@@ -46,6 +46,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -573,13 +574,22 @@ func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *u
 
 // chainEntries reads the entries [start, end) of one of the peer's chains.
 func chainEntries(ctx context.Context, src Source, u *url.URL, chainName string, start, end, pageSize uint64) ([][]byte, error) {
+	entries, _, err := chainEntriesWith(ctx, src, u, chainName, start, end, pageSize, nil)
+	return entries, err
+}
+
+// chainEntriesWith reads the entries [start, end) of one of the peer's chains
+// and, when bodies is set, the message behind each entry, which it proves by
+// its hash (see messages).
+func chainEntriesWith(ctx context.Context, src Source, u *url.URL, chainName string, start, end, pageSize uint64, bodies *messages) ([][]byte, []messaging.Message, error) {
 	var out [][]byte
+	var msgs []messaging.Message
 	for start < end {
 		count := pageSize
 		if count > end-start {
 			count = end - start
 		}
-		expand := false
+		expand := bodies != nil
 		page, err := src.QueryChainEntries(ctx, u, &api.ChainQuery{
 			Name: chainName,
 			Range: &api.RangeOptions{
@@ -589,19 +599,26 @@ func chainEntries(ctx context.Context, src Source, u *url.URL, chainName string,
 			},
 		})
 		if err != nil {
-			return nil, fmt.Errorf("query entries from %d: %w", start, err)
+			return nil, nil, fmt.Errorf("query entries from %d: %w", start, err)
 		}
 		if page == nil || len(page.Records) == 0 {
-			return nil, fmt.Errorf("the peer served no entry at %d of %d", start, end)
+			return nil, nil, fmt.Errorf("the peer served no entry at %d of %d", start, end)
 		}
 		for _, e := range page.Records {
 			if e == nil {
-				return nil, fmt.Errorf("the peer served a nil entry at %d", start)
+				return nil, nil, fmt.Errorf("the peer served a nil entry at %d", start)
 			}
 			if e.Index != start {
-				return nil, fmt.Errorf("the peer served entry %d where %d was asked for", e.Index, start)
+				return nil, nil, fmt.Errorf("the peer served entry %d where %d was asked for", e.Index, start)
 			}
 			entry := e.Entry
+			if bodies != nil {
+				msg, err := bodies.behind(e)
+				if err != nil {
+					return nil, nil, errors.NotFound.WithFormat("entry %d (%x): %w", start, entry[:4], err)
+				}
+				msgs = append(msgs, msg)
+			}
 			out = append(out, entry[:])
 			start++
 			if start >= end {
@@ -609,7 +626,201 @@ func chainEntries(ctx context.Context, src Source, u *url.URL, chainName string,
 			}
 		}
 	}
-	return out, nil
+	return out, msgs, nil
+}
+
+// messages proves and holds the messages a peer serves behind the entries of
+// an account's transaction chains, for one fetch of that account.
+//
+// An entry of a transaction chain is the hash of a message, and a node that
+// holds the hash without the message holds half of what the executor reads:
+// the first block a new process opens walks the anchor pool's chains and loads
+// the message behind each entry (executor.md, "Sync" §3). The entry is under
+// the root the pass is proven against, so a message is proven by its own hash
+// and nothing about the peer is trusted. What the peer stores under an entry
+// is not always the message as it arrived: a wrapper -- an anchor, a
+// sequenced or synthetic message -- whose transaction is stored under its own
+// hash is stored referring to it (the executor's storedForm, #4236). Such a
+// message is proven by putting the transaction back, itself proven by its
+// hash, and hashing the result; it is kept in the stored form, with the
+// transaction under its own hash beside it, as the peer keeps it.
+//
+// A peer that serves an entry with no message behind it -- a peer that itself
+// joined holds the blocks it did not execute that way -- or a message that
+// does not hash to the entry, has not served the chain; the fetch fails and
+// the caller asks the next peer. A hash is never kept without its message.
+type messages struct {
+	ctx context.Context
+	src Source
+
+	// txns are the transactions proven so far in this fetch, by hash: the
+	// ones a stored form refers to, and the entries that are transactions.
+	txns map[[32]byte]*protocol.Transaction
+
+	// resolved are the transactions a stored form referred to, to be written
+	// beside it.
+	resolved []*protocol.Transaction
+}
+
+func newMessages(ctx context.Context, src Source) *messages {
+	return &messages{ctx: ctx, src: src, txns: map[[32]byte]*protocol.Transaction{}}
+}
+
+// behind is the message the peer served behind e, if it is e's.
+func (m *messages) behind(e *api.ChainEntryRecord[api.Record]) (messaging.Message, error) {
+	var msg messaging.Message
+	switch v := e.Value.(type) {
+	case *api.MessageRecord[messaging.Message]:
+		msg = v.Message
+	case *api.ErrorRecord:
+		return nil, fmt.Errorf("the peer does not hold the message: %v", v.Value)
+	case nil:
+	default:
+		return nil, fmt.Errorf("the peer served a %v record, not a message", v.RecordType())
+	}
+	if msg == nil {
+		return nil, fmt.Errorf("the peer served no message")
+	}
+
+	// A transaction entry is its transaction, whole: a remote transaction's
+	// hash is whatever the stub says it is.
+	if tm, ok := msg.(*messaging.TransactionMessage); ok {
+		if err := wholeTransaction(tm.Transaction, e.Entry); err != nil {
+			return nil, err
+		}
+		m.txns[e.Entry] = tm.Transaction
+		return msg, nil
+	}
+
+	full, err := m.expand(msg)
+	if err != nil {
+		return nil, err
+	}
+	if h := full.Hash(); h != e.Entry {
+		return nil, errors.Conflict.WithFormat("the peer served a %v that hashes to %x", msg.Type(), h[:4])
+	}
+	return msg, nil
+}
+
+// expand is msg with every transaction it refers to by hash put back.
+func (m *messages) expand(msg messaging.Message) (messaging.Message, error) {
+	switch w := msg.(type) {
+	case *messaging.TransactionMessage:
+		if w.Transaction == nil || w.Transaction.Body == nil {
+			return nil, fmt.Errorf("a transaction with no body")
+		}
+		remote, ok := w.Transaction.Body.(*protocol.RemoteTransaction)
+		if !ok {
+			return msg, nil
+		}
+		txn, err := m.transaction(remote.Hash)
+		if err != nil {
+			return nil, err
+		}
+		return &messaging.TransactionMessage{Transaction: txn}, nil
+
+	case *messaging.SequencedMessage:
+		inner, err := m.expand(w.Message)
+		if err != nil {
+			return nil, err
+		}
+		c := *w
+		c.Message = inner
+		return &c, nil
+
+	case *messaging.SyntheticMessage:
+		inner, err := m.expand(w.Message)
+		if err != nil {
+			return nil, err
+		}
+		c := *w
+		c.Message = inner
+		return &c, nil
+
+	case *messaging.BadSyntheticMessage:
+		inner, err := m.expand(w.Message)
+		if err != nil {
+			return nil, err
+		}
+		c := *w
+		c.Message = inner
+		return &c, nil
+
+	case *messaging.BlockAnchor:
+		inner, err := m.expand(w.Anchor)
+		if err != nil {
+			return nil, err
+		}
+		c := *w
+		c.Anchor = inner
+		return &c, nil
+
+	case nil:
+		return nil, fmt.Errorf("an empty message")
+
+	default:
+		return msg, nil
+	}
+}
+
+// transaction is the transaction whose hash is h, proven by it: from this
+// fetch if it has been seen, else asked of the same peer.
+func (m *messages) transaction(h [32]byte) (*protocol.Transaction, error) {
+	if txn, ok := m.txns[h]; ok {
+		return txn, nil
+	}
+	rec, err := m.src.QueryMessage(m.ctx, protocol.UnknownUrl().WithTxID(h), nil)
+	if err != nil {
+		return nil, fmt.Errorf("the peer does not serve the transaction %x a message refers to: %w", h[:4], err)
+	}
+	if rec == nil {
+		return nil, fmt.Errorf("the peer served no transaction %x", h[:4])
+	}
+	tm, ok := rec.Message.(*messaging.TransactionMessage)
+	if !ok {
+		return nil, fmt.Errorf("the peer served a %T for the transaction %x", rec.Message, h[:4])
+	}
+	if err := wholeTransaction(tm.Transaction, h); err != nil {
+		return nil, err
+	}
+	m.txns[h] = tm.Transaction
+	m.resolved = append(m.resolved, tm.Transaction)
+	return tm.Transaction, nil
+}
+
+// wholeTransaction says whether txn is the transaction h names, with its body.
+func wholeTransaction(txn *protocol.Transaction, h [32]byte) error {
+	if txn == nil || txn.Body == nil {
+		return fmt.Errorf("the peer served a transaction with no body")
+	}
+	if _, remote := txn.Body.(*protocol.RemoteTransaction); remote {
+		return fmt.Errorf("the peer served a transaction without its body")
+	}
+	if got := *(*[32]byte)(txn.GetHash()); got != h {
+		return errors.Conflict.WithFormat("the peer served transaction %x for %x", got[:4], h[:4])
+	}
+	return nil
+}
+
+// store writes the transactions a stored form referred to under their own
+// hashes.
+func (m *messages) store(batch *database.Batch) error {
+	for _, txn := range m.resolved {
+		h := *(*[32]byte)(txn.GetHash())
+		if err := batch.Message(h).Main().Put(&messaging.TransactionMessage{Transaction: txn}); err != nil {
+			return fmt.Errorf("store transaction %x: %w", h[:4], err)
+		}
+	}
+	m.resolved = nil
+	return nil
+}
+
+// carriesMessages is whether a chain's entries are the hashes of messages the
+// node stores. The data model labels the synthetic sequence chains as
+// transaction chains when their entries are index entries (the querier makes
+// the same exception, internal/api/v3/querier.go queryChainEntry).
+func carriesMessages(c *api.ChainRecord) bool {
+	return c.Type == merkle.ChainTypeTransaction && !strings.HasPrefix(c.Name, "synthetic-sequence(")
 }
 
 // addChainToIndex records the chain in the account's chain index. The account
@@ -648,6 +859,7 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 	if chains == nil {
 		return nil
 	}
+	bodies := newMessages(ctx, src)
 	for _, c := range chains.Records {
 		if c == nil || c.Name == "" {
 			continue
@@ -656,7 +868,7 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 		if err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
-		if err := pullChainEntries(ctx, src, dstChain.Inner(), u, c, pageSize); err != nil {
+		if err := pullChainEntries(ctx, src, batch, bodies, dstChain.Inner(), u, c, pageSize); err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
 		if err := addChainToIndex(batch, u, c); err != nil {
@@ -668,8 +880,10 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, u *u
 
 // pullChainEntries brings one chain up to the height the peer served, from
 // whatever the node already holds, and checks the result against the peer's
-// head.
-func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
+// head. A transaction chain's entries come with the messages they name, each
+// checked against its entry and written into batch with the entries, so a pass
+// that is refused discards both (#4400).
+func pullChainEntries(ctx context.Context, src Source, batch *database.Batch, bodies *messages, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64) error {
 	head, err := dst.Head().Get()
 	if err != nil {
 		return fmt.Errorf("load the local head: %w", err)
@@ -682,13 +896,28 @@ func pullChainEntries(ctx context.Context, src Source, dst *database.MerkleManag
 			"the local chain is at %d and the peer served %d; it cannot be re-pulled", from, c.Count)
 	}
 
-	entries, err := chainEntries(ctx, src, u, c.Name, uint64(from), c.Count, pageSize)
+	if !carriesMessages(c) {
+		bodies = nil
+	}
+	entries, msgs, err := chainEntriesWith(ctx, src, u, c.Name, uint64(from), c.Count, pageSize, bodies)
 	if err != nil {
 		return err
 	}
 	for i, e := range entries {
 		if err := dst.AddEntry(e, false); err != nil {
 			return fmt.Errorf("add entry %d: %w", from+int64(i), err)
+		}
+		if bodies != nil {
+			// Under the entry, not under the message's own hash: a stored
+			// form refers to its transaction and hashes to something else.
+			if err := batch.Message(*(*[32]byte)(e)).Main().Put(msgs[i]); err != nil {
+				return fmt.Errorf("store the message behind entry %d: %w", from+int64(i), err)
+			}
+		}
+	}
+	if bodies != nil {
+		if err := bodies.store(batch); err != nil {
+			return err
 		}
 	}
 
