@@ -263,7 +263,11 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	// verification can start. A restart holds the network definition it
 	// executed with and a node started from genesis holds the genesis one
 	// (executor spec, "Sync", step 1; #4301).
-	authority, err := anchorsrc.FromStore(opts.Database, opts.Partition)
+	// Recorded under SystemData, where no pull reaches, and not read from
+	// <partition>/network, an account the pull overwrites before anything is
+	// proven: a node that restarted between a pull and its match would
+	// otherwise trust a peer's validators (#4438 F1).
+	authority, err := anchorsrc.FromTrusted(opts.Database, opts.Partition)
 	if err != nil {
 		// A node that cannot say who the validators are cannot verify a root,
 		// and a join that cannot verify a root is the defect this closes. It
@@ -283,7 +287,19 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	// collected from the Directory's validators the same way. Never from this
 	// node (#4303).
 	s.authority = authority
-	collector, err := anchorsrc.NewCollector(opts.Partition, authority, opts.Sources, opts.Sources.Querier(opts.Partition))
+	sources := opts.Sources
+	pool := opts.Partition.JoinPath(protocol.AnchorPool)
+	collector, err := anchorsrc.NewCollector(opts.Partition, authority, sources, func(ctx context.Context) ([]anchorsrc.AccountReader, error) {
+		srcs, _, err := sources.For(ctx, pool)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]anchorsrc.AccountReader, len(srcs))
+		for i, src := range srcs {
+			out[i] = src
+		}
+		return out, nil
+	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -841,6 +857,11 @@ func (s *PulledState) TrustedVersion() uint64 { return s.authority.Version() }
 // holds the match off, as it did before (§1's stated limit).
 func (s *PulledState) refreshAuthority() {
 	moved, err := s.authority.UpdateFrom(s.db, s.partition)
+	if err == nil {
+		// The state is proven: what the sets are now is what a restart
+		// trusts (FromTrusted).
+		err = s.authority.Remember(s.db, s.partition)
+	}
 	switch {
 	case err != nil:
 		s.log.Debug("The network definition could not be read from this node's store",

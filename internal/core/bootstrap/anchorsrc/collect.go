@@ -64,10 +64,13 @@ type Collector struct {
 	// Validators finds the producer's validators.
 	Validators Validators
 
-	// Ledger reaches the producer's peers for its anchor ledger, which says
-	// the sequence number of the last anchor produced. It positions the
-	// first read and nothing else: an anchor is taken on its signatures.
-	Ledger api.Querier
+	// Ledgers reaches each of the producer's peers, by name, for its anchor
+	// ledger, which says the sequence number of the last anchor produced. It
+	// positions the first read and nothing else: an anchor is taken on its
+	// signatures. The LOWEST number any peer answers is taken, so one peer
+	// cannot place the read above every anchor there is (#4438 F4); a peer
+	// that answers low only makes the read start earlier.
+	Ledgers func(ctx context.Context) ([]AccountReader, error)
 
 	// OnAnchor is called for every anchor a quorum signed, with the block
 	// it anchors and the root that block committed.
@@ -93,7 +96,12 @@ const collectBackfill = 16
 const maxAnchorsPerRead = 32
 
 // NewCollector constructs a Collector.
-func NewCollector(producer *url.URL, authority *Authority, validators Validators, ledger api.Querier) (*Collector, error) {
+// An AccountReader is one peer's account query.
+type AccountReader interface {
+	QueryAccount(ctx context.Context, scope *url.URL, query *api.DefaultQuery) (*api.AccountRecord, error)
+}
+
+func NewCollector(producer *url.URL, authority *Authority, validators Validators, ledgers func(ctx context.Context) ([]AccountReader, error)) (*Collector, error) {
 	switch {
 	case producer == nil:
 		return nil, errors.BadRequest.With("anchorsrc.NewCollector: a producer partition is required")
@@ -101,13 +109,13 @@ func NewCollector(producer *url.URL, authority *Authority, validators Validators
 		return nil, errors.BadRequest.With("anchorsrc.NewCollector: an authority is required — an unverified root is not a root")
 	case validators == nil:
 		return nil, errors.BadRequest.With("anchorsrc.NewCollector: the producer's validators are required")
-	case ledger == nil:
-		return nil, errors.BadRequest.With("anchorsrc.NewCollector: a querier is required")
+	case ledgers == nil:
+		return nil, errors.BadRequest.With("anchorsrc.NewCollector: the producer's peers are required")
 	}
 	if _, ok := protocol.ParsePartitionUrl(producer); !ok {
 		return nil, errors.BadRequest.WithFormat("%v is not a partition", producer)
 	}
-	return &Collector{Producer: producer, Authority: authority, Validators: validators, Ledger: ledger}, nil
+	return &Collector{Producer: producer, Authority: authority, Validators: validators, Ledgers: ledgers}, nil
 }
 
 // Rewind positions the next read at the newest anchor again. The join calls it
@@ -210,6 +218,9 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 		if err == nil && rec.Sequence.Number != n {
 			err = errors.Conflict.WithFormat("asked for anchor %d, it answered anchor %d", n, rec.Sequence.Number)
 		}
+		if err == nil {
+			err = c.isOwn(rec)
+		}
 		if err != nil {
 			lastErr = errors.UnknownError.WithFormat("%s: %w", v.Name, err)
 			continue
@@ -232,10 +243,19 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 	}
 	if !produced {
 		// No validator answered an anchor under this number: not produced
-		// yet, no longer held, or not reachable this read.
+		// yet, no longer held, or not reachable this read. At the newest
+		// number the ledgers named it is said: a position no validator
+		// can answer is where the collector is held (#4438 F4).
+		if n == c.newest {
+			c.stall = &Stall{Entry: n, Asked: asked, Err: errors.NotFound.WithFormat(
+				"no validator answers anchor %d, the newest the peers' ledgers name: %v", n, lastErr)}
+		}
 		return false, false, nil
 	}
 
+	// Every group a quorum signed is observed, not only the first: a group
+	// that verifies and is not the partition's own anchor would otherwise
+	// hide the one that is (#4438 F2).
 	for _, h := range order {
 		rec := groups[h]
 		pa := rec.Message.Transaction.Body.(protocol.AnchorBody).GetPartitionAnchor()
@@ -247,10 +267,13 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 			}
 			continue
 		}
-		c.stall = nil
+		taken = true
 		if c.OnAnchor != nil {
 			c.OnAnchor(c.Producer, pa.MinorBlockIndex, pa.StateTreeAnchor)
 		}
+	}
+	if taken {
+		c.stall = nil
 		if n > c.newest {
 			c.newest = n
 		}
@@ -259,6 +282,33 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 
 	c.stall = &Stall{Entry: n, Asked: asked, Err: lastErr}
 	return false, true, nil
+}
+
+// isOwn refuses an answer that is not the producer's own anchor: sent by the
+// producer, to the Directory, carrying the producer's partition anchor in the
+// producer's kind of body. Validator keys sit on the Directory and on their
+// BVN at once, so the Directory's anchor, relayed under a BVN's name, would
+// otherwise pass the BVN's threshold (#4438 F2).
+func (c *Collector) isOwn(rec *api.MessageRecord[*messaging.TransactionMessage]) error {
+	if rec.Sequence.Source == nil || !rec.Sequence.Source.RootIdentity().Equal(c.Producer) {
+		return errors.Conflict.WithFormat("the anchor was sent by %v, not %v", rec.Sequence.Source, c.Producer)
+	}
+	if rec.Sequence.Destination == nil || !rec.Sequence.Destination.RootIdentity().Equal(protocol.DnUrl()) {
+		return errors.Conflict.WithFormat("the anchor was sent to %v, not the Directory", rec.Sequence.Destination)
+	}
+	body := rec.Message.Transaction.Body
+	if protocol.DnUrl().Equal(c.Producer) {
+		if _, ok := body.(*protocol.DirectoryAnchor); !ok {
+			return errors.Conflict.WithFormat("the Directory's anchor is a %v", body.Type())
+		}
+	} else if _, ok := body.(*protocol.BlockValidatorAnchor); !ok {
+		return errors.Conflict.WithFormat("a BVN's anchor is a %v", body.Type())
+	}
+	pa := body.(protocol.AnchorBody).GetPartitionAnchor()
+	if pa.Source == nil || !pa.Source.Equal(c.Producer) {
+		return errors.Conflict.WithFormat("the anchor is %v's, not %v's", pa.Source, c.Producer)
+	}
+	return nil
 }
 
 // anchorOf is the anchor a sequencer answered, or why the answer is not one.
@@ -282,19 +332,36 @@ func anchorOf(ans *api.MessageRecord[messaging.Message]) (*api.MessageRecord[*me
 	return rec, nil
 }
 
-// lastProduced is the sequence number of the producer's newest anchor, from
-// its anchor ledger as a peer holds it.
+// lastProduced is the sequence number of the producer's newest anchor, the
+// lowest any of its peers' anchor ledgers names.
 func (c *Collector) lastProduced(ctx context.Context) (uint64, error) {
 	u := c.Producer.JoinPath(protocol.AnchorPool)
-	rec, err := api.Querier2{Querier: c.Ledger}.QueryAccount(ctx, u, nil)
+	peers, err := c.Ledgers(ctx)
 	if err != nil {
-		return 0, errors.UnknownError.WithFormat("read %v: %w", u, err)
+		return 0, errors.UnknownError.WithFormat("find %v's peers: %w", c.Producer, err)
 	}
-	ledger, ok := rec.Account.(*protocol.AnchorLedger)
-	if !ok {
-		return 0, errors.Conflict.WithFormat("a peer served %v as %v, not an anchor ledger", u, rec.Account.Type())
+	var low uint64
+	var found bool
+	var last error
+	for _, p := range peers {
+		rec, err := p.QueryAccount(ctx, u, nil)
+		if err != nil {
+			last = err
+			continue
+		}
+		ledger, ok := rec.Account.(*protocol.AnchorLedger)
+		if !ok {
+			last = errors.Conflict.WithFormat("a peer served %v as %v, not an anchor ledger", u, rec.Account.Type())
+			continue
+		}
+		if !found || ledger.MinorBlockSequenceNumber < low {
+			low, found = ledger.MinorBlockSequenceNumber, true
+		}
 	}
-	return ledger.MinorBlockSequenceNumber, nil
+	if !found {
+		return 0, errors.UnknownError.WithFormat("no peer served %v: %w", u, last)
+	}
+	return low, nil
 }
 
 // String names the collector in a log line.

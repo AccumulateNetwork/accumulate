@@ -64,10 +64,24 @@ func (r *validatorRing) ValidatorsOf(context.Context, *url.URL) ([]anchorsrc.Val
 }
 
 func (*validatorRing) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
-	return nil, nil, nil
+	return []pull.Source{ledgerSource{n: 1}}, protocol.PartitionUrl("BVN0"), nil
 }
 
 func (*validatorRing) Querier(*url.URL) api.Querier { return anchorLedgerAt(1) }
+
+// ledgerSource is a peer that answers the partition's anchor ledger at n and
+// nothing else.
+type ledgerSource struct {
+	pull.Source
+	n uint64
+}
+
+func (l ledgerSource) QueryAccount(_ context.Context, scope *url.URL, _ *api.DefaultQuery) (*api.AccountRecord, error) {
+	if !scope.PathEqual(protocol.AnchorPool) {
+		return nil, errors.NotFound.WithFormat("%v: not held", scope)
+	}
+	return &api.AccountRecord{Account: &protocol.AnchorLedger{Url: scope, MinorBlockSequenceNumber: l.n}}, nil
+}
 
 // anchorLedgerAt answers a partition's anchor ledger, saying the last anchor
 // it produced is number n, and nothing else.

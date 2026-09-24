@@ -58,6 +58,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 	}
 
 	obs := s.tracker.Snapshot()
+	proven := false
 	sort.Slice(obs, func(i, j int) bool { return obs[i].Block < obs[j].Block })
 
 	batch := s.db.Begin(false)
@@ -89,12 +90,22 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 		}
 		s.executed = o.Block
 		s.provenAt = o.Block
+		proven = true
 		if s.machine.State() != nodestate.StateActive {
 			s.matched = tracker.Match{Block: o.Block, Anchor: o.Anchor}
 			s.Promote(o.Block)
 		}
 	}
 	batch.Discard()
+
+	// The state is proven at the last block that matched, and with it the
+	// network definition it holds: the trusted sets move, and a restart
+	// trusts them (#4438, review in passing). Without this a node proven
+	// here, and not by Matched, would verify with the sets it started with
+	// for as long as it runs, and a change to them would blind the watch.
+	if proven {
+		s.refreshAuthority()
+	}
 
 	// Past the match, what the join took by its chain heads alone is
 	// brought in whole, a few accounts a check, while the node executes.

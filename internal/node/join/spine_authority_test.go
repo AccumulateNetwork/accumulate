@@ -104,3 +104,38 @@ func TestTheTrustedSetsMoveOnlyAtAMatch(t *testing.T) {
 	require.Equal(t, uint64(9), block)
 	require.Equal(t, uint64(2), s.TrustedVersion(), "the match did not move the trusted set to the state it proved")
 }
+
+// TestAPulledNetworkDefinitionIsNotTrustedAfterARestart — #4438 F1. The join
+// pulls <partition>/network like any account, before anything is proven, and
+// a peer can serve one naming its own validators. Within one process that is
+// harmless: the sets move only at a match (TestTheTrustedSetsMoveOnlyAtAMatch).
+// But a node that restarts between the pull and its match must not seed its
+// trust from the account the pull wrote: it holds the definition it executed
+// with (executor spec, "Sync" §1), recorded where no pull reaches.
+func TestAPulledNetworkDefinitionIsNotTrustedAfterARestart(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	db := database.OpenInMemory(nil)
+	db.SetObserver(database.NewDatabaseObserver())
+	t.Cleanup(func() { _ = db.Close() })
+	values, _ := genesisValues(t, 4)
+	putNetwork(t, db, here, values)
+
+	first, err := NewState(StateOptions{Partition: here, Database: db, Sources: noSources{}, ExecutedBlock: 1})
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), first.TrustedVersion())
+
+	// A peer's definition, written by the pull: its own keys, a newer version.
+	forged, _ := genesisValues(t, 4)
+	forged.Network.Version = 2
+	putNetwork(t, db, here, forged)
+
+	// The node restarts before its first match.
+	again, err := NewState(StateOptions{Partition: here, Database: db, Sources: noSources{}, ExecutedBlock: 1})
+	require.NoError(t, err)
+	require.Equal(t, uint64(1), again.TrustedVersion(), "the restarted join trusts the definition a peer served")
+	set, err := again.authority.SetFor("BVN0")
+	require.NoError(t, err)
+	require.False(t, set.MaySign(forged.Network.Validators[0].PublicKeyHash[:]),
+		"the restarted join counts a signature by a key only the peer's definition names")
+	require.True(t, set.MaySign(values.Network.Validators[0].PublicKeyHash[:]))
+}

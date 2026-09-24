@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Set is one partition's validator set: which keys may sign for that
@@ -134,6 +135,95 @@ func FromStore(db database.Viewer, local *url.URL) (*Authority, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	return FromValues(values)
+}
+
+// FromTrusted is the validator sets this node trusts: the definition it
+// recorded under SystemData (Remember), or, when it has recorded none, its own
+// accounts -- read before anything is pulled -- which it records then
+// (#4438 F1). <partition>/network is an account the join's pull overwrites with
+// a peer's before anything is proven, so a node that restarted between a pull
+// and its match and read the account would trust the peer's validators; the
+// record under SystemData is written only from the node's own execution and
+// from a state that matched (executor spec, "Sync" §1: "a restart holds the
+// network definition it executed with").
+func FromTrusted(db *database.Database, local *url.URL) (*Authority, error) {
+	values, ok, err := readTrusted(db, local)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if ok {
+		return FromValues(values)
+	}
+	a, err := FromStore(db, local)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if err := a.Remember(db, local); err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return a, nil
+}
+
+// Remember records the sets this node trusts under SystemData, where no pull
+// reaches: the record FromTrusted seeds a restart from. The caller records
+// only what it has proven or executed.
+func (a *Authority) Remember(db *database.Database, local *url.URL) error {
+	id, ok := protocol.ParsePartitionUrl(local)
+	if !ok {
+		return errors.BadRequest.WithFormat("%v is not a partition", local)
+	}
+	network, err := a.values.Network.MarshalBinary()
+	if err != nil {
+		return errors.UnknownError.WithFormat("marshal the trusted network definition: %w", err)
+	}
+	globals, err := a.values.Globals.MarshalBinary()
+	if err != nil {
+		return errors.UnknownError.WithFormat("marshal the trusted globals: %w", err)
+	}
+	batch := db.Begin(true)
+	defer batch.Discard()
+	if err := batch.SystemData(id).TrustedNetwork().Put(network); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if err := batch.SystemData(id).TrustedGlobals().Put(globals); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	return errors.UnknownError.Wrap(batch.Commit())
+}
+
+// readTrusted reads the record Remember wrote, and whether there is one.
+func readTrusted(db *database.Database, local *url.URL) (*core.GlobalValues, bool, error) {
+	id, ok := protocol.ParsePartitionUrl(local)
+	if !ok {
+		return nil, false, errors.BadRequest.WithFormat("%v is not a partition", local)
+	}
+	batch := db.Begin(false)
+	defer batch.Discard()
+	network, err := batch.SystemData(id).TrustedNetwork().Get()
+	switch {
+	case errors.Is(err, errors.NotFound):
+		return nil, false, nil
+	case err != nil:
+		return nil, false, errors.UnknownError.Wrap(err)
+	}
+	globals, err := batch.SystemData(id).TrustedGlobals().Get()
+	switch {
+	case errors.Is(err, errors.NotFound):
+		return nil, false, nil
+	case err != nil:
+		return nil, false, errors.UnknownError.Wrap(err)
+	}
+	if len(network) == 0 || len(globals) == 0 {
+		return nil, false, nil
+	}
+	values := &core.GlobalValues{Network: new(protocol.NetworkDefinition), Globals: new(protocol.NetworkGlobals)}
+	if err := values.Network.UnmarshalBinary(network); err != nil {
+		return nil, false, errors.UnknownError.WithFormat("the trusted network definition: %w", err)
+	}
+	if err := values.Globals.UnmarshalBinary(globals); err != nil {
+		return nil, false, errors.UnknownError.WithFormat("the trusted globals: %w", err)
+	}
+	return values, true, nil
 }
 
 func readValues(db database.Viewer, local *url.URL) (*core.GlobalValues, error) {

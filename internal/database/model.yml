@@ -442,3 +442,17 @@
       # (#4344). Nothing outside this node's own executor writes it.
       type: index
       dataType: uint
+    - name: TrustedNetwork
+      # The network definition THIS node trusts to verify its partition's
+      # anchors, marshalled. It is here and not read from <partition>/network
+      # because that is an ACCOUNT, which the join's pull overwrites with a
+      # peer's before anything is proven; a restart between the pull and the
+      # match would otherwise trust the peer's validators (#4438 F1). It is
+      # written from the node's own store before a join pulls anything, and
+      # from the proven state at every match.
+      type: state
+      dataType: bytes
+    - name: TrustedGlobals
+      # The network globals that go with TrustedNetwork, marshalled.
+      type: state
+      dataType: bytes
