@@ -10,6 +10,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
@@ -86,4 +87,47 @@ func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
 		require.ElementsMatch(t, []string{p.NodePeerID(joiner).String(), p.NodePeerID(rebooted).String()}, st.Asked,
 			"read %d: the peers asked are named", read)
 	}
+
+	// The production join reads it the same way, and says so on the gauge
+	// (review F2): a BVN0 node restarts, and the join the simulator builds
+	// for it, as the daemon does, runs its round. Directory node 0 restarts
+	// too, so no Directory peer the BVN0 join can ask serves entry 25 signed.
+	p.RestartNode(0)
+	b := sim.S.Partition("BVN0")
+	const bvnJoiner = 1
+
+	// Diverged, the root watch's read after the handoff.
+	b.RestartNode(bvnJoiner)
+	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
+	_, _, err = b.NodeJoinState(bvnJoiner).Diverged(ctx)
+	require.Error(t, err)
+	require.Equal(t, float64(first), spineStalledGauge(t, "BVN0"), "the root watch's read does not report the stall")
+
+	// Pull, the join's round.
+	b.RestartNode(bvnJoiner)
+	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
+	_ = b.NodeJoinState(bvnJoiner).Pull(ctx)
+	require.Equal(t, float64(first), spineStalledGauge(t, "BVN0"), "the join's round does not report the stall")
+}
+
+// spineStalledGauge is accumulate_join_spine_stalled_entry for a partition,
+// as the node's metrics endpoint serves it.
+func spineStalledGauge(t *testing.T, partition string) float64 {
+	t.Helper()
+	families, err := prometheus.DefaultGatherer.Gather()
+	require.NoError(t, err)
+	for _, f := range families {
+		if f.GetName() != "accumulate_join_spine_stalled_entry" {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			for _, l := range m.GetLabel() {
+				if l.GetName() == "partition" && l.GetValue() == partition {
+					return m.GetGauge().GetValue()
+				}
+			}
+		}
+	}
+	t.Fatalf("no accumulate_join_spine_stalled_entry series for %s", partition)
+	return 0
 }
