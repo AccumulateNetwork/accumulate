@@ -363,7 +363,8 @@ execute-from-own-state branch, and the pull's meeting point (ahead / level /
 disagrees, #4348, and its hole #4350) are deleted, not bypassed:
 `TestTheJoinAsksNoPeerForItsConclusions` (internal/node/join) fails on any
 of those identifiers in the module's non-test source. A join collects into
-its own staging from the first block it hears and settles on state it proved
+its own buffer from the first block it hears, takes the buffer into its own
+staging only through the block after the state it proved (#4398), and settles on state it proved
 against a signed anchor; at an anchored height there is one correct leaf per
 account, so there is nothing to meet in the middle. The departures recorded
 here for serving staging — the unpinned page, `Block` as the last processed
@@ -478,6 +479,14 @@ simulator still does not do as the daemon does:
   relay assertion — the committee executed what the joining follower was
   handed — therefore proves the hub and not the daemon's relay
   (`cmd/accumulated/run/submit_relay.go`, #4366).
+- `RestartNode` resets the node's staging and its join, not its executor:
+  the executor's cache seed and in-memory producer cache survive the
+  "restart", so a simulated handoff never meets what a fresh process meets on
+  its first block (the seed reading message bodies the join did not pull,
+  #4400). The rule for a handoff that fails (executor.md "Sync", step 5,
+  #4401) is therefore exercised by `internal/node/dagbft`, `internal/node/join`
+  and the simulator's `joinState` against an injected failure, not by a
+  simulated restart.
 - A simulator follower still votes and counts its own vote
   (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
   it; the cadence assertion shows only that the partition runs on.
@@ -833,6 +842,12 @@ spec**, both deliberate:
   that index and the simulator's ledgers record no round. Every simulator
   join test therefore exercises a handoff rule production does not run; the
   round rule is covered only by `internal/node/dagbft` and by a live network.
+  The same holds for which buffered blocks are taken into staging before the
+  handoff (#4398): the DAG service stages the groups through the first one
+  above the pulled ledger's `LeaderRound` (`Service.StageThrough`); the
+  simulator stages the blocks whose index is at most `Q + 1`. The rule —
+  nothing collected after `Q + 1` is in staging when `Q + 1` executes — is the
+  same on both.
 - `classify` resolves a remote transaction body from the store, so a sequenced
   message carrying a remote stub whose body this node has not pulled yet is
   not classified and not held at all — a hole on the joining node where its
