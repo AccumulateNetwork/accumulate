@@ -32,7 +32,9 @@ import (
 // TestARollingRestartOfTheDirectoryLeavesItsAnchorsServable — #4416. Every
 // Directory validator restarts in turn, inside one 1024-entry window of
 // dn.acme/anchors, and rejoins by the production pull while the network runs
-// on under load. Afterwards every anchor on the pool is held by pull on at
+// on under load. Each rejoins with an empty buffer, the shape a daemon
+// reaches through a join buffer overrun (#4407) and, after #4405, through an
+// outage longer than DAGGCDepth; see joinByPull. Afterwards every anchor on the pool is held by pull on at
 // least one of them, and each node holds by pull the anchors appended while it
 // was down.
 //
@@ -106,14 +108,21 @@ func TestARollingRestartOfTheDirectoryLeavesItsAnchorsServable(t *testing.T) {
 	}
 	sim.StepN(10)
 
-	// joinByPull starts a node's process again and runs its join as the
-	// daemon runs it, with the network stepping under load after every pull
-	// round. What the node collected while it was down is gone with the old
-	// process, as on a real node: it holds its own state and nothing after
-	// it, so it cannot execute from there and pulls. The simulator hands a
-	// node that is not executing every block, so without the restart here
-	// the node would meet its own state at once, execute what it collected,
-	// and pull nothing.
+	// joinByPull starts the node collecting again with nothing in hand and
+	// runs its join as the daemon runs it, with the network stepping under
+	// load after every pull round. It holds its own state and nothing after
+	// it, so it cannot execute from there and pulls.
+	//
+	// That is not what a daemon restart after a short outage looks like: the
+	// daemon keeps its buffer, and certificate catch-up fills it with every
+	// round after R within DAGGCDepth, so such a node meets its own state and
+	// pulls nothing -- which is the simulator's single RestartNode. The shape
+	// here, a buffer holding nothing between R and the live frontier that
+	// then fills, is what a daemon reaches today only through a join buffer
+	// overrun (#4407), and after #4405 through any outage longer than
+	// DAGGCDepth (Node.Rejoin); beyond DAGGCDepth today the buffer never
+	// fills (#4405). So this test holds the pull's capacity, through the
+	// production wiring, on the overrun path.
 	joinByPull := func(p *simulator.Partition, partition string, node int) {
 		t.Helper()
 		p.RestartNode(node)
