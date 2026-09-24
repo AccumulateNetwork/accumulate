@@ -1800,10 +1800,17 @@ when (#4279). Every block therefore writes, at Info, `module=stream`:
 
 - **`Stream position`**, per stream, after `flushStreams` has written
   Delivered: `block`, `ledger` (synthetic or anchors), `source`,
-  `delivered`, `advanced` (by this block), `sighted` (the highest number
-  ever held), `reach` (how far validated hashes stand), `held` (entries in
-  staging), `waiting` (the first number above Delivered nothing is held
-  for, 0 when none).
+  `delivered` (the ledger's, or staging's if higher), `advanced` (by this
+  block), `received` (the ledger's `Received`, #4412), `sighted` (the
+  highest number this node's staging ever held), `reach` (how far validated
+  hashes stand), `held` (entries in staging), `waiting` (the first number
+  above Delivered nothing is held for, 0 when none). `received` and
+  `sighted` are logged side by side because they can disagree: on a node
+  that rejoined behind a hole its peers hold entries behind, the state says
+  N arrived and this node's staging has sighted less, which is #4412's
+  failure read straight off the line. A stream whose ledger `Received` is
+  above `Delivered` is behind, and is logged as such even when staging
+  holds nothing for it.
 
   **A line is written when something about the stream changed, and
   otherwise no more often than `StreamLogEvery` blocks.** A stream in
