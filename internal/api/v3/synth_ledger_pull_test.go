@@ -57,13 +57,21 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 	stale := protocol.AccountUrl("bob", "tokens").WithTxID([32]byte{9})
 
 	for _, c := range []struct {
-		name   string
-		peer   []*url.TxID
-		joiner []*url.TxID
+		name          string
+		peer          []*url.TxID
+		joiner        []*url.TxID
+		peerCascade   []*url.TxID
+		joinerCascade []*url.TxID
 	}{
 		{name: "idle: both queues empty (control)"},
 		{name: "loaded: the peer has a delivery queued", peer: []*url.TxID{queued}},
 		{name: "restart: the joiner holds its own stale queue", joiner: []*url.TxID{stale}},
+		// Nothing drains the cascade queue any more (exec_local_queue.go,
+		// "(removed)"), but the leaf still hashes it when it is not empty,
+		// so a store holding an entry from before must be replaced too
+		// (review F5).
+		{name: "the peer's cascade queue holds an entry", peerCascade: []*url.TxID{stale}},
+		{name: "restart: the joiner holds a stale cascade entry", joinerCascade: []*url.TxID{stale}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -80,6 +88,9 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 			for _, id := range c.peer {
 				require.NoError(t, batch.Account(synth).LocalDeliveryQueue().Add(id))
 				require.NoError(t, batch.Message(id.Hash()).Main().Put(deposit))
+			}
+			if len(c.peerCascade) > 0 {
+				require.NoError(t, batch.Account(synth).CascadeDeliveryQueue().Add(c.peerCascade...))
 			}
 			ledger := new(protocol.SystemLedger)
 			ledger.Url = sysLedger
@@ -112,6 +123,9 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 			defer jb.Discard()
 			for _, id := range c.joiner {
 				require.NoError(t, jb.Account(synth).LocalDeliveryQueue().Add(id))
+			}
+			if len(c.joinerCascade) > 0 {
+				require.NoError(t, jb.Account(synth).CascadeDeliveryQueue().Add(c.joinerCascade...))
 			}
 
 			src := api.Querier2{Querier: NewQuerier(QuerierParams{Database: peerDB, Partition: partitionID})}

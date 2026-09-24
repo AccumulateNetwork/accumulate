@@ -137,3 +137,64 @@ func TestALoneScheduledEventIsBoundToItsBlock(t *testing.T) {
 	require.Error(t, Account(context.Background(), liar, batch, sysLedger, opts),
 		"the one held vote moved from block 30 to 31 and the leaf check passed")
 }
+
+// TestStaleMinorVotesAreCleared (review F5): the restart case for the minor
+// side, which the suite did not cover -- skipping the clear passed green. A
+// restarted node holds a vote the peer has already released; the peer serves
+// no events; the pull must clear the node's vote or the ledger is refused by
+// every peer for ever -- the #4399 symptom, on the minor side.
+func TestStaleMinorVotesAreCleared(t *testing.T) {
+	partitionID := "StaleVotes"
+	part := protocol.PartitionUrl(partitionID)
+	sysLedger := part.JoinPath(protocol.Ledger)
+	vote := &protocol.AuthoritySignature{
+		Origin:    protocol.AccountUrl("alice", "book", "1"),
+		Authority: protocol.AccountUrl("alice", "book"),
+		Vote:      protocol.VoteTypeAccept,
+		TxID:      protocol.AccountUrl("alice", "tokens").WithTxID([32]byte{1}),
+		Cause:     protocol.AccountUrl("alice", "book", "1").WithTxID([32]byte{2}),
+	}
+
+	src := newObservedDB(t)
+	b := src.Begin(true)
+	ledger := &protocol.SystemLedger{Url: sysLedger, Index: 204}
+	require.NoError(t, b.Account(sysLedger).Main().Put(ledger))
+	require.NoError(t, b.UpdateBPT())
+	require.NoError(t, b.Commit())
+	b = src.Begin(true)
+	data, err := (&protocol.IndexEntry{BlockIndex: ledger.Index}).MarshalBinary()
+	require.NoError(t, err)
+	idx, err := b.Account(sysLedger).RootChain().Index().Get()
+	require.NoError(t, err)
+	require.NoError(t, idx.AddEntry(data, false))
+	require.NoError(t, b.UpdateBPT())
+	require.NoError(t, b.Commit())
+	b = src.Begin(false)
+	root, err := b.GetBptRootHash()
+	require.NoError(t, err)
+	b.Discard()
+
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: ledger.Index}, Partition: part}
+
+	dst := newObservedDB(t)
+	// The stale vote is committed, as a restarted node's store holds it.
+	sb := dst.Begin(true)
+	require.NoError(t, sb.Account(sysLedger).Main().Put(&protocol.SystemLedger{Url: sysLedger, Index: 190}))
+	require.NoError(t, sb.Account(sysLedger).Events().Minor().Votes(6).Add(vote))
+	require.NoError(t, sb.UpdateBPT())
+	require.NoError(t, sb.Commit())
+	sb = dst.Begin(false)
+	staleRoot, err := sb.Account(sysLedger).Events().BPT().GetRootHash()
+	require.NoError(t, err)
+	sb.Discard()
+	require.NotEqual(t, [32]byte{}, staleRoot, "precondition: the stale vote is in the joiner's events BPT")
+
+	batch := dst.Begin(true)
+	defer batch.Discard()
+	require.NoError(t, Account(context.Background(), honest, batch, sysLedger, opts),
+		"a stale held vote on the joiner was not cleared by the peer's empty answer")
+	got, err := batch.Account(sysLedger).Events().Minor().Votes(6).Get()
+	require.NoError(t, err)
+	require.Empty(t, got, "the stale vote survived the pull")
+}
