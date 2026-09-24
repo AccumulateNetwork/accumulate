@@ -384,3 +384,35 @@ func TestFullSpine_AStoredFormsTransactionTheNodeHoldsIsNotAskedFor(t *testing.T
 		b.Discard()
 	}
 }
+
+// TestFullSpine_ALocalStubIsNotABody — the node's own copy of a transaction
+// a stored form refers to is held to the check a peer's is: a stub under the
+// transaction's hash is not its body, so the node asks the peer rather than
+// resolving the stored form with it and refusing an honest peer (re-check
+// finding 3, note_3896174331).
+func TestFullSpine_ALocalStubIsNotABody(t *testing.T) {
+	src, u, entries := spineWithMessages(t)
+	var anchor *messaging.BlockAnchor
+	func() {
+		b := src.Begin(false)
+		defer b.Discard()
+		require.NoError(t, b.Message(entries[len(entries)-1]).Main().GetAs(&anchor))
+	}()
+	ref := anchor.Anchor.(*messaging.SequencedMessage).Message.(*messaging.TransactionMessage).Transaction
+
+	dst := newObservedDB(t)
+	b := dst.Begin(true)
+	defer b.Discard()
+	body := ref.Body.(*protocol.RemoteTransaction)
+	require.NoError(t, b.Message(body.Hash).Main().Put(&messaging.TransactionMessage{Transaction: ref}), "the node holds a stub under the transaction's hash")
+
+	peer := &askCounting{dbSource: &dbSource{db: src}}
+	p, _, err := FetchFrom(context.Background(), []Source{peer}, b, u, Options{Mode: ModeFullSpine})
+	require.NoError(t, err, "an honest peer was refused because the node's own stub was taken for the body")
+	require.NotZero(t, peer.asked, "the node took its own stub for the transaction's body")
+	require.NoError(t, p.Keep())
+
+	var txn *messaging.TransactionMessage
+	require.NoError(t, b.Message(body.Hash).Main().GetAs(&txn))
+	require.NotEqual(t, protocol.TransactionTypeRemote, txn.Transaction.Body.Type(), "the peer's whole transaction replaces the stub")
+}
