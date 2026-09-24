@@ -378,3 +378,37 @@ func TestRequester_MissWhileLaggingIsNotAMiss(t *testing.T) {
 	require.Equal(t, strandedAfter, asks-before, "caught up: misses count, and the stream strands")
 	require.Equal(t, []string{streamKey(reqStream)}, c.requester.Stranded())
 }
+
+// A signature by a key that is not active on the source does not count
+// toward the quorum and does not travel: the requester keeps asking by node
+// until it has a quorum of committee signers, and the envelope carries only
+// theirs (#4424). Unaddressed, a follower answers with its own key.
+func TestRequestAnchorSpan_OutsiderSignaturesDoNotCount(t *testing.T) {
+	c := testConductor()
+	c.Peers = fakePeers{"n1", "n2", "n3"}
+	g := new(network.GlobalValues)
+	g.Network = &protocol.NetworkDefinition{Partitions: []*protocol.PartitionInfo{{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator}}}
+	for i := byte(1); i <= 3; i++ {
+		g.Network.AddValidator(append(make([]byte, 31), i), "BVN1", true)
+	}
+	g.Network.AddValidator(append(make([]byte, 31), 9), "BVN1", false)
+	g.Globals = &protocol.NetworkGlobals{ValidatorAcceptThreshold: protocol.Rational{Numerator: 2, Denominator: 3}}
+	c.Globals.Store(g)
+
+	var envelopes []*messaging.Envelope
+	c.Intercept = func(_ context.Context, env *messaging.Envelope) (bool, error) {
+		envelopes = append(envelopes, env)
+		return false, nil
+	}
+	r := &byNodeRanger{signers: map[string]byte{"": 9, "n1": 1, "n2": 2, "n3": 3}}
+	_, served, err := c.requestAnchorSpan(context.Background(), r, protocol.PartitionUrl("BVN1"), 1, 2, acceptAll)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), served)
+	require.Equal(t, []string{"", "n1", "n2"}, r.asked, "the outsider's answer counts for nothing")
+
+	require.Len(t, envelopes, 1)
+	for _, m := range envelopes[0].Messages {
+		require.NotEqual(t, append(make([]byte, 31), 9), m.(*messaging.BlockAnchor).Signature.GetPublicKey(), "the outsider's signature travels")
+	}
+	require.Len(t, envelopes[0].Messages, 4, "two committee signers for each of two anchors")
+}

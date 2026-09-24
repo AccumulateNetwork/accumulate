@@ -84,6 +84,7 @@ func TestSequencer_AnswersFromTheCache(t *testing.T) {
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = protocol.ExecutorVersionLatest
 	globals.Network = &protocol.NetworkDefinition{Version: 1}
+	globals.Network.AddValidator(key.Public().(ed25519.PublicKey), "BVN0", true) // a validator signs its answers (#4424)
 	svc := NewSequencer(SequencerParams{
 		Database:     database.OpenInMemory(nil),
 		EventBus:     events.NewBus(nil),
@@ -155,6 +156,7 @@ func TestSequencer_MissOnlyWhenProduced(t *testing.T) {
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = protocol.ExecutorVersionLatest
 	globals.Network = &protocol.NetworkDefinition{Version: 1}
+	globals.Network.AddValidator(key.Public().(ed25519.PublicKey), "BVN0", true) // a validator signs its answers (#4424)
 	db := database.OpenInMemory(nil)
 	svc := NewSequencer(SequencerParams{Database: db, EventBus: events.NewBus(nil), Globals: globals, Partition: "BVN0", ValidatorKey: key, Cache: cache})
 	src := protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic)

@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 )
 
 // healCadence is how many blocks pass between healing activations (#4201).
@@ -62,17 +63,19 @@ const sendersPerActivation = 2
 // receiver refused (msg_block_anchor.go:285), one per block per partition.
 //
 // A node with no key is not in a committee: it has no identity to be in one
-// with.
+// with. Globals not loaded yet are not membership either: a node signs no
+// anchor on a startup race.
+//
+// The predicate is GlobalValues.MembershipOf, the one the sequencer asks
+// before it signs a healing answer and the requester asks of each signature
+// it is handed (#4424): the three places a node decides whether a validator
+// signature on an anchor counts ask the same question.
 func (c *Conductor) inCommittee() bool {
 	if len(c.ValidatorKey) != ed25519.PrivateKeySize {
 		return false
 	}
-	globals := c.Globals.Load()
-	if globals == nil || globals.Network == nil {
-		return false
-	}
-	_, v, ok := globals.Network.ValidatorByKey(c.ValidatorKey.Public().(ed25519.PublicKey))
-	return ok && v.IsActiveOn(c.Partition.ID)
+	pub := c.ValidatorKey.Public().(ed25519.PublicKey)
+	return c.Globals.Load().MembershipOf(pub, c.Partition.ID) == network.CommitteeMember
 }
 
 // partitionValidators returns this partition's active validator keys, sorted,

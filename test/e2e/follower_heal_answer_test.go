@@ -21,18 +21,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
-// #4424 (repro, not a fix). A follower answers a healing pull for an anchor
+// #4424. A follower answered a healing pull for an anchor
 // with a record signed by its own key, which no destination accepts; the
-// requester turns every signature in the answer into a BlockAnchor in one
-// envelope (requestAnchorSpan), and the executor refuses the whole envelope
+// requester turned every signature in the answer into a BlockAnchor in one
+// envelope (requestAnchorSpan), and the executor refused the whole envelope
 // on the first bad message — the quorum's good signatures with it.
 //
 // Run 20260924T093936Z: 141 refusals `key is not an active validator for
 // Directory|BVN3`, 140 of them within 3 s of the refusing container's own
 // `Requested missing anchors` from that same source; 0 for BVN1/BVN2.
 //
-// This test FAILS on issue-4205-lead d52ec1e00: the follower's answer carries
-// its own signature, and the requester's envelope is refused.
+// This test failed on issue-4205-lead d52ec1e00: the follower's answer
+// carried its own signature, and the requester's envelope was refused. A node
+// in no committee now signs no answer (sequencer_cache.go, signsAnswers); the
+// requester's own filter is pinned in crosschain's
+// TestRequesterKeepsOnlyCommitteeSignatures.
 func TestAFollowerAnswersNoAnchorWithItsOwnKey(t *testing.T) {
 	net, key := networkWithAFollower(t.Name(), 1, 3)
 	sim := NewSim(t,

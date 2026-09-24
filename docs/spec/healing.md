@@ -218,6 +218,22 @@ execution lag, because the window belongs to the sender and the answering
 node is not it ([The in-flight window belongs to the
 sender](#the-in-flight-window-belongs-to-the-sender)). A span that is partly ready is answered as
 far as it is ready; the requester remembers only what it was given.
+
+**Only a committee member signs an answer** (#4424). "The answering
+validator's signature" is a validator's: a node whose key is not active on
+the source partition — a follower, an API node serving the sequencer, a
+validator the committee has dropped — signs no answer. For an anchor it
+answers with the validators' signatures it holds and nothing of its own, and
+"not yet" when it holds none; for a synthetic it answers "not yet". **The
+requester keeps only committee signatures**: before it builds the envelope it
+drops every signature whose key is not active on the source partition in its
+own globals, and such a signature does not count toward the quorum it asks
+for by node. The envelope goes to the requester's own partition, whose
+submit validation refuses the whole envelope at the first signature by an
+outsider, so one stray signature would take the quorum's good copies with it
+(run 20260924T093936Z: 141 heal envelopes refused "key is not an active
+validator", every one carrying the follower's key). A requester that has not
+loaded a definition judges nothing and keeps what it was given.
 It packs the entries into a **bundle** — as many anchors and synthetic transactions as fit the
 envelope budget, whatever their streams, each with the transaction it belongs to
 when it has one, and with no proof of its own — and **submits the bundle into
