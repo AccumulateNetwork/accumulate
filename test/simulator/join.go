@@ -20,18 +20,18 @@ import (
 
 // joinState is one node's join, as the DAG service keeps it (#4292, #4294):
 // it is the simulator's [join.Buffer]. While the node is collecting it
-// executes nothing. Every block it is handed is buffered, and once
-// ApplyStaging has run each one is also taken into the node's own staging —
-// the buffered ones in order, then each new one as it arrives. Handoff leaves
-// collecting mode at the block the pulled state is and produces the buffered
-// blocks after it, as the DAG service's handoff does (dagbft/collect.go).
+// executes nothing, and every block it is handed is buffered. StageThrough
+// takes the buffered blocks through the one after the state the join proved
+// into the node's own staging, and none after it; Handoff leaves collecting
+// mode at the block the pulled state is and produces the buffered blocks
+// after it, as the DAG service does (dagbft/collect.go). The blocks after
+// Q + 1 reach staging only by being produced, as they reach a peer's (#4398).
 //
 // No peer's staging is loaded (#4362): staging is what this node collected
 // from consensus, minus what the pulled state says executed.
 type joinState struct {
 	mu      sync.Mutex
 	joining bool
-	staged  bool
 	buffer  []joinedBlock
 	exec    execute.Executor
 
@@ -45,6 +45,7 @@ var _ join.Buffer = (*joinState)(nil)
 type joinedBlock struct {
 	params    coreexec.BlockParams
 	envelopes []*messaging.Envelope
+	staged    bool // taken into staging by StageThrough
 }
 
 // A blockCollector is an executor that can take a committed block into staging
@@ -71,7 +72,7 @@ func (j *joinState) BufferOverrun() bool { return false }
 func (j *joinState) leave() {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	j.joining, j.staged, j.buffer = true, false, nil
+	j.joining, j.buffer = true, nil
 }
 
 // StartCollecting implements [join.Buffer]. A node that is already
@@ -83,19 +84,16 @@ func (j *joinState) StartCollecting() {
 	if j.joining {
 		return
 	}
-	j.joining, j.staged, j.buffer = true, false, nil
+	j.joining, j.buffer = true, nil
 }
 
-// Collect keeps a block, and takes it into staging once ApplyStaging has run.
+// Collect keeps a block. It does not take it into staging: StageThrough does
+// that, through the block after the state the join proves, and no further.
 func (j *joinState) Collect(params coreexec.BlockParams, envelopes []*messaging.Envelope) error {
 	j.mu.Lock()
-	j.buffer = append(j.buffer, joinedBlock{params, envelopes})
-	staged := j.staged
-	j.mu.Unlock()
-	if !staged {
-		return nil
-	}
-	return j.apply(params, envelopes)
+	defer j.mu.Unlock()
+	j.buffer = append(j.buffer, joinedBlock{params: params, envelopes: envelopes})
+	return nil
 }
 
 func (j *joinState) apply(params coreexec.BlockParams, envelopes []*messaging.Envelope) error {
@@ -107,60 +105,87 @@ func (j *joinState) apply(params coreexec.BlockParams, envelopes []*messaging.En
 	return errors.UnknownError.Wrap(err)
 }
 
-// ApplyStaging implements [join.Buffer]: it runs load, then takes every block
-// buffered since the node left into staging, in order, and every one that
-// arrives after.
-func (j *joinState) ApplyStaging(load func() error) error {
+// StageThrough implements [join.Buffer]: it takes into staging, in order,
+// every buffered block whose index is at most block and that is not in
+// staging yet, and none after it. The simulator's blocks carry their index,
+// so block is found by it rather than by the leader round the DAG service
+// reads (DIFFERENCES E11). NotReady: block has not been collected yet;
+// Conflict: block is at or before the block this node stood at when it
+// started collecting.
+func (j *joinState) StageThrough(block uint64) error {
 	j.mu.Lock()
 	if !j.joining {
 		j.mu.Unlock()
 		return errors.NotAllowed.With("this node is not joining")
 	}
-	if j.staged {
-		j.mu.Unlock()
-		return errors.NotAllowed.With("staging has already been applied")
-	}
-	buffered := j.buffer
-	j.mu.Unlock()
-
-	err := load()
+	from, err := j.from()
 	if err != nil {
-		return errors.UnknownError.Wrap(err)
+		j.mu.Unlock()
+		return err
 	}
-	for _, b := range buffered {
-		err := j.apply(b.params, b.envelopes)
-		if err != nil {
-			return errors.UnknownError.Wrap(err)
+	if block <= from {
+		j.mu.Unlock()
+		return errors.Conflict.WithFormat("cannot stage through block %d, at or behind the block %d this node stood at", block, from)
+	}
+	through := int(block - from)
+	if through > len(j.buffer) {
+		j.mu.Unlock()
+		return errors.NotReady.WithFormat("block %d has not been collected: only %d blocks have been since %d", block, len(j.buffer), from)
+	}
+	// By position: the buffer only grows while the node is joining, so a
+	// position names the same block after Collect has appended.
+	var take []int
+	for i := range j.buffer[:through] {
+		if !j.buffer[i].staged {
+			take = append(take, i)
 		}
 	}
+	blocks := append([]joinedBlock(nil), j.buffer[:through]...)
+	j.mu.Unlock()
 
-	j.mu.Lock()
-	defer j.mu.Unlock()
-	j.staged = true
+	for _, i := range take {
+		err := j.apply(blocks[i].params, blocks[i].envelopes)
+		if err != nil {
+			return errors.UnknownError.WithFormat("stage buffered block %d: %w", blocks[i].params.Index, err)
+		}
+		j.mu.Lock()
+		j.buffer[i].staged = true
+		j.mu.Unlock()
+	}
 	return nil
+}
+
+// from is the block this node stood at when it started collecting: the one
+// before the first buffered block, or its last block when nothing is
+// buffered. It is called with the lock held.
+func (j *joinState) from() (uint64, error) {
+	if len(j.buffer) > 0 {
+		return j.buffer[0].params.Index - 1, nil
+	}
+	last, _, err := j.exec.LastBlock()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("read the last block: %w", err)
+	}
+	return last.Index, nil
 }
 
 // Handoff implements [join.Buffer]: it leaves collecting mode at block q and
 // produces every buffered block after q, in order. The blocks at or below q
 // are in the state the pull put there and are not produced again; a q past
 // the last block collected is not ready, because the blocks up to it have not
-// been handed to this node yet.
+// been handed to this node yet. A block that fails to produce puts the node
+// back into collecting mode holding it and the blocks after it, as the DAG
+// service does (#4401).
 func (j *joinState) Handoff(q uint64) error {
 	j.mu.Lock()
 	if !j.joining {
 		j.mu.Unlock()
 		return errors.NotAllowed.With("this node is not joining")
 	}
-	var from uint64
-	if len(j.buffer) > 0 {
-		from = j.buffer[0].params.Index - 1
-	} else {
-		last, _, err := j.exec.LastBlock()
-		if err != nil {
-			j.mu.Unlock()
-			return errors.UnknownError.WithFormat("read the last block: %w", err)
-		}
-		from = last.Index
+	from, err := j.from()
+	if err != nil {
+		j.mu.Unlock()
+		return err
 	}
 	if q < from {
 		j.mu.Unlock()
@@ -172,15 +197,19 @@ func (j *joinState) Handoff(q uint64) error {
 		return errors.NotReady.WithFormat("the state is block %d and only %d blocks have been collected since %d", q, len(j.buffer), from)
 	}
 	blocks := j.buffer[skip:]
-	j.joining, j.staged, j.buffer = false, false, nil
-	j.mu.Unlock()
-
 	if j.produce == nil {
+		j.mu.Unlock()
 		return errors.NotAllowed.With("this node cannot produce a block")
 	}
-	for _, b := range blocks {
+	j.joining, j.buffer = false, nil
+	j.mu.Unlock()
+
+	for i, b := range blocks {
 		err := j.produce(b.params, b.envelopes)
 		if err != nil {
+			j.mu.Lock()
+			j.joining, j.buffer = true, append([]joinedBlock(nil), blocks[i:]...)
+			j.mu.Unlock()
 			return errors.UnknownError.WithFormat("produce buffered block %d: %w", b.params.Index, err)
 		}
 	}

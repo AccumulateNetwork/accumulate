@@ -79,9 +79,10 @@ type ExecutorApp struct {
 
 	// Join, when it is set and says the node is joining, takes the blocks
 	// this node is handed instead of executing them: a node that has left and
-	// is coming back (executor spec, "Sync"; #4294). Collect keeps the block —
-	// buffered until the node has its peers' staging, applied to that staging
-	// after — exactly as the DAG service does.
+	// is coming back (executor spec, "Sync"; #4294). Collect keeps the block
+	// in the join's buffer and nothing more, exactly as the DAG service does:
+	// the join takes the buffer into staging only through the block after the
+	// state it proves (#4398).
 	Join Joining
 }
 

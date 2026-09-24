@@ -9,6 +9,7 @@ package join
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,8 +29,17 @@ type fakeBuffer struct {
 	handedOff  uint64
 	handoffs   []uint64 // every block the join handed off at, in order
 	handoffErr error
-	applied    int // how many times collecting into staging was started
 	starts     int // how many times the join started collecting
+
+	// staged is every block the join asked to stage through, in order;
+	// stageErrs, if set, is what StageThrough answers each time, in turn,
+	// before it answers nil.
+	staged    []uint64
+	stageErrs []error
+
+	// log, if set, records the join's calls on the buffer and the stage in
+	// the order they are made.
+	log *[]string
 
 	// restarts, if set, is whether StartCollecting starts a new buffer once
 	// this one has overrun; otherwise the overrun stays.
@@ -45,15 +55,18 @@ func (b *fakeBuffer) StartCollecting() {
 }
 func (b *fakeBuffer) Collecting() bool    { return b.collecting }
 func (b *fakeBuffer) BufferOverrun() bool { return b.overrun }
-func (b *fakeBuffer) ApplyStaging(load func() error) error {
-	err := load()
-	if err != nil {
+func (b *fakeBuffer) StageThrough(block uint64) error {
+	record(b.log, "stage", block)
+	b.staged = append(b.staged, block)
+	if len(b.stageErrs) > 0 {
+		err := b.stageErrs[0]
+		b.stageErrs = b.stageErrs[1:]
 		return err
 	}
-	b.applied++
 	return nil
 }
 func (b *fakeBuffer) Handoff(q uint64) error {
+	record(b.log, "handoff", q)
 	if b.handoffErr != nil {
 		return b.handoffErr
 	}
@@ -76,13 +89,26 @@ type fakeStage struct {
 	// Delivered + 1; gapAsked is every block HasGap was asked about.
 	gaps     map[uint64]bool
 	gapAsked []uint64
+
+	log *[]string
 }
 
-func (s *fakeStage) SettleStagingAt(q uint64) error { s.settled = q; return nil }
+func (s *fakeStage) SettleStagingAt(q uint64) error {
+	record(s.log, "settle", q)
+	s.settled = q
+	return nil
+}
+
+func record(log *[]string, what string, n uint64) {
+	if log != nil {
+		*log = append(*log, fmt.Sprintf("%s %d", what, n))
+	}
+}
 
 // HasGap is the seam granted for #4362 (Stage.HasGap): whether the streams
 // collected for a block run contiguously from each stream's Delivered + 1.
 func (s *fakeStage) HasGap(block uint64) (bool, error) {
+	record(s.log, "gap", block)
 	s.gapAsked = append(s.gapAsked, block)
 	return s.gaps[block], nil
 }
@@ -176,7 +202,7 @@ func TestJoin_HandsOffWhereTheNextBlockHasNoGap(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Joined, outcome)
 
-	require.Equal(t, 1, buf.applied, "the node collects into its own staging")
+	require.Equal(t, []uint64{21}, buf.staged, "the node stages what it collected through the block after the state")
 	require.Equal(t, []uint64{21}, stage.gapAsked, "the block after the match is checked for a gap")
 	require.Equal(t, uint64(20), stage.settled, "staging settles at the block the state is")
 	require.Equal(t, []uint64{20}, buf.handoffs, "and the handoff is at that block")
@@ -217,7 +243,7 @@ func TestJoin_StartsAgainAfterABufferOverrun(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Joined, outcome)
 	require.Equal(t, 2, buf.starts, "the join started collecting again after the overrun")
-	require.Equal(t, 2, buf.applied, "and collects into staging again")
+	require.Equal(t, []uint64{21}, buf.staged, "and stages only from the new buffer")
 	require.Equal(t, []uint64{20}, buf.handoffs)
 }
 
@@ -324,4 +350,42 @@ func TestJoin_APreListenEntryAdvancesTheSyncInsteadOfExecuting(t *testing.T) {
 	assert.Equal(t, uint64(b+1), state.synced, "the sync advanced to B+1")
 	assert.Equal(t, uint64(b+1), stage.settled, "staging settles at the block the sync reached")
 	assert.Equal(t, []uint64{b + 1, b + 2}, stage.gapAsked, "the join asked about B+1, then B+2")
+	assert.Equal(t, []uint64{b + 1, b + 2}, buf.staged, "and staged through each before it asked")
+}
+
+// Staging at the handoff holds everything collected through Q + 1 and nothing
+// after it (executor spec, "Sync", step 5; #4398). The join stages through
+// Q + 1 once the state matches at Q and before it asks whether Q + 1 has a
+// gap — the gap check reads what Q + 1 carries — then settles at Q and hands
+// off. Before #4398 every collected group was staged as it arrived, and a
+// joining node executed Q + 1 holding what Q + 2 … brought (run
+// 20260924T052134Z).
+func TestJoin_StagesThroughTheBlockAfterTheStateBeforeTheGapCheck(t *testing.T) {
+	var log []string
+	buf := &fakeBuffer{log: &log}
+	stage := &fakeStage{log: &log}
+	state := &fakeState{matchAt: 20, matchFrom: 1}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
+
+	_, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, []string{"stage 21", "gap 21", "settle 20", "handoff 20"}, log)
+}
+
+// Q + 1 not collected yet is a wait, not a gap check without it: the join
+// asks nothing of the stage and hands nothing off until the block after the
+// state is staged.
+func TestJoin_WaitsForTheBlockAfterTheStateBeforeItAsksAboutAGap(t *testing.T) {
+	var log []string
+	buf := &fakeBuffer{log: &log, stageErrs: []error{
+		errors.NotReady.With("block 21 has not been collected"),
+		errors.Conflict.With("the state is behind"),
+	}}
+	stage := &fakeStage{log: &log}
+	state := &fakeState{matchAt: 20, matchFrom: 1}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
+
+	_, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, []string{"stage 21", "stage 21", "stage 21", "gap 21", "settle 20", "handoff 20"}, log)
 }

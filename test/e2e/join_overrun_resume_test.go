@@ -211,7 +211,8 @@ func (b *resumeBuffer) overrunLocked() bool {
 	return b.overran
 }
 
-func (b *resumeBuffer) ApplyStaging(load func() error) error { return load() }
+// StageThrough stands for staging, which this test does not look at.
+func (b *resumeBuffer) StageThrough(uint64) error { return nil }
 
 // Handoff hands off at q only if the buffer holds every block from q + 1 to
 // the network's block: never from a buffer that overran, never below the

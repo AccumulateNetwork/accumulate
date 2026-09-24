@@ -32,11 +32,11 @@ type ExecutorStage struct {
 // contiguously from the pulled state's Delivered: a number above Delivered,
 // below the highest number held or validated, that nothing is held for.
 //
-// It does not know which of the collected entries the block carries — a
+// It does not know which of the staged entries the block carries — a
 // collected group has no block number — so it asks the question of
-// everything collected. That is the stricter question: a hole that only a
-// later block would have needed filled is reported too, and the join then
-// advances the sync one more round, which is the safe direction.
+// everything staged, which is everything collected through block and nothing
+// after it (Buffer.StageThrough, #4398). Entries from before block are asked
+// about too: a hole below what block carries is one it would need filled.
 func (s *ExecutorStage) HasGap(block uint64) (bool, error) {
 	if s.Staging == nil || s.Database == nil {
 		return false, errors.BadRequest.With("a stage needs staging and a database")
