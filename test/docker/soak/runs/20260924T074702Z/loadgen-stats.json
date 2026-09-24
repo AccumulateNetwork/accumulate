@@ -1,0 +1,207 @@
+{
+  "updatedUnix": 1790238060,
+  "startUnix": 1790236140,
+  "elapsedSec": 1920,
+  "phase": "done",
+  "target": 180000,
+  "generated": 145643,
+  "rejected": 5,
+  "skipped": 147,
+  "rate": 75.85313301172623,
+  "targetTps": 100,
+  "perType": {
+    "add-account": {
+      "generated": 570,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-credits-lite": {
+      "generated": 10675,
+      "rejected": 0,
+      "skipped": 11
+    },
+    "add-credits-page": {
+      "generated": 10420,
+      "rejected": 0,
+      "skipped": 7
+    },
+    "add-key-book": {
+      "generated": 285,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "add-page-key": {
+      "generated": 3151,
+      "rejected": 0,
+      "skipped": 8
+    },
+    "add-token": {
+      "generated": 1317,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "burn-credits": {
+      "generated": 2579,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "burn-tokens": {
+      "generated": 4089,
+      "rejected": 0,
+      "skipped": 5
+    },
+    "burn-tokens-adi": {
+      "generated": 5117,
+      "rejected": 0,
+      "skipped": 2
+    },
+    "burn-tokens-custom": {
+      "generated": 1286,
+      "rejected": 0,
+      "skipped": 2
+    },
+    "fail:data-to-void": {
+      "generated": 1324,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "fail:overburn-tokens": {
+      "generated": 1339,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "fail:overspend": {
+      "generated": 2793,
+      "rejected": 1,
+      "skipped": 5
+    },
+    "fail:send-to-void": {
+      "generated": 2744,
+      "rejected": 1,
+      "skipped": 0
+    },
+    "fail:sub-adi-on-void": {
+      "generated": 1293,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:add-credits": {
+      "generated": 98,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-data-account": {
+      "generated": 120,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-identity": {
+      "generated": 100,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-book": {
+      "generated": 31,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-key-page": {
+      "generated": 94,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token": {
+      "generated": 70,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-account": {
+      "generated": 126,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:create-token-holder": {
+      "generated": 140,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:issue-tokens": {
+      "generated": 70,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "grow:set-threshold": {
+      "generated": 74,
+      "rejected": 0,
+      "skipped": 0
+    },
+    "issue-tokens": {
+      "generated": 2566,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "remove-page-key": {
+      "generated": 2517,
+      "rejected": 1,
+      "skipped": 1
+    },
+    "send-tokens-adi": {
+      "generated": 19865,
+      "rejected": 0,
+      "skipped": 20
+    },
+    "send-tokens-custom": {
+      "generated": 3912,
+      "rejected": 1,
+      "skipped": 3
+    },
+    "send-tokens-lite": {
+      "generated": 24506,
+      "rejected": 1,
+      "skipped": 10
+    },
+    "set-threshold": {
+      "generated": 5194,
+      "rejected": 0,
+      "skipped": 32
+    },
+    "transfer-credits": {
+      "generated": 3833,
+      "rejected": 0,
+      "skipped": 5
+    },
+    "update-account-auth": {
+      "generated": 2577,
+      "rejected": 0,
+      "skipped": 1
+    },
+    "update-page-key": {
+      "generated": 3950,
+      "rejected": 0,
+      "skipped": 15
+    },
+    "write-data-adi": {
+      "generated": 16025,
+      "rejected": 0,
+      "skipped": 11
+    },
+    "write-data-lite": {
+      "generated": 10793,
+      "rejected": 0,
+      "skipped": 5
+    }
+  },
+  "queries": {
+    "notReadyRetriedElsewhere": 44231,
+    "notReadyAtEveryEndpoint": 0,
+    "transportErrorRetriedElsewhere": 872,
+    "transportErrorAtEveryEndpoint": 0
+  },
+  "accounts": {
+    "identities": 95,
+    "keyBooks": 126,
+    "keyPages": 220,
+    "tokenIssuers": 70,
+    "accounts": 3554
+  }
+}
