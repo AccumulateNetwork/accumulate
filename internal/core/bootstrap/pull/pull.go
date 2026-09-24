@@ -434,12 +434,31 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	// A peer that answers with an empty record has served nothing, and serving
 	// nothing is a failure of that source, not an account with no state. It
 	// used to return success with no receipt, and a fetch with no receipt
-	// settles against any root at all, including one nobody anchored.
-	if rec == nil || rec.Account == nil {
-		return nil, errors.NotFound.WithFormat("%v: the peer served no account", u)
+	// settles against any root at all, including one nobody anchored. It is
+	// not NotFound: that is the peer's own answer that it holds no leaf, and
+	// a name every source answers so is dropped (executor.md, "Sync", §2).
+	if rec == nil {
+		return nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
 	}
 	if wantReceipt && rec.Receipt == nil {
 		return nil, errors.Conflict.WithFormat("%v: the peer served no receipt", u)
+	}
+
+	// A leaf with no body (#4397): the peer's tree holds a leaf for an account
+	// with no main state, and it served the receipt for that leaf. Nothing is
+	// stored for the body, which hashes as the zero hash; the account is
+	// marked dirty so its leaf is written when the pass is, and the rest of
+	// it is pulled as for any account. Settle's leaf check is what decides:
+	// a peer that serves no body for an account that has one serves a receipt
+	// that does not pass through the leaf this state hashes to.
+	if rec.Account == nil {
+		if !wantReceipt {
+			return nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
+		}
+		if err := batch.Account(u).MarkDirty(); err != nil {
+			return nil, errors.UnknownError.WithFormat("mark dirty: %w", err)
+		}
+		return rec.Receipt, nil
 	}
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
 		return nil, errors.UnknownError.WithFormat("store main: %w", err)
