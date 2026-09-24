@@ -585,6 +585,15 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 		}
 		return rec.Receipt, true, nil
 	}
+	// A body names its own account, and that is what binds a body's leaf to
+	// the name asked for. A body served under another name hashes to that
+	// other account's true leaf and passes the leaf check; the store then
+	// refuses it only at commit, where a mismatched URL is a panic, and one
+	// such answer took the joining node down (#4408, review R4). It is a
+	// refusal of this source here, and the next is asked.
+	if got := rec.Account.GetUrl(); got == nil || !got.Equal(u) {
+		return nil, false, errors.Conflict.WithFormat("%v: the peer served the body of %v", u, got)
+	}
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
 		return nil, false, errors.UnknownError.WithFormat("store main: %w", err)
 	}

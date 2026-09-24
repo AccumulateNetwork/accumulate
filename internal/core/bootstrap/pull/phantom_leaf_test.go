@@ -313,3 +313,40 @@ func TestOnlyAnAnswerVotesOnALeafWithNoBody(t *testing.T) {
 		require.True(t, stderrors.Is(err, ErrDissent), "want ErrDissent, got %v", err)
 	})
 }
+
+// TestABodyServedUnderAnotherNameIsRefused (#4408, review R4). A liar serves
+// alice/data's body, receipt and chains under nobody/tokens. The pulled state
+// carries alice/data's URL, so it hashes to alice/data's true leaf and passes
+// the leaf check against the anchored root; the store's own URL check then
+// fired at commit, where it is a panic, and took the joining node down. A body
+// that does not name the account asked for is refused at the pull, and the
+// next source is asked.
+func TestABodyServedUnderAnotherNameIsRefused(t *testing.T) {
+	src, root, block, part, _, _, bodied, partitionID := mainlessFixture(t)
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
+	phantom := url.MustParse("nobody/tokens")
+	liar := swapAll{Source: honest, for_: phantom, other: bodied}
+
+	for _, c := range []struct {
+		name string
+		srcs []Source
+	}{
+		{"the liar alone", []Source{liar}},
+		{"the liar, then an honest peer", []Source{liar, honest}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dst := newObservedDB(t)
+			batch := dst.Begin(true)
+			p, _, err := FetchFrom(context.Background(), c.srcs, batch, phantom, opts)
+			if err == nil {
+				err = p.Settle(root)
+			}
+			require.Error(t, err, "a body served under a name it does not carry was kept")
+			require.NoError(t, batch.UpdateBPT())
+			require.NoError(t, batch.Commit())
+			_, lerr := rvLeaf(dst, phantom)
+			require.Error(t, lerr, "a leaf was written under the phantom name")
+		})
+	}
+}
