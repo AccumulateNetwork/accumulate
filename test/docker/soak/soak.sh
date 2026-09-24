@@ -544,7 +544,7 @@ if stale=$(pgrep -f "$here/soakmon.py" 2>/dev/null) && [ -n "$stale" ]; then
   exit 1
 fi
 ( while kill -0 $$ 2>/dev/null; do
-    env RUN_DIR="$rd" "$here/soakmon.py" >> "$rd/soakmon.log" 2>&1
+    env RUN_DIR="$rd" REJOIN_MAX_BEHIND="${REJOIN_MAX_BEHIND:-10}" "$here/soakmon.py" >> "$rd/soakmon.log" 2>&1
     echo "$(date -u +%FT%TZ) soakmon exited rc=$? — restarting" >> "$rd/soakmon.log"
     sleep 2
   done ) &
@@ -830,11 +830,19 @@ fi
 
 # Monitor: heights + total heals every 5 min
 # followerHeals is its own column, not part of the heals sum: see the loop.
-echo "time,dnHeight,heals,cpuPct,followerHeals" > "$mon"
+#
+# Heights are every node's own accumulate_node_executed_block, read from the
+# same scrape as the heals (heights.py, #4404). `dnHeightMajority` is the
+# block a majority of the Directory's validators have executed and
+# `dnHeightMax` the highest; then one `exec.<container>.<partition>` column
+# per node the run has. The column used to be `dnHeight`, the Directory
+# ledger index as ONE node answered it — host port 26680, acc-bvn1-val1 —
+# and on run 20260924T052134Z that was the restarted node: it read 207 for a
+# minute while the other eleven went 215 -> 323.
+mon_tmp=$(mktemp -d)
+echo "time,$(python3 "$here/heights.py" header "$FOL_LIST")" > "$mon"
 ( while kill -0 $DRIVER 2>/dev/null; do
-    h=$(curl -s -X POST http://localhost:26680/v3 -H 'content-type: application/json' \
-      -d '{"jsonrpc":"2.0","id":1,"method":"query","params":{"scope":"acc://dn.acme/ledger"}}' \
-      | grep -oE '"index":[0-9]+' | head -1 | cut -d: -f2)
+    rm -f "$mon_tmp"/*.prom
     # Heals = entries that came back in answer to a span request AND filled a
     # gap (#4283). This used to read syntheticHeals/anchorHeals off
     # consensus-status, which no node has reported since healing became
@@ -852,8 +860,8 @@ echo "time,dnHeight,heals,cpuPct,followerHeals" > "$mon"
     # no-follower run's monitor.csv gains.
     heals=0; fol_heals=""; [ "$n_fol" -gt 0 ] && fol_heals=0
     for c in $(docker ps --filter name=acc-bvn --format '{{.Names}}'); do
-      x=$(docker exec "$c" sh -c 'wget -q -O - http://127.0.0.1:26670/metrics 2>/dev/null' \
-        | grep -E '^accumulate_conductor_heal_entries_total\{[^}]*outcome="applied"' | awk '{s+=$NF} END {printf "%d", s}')
+      docker exec "$c" sh -c 'wget -q -O - http://127.0.0.1:26670/metrics 2>/dev/null' > "$mon_tmp/$c.prom"
+      x=$(grep -E '^accumulate_conductor_heal_entries_total\{[^}]*outcome="applied"' "$mon_tmp/$c.prom" | awk '{s+=$NF} END {printf "%d", s}')
       case ",$FOL_LIST," in
         *",$c,"*) fol_heals=$(( ${fol_heals:-0} + ${x:-0} )) ;;
         *)        heals=$((heals + ${x:-0})) ;;
@@ -865,7 +873,7 @@ echo "time,dnHeight,heals,cpuPct,followerHeals" > "$mon"
     ts=$(date -u +%FT%T)
     echo "$stats" | sed "s/^/$ts,/" >> "$rd/stats.csv"
     cpu=$(echo "$stats" | cut -d, -f2 | tr -d '%' | awk '{s+=$1} END {printf "%.0f", s}')
-    echo "$ts,${h:-?},$heals,${cpu:-?},$fol_heals" >> "$mon"
+    echo "$ts,$(python3 "$here/heights.py" row "$FOL_LIST" "$mon_tmp" "$heals" "${cpu:-?}" "$fol_heals")" >> "$mon"
     # 30 s, not 5 min: run 20260903T121819Z climbed from 45 MiB to the
     # GOMEMLIMIT in ten minutes and stats.csv had two points for it (PLAN S0).
     sleep ${MON_INTERVAL:-$([ "$duration_seconds" -le 1800 ] && echo 20 || echo 30)}
@@ -965,6 +973,7 @@ if [ -n "${READPROBE:-}" ]; then kill $READPROBE 2>/dev/null; wait $READPROBE 2>
 # were not on this list at all until then.
 stop_bg "${CHAOS:-}" "${MON:-}" "${MONLOOP:-}" "${STORELOOP:-}" "${PROFLOOP:-}" \
         "${SEIZE:-}" "${LOGCAP:-}" "${WEDGE:-}"
+rm -rf "${mon_tmp:-/nonexistent-mon-tmp}"
 # And say so if one survived anyway. The symptom is invisible — an orphan
 # subshell doing nothing anyone sees — so it has to become a line in the log
 # rather than something the operator notices in `ps` a day later (#4364).
@@ -1549,45 +1558,12 @@ PYEOF
 }
 
 nodestate_row() {   # $1 = role: validator | follower
-  python3 - "$rd/nodestate.csv" "${1:-}" <<'PYEOF'
-import csv, sys
-path, role = sys.argv[1], sys.argv[2]
-try:
-    rows = list(csv.DictReader(open(path)))
-except OSError:
-    print("— not measured (no `nodestate.csv`: no node exported accumulate_node_state, or no container start was read)")
-    raise SystemExit
-rows = [r for r in rows if not role or r.get("role") == role]
-if not rows:
-    print("— not measured (no %s row in `nodestate.csv`)" % (role or "node"))
-    raise SystemExit
-# soakmon writes a row when a start reaches ACTIVE and, on its way out, a
-# `final` row for every start that has not. soakmon is supervised and can
-# restart mid-run, so a `final` row is a start that never reached ACTIVE
-# only if no later row completed the same start.
-key = lambda r: (r["node"], r["partition"], r["containerStarted"])
-done = {key(r) for r in rows if r["kind"] in ("reached", "already")}
-reached = [r for r in rows if r["kind"] == "reached"]
-stuck = {}
-for r in rows:
-    if r["kind"] == "final" and key(r) not in done:
-        stuck[key(r)] = r
-if reached:
-    w = max(reached, key=lambda r: float(r["startToActiveS"]))
-    head = "worst %ss (%s %s) over %d start(s) seen booting" % (
-        w["startToActiveS"], w["node"], w["partition"], len(reached))
-else:
-    head = "no start inside the run was seen booting"
-already = sum(1 for r in rows if r["kind"] == "already")
-if already:
-    head += "; %d ACTIVE at first sight (started before the monitor saw them: upper bounds, not in the worst)" % already
-if stuck:
-    head += "; NEVER ACTIVE: " + ", ".join(
-        "%s %s (%s)" % (r["node"], r["partition"], r["state"]) for r in stuck.values())
-else:
-    head += "; every start reached ACTIVE"
-print(head)
-PYEOF
+  # Rejoined, not ACTIVE (#4404): the gauge goes ACTIVE at the join's first
+  # root match and is never demoted, so run 20260924T052134Z's row read three
+  # failed starts as reaching ACTIVE. rejoin.py judges each start on the
+  # gauge, its executed height against its partition's (nodestate.csv), and
+  # its anchors against its peers' (node-logs-live.txt).
+  python3 "$here/rejoin.py" "$rd" "${1:-}" --max-behind "${REJOIN_MAX_BEHIND:-10}"
 }
 
 sub_row() {   # $1 = role, $2 = when the loadgen exited, $3 = "stallkill" or ""
@@ -1701,13 +1677,26 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   echo "| ended (UTC) | $ended |"
   echo "| elapsed | ${elapsed_h}h |"
   echo "| driver exit | $rc $([ "$rc" -eq 0 ] && echo '(clean)' || echo '(FAILED)') |"
-  echo "| dn height | ${first_h:-?} -> ${last_h:-?} |"
+  echo "| Directory height (block, the highest a majority of its validators executed; first -> last sample) | ${first_h:-— not measured} -> ${last_h:-— not measured} |"
   echo "| heals | ${first_x:-?} -> ${last_x:-?} |"
   echo "| chaos events | $n_chaos |"
   echo "| monitor samples | $(( $(wc -l < "$mon") - 1 )) |"
   echo "| seizure | $(grep -q SEIZED "$rd/seizewatch.out" 2>/dev/null && grep SEIZED "$rd/seizewatch.out" | tail -1 || echo 'none detected') |"
   echo "| reconcile pulls (#4073) | $reconcile_pulls |"
   echo "| stalled channels at end | $stalled_end |"
+  echo "| load generator reads a node would not answer (whole run) | $(python3 -c '
+import json, sys
+try:
+    q = json.load(open(sys.argv[1])).get("queries")
+except Exception:
+    q = None
+if q is None:
+    print("— not measured (loadgen-stats.json has no `queries`: a load generator built before #4404)")
+else:
+    print("NotReady: %d answers retried at another endpoint, %d queries no endpoint would answer; transport error: %d answers retried at another endpoint, %d queries failed at every endpoint" % (
+        q.get("notReadyRetriedElsewhere", 0), q.get("notReadyAtEveryEndpoint", 0),
+        q.get("transportErrorRetriedElsewhere", 0), q.get("transportErrorAtEveryEndpoint", 0)))
+' "$rd/loadgen-stats.json" 2>/dev/null) |"
   echo "| read-back probe | $(grep -m1 '^\*\*Whole run:\*\*' "$rd/readprobe-report.md" 2>/dev/null | sed 's/\*\*//g' || echo 'no report') |"
   if [ "$n_fol" -gt 0 ]; then
     echo "| follower read probe | $(grep -m1 -E '^\*\*acc-' "$rd/readprobe-report.md" 2>/dev/null | sed 's/\*\*//g' || echo '— not measured (no readprobe report)') |"
@@ -1716,7 +1705,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
   # say so in the verdict rather than leaving the dirs to be stumbled upon.
   echo "| wedge captures (#4125) | $(ls -d "$rd"/wedge-* 2>/dev/null | wc -l) $(ls -d "$rd"/wedge-* 2>/dev/null | xargs -r -n1 basename | paste -sd', ' -) |"
   echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run, the validators) | $(sub_row validator "$lg_exit" "$stopped_early") |"
-  echo "| container start → ACTIVE (s, per node and partition, every start the monitor saw; the validators) | $(nodestate_row validator) |"
+  echo "| restarted node rejoined (per node and partition: gauge ACTIVE, executed block within ${REJOIN_MAX_BEHIND:-10} of the block a majority of the partition's validators executed through its last reading, and every anchor it stated agreeing with its peers'; s = container start to the first sample ACTIVE and within that bound; the validators) | $(nodestate_row validator) |"
   if [ "$n_fol" -gt 0 ]; then
     echo
     echo "### Follower (#4365)"
@@ -1730,7 +1719,7 @@ n_chaos=$(wc -l < "$chaos" 2>/dev/null || echo 0)
     fi
     echo "| accepted, neither certified here, taken on relay, nor refused (#, whole run) | $(sub_row follower "$lg_exit" "$stopped_early") |"
     echo "| relayed (#, whole run) | $(relay_row follower) |"
-    echo "| container start → ACTIVE (s, per partition, the add-follower and every restart) | $(nodestate_row follower) |"
+    echo "| follower start rejoined (per partition, the add-follower and every restart; same reading as the validators' row) | $(nodestate_row follower) |"
     echo
     echo "**Stranded across disturbances (#4364).** The criterion is that the"
     echo "figure does not climb between disturbances and that every step is"

@@ -23,6 +23,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 # network, and the ad-hoc tools up there read it too.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import topology
+import heights
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMPOSE = os.path.join(HERE, "docker-compose.yml")
@@ -87,7 +88,7 @@ def _final_rows():
             write_submissions_csv(ns["submissions"], force=True)
         if ns.get("mem"):
             write_mem_csv(ns["mem"], force=True)
-        write_nodestate_csv(pending_starts(_NODESTATE_TRACK, time.time()))
+        write_nodestate_csv(final_starts(_NODESTATE_TRACK, time.time()))
     except Exception as e:
         try:
             sys.stderr.write("final rows: %r\n" % (e,))
@@ -1721,7 +1722,12 @@ NODE_STATE_NAMES = {0: "BOOTING", 1: "WAITING (retired)", 2: "ACTIVE", 3: "COMPL
 NODE_STATE_ACTIVE = 2
 BOOTING_BOUND_S = 600
 NODESTATE_CSV_HEADER = ("time,node,role,partition,containerStarted,state,"
-                        "startToActiveS,kind")
+                        "startToActiveS,kind,executedBlock,partitionHeight,"
+                        "startToCaughtUpS")
+# How far behind its partition a node may be and still count as executing
+# with it (#4404): blocks, against the height a majority of the partition's
+# validators have executed (heights.py). soak.conf's REJOIN_MAX_BEHIND.
+REJOIN_MAX_BEHIND = int(os.environ.get("REJOIN_MAX_BEHIND") or 10)
 _NODESTATE_TRACK = {}   # (node, partition) -> this start, whether it was seen not ACTIVE, when it became ACTIVE
 
 
@@ -1748,6 +1754,15 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
     now = time.time() if now is None else now
     disturbed = disturbed or {}
     fol = set(followers or ())
+    # Each node's own executed block per partition, and the partition's
+    # height as the block a majority of its VALIDATORS executed (#4404). The
+    # gauge alone cannot say a node rejoined: it goes ACTIVE at the join's
+    # first root match and is never demoted (join/state.go:857,
+    # tracker.go:194), and run 20260924T052134Z read three failed starts as
+    # ACTIVE — acc-bvn1-val1 bvn1 among them, stuck at block 214 against
+    # peers at 1376.
+    executed = {n: heights.executed_from_rows(per[n]) for n in (per or {})}
+    part_h = heights.partition_heights(executed, [n for n in executed if n not in fol])
     rows = []
     for node in sorted(per or {}):
         role = "follower" if node in fol else "validator"
@@ -1781,34 +1796,56 @@ def nodestate_from(per, now=None, disturbed=None, followers=()):
                     why = "BOOTING %ds after its container started (bound %ds)" % (since, BOOTING_BOUND_S)
                 else:
                     why = "BOOTING %ds after its container started" % since
+            ex = executed.get(node, {}).get(part)
+            ph = (part_h.get(part) or {}).get("majority")
+            behind = None if ex is None or ph is None else ph - ex
+            # ACTIVE by the gauge and not executing with its partition: the
+            # state the gauge cannot show, and the one the board must.
+            lagging = bool(active and behind is not None and behind > REJOIN_MAX_BEHIND)
+            if lagging:
+                why = ("ACTIVE by the gauge, executed %d vs partition %d "
+                       "(%d behind; bound %d)" % (ex, ph, behind, REJOIN_MAX_BEHIND))
             rows.append({"node": node, "role": role, "partition": part,
                          "measured": True, "value": v, "state": state,
                          "active": active, "alarm": alarm, "sinceStartS": since,
-                         "why": why})
+                         "why": why, "executed": ex, "partitionHeight": ph,
+                         "behind": behind, "lagging": lagging})
     return {"rows": rows,
             "allActive": bool(rows) and all(r["active"] for r in rows),
             "measured": any(r["measured"] for r in rows),
             "booting": sum(1 for r in rows if r["state"] == "BOOTING"),
+            "lagging": sum(1 for r in rows if r.get("lagging")),
+            "maxBehind": REJOIN_MAX_BEHIND,
             "alarms": ["%s %s" % (r["node"], r["partition"]) for r in rows if r["alarm"]],
             "boundS": BOOTING_BOUND_S,
             "label": "node state, per node and partition, now; alarm = BOOTING "
                      "longer than %ds after its container started" % BOOTING_BOUND_S}
 
 
-def track_start_to_active(track, ns, started, now):
-    """The time from a container's start to ACTIVE, per partition — the number
-    the verdict wants on a restart and on an add-follower.
+def track_start_to_active(track, ns, started, now, max_behind=None):
+    """The time from a container's start to ACTIVE, and to executing with its
+    partition, per partition — the numbers the verdict wants on a restart and
+    on an add-follower.
 
     `track` is carried between samples; `started` is container -> epoch of
     its current start. Returns the rows that completed on this sample, each
     with `kind`:
-      reached — seen not ACTIVE after this start and then ACTIVE: the figure
-                is a measurement, to the scrape interval (I_FLOW);
-      already — ACTIVE at the first sample after this start (the container
-                started before the monitor saw it, or booted inside one
-                interval): the figure is an upper bound only.
-    A start that never reaches ACTIVE completes nothing; `pending_starts`
-    names it."""
+      reached    — seen not ACTIVE after this start and then ACTIVE: the
+                   figure is a measurement, to the scrape interval (I_FLOW);
+      already    — ACTIVE at the first sample after this start (the container
+                   started before the monitor saw it, or booted inside one
+                   interval): the figure is an upper bound only;
+      caught-up  — the first sample of this start at which the gauge read
+                   ACTIVE AND its executed block was within `max_behind` of
+                   the partition's majority height (#4404). The gauge alone
+                   is not the reading: it goes ACTIVE at the join's first
+                   root match, mid-join, and is never demoted;
+      superseded — the start ended because the container started again:
+                   its last reading (state, executed block, partition height).
+    Every row carries the executed block and the partition height of the
+    sample it was taken at. A start that never reaches ACTIVE completes
+    nothing; `final_starts` writes every start's last reading at exit."""
+    n = REJOIN_MAX_BEHIND if max_behind is None else max_behind
     out = []
     for r in ns.get("rows") or ():
         if not r.get("measured"):
@@ -1818,38 +1855,62 @@ def track_start_to_active(track, ns, started, now):
             continue
         key = (r["node"], r["partition"])
         t = track.get(key)
+        if t is not None and t["started"] != st:
+            out.append(_start_row(key, t, now, "superseded"))
         if t is None or t["started"] != st:
             t = track[key] = {"started": st, "activeAt": None, "sawInactive": False,
+                              "caughtUpAt": None,
                               "role": r.get("role", "validator"), "state": r["state"]}
         t["state"] = r["state"]
-        if t["activeAt"] is not None:
-            continue
-        if not r["active"]:
-            t["sawInactive"] = True
-            continue
-        t["activeAt"] = now
-        out.append({"node": r["node"], "role": t["role"], "partition": r["partition"],
-                    "containerStarted": st, "state": r["state"],
-                    "startToActiveS": round(max(0.0, now - st), 1),
-                    "kind": "reached" if t["sawInactive"] else "already"})
+        t["executed"] = r.get("executed")
+        t["partitionHeight"] = r.get("partitionHeight")
+        if t["activeAt"] is None:
+            if not r["active"]:
+                t["sawInactive"] = True
+                continue
+            t["activeAt"] = now
+            out.append(_start_row(key, t, now, "reached" if t["sawInactive"] else "already"))
+        if (t["caughtUpAt"] is None and r["active"] and r.get("behind") is not None
+                and r["behind"] <= n):
+            t["caughtUpAt"] = now
+            out.append(_start_row(key, t, now, "caught-up"))
     return out
+
+
+def _start_row(key, t, now, kind):
+    node, part = key
+    return {"node": node, "role": t["role"], "partition": part,
+            "containerStarted": t["started"], "state": t["state"],
+            "startToActiveS": (None if t["activeAt"] is None
+                               else round(max(0.0, t["activeAt"] - t["started"]), 1)),
+            "startToCaughtUpS": (None if t.get("caughtUpAt") is None
+                                 else round(max(0.0, t["caughtUpAt"] - t["started"]), 1)),
+            "executedBlock": t.get("executed"), "partitionHeight": t.get("partitionHeight"),
+            "sinceStartS": round(max(0.0, now - t["started"]), 1), "kind": kind}
+
+
+def final_starts(track, now):
+    """Every start's last reading, at exit: its state, executed block and the
+    partition's height, and when (if ever) it reached ACTIVE and caught up.
+    A start with no `reached`/`already` row never reached ACTIVE; a start
+    whose final executed block is more than REJOIN_MAX_BEHIND under the
+    partition's did not stay with it, whatever the gauge says."""
+    return [_start_row(k, t, now, "final") for k, t in sorted(track.items())]
 
 
 def pending_starts(track, now):
     """Every start that has not reached ACTIVE, with how long it has been."""
-    return [{"node": n, "role": t["role"], "partition": p,
-             "containerStarted": t["started"], "state": t["state"],
-             "startToActiveS": None, "sinceStartS": round(max(0.0, now - t["started"]), 1),
-             "kind": "final"}
-            for (n, p), t in sorted(track.items()) if t["activeAt"] is None]
+    return [e for e in final_starts(track, now) if e["startToActiveS"] is None]
 
 
 def nodestate_csv_rows(events, ts):
     iso = lambda e: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(e))
-    return ["%s,%s,%s,%s,%s,%s,%s,%s" % (
+    f = lambda v: "" if v is None else v
+    return ["%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s" % (
         ts, e["node"], e["role"], e["partition"], iso(e["containerStarted"]),
-        e["state"], "" if e["startToActiveS"] is None else e["startToActiveS"],
-        e["kind"]) for e in events]
+        e["state"], f(e["startToActiveS"]), e["kind"],
+        f(e.get("executedBlock")), f(e.get("partitionHeight")),
+        f(e.get("startToCaughtUpS"))) for e in events]
 
 
 def write_nodestate_csv(events, now=None):
@@ -3162,9 +3223,9 @@ function nodestateView(nsd){
   const act=meas.filter(r=>r.active).length,boot=meas.filter(r=>r.state==='BOOTING').length;
   out.act=meas.length?`<span class="${act<rows.length?'yel':''}">${act} / ${rows.length}</span>`:ABSENT;
   out.boot=meas.length?`<span class="${nsd.alarms&&nsd.alarms.length?'red':(boot?'yel':'')}">${boot}</span>`:ABSENT;
-  const odd=rows.filter(r=>!r.active).map(r=>
+  const odd=rows.filter(r=>!r.active||r.lagging).map(r=>
     `<span class="${r.alarm?'red':(r.measured?'yel':'mut')}">${r.node}${r.partition?' '+r.partition:''}: ${r.why}</span>`);
-  out.rows=odd.length?odd.join(' · '):`every row ACTIVE · alarm bound ${nsd.boundS}s after container start`;
+  out.rows=odd.length?odd.join(' · '):`every row ACTIVE and within ${nsd.maxBehind} blocks of its partition · alarm bound ${nsd.boundS}s after container start`;
   return out;
 }
 // --- end pure render helpers ---
@@ -3441,7 +3502,7 @@ const DEFS={
  nrssavg:"Resident memory of the node process, MiB, averaged over the fleet.", nrssmax:"Largest resident memory of any node, MiB.", nrssmin:"Smallest resident memory of any node, MiB.",
  nsact:"Rows of accumulate_node_state reading ACTIVE (value 2) at this sample, out of every row: one row per node AND per partition it runs, because a process runs the Directory beside its BVN and one can boot while the other serves. Only 2 is ACTIVE; a node that exports no gauge is a row that is not ACTIVE. Every node, the follower included.",
  nsboot:"Rows reading BOOTING (value 0) at this sample. BOOTING right after a restart or an add-follower is the join working; red only when a row has been BOOTING longer than the bound after its container started (State.StartedAt), which means the join is stuck.",
- nsrows:"Every row that is not ACTIVE, by node and partition, with its state by name and how long since its container started. A retired state (WAITING, COMPLETE) is named, not read as ACTIVE. No gauge reads `not measured`. The time from each container start to ACTIVE is in nodestate.csv and the manifest.",
+ nsrows:"Every row that is not ACTIVE, by node and partition, with its state by name and how long since its container started. A retired state (WAITING, COMPLETE) is named, not read as ACTIVE. No gauge reads `not measured`. A row the gauge calls ACTIVE is listed too when its executed block is more than REJOIN_MAX_BEHIND blocks under the block a majority of its partition's validators executed: the gauge goes ACTIVE at the join's first root match and is never demoted (#4404). Each start's time to ACTIVE, and to executing with its partition, is in nodestate.csv; the manifest's rejoin row adds anchor agreement from the log.",
  nstrand:"The largest count, on any one validator, of transactions it took responsibility for at Submit and neither certified itself, nor handed to a node that took it, nor had answered with a refusal — accepted minus certified minus relayed-taken minus relayed-refused, whole run. What is left had no answer of any kind. On a validator certification is its own job and it relays nothing, so this sits at the in-flight window, the rounds not yet certified; a number that climbs means submissions are dying in a queue nobody drains. In flight and stranded look alike at one sample: the manifest states the final value after the drain together with its trend, and that is the reading to judge on. Over the validators, the same membership as every other total in this panel.",
  nacc:"Transactions accepted at Submit across the validators, whole run — the denominator the number above is read against.",
  nstrandnode:"Which validator holds that worst count, plus the three impossible states (REPORTING-SPEC 1a): certified plus relayed-taken plus relayed-refused above what was accepted; more relayed than accepted; or any relay at all beside no accepted series. Causes, in order of likelihood: a certified count per header instead of once per transaction; a relay counted per attempt instead of once per submission at its final answer; or — and this one is a REAL EVENT, not a broken counter — a node PROMOTED mid-run that kept its own copy of a submission it had already relayed, which the contract forbids precisely because it lands here (#4364's own disturbance). Also shown: any relay outcome label this harness does not know, named rather than folded into one it does, because the relay's behaviour is still open for Paul (#4366).",
