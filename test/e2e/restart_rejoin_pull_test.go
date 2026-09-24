@@ -162,12 +162,11 @@ func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 	require.Len(t, srcs, p.NodeCount()-1,
 		"the joining node must be excluded from its own peer list, leaving the other two")
 
-	state, err := join.NewState(join.StateOptions{
-		Partition: part,
-		Database:  p.NodeDatabase(joiner),
-		Sources:   sources,
-	})
-	require.NoError(t, err)
+	// The join's state RestartNode built, as the daemon builds it: its
+	// sources are a QueryPeers like the one above, and its machine is what
+	// the node's querier refuses by.
+	state := p.NodeJoinState(joiner)
+	require.NotNil(t, state)
 
 	var matchedAt uint64
 	var matched bool

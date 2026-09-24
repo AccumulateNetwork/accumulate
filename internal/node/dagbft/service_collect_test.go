@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -55,12 +56,24 @@ func newJoiningService(t *testing.T) (*Service, *collectingAdapter, ed25519.Publ
 		NodeConfig: nodeCfg,
 		Adapter:    ca,
 		EventBus:   events.NewBus(nil),
+		Database:   database.OpenInMemory(nil),
 	})
 	require.NoError(t, err)
 	svc.node = node
 	svc.committee = committee
 	svc.ctx = context.Background()
 	return svc, ca, pub
+}
+
+// pullState puts in the service's database the system ledger a join's pull
+// leaves there: the block the pulled state is and the leader round that
+// committed it. The handoff reads both from it (#4362).
+func pullState(t *testing.T, svc *Service, index uint64, round types.Round) {
+	t.Helper()
+	u := protocol.PartitionUrl(svc.config.Partition.ID).JoinPath(protocol.Ledger)
+	require.NoError(t, svc.config.Database.Update(func(batch *database.Batch) error {
+		return batch.Account(u).Main().Put(&protocol.SystemLedger{Url: u, Index: index, LeaderRound: uint64(round)})
+	}))
 }
 
 // A joining node collects every committed group and executes none of them:
@@ -154,6 +167,7 @@ func TestHandoff_ProducesOnlyWhatTheStateDoesNotHave(t *testing.T) {
 
 	// The pull reached block 41, which is the first of them: it is in the
 	// state already, so only 42 and 43 are produced.
+	pullState(t, svc, 41, 2)
 	require.NoError(t, svc.performHandoff(41))
 
 	require.False(t, svc.Collecting(), "a node that has joined is not collecting")
@@ -182,14 +196,18 @@ func TestHandoff_WaitsForTheBlocksItHasNotCollected(t *testing.T) {
 	svc, ca, author := newJoiningService(t)
 	w := svc.node.Workers()[0]
 
+	// The node stood at block 40, committed at round 10, and collects the
+	// group committed at round 12.
 	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 10
 	svc.StartCollecting()
 	b := types.NewBatch([][]byte{{1}})
 	require.NoError(t, w.StoreBatch(b))
-	_, err := svc.processCommittedGroup(group(commitCert(author, 2, time.Unix(100, 0),
+	_, err := svc.processCommittedGroup(group(commitCert(author, 12, time.Unix(100, 0),
 		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
 	require.NoError(t, err)
 
+	pullState(t, svc, 45, 20)
 	err = svc.performHandoff(45)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
@@ -198,6 +216,7 @@ func TestHandoff_WaitsForTheBlocksItHasNotCollected(t *testing.T) {
 	require.Empty(t, ca.blocks)
 
 	// A block behind where the node stood is refused outright.
+	pullState(t, svc, 39, 8)
 	err = svc.performHandoff(39)
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
@@ -297,6 +316,7 @@ func TestHandoff_StartingToCollectTwiceKeepsTheMapOntoBlocks(t *testing.T) {
 	require.NoError(t, err)
 
 	// The state is block 41: only block 42, the second group, is produced.
+	pullState(t, svc, 41, 2)
 	require.NoError(t, svc.performHandoff(41))
 	require.Len(t, ca.blocks, 1)
 	require.Equal(t, uint64(42), ca.blocks[0].Index)
@@ -319,9 +339,11 @@ func TestHandoff_CollectingAgainAfterAHandoffMapsOntoTheBlocksAfterIt(t *testing
 		require.NoError(t, err)
 	}
 
-	// Joined at 40, then executed 41 and 42.
+	// Joined at 40, committed at round 1, then executed 41 and 42.
 	svc.lastBlockIndex = 40
+	svc.lastLeaderRound = 1
 	svc.StartCollecting()
+	pullState(t, svc, 40, 1)
 	require.NoError(t, svc.performHandoff(40))
 	commit(2, 1)
 	commit(4, 2)
@@ -339,11 +361,13 @@ func TestHandoff_CollectingAgainAfterAHandoffMapsOntoTheBlocksAfterIt(t *testing
 
 	// A pull behind where the node stood cannot be handed off at: those
 	// blocks are not in the buffer.
+	pullState(t, svc, 41, 2)
 	err := svc.performHandoff(41)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
 	require.True(t, svc.Collecting())
 
 	// The peers' state is block 44: only 45 is produced.
+	pullState(t, svc, 44, 8)
 	require.NoError(t, svc.performHandoff(44))
 	require.False(t, svc.Collecting())
 	require.Len(t, ca.blocks, 3)

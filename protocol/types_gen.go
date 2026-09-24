@@ -982,7 +982,9 @@ type SystemLedger struct {
 	ExecutorVersion ExecutorVersion `json:"executorVersion,omitempty" form:"executorVersion" query:"executorVersion"`
 	// BvnExecutorVersions is the active executor version of each BVN.
 	BvnExecutorVersions []*PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
-	extraData           []byte
+	// LeaderRound is the consensus round of the leader that committed the block, from v2-kourou (DAG-BFT); zero on older blocks.
+	LeaderRound uint64 `json:"leaderRound,omitempty" form:"leaderRound" query:"leaderRound"`
+	extraData   []byte
 }
 
 type SystemWriteData struct {
@@ -3430,6 +3432,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 			u.BvnExecutorVersions[i] = (v).Copy()
 		}
 	}
+	u.LeaderRound = v.LeaderRound
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -6039,6 +6042,9 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 		if !((v.BvnExecutorVersions[i]).Equal(u.BvnExecutorVersions[i])) {
 			return false
 		}
+	}
+	if !(v.LeaderRound == u.LeaderRound) {
+		return false
 	}
 
 	return true
@@ -13512,15 +13518,16 @@ func (v *SystemGenesis) IsValid() error {
 }
 
 var fieldNames_SystemLedger = []string{
-	1: "Type",
-	2: "Url",
-	3: "Index",
-	4: "Timestamp",
-	5: "AcmeBurnt",
-	6: "PendingUpdates",
-	7: "Anchor",
-	8: "ExecutorVersion",
-	9: "BvnExecutorVersions",
+	1:  "Type",
+	2:  "Url",
+	3:  "Index",
+	4:  "Timestamp",
+	5:  "AcmeBurnt",
+	6:  "PendingUpdates",
+	7:  "Anchor",
+	8:  "ExecutorVersion",
+	9:  "BvnExecutorVersions",
+	10: "LeaderRound",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -13561,6 +13568,9 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 		for _, v := range v.BvnExecutorVersions {
 			writer.WriteValue(9, v.MarshalBinary)
 		}
+	}
+	if !(v.LeaderRound == 0) {
+		writer.WriteUint(10, v.LeaderRound)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -19318,6 +19328,9 @@ func (v *SystemLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 			break
 		}
 	}
+	if x, ok := reader.ReadUint(10); ok {
+		v.LeaderRound = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
 	if err != nil {
@@ -21047,6 +21060,7 @@ func init() {
 		encoding.NewTypeField("anchor", "AnchorBody"),
 		encoding.NewTypeField("executorVersion", "string"),
 		encoding.NewTypeField("bvnExecutorVersions", "PartitionExecutorVersion[]"),
+		encoding.NewTypeField("leaderRound", "uint64"),
 	}, "SystemLedger", "systemLedger")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -23324,6 +23338,7 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 		Anchor              *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
 		ExecutorVersion     ExecutorVersion                              `json:"executorVersion,omitempty"`
 		BvnExecutorVersions encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LeaderRound         uint64                                       `json:"leaderRound,omitempty"`
 		ExtraData           *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -23350,6 +23365,9 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.BvnExecutorVersions) == 0) {
 		u.BvnExecutorVersions = v.BvnExecutorVersions
+	}
+	if !(v.LeaderRound == 0) {
+		u.LeaderRound = v.LeaderRound
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -26819,6 +26837,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 		Anchor              *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
 		ExecutorVersion     ExecutorVersion                              `json:"executorVersion,omitempty"`
 		BvnExecutorVersions encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LeaderRound         uint64                                       `json:"leaderRound,omitempty"`
 		ExtraData           *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -26830,6 +26849,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.Anchor = &encoding.JsonUnmarshalWith[AnchorBody]{Value: v.Anchor, Func: UnmarshalAnchorBodyJSON}
 	u.ExecutorVersion = v.ExecutorVersion
 	u.BvnExecutorVersions = v.BvnExecutorVersions
+	u.LeaderRound = v.LeaderRound
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -26852,6 +26872,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 
 	v.ExecutorVersion = u.ExecutorVersion
 	v.BvnExecutorVersions = u.BvnExecutorVersions
+	v.LeaderRound = u.LeaderRound
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

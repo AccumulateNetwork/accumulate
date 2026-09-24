@@ -21,6 +21,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
@@ -54,6 +55,12 @@ type ServiceConfig struct {
 
 	// Genesis is the path to the genesis file/snapshot.
 	Genesis string
+
+	// Database is the store the executor commits to, where a join puts the
+	// state it pulls. The handoff reads the partition's system ledger from
+	// it: the block the pulled state is and the leader round that committed
+	// that block (#4362). Required.
+	Database *database.Database
 
 	// Host is the libp2p host for networking (optional, enables multi-node).
 	Host host.Host
@@ -90,9 +97,12 @@ type Service struct {
 	running  bool
 	stopping bool
 
-	// Block production state
-	lastBlockIndex uint64
-	lastBlockTime  time.Time
+	// Block production state. lastLeaderRound is the leader round of the
+	// group lastBlockIndex was produced from: what a join's handoff measures
+	// the pulled state's round against (#4362).
+	lastBlockIndex  uint64
+	lastBlockTime   time.Time
+	lastLeaderRound types.Round
 
 	// Consensus checkpoints: the position for the block about to be produced
 	// and the one before it, so whichever block the executor actually holds
@@ -116,7 +126,6 @@ type Service struct {
 	// staging and kept in the buffer instead of executed, and nothing here
 	// advances the block index. See collect.go.
 	collecting    bool
-	collectFrom   uint64
 	buffer        []*CollectedGroup
 	bufferBytes   int
 	bufferOverrun bool
@@ -147,6 +156,11 @@ func NewService(config ServiceConfig) (*Service, error) {
 	}
 	if config.EventBus == nil {
 		return nil, errors.BadRequest.With("event bus is required")
+	}
+	if config.Database == nil {
+		// Without it a join could never hand off, and a node that restarts
+		// joins (#4205): required here rather than discovered at the handoff.
+		return nil, errors.BadRequest.With("database is required")
 	}
 
 	s := &Service{
@@ -467,6 +481,10 @@ func (s *Service) seedFromCheckpoint() {
 		}
 		s.node.Restore(cp)
 		s.lastSaved = cp
+		// Consensus resumes after this round, so the groups it commits from
+		// here are the ones after it; a join's handoff at a state below it
+		// would need groups this node will not be delivered (#4362).
+		s.lastLeaderRound = cp.LastCommitRound
 		return
 	}
 	slog.Warn("No consensus checkpoint matches the executor's last block; starting at round zero",
@@ -849,6 +867,7 @@ func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, le
 	// Update state
 	s.lastBlockIndex = blockIndex
 	s.lastBlockTime = blockTime
+	s.lastLeaderRound = leader.Header.Round
 
 	s.noteBlockProduced(blockIndex, leader.Header.Round)
 	// Separate "producing blocks" from "producing blocks with something in

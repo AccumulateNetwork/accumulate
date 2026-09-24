@@ -122,6 +122,11 @@ type BlockParams struct {
 	Time       time.Time
 	CommitInfo any // nil for DAG-BFT, *abcitypes.CommitInfo for CometBFT
 	Evidence   any // nil for DAG-BFT, []abcitypes.Misbehavior for CometBFT
+
+	// LeaderRound is the consensus round of the leader that committed the
+	// block: zero for CometBFT. From v2-kourou the system ledger records it,
+	// so a joining node can tell which buffered group is the next block.
+	LeaderRound uint64
 }
 
 // A Block is the context in which messages are processed.

@@ -109,18 +109,11 @@ func TestAJoinOverrunIsRecordedAndResumesTheJoin(t *testing.T) {
 	require.LessOrEqual(t, head()-r, buf.capacity,
 		"precondition: the buffer has not overrun when the join starts")
 
-	sources := &join.QueryPeers{
-		Client:  sim.S.Services(),
-		Network: t.Name(),
-		Router:  sim.S.Router(),
-		Self:    p.NodePeerID(joiner),
-	}
-	pulled, err := join.NewState(join.StateOptions{
-		Partition: part,
-		Database:  p.NodeDatabase(joiner),
-		Sources:   sources,
-	})
-	require.NoError(t, err)
+	// The join's state as the daemon builds it, over join.QueryPeers with
+	// this node's own ID excluded; its machine is what the node's querier
+	// refuses by.
+	pulled := p.NodeJoinState(joiner)
+	require.NotNil(t, pulled)
 
 	// The network runs on while the node pulls, which is what a join meets.
 	// During the first pull it runs past what the buffer holds: the overrun

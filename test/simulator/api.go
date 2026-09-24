@@ -35,6 +35,11 @@ import (
 // Services returns the simulator's API v3 implementation.
 func (s *Simulator) Services() *message.Client { return s.services.Client }
 
+// HarnessServices is the client a test harness reads through: an unaddressed
+// call goes to a node that can serve, never to one that is joining
+// (services.Network.HarnessClient). The nodes themselves use Services.
+func (s *Simulator) HarnessServices() *message.Client { return s.services.HarnessClient() }
+
 // SetService replaces the service handler for the given address.
 func (s *Simulator) SetService(address *api.ServiceAddress, handler func(message.Stream)) {
 	s.services.Services.Replace("", address, handler)

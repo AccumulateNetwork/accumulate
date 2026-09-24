@@ -439,6 +439,51 @@ still different, or not known:
   opens, loudly, instead of the first one and then running on an empty cache.
   A failed handoff stays terminal on both sides (#4401).
 
+**The simulator's joining node (#4363)**: `RestartNode` builds the join's
+state as `cmd/accumulated/run/dagbft.go` does at startup — `join.NewState`
+over `join.QueryPeers` with the node's own peer excluded, from its executor's
+last block — and the node's production querier refuses by that state's
+machine, so a read addressed to a restarted or following simulator node
+answers `NotReady` until the tracker promotes it to `ACTIVE`
+(`TestAFollowerJoinsARunningNetworkAndLeaves`,
+`TestARestartedNodeRefusesReadsByItsJoinsMachine`). `Partition.StopNode`
+takes a node out of the consensus hub and withdraws its services. What the
+simulator still does not do as the daemon does:
+
+- Only the querier is handed the machine. The daemon hands it to the
+  sequencer, the submitter, the validator and the consensus service too; the
+  simulator's sequencer answers a joining node's requests ungated.
+- The harness's reads, and only the harness's, are steered to a node that
+  can serve: a read that names no peer skips a node whose join machine says
+  `BOOTING` (`services.Network.HarnessClient`, used by `harness.NewSim`).
+  The daemon has no such oracle. It reaches a serving node only by its
+  local-first dial — a client connected to a validator's API is answered by
+  that validator (`p2p/dial` `newNetworkStream`) — and a `NotReady` from a
+  joining peer is not redialed: it returns as an `ErrorResponse`, which
+  `message.typedRequest`'s callback accepts, so the dial succeeds and
+  `BadDial` is never reached. Sending a reader to a synced node is the next
+  phase's work (step 6). The nodes' own routed client (`Network.Client`) has
+  no oracle and can reach a joining node and be refused, as a daemon's
+  non-local call can; what it does not model is a joining node's *own*
+  routed reads, which the daemon answers locally with `NotReady`.
+- A submission to any simulator node goes to the whole partition through the
+  consensus hub (`Node.submit` → `Partition.Submit`). The follower test's
+  relay assertion — the committee executed what the joining follower was
+  handed — therefore proves the hub and not the daemon's relay
+  (`cmd/accumulated/run/submit_relay.go`, #4366).
+- A simulator follower still votes and counts its own vote
+  (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
+  it; the cadence assertion shows only that the partition runs on.
+- A simulator node is one partition's node, not a process. Every BVN node
+  has a Directory node beside it with its own key and peer ID
+  (`test/simulator/factory.go`), and `RestartNode` and `StopNode` act on one
+  partition only: the follower test restarts and stops the follower's BVN0
+  node, and its Directory node never joins (never `BOOTING`, serves
+  everything) and never stops. The daemon is one process for both, so a
+  follower joins on both partitions and leaving stops both.
+- The follower is forced into the join by `RestartNode` from genesis; the
+  daemon would not join a genesis-only node at all (#4340).
+
 **The exception is entering the join, not a flag inside it (#4304)**. The spec
 says only a node that has executed no block may start without asking; on this
 line such a node does not ask, because the daemon does not run the join for
@@ -551,8 +596,9 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   `PromoteToComplete`, `CanServeHistory` and `nodestate.Restore` still exist
   with no production caller (delete, or pin by test — the builder's
   uncommitted caller scan is the pin); the gauge and the daemon's `Always{}`
-  are two objects nothing keeps in agreement; and `servingFor` gates two query
-  kinds where the spec says every read (#4295).
+  are two objects nothing keeps in agreement. (That `servingFor` gated two
+  query kinds where the spec says every read is retired: since `08c0e413d`
+  (#4368) it refuses every query while `BOOTING`.)
 - **The ModeFullSpine rationale was wrong and is retired** (#4301 (c)): the
   spine was pulled "explicitly unverified because it is what the verifier
   reads from"; the definition and its signatures verify the spine like any
@@ -567,16 +613,13 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
   joining node from a node whose entries are in flight, and both mean "ask
   again".
 - **The v3 querier was not gated** (#4297) when this was written; it is now
-  — `servingFor` in `internal/api/v3/querier.go:150-169` refuses a BPT page
-  and an account read carrying a receipt while joining, as the entry below
-  ("`Submit`, `Validate`, `BptPageQuery` and an account read carrying a
-  receipt answer `NotReady`") records. What was true then: a joining node
+  — `servingFor` (`internal/api/v3/querier.go`) refuses every query while
+  the node is `BOOTING` (`08c0e413d`, #4368; it first gated only a BPT page
+  and an account read carrying a receipt). What was true then: a joining node
   answered account state and BPT pages from a store the pull had half filled. The hazard is
   another joining node pulling its unverified spine from it — `pull.Account`
   in `ModeFullSpine` was explicitly unverified, because it was what the verifier
-  reads from — and then never pulling the spine again. Gating the querier
-  would also stop a joining node answering ordinary reads about itself, which
-  is why it is recorded rather than done.
+  reads from — and then never pulling the spine again.
 - **A joining sibling partition is a quiet hole.** Every node runs the
   Directory beside its BVN, and the dialer answers a service the node itself
   provides before asking the network, so while one of them is joining the
@@ -775,6 +818,14 @@ spec**, both deliberate:
   `runnable` re-checks a collected entry's own receipt against the anchor
   chain, so runnability is a question about the entry and the state and not
   about when the entry was held (executor.md, "Collection").
+- **The simulator's join still maps by block number** (#4362). The DAG
+  service's handoff picks the buffered groups above the pulled ledger's
+  `LeaderRound` (executor.md, "Sync", step 5); the simulator's buffer
+  (`test/simulator/join.go`, `joinState.Handoff`) is handed blocks that
+  already carry an index and has no leader rounds, so it maps its buffer by
+  that index and the simulator's ledgers record no round. Every simulator
+  join test therefore exercises a handoff rule production does not run; the
+  round rule is covered only by `internal/node/dagbft` and by a live network.
 - `classify` resolves a remote transaction body from the store, so a sequenced
   message carrying a remote stub whose body this node has not pulled yet is
   not classified and not held at all — a hole on the joining node where its
