@@ -176,7 +176,7 @@ func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 	// sent no anchor. The pulled state cannot be matched by equality there.
 	// The node hands off from the pulled state unproven, executes the quiet
 	// blocks like any node, and is proven at the next heartbeat anchor
-	// (executor spec, "Sync", "Execute, and repair on a mismatch"). Before
+	// (executor spec, "Sync", "Two mismatches"). Before
 	// it, a join that only pulled records waited at the peer's head for an
 	// anchor of that block that never came: 29 releases, every one at a block
 	// that sent no anchor (#4438).

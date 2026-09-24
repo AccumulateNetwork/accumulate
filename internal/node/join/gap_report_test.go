@@ -23,7 +23,7 @@ import (
 // say which stream it was or at which number (#4432). The line names every
 // stream with a gap and its numbers, and the gauge carries the first missing
 // number per stream. A gap no longer holds the handoff (executor spec, "Sync",
-// "One rule for every node"); it is still said.
+// "Two mismatches"); it is still said.
 func TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber(t *testing.T) {
 	const b = 157
 	const partition = "TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber"

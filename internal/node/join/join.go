@@ -135,7 +135,7 @@ type State interface {
 	// The node hands off there and stays BOOTING; the root watch promotes it
 	// at the first executed block whose root equals the partition's signed
 	// anchor, and the state is repaired from the block ledger at a mismatch
-	// (executor spec, "Sync", "Execute, and repair on a mismatch").
+	// (executor spec, "Sync", "Two mismatches").
 	Ready() (uint64, bool)
 
 	// Promote says the node handed off at block, the block Matched last
@@ -395,7 +395,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 		if !ok {
 			// Not proven, but the walk is done: the node may execute from
 			// here and compare at every block that anchors (executor spec,
-			// "Sync", "Execute, and repair on a mismatch").
+			// "Sync", "Two mismatches").
 			q, ok = opts.State.Ready()
 		}
 		if ok {
@@ -456,8 +456,8 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, proven bool, fail
 		// this node does not. The node executes anyway, with whatever
 		// staging holds: a block executed without an entry it needed is
 		// wrong only in the accounts its record names, and the root check
-		// repairs them from the block ledger (executor spec, "Sync", "One
-		// rule for every node"). The gap is said and put on the gauge.
+		// repairs them from the block ledger (executor spec, "Sync", "Two
+		// mismatches", and step 6). The gap is said and put on the gauge.
 		streams := make([]string, len(gaps))
 		for i, g := range gaps {
 			streams[i] = g.String()

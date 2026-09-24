@@ -214,7 +214,7 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 
 	// The node may hand off from a pulled state not yet proven, and it is
 	// ACTIVE only from the first executed block whose root matches (executor
-	// spec, "Sync", "Execute, and repair on a mismatch"). So the "handed off"
+	// spec, "Sync", "Two mismatches"). So the "handed off"
 	// readings are taken at the first root check that finds it ACTIVE after a
 	// handoff, and handoffs are counted from the one it was proven after.
 	var matchedFailing, retried, handedOff, resyncing, rejoined *reading

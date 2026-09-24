@@ -113,7 +113,7 @@ type Options struct {
 	// instead of refusing the peer, and replaces the account's chain index
 	// with the peer's, so a chain only the node holds is dropped. A joining node that executed blocks and
 	// is repairing what it executed from the block ledger sets it (executor
-	// spec, "Sync", "Execute, and repair on a mismatch"): its chains may
+	// spec, "Sync", "Two mismatches"): its chains may
 	// carry entries of its own that no peer has, and refusing every peer
 	// would leave the account wrong for good.
 	RetakeLonger bool
@@ -1273,8 +1273,8 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodi
 	if retakeLonger {
 		// The account is taken whole: a chain the node created that the
 		// peer's account does not have leaves the index, or the account's
-		// hash still counts it (executor spec, "Sync", "One rule for every
-		// node": "the repair takes accounts whole").
+		// hash still counts it (executor spec, "Sync", "Two
+		// mismatches": "the repair takes accounts whole").
 		var list []*protocol.ChainMetadata
 		for _, c := range chains.Records {
 			if c == nil || c.Name == "" {

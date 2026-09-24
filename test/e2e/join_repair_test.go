@@ -183,7 +183,7 @@ func (f *repairFixture) requireOneRootChain(t *testing.T) {
 }
 
 // TestAJoinRepairsABlockExecutedWithoutItsSynthetic — executor spec, "Sync",
-// "Execute, and repair on a mismatch": a joining node executes blocks as they
+// "Two mismatches": a joining node executes blocks as they
 // come, and one executed without a synthetic transaction it needed is wrong
 // only in the accounts its record names. The joiner's copies of BVN1's blocks
 // lose every synthetic deposit for its first rounds, its root then differs
@@ -243,7 +243,7 @@ func TestAJoinRepairsABlockExecutedWithoutItsSynthetic(t *testing.T) {
 }
 
 // TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated — executor spec, "Sync",
-// "Execute, and repair on a mismatch": "A node that executed an account into
+// "Two mismatches": "A node that executed an account into
 // existence that no peer holds loses it at the repair, because its own record
 // names it." The joiner alone is handed a transaction creating bob/extra; it
 // executes it, its root differs from the partition's, and the repair, reading
@@ -336,7 +336,7 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 // requireSameChains requires an account's chains on node to equal its chains
 // on peer entry by entry: the same chains, the same heights, and the same
 // entry at every index -- not only a leaf that hashes the same (executor
-// spec, "Sync", "One rule for every node": the node ends holding every
+// spec, "Sync", "Two mismatches": the node ends holding every
 // account's chains and entries).
 func requireSameChains(t *testing.T, node, peer *database.Database, u *url.URL) {
 	t.Helper()

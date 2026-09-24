@@ -98,7 +98,7 @@ func (b *Batch) DeleteAccountState_TESTONLY(url *url.URL) error {
 // lists emptied (the list names its index chains), its chain list, its directory
 // and its pending list cleared, and its state-tree leaf. It is what a joining
 // node does with an account its own execution created and no peer holds
-// (executor spec, "Sync", "Execute, and repair on a mismatch"): after it the
+// (executor spec, "Sync", "Two mismatches"): after it the
 // executor reads the account as absent, the account holds nothing (invariant
 // 13), and the local root holds no leaf for it. The entries of an emptied
 // chain are left in the store unreachable: no head counts them. Use it on a

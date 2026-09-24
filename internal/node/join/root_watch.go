@@ -28,18 +28,21 @@ import (
 //
 // The state handed off at may be unproven: once the walk is done the node
 // executes and compares at every block that anchors (executor spec, "Sync",
-// "Execute, and repair on a mismatch"). From here executed is the last block
+// "Two mismatches"). From here executed is the last block
 // compared, or the block handed off at.
 func (s *PulledState) HandedOff(q uint64) {
 	s.executed = q
+	if s.sync != nil {
+		s.served = s.sync.servedBy
+	}
 	s.sync = nil
 	s.repairFrom = 0
 }
 
 // Diverged compares the root this node computed after each block it executed
 // since the handoff with the partition's signed anchor for that block, at
-// every block that sent one (executor spec, "Sync", "Execute, and repair on a
-// mismatch"). A match is the proof, step 3: a node that handed off from an
+// every block that sent one (executor spec, "Sync", "Two
+// mismatches"). A match is the proof, step 3: a node that handed off from an
 // unproven state is promoted there. A mismatch is reported, and the next pull
 // is a repair from the block ledger, from the last block that matched -- or
 // from the start of the pull, if none has.
@@ -81,15 +84,18 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 		if local != o.Anchor {
 			s.log.Warn("An executed block's root is not its anchored root; repairing from the block ledger",
 				"partition", s.partition, "block", o.Block, "compared", s.executed, "matched", s.provenAt)
-			from := s.provenAt
-			if from == 0 {
-				from = s.pullFrom
-			}
-			s.RepairFrom(from)
+			// Since the last comparison: the last block whose root was
+			// compared and matched, or the block the node handed off at
+			// (executor spec, "Sync", "Two mismatches").
+			// A repair that does not bring a match is followed by one that
+			// walks the tree again (startRepair).
+			s.RepairFrom(s.executed)
 			return o.Block, true, nil
 		}
 		s.executed = o.Block
 		s.provenAt = o.Block
+		s.repairs = 0
+		s.served = nil // what it took is proven
 		proven = true
 		if s.machine.State() != nodestate.StateActive {
 			s.matched = tracker.Match{Block: o.Block, Anchor: o.Anchor}
@@ -116,7 +122,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 }
 
 // RepairFrom makes the next pull a repair from the block ledger, from block
-// on (executor spec, "Sync", "One rule for every node"): every account the
+// on (executor spec, "Sync", "Two mismatches"): every account the
 // partition's records name after block, and every account this node's own
 // records name through the block it last executed, is pulled again whole --
 // main state, every chain with its entries and the messages behind them,
@@ -126,6 +132,16 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 // the last block whose root matched, or where the pull began. It must not be
 // executing while the repair pulls: the caller collects first (join.Run).
 func (s *PulledState) RepairFrom(block uint64) {
+	// The pull handed off from did not bring the match: the peers whose
+	// answers it took go to the back of the order.
+	if s.demoted == nil {
+		s.demoted = map[string]int{}
+	}
+	for peer := range s.served {
+		s.demoted[peer]++
+	}
+	s.served = nil
+
 	// Zero is nothing to repair from: the next pull starts afresh.
 	s.sync = nil
 	s.repairFrom = block

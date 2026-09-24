@@ -309,7 +309,7 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 // forwarded to the state it wraps and stepping the network as it watches: the
 // node may hand off from a state not yet proven and be promoted at the first
 // executed block whose root matches its partition's signed anchor, or repaired
-// at a mismatch (executor spec, "Sync", "Execute, and repair on a mismatch").
+// at a mismatch (executor spec, "Sync", "Two mismatches").
 // The watch runs for as long as the node does, so once the node is ACTIVE the
 // test's join ends there: cancel ends join.Run.
 type steppingState struct {

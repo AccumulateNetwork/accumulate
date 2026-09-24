@@ -27,6 +27,7 @@ import (
 // order a page and a record are seen in is the test's to choose.
 type scriptedPeer struct {
 	noValidators
+	name      string
 	partition *url.URL
 	block     uint64
 	records   map[uint64][]*url.URL
@@ -38,11 +39,43 @@ type scriptedPeer struct {
 	// records.
 	state  *database.Database
 	onPage func()
+
+	// ledger, when not empty, is what the peer's ledger says on each read of
+	// where it stands, in turn, before it says block: a peer that stood
+	// further back a moment ago.
+	ledger []uint64
 }
 
 func (p *scriptedPeer) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
 	src := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: p.state, Partition: "BVN0"})}
-	return []pull.Source{servedAt{Source: src, db: p.state}}, p.partition, nil
+	return []pull.Source{scriptedSource{Source: servedAt{Source: src, db: p.state}, peer: p}}, p.partition, nil
+}
+
+// scriptedSource is the scripted peer reached by name: its ledger says the
+// peer's block, it pages the scripted BPT, and it serves accounts from the
+// peer's store.
+type scriptedSource struct {
+	pull.Source
+	peer *scriptedPeer
+}
+
+func (s scriptedSource) QueryAccount(ctx context.Context, u *url.URL, q *api.DefaultQuery) (*api.AccountRecord, error) {
+	if u.Equal(s.peer.partition.JoinPath(protocol.Ledger)) {
+		n := s.peer.block
+		// A read of where the peer stands asks for no receipt; the pull of
+		// the ledger account asks for one and is not such a read.
+		if q == nil && len(s.peer.ledger) > 0 {
+			n, s.peer.ledger = s.peer.ledger[0], s.peer.ledger[1:]
+		}
+		return &api.AccountRecord{Account: &protocol.SystemLedger{Url: u, Index: n}}, nil
+	}
+	return s.Source.QueryAccount(ctx, u, q)
+}
+
+func (s scriptedSource) String() string { return "peer " + s.peer.name }
+
+func (s scriptedSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api.BptPageQuery) (*api.BptPageRecord, error) {
+	return api.Querier2{Querier: s.peer}.QueryBptPage(ctx, scope, q)
 }
 
 func (p *scriptedPeer) Querier(*url.URL) api.Querier { return p }

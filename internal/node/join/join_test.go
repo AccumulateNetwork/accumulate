@@ -347,8 +347,8 @@ func contains(s []uint64, v uint64) bool {
 // and 104 is not in B+1. The gap does not hold the handoff: the node executes
 // B+1 with whatever staging holds, and a block executed without an entry it
 // needed is wrong only in the accounts its record names, which the root check
-// repairs from the block ledger (executor spec, "Sync", "One rule for every
-// node"). Before, the join held B+1 back and advanced the sync to a block with
+// repairs from the block ledger (executor spec, "Sync", "Two
+// mismatches"). Before, the join held B+1 back and advanced the sync to a block with
 // no gap (#4362).
 func TestJoin_AGapDoesNotHoldTheHandoff(t *testing.T) {
 	const b = 20

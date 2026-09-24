@@ -23,7 +23,7 @@ import (
 // open mark set, the mark points that close their sets, and -- on a
 // transaction chain -- the message behind every entry, the open set's
 // included (executor spec, "Sync",
-// "One rule for every node": the node ends holding every account's chains and
+// "Two mismatches": the node ends holding every account's chains and
 // entries, not only a root that matches).
 //
 // It does not touch a chain's head or its open mark set, so it may run while

@@ -160,8 +160,8 @@ func joinPastFailedWork(t *testing.T, failing bool) {
 	// The join here pulls and compares; it does not execute. A pulled state
 	// matches only at a block that sent an anchor, so the partition is kept
 	// busy while the join runs -- a valid send in every round -- and every
-	// block anchors (executor spec, "Sync", "Execute, and repair on a
-	// mismatch": an idle partition is the executing join's case).
+	// block anchors (executor spec, "Sync", "Two
+	// mismatches": an idle partition is the executing join's case).
 	busy := func() {
 		send(bob.JoinPath("tokens"))
 		sim.StepN(3)
