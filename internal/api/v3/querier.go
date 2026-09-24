@@ -501,7 +501,28 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	r := new(api.AccountRecord)
 
 	state, err := record.Main().Get()
-	if err != nil {
+	switch {
+	case err == nil:
+	case errors.Is(err, errors.NotFound) && wantReceipt.Yes() && wantReceipt.ForHeight == 0:
+		// A leaf can stand without a body (#4397): an authority signature
+		// recorded on a principal that does not exist gives it signature
+		// chains, and a failed deposit gives it an empty account's leaf. The
+		// leaf is in the root every peer anchors, so a node pulling this
+		// partition must be able to fetch it, and NotFound would tell it the
+		// account is not there. It is answered with no body and the receipt
+		// for the leaf, which starts at the zero hash the missing body hashes
+		// to; the rest of the leaf is served by the queries that serve it for
+		// any account. Only a request for a current receipt is answered so:
+		// every other reader still sees NotFound, which is what it saw before.
+		_, lerr := batch.BPT().Get(record.Key())
+		switch {
+		case errors.Is(lerr, errors.NotFound):
+			return nil, errors.UnknownError.WithFormat("load state: %w", err)
+		case lerr != nil:
+			return nil, errors.UnknownError.WithFormat("load leaf: %w", lerr)
+		}
+		state = nil
+	default:
 		return nil, errors.UnknownError.WithFormat("load state: %w", err)
 	}
 
@@ -517,7 +538,11 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	// touched.
 	r.Sighted = sighted(s.stagingFor(), record.Url(), state)
 
-	switch state.Type() {
+	var typ protocol.AccountType
+	if state != nil {
+		typ = state.Type()
+	}
+	switch typ {
 	case protocol.AccountTypeIdentity, protocol.AccountTypeKeyBook:
 		directory, err := record.Directory().Get()
 		if err != nil {
