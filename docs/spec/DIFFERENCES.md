@@ -391,6 +391,36 @@ is `nodeMustJoin(lastBlock) = lastBlock > GenesisBlock`, and was
 `lastBlock > 0` until #4304. Genesis is not an execution but it does write the
 ledger at block 1, so the old test was true of every node ever started.
 
+**The simulator's joining node (#4363)**: `RestartNode` builds the join's
+state as `cmd/accumulated/run/dagbft.go` does at startup — `join.NewState`
+over `join.QueryPeers` with the node's own peer excluded, from its executor's
+last block — and the node's production querier refuses by that state's
+machine, so a read addressed to a restarted or following simulator node
+answers `NotReady` until the tracker promotes it to `ACTIVE`
+(`TestAFollowerJoinsARunningNetworkAndLeaves`,
+`TestARestartedNodeRefusesReadsByItsJoinsMachine`). `Partition.StopNode`
+takes a node out of the consensus hub and withdraws its services. What the
+simulator still does not do as the daemon does:
+
+- Only the querier is handed the machine. The daemon hands it to the
+  sequencer, the submitter, the validator and the consensus service too; the
+  simulator's sequencer answers a joining node's requests ungated.
+- A routed call that names no peer goes to a node that can serve
+  (`test/simulator/services`, `Network.Dial`). That stands in for the
+  daemon's local-first dial from a validator, whose own reads never reach a
+  joining peer; it also means a joining node's *own* routed reads, which the
+  daemon answers locally with `NotReady`, are served by a peer here.
+- A submission to any simulator node goes to the whole partition through the
+  consensus hub (`Node.submit` → `Partition.Submit`). The follower test's
+  relay assertion — the committee executed what the joining follower was
+  handed — therefore proves the hub and not the daemon's relay
+  (`cmd/accumulated/run/submit_relay.go`, #4366).
+- A simulator follower still votes and counts its own vote
+  (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
+  it; the cadence assertion shows only that the partition runs on.
+- The follower is forced into the join by `RestartNode` from genesis; the
+  daemon would not join a genesis-only node at all (#4340).
+
 **The exception is entering the join, not a flag inside it (#4304)**. The spec
 says only a node that has executed no block may start without asking; on this
 line such a node does not ask, because the daemon does not run the join for

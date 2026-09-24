@@ -143,13 +143,11 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 		Router:  sim.S.Router(),
 		Self:    followerID,
 	}
-	state, err := join.NewState(join.StateOptions{
-		Partition:     part,
-		Database:      p.NodeDatabase(follower),
-		Sources:       sources,
-		ExecutedBlock: fresh,
-	})
-	require.NoError(t, err)
+	// The state is the one RestartNode built as the daemon builds it, and
+	// its machine is what the follower's querier refuses by: a state built
+	// here would be one the follower's services never see.
+	state := p.NodeJoinState(follower)
+	require.NotNil(t, state, "the restarted follower has no join state")
 
 	srcs, srcPart, err := sources.For(ctx, alice.JoinPath("tokens"))
 	require.NoError(t, err)
@@ -286,6 +284,12 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 
 	const window = 20
 	cadence := func() uint64 {
+		// The ledger records the last block that executed something, so
+		// after empty blocks it stands behind the partition's height. One
+		// loaded step first puts it at the height, or the window would count
+		// the empty blocks before it too (24 blocks in 20 steps, measured).
+		sim.SubmitTxnSuccessfully(send())
+		sim.Step()
 		from := partitionBlock(t, p.NodeDatabase(0), part)
 		for i := 0; i < window; i++ {
 			sim.SubmitTxnSuccessfully(send())
