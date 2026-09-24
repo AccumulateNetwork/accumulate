@@ -370,3 +370,122 @@ func TestReceivedIsAtLeastDeliveredAtEveryBlock(t *testing.T) {
 	require.True(t, sawNonZero["synthetic"], "the run delivered no synthetic stream")
 	require.True(t, sawNonZero["anchors"], "the run delivered no anchor stream")
 }
+
+// #4412, review F1: the anchor stream. Directory anchors reach BVN1 with only
+// one validator's copy each -- the other copies are withheld -- so every one
+// of them stays below its signature quorum and is held, not executed. That is
+// the hold #4432 found at every BVN restart of run 4. The anchor ledger's
+// Received for the Directory must still say how far the anchors have arrived,
+// above Delivered and identical on every node; only the anchor hold site
+// (BlockAnchor.process) can count them, since nothing below quorum reaches
+// the sequenced layer.
+func TestReceivedCountsAnchorsHeldBelowQuorum(t *testing.T) {
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 2, 3),
+		simulator.Genesis(GenesisTime),
+		simulator.IgnoreDeliverResults(),
+		simulator.IgnoreCommitResults(),
+	)
+
+	dn := DnUrl()
+	anchorNumber := func(m messaging.Message) (*messaging.BlockAnchor, uint64, bool) {
+		ba, ok := m.(*messaging.BlockAnchor)
+		if !ok {
+			return nil, 0, false
+		}
+		seq, ok := ba.Anchor.(*messaging.SequencedMessage)
+		if !ok || seq.Source == nil || !seq.Source.Equal(dn) {
+			return nil, 0, false
+		}
+		return ba, seq.Number, true
+	}
+
+	// From `from` on, one copy per anchor number is let through -- the copy
+	// of whichever signer was seen first for that number, which every node
+	// sees in the same block -- and every other copy, and every copy
+	// authorized by a proof rather than a signature, is held back until
+	// release.
+	var hookMu sync.Mutex
+	var from atomic.Uint64
+	var release atomic.Bool
+	keeper := map[uint64]string{}
+	delayed := map[int][]*messaging.Envelope{}
+	sim.S.SetNodeBlockHook("BVN1", func(node int, _ execute.BlockParams, envelopes []*messaging.Envelope) ([]*messaging.Envelope, bool) {
+		hookMu.Lock()
+		defer hookMu.Unlock()
+		var kept []*messaging.Envelope
+		for _, env := range envelopes {
+			touched := false
+			var rest []messaging.Message
+			for _, m := range env.Messages {
+				ba, n, ok := anchorNumber(m)
+				if !ok || from.Load() == 0 || n < from.Load() || release.Load() {
+					rest = append(rest, m)
+					continue
+				}
+				var signer string
+				if ba.Signature != nil && ba.Proof == nil {
+					signer = string(ba.Signature.GetPublicKey())
+					if _, seen := keeper[n]; !seen {
+						keeper[n] = signer
+					}
+				}
+				if signer != "" && keeper[n] == signer {
+					rest = append(rest, m)
+					continue
+				}
+				delayed[node] = append(delayed[node], &messaging.Envelope{Messages: []messaging.Message{m}})
+				touched = true
+			}
+			switch {
+			case !touched:
+				kept = append(kept, env)
+			case len(rest) > 0:
+				e := env.Copy()
+				e.Messages = rest
+				kept = append(kept, e)
+			}
+		}
+		if release.Load() && len(delayed[node]) > 0 {
+			kept = append(delayed[node], kept...)
+			delayed[node] = nil
+		}
+		return kept, true
+	})
+
+	p := sim.S.Partition("BVN1")
+	ledgerOf := func(i int) PartitionSyntheticLedger {
+		_, anchors := streamLedgers(t, p.NodeDatabase(i), "BVN1")
+		return anchors[dn.String()]
+	}
+
+	// Let the Directory anchor BVN1 a few times, then start withholding at
+	// the next number.
+	sim.StepN(20)
+	d0 := ledgerOf(0).Delivered
+	require.NotZero(t, d0, "precondition: BVN1 has executed Directory anchors")
+	from.Store(d0 + 1)
+
+	sim.StepN(20)
+	var received uint64
+	for i := 0; i < p.NodeCount(); i++ {
+		l := ledgerOf(i)
+		t.Logf("node %d: anchors from the Directory delivered=%d received=%d sighted=%d", i, l.Delivered, l.Received,
+			p.NodeStaging(i).SightedOn(execute.StreamID{Ledger: PartitionUrl("BVN1").JoinPath(AnchorPool), Source: dn}))
+		require.Equal(t, d0, l.Delivered, "precondition: node %d executed no anchor below its quorum", i)
+		require.Greater(t, l.Received, l.Delivered, "node %d: anchors held below quorum are received, and Received says so", i)
+		if i == 0 {
+			received = l.Received
+		}
+		require.Equal(t, received, l.Received, "node %d's Received differs from node 0's", i)
+	}
+
+	// The withheld copies arrive; the anchors reach quorum and run.
+	release.Store(true)
+	sim.StepN(20)
+	for i := 0; i < p.NodeCount(); i++ {
+		l := ledgerOf(i)
+		require.GreaterOrEqual(t, l.Delivered, received, "node %d ran the held anchors", i)
+		require.GreaterOrEqual(t, l.Received, l.Delivered, "node %d", i)
+	}
+}
