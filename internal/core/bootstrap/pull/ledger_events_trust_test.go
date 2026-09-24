@@ -197,6 +197,12 @@ func TestStaleMinorVotesAreCleared(t *testing.T) {
 	got, err := batch.Account(sysLedger).Events().Minor().Votes(6).Get()
 	require.NoError(t, err)
 	require.Empty(t, got, "the stale vote survived the pull")
+
+	// And the block list that indexed it (review R3): it is outside the
+	// events BPT, so no leaf check sees a stale entry left in it.
+	blocks, err := batch.Account(sysLedger).Events().Minor().Blocks().Get()
+	require.NoError(t, err)
+	require.Empty(t, blocks, "the stale vote's block survived in the minor block list")
 }
 
 // TestServedEventsAreWrittenOnce (review R2). The events BPT is keyed by
