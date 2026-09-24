@@ -65,6 +65,7 @@ func newRepairFixture(t *testing.T) *repairFixture {
 	MakeIdentity(t, sim.DatabaseFor(bob), bob, bobKey[32:])
 	CreditCredits(t, sim.DatabaseFor(bob), bob.JoinPath("book", "1"), 1e12)
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	MakeAccount(t, sim.DatabaseFor(bob), &DataAccount{Url: bob.JoinPath("data")})
 
 	var ts uint64
 	f := &repairFixture{sim: sim, p: sim.S.Partition("BVN1"), part: PartitionUrl("BVN1"), joiner: 1, bob: bob, bobKey: bobKey}
@@ -84,6 +85,10 @@ func newRepairFixture(t *testing.T) *repairFixture {
 	st := sim.BuildAndSubmitTxnSuccessfully(build.Transaction().For(bob).
 		CreateTokenAccount(bob, "savings").ForToken(AcmeUrl()).
 		SignWith(bob, "book", "1").Version(1).Timestamp(1).PrivateKey(bobKey))
+	sim.StepUntil(Txn(st.TxID).Succeeds())
+	st = sim.BuildAndSubmitTxnSuccessfully(build.Transaction().For(bob, "data").
+		WriteData().DoubleHash([]byte("on every node")).
+		SignWith(bob, "book", "1").Version(1).Timestamp(2).PrivateKey(bobKey))
 	sim.StepUntil(Txn(st.TxID).Succeeds())
 
 	// Down: it stops executing, the network runs on, and it comes back with
@@ -250,7 +255,11 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 
 	env := MustBuild(t, build.Transaction().For(f.bob).
 		CreateTokenAccount(f.bob, "extra").ForToken(AcmeUrl()).
-		SignWith(f.bob, "book", "1").Version(1).Timestamp(2).PrivateKey(f.bobKey))
+		SignWith(f.bob, "book", "1").Version(1).Timestamp(3).PrivateKey(f.bobKey))
+	// A scratch write gives bob/data a chain no peer's bob/data has.
+	scratch := MustBuild(t, build.Transaction().For(f.bob, "data").
+		WriteData().DoubleHash([]byte("only the joiner")).Scratch().
+		SignWith(f.bob, "book", "1").Version(1).Timestamp(4).PrivateKey(f.bobKey))
 	// The next block the joiner is handed carries the creation, and no
 	// other node's does.
 	var injected atomic.Bool
@@ -258,7 +267,7 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 		if node != f.joiner || injected.Swap(true) {
 			return envelopes, true
 		}
-		return append(envelopes, env), true
+		return append(envelopes, env, scratch), true
 	})
 
 	// The joiner's own execution grows bob's key page's chains -- it pays
@@ -266,7 +275,17 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 	page := f.bob.JoinPath("book", "1")
 	grew := false
 	created := false
+	scratched := false
 	counter := f.join(t, func(round int) {
+		View(t, f.p.NodeDatabase(f.joiner), func(batch *database.Batch) {
+			chains, err := batch.Account(f.bob.JoinPath("data")).Chains().Get()
+			require.NoError(t, err)
+			for _, c := range chains {
+				if c.Name == "scratch" {
+					scratched = true
+				}
+			}
+		})
 		if chainHeight(t, f.p.NodeDatabase(f.joiner), page, "main") > chainHeight(t, f.p.NodeDatabase(0), page, "main") ||
 			chainHeight(t, f.p.NodeDatabase(f.joiner), page, "signature") > chainHeight(t, f.p.NodeDatabase(0), page, "signature") {
 			grew = true
@@ -307,6 +326,10 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 	// peers' appended to its own.
 	require.True(t, grew, "precondition: the joiner's execution never grew %v's chains beyond the peers'", page)
 	requireSameChains(t, f.p.NodeDatabase(f.joiner), f.p.NodeDatabase(0), page)
+	// And bob/data lists the peers' chains, not the scratch chain only the
+	// joiner's execution created.
+	require.True(t, scratched, "precondition: the joiner never listed a scratch chain on bob/data")
+	requireSameChains(t, f.p.NodeDatabase(f.joiner), f.p.NodeDatabase(0), f.bob.JoinPath("data"))
 	f.requireOneRootChain(t)
 }
 
@@ -357,6 +380,21 @@ func requireSameChains(t *testing.T, node, peer *database.Database, u *url.URL) 
 	}
 	want, got := read(peer), read(node)
 	require.NotEmpty(t, want, "precondition: the peer holds no chain of %v", u)
+
+	// The chain lists are the same, both ways: a chain only the node lists
+	// is hashed into its leaf and is not the peers'.
+	listed := func(db *database.Database) []string {
+		var out []string
+		View(t, db, func(batch *database.Batch) {
+			chains, err := batch.Account(u).Chains().Get()
+			require.NoError(t, err)
+			for _, meta := range chains {
+				out = append(out, meta.Name)
+			}
+		})
+		return out
+	}
+	require.ElementsMatch(t, listed(peer), listed(node), "%v: the node lists other chains than the peer", u)
 	for name, entries := range want {
 		require.Equal(t, len(entries), len(got[name]), "%v chain %s: the node holds another height", u, name)
 		for i := range entries {
