@@ -689,11 +689,9 @@ the half-filled ones its own pull is building, and a second joining node would
 otherwise take its spine from the first (#4297). Nor does it answer for
 missing data: not the sequencer, not healing. **In this phase a syncing node
 refuses every read** and answers once it is fully synced (Paul, 2026-09-19):
-`BOOTING` refuses with `NotReady`, `ACTIVE` serves. "Every read" is the rule;
-the code gates two query kinds (`servingFor`: a BPT page, an account with a
-receipt) and a joining node still answers ordinary account reads from a
-half-filled store — a code change under #4295, not a narrowing of this
-sentence. Tracking
+`BOOTING` refuses with `NotReady`, `ACTIVE` serves. "Every read" is the rule
+and, since #4368, what the code does: `servingFor` refuses every query while
+the node is `BOOTING`, counted per call. Tracking
 which nodes are not synced, so a *reader* can be sent to one that can answer,
 is the next phase's work and nothing here anticipates it.
 
