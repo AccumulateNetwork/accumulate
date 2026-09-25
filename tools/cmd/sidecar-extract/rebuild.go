@@ -93,7 +93,11 @@ func rebuildChains(archiveArgs []string, blockstore string) error {
 	for k := rhead.Count - 1; k >= 0; k-- {
 		ie := new(protocol.IndexEntry)
 		if err := rootIndex.EntryAs(k, ie); err != nil {
-			return fmt.Errorf("root index entry %d: %w", k, err)
+			// No copy has it: the blocks either side of it have no
+			// anchors to prove against, and will show as gaps
+			log.Printf("root index entry %d: %v", k, err)
+			after = nil
+			continue
 		}
 		if after != nil {
 			rootSpans[after.BlockIndex] = rootSpan{ie.Source + 1, after.Source}
