@@ -258,3 +258,74 @@ func TestALeafAPageOmitsIsNotDeletedOnThePagesWord(t *testing.T) {
 	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
 	require.Equal(t, int64(9), balanceIn(t, db, carol), "a page's omission deleted an account the peers hold")
 }
+
+// TestAWalkPagesPeerAtZeroDoesNotSetTheRecordFloor — #4438 re-review F-1. The
+// records are read back to the block a walk page's peer says it stands at.
+// A peer that says 0 would make that a query per block since genesis. The
+// floor is the newest verified anchor's block less the peers' retention.
+func TestAWalkPagesPeerAtZeroDoesNotSetTheRecordFloor(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	alice := protocol.AccountUrl("alice", "tokens")
+	store := peerStore(t)
+	putTokens(t, store, alice, 5)
+	leaf := leafIn(t, store, alice)
+
+	peer := &scriptedPeer{partition: here, block: 3000, records: map[uint64][]*url.URL{}, state: store,
+		page: []*api.BptLeafSummary{&leaf}}
+	peer.ledger = []uint64{3000, 0} // S, then the page's peer
+	s, _ := joiningAt(t, peer)
+	s.tracker.Observe(here, 3000, [32]byte{1})
+
+	for i := 0; i < 5; i++ {
+		require.NoError(t, s.Pull(context.Background()))
+	}
+	require.Equal(t, uint64(3000-recordWindow), s.sync.low, "the records were not read back to the retention floor")
+	require.LessOrEqual(t, peer.blockReads, recordWindow,
+		"a walk page's peer at 0 made the records read back past the newest anchor's retention window")
+}
+
+// TestReadingTheRecordsBackIsBoundedPerRound — #4438 re-review F-1. With no
+// anchor verified yet there is no floor, and the records are read back to the
+// page's block over several rounds, at most maxRecordsPerRound blocks each, as
+// the forward direction is.
+func TestReadingTheRecordsBackIsBoundedPerRound(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	alice := protocol.AccountUrl("alice", "tokens")
+	store := peerStore(t)
+	putTokens(t, store, alice, 5)
+	leaf := leafIn(t, store, alice)
+
+	peer := &scriptedPeer{partition: here, block: 3000, records: map[uint64][]*url.URL{}, state: store,
+		page: []*api.BptLeafSummary{&leaf}}
+	peer.ledger = []uint64{3000, 0}
+	s, _ := joiningAt(t, peer)
+
+	require.NoError(t, s.Pull(context.Background()))
+	require.LessOrEqual(t, peer.blockReads, maxRecordsPerRound, "one round read back more than maxRecordsPerRound records")
+	require.Equal(t, uint64(3000-maxRecordsPerRound), s.sync.low, "one round's reading back went further than maxRecordsPerRound")
+	for i := 0; i < 5; i++ {
+		require.NoError(t, s.Pull(context.Background()))
+	}
+	require.Equal(t, uint64(0), s.sync.low, "the records were not read back to the page's block")
+}
+
+// TestAPeerBehindTheNewestSignedAnchorDoesNotSetTheTarget — #4438 re-review
+// F-2. The target is the lowest block any peer names, floored at the newest
+// block a quorum signed an anchor for: a peer that says 0, or an honest
+// laggard, is behind and does not pin L where it stands.
+func TestAPeerBehindTheNewestSignedAnchorDoesNotSetTheTarget(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	alice := protocol.AccountUrl("alice", "tokens")
+	store := peerStore(t)
+	putTokens(t, store, alice, 5)
+	leaf := leafIn(t, store, alice)
+
+	laggard := &scriptedPeer{partition: here, block: 0, records: map[uint64][]*url.URL{}, state: store, page: []*api.BptLeafSummary{&leaf}}
+	honest := &scriptedPeer{partition: here, block: 10, records: map[uint64][]*url.URL{}, state: store, page: []*api.BptLeafSummary{&leaf}}
+	s, _ := joiningAt(t, honest)
+	s.sources = &peerSet{peers: []*scriptedPeer{laggard, honest}}
+	s.tracker.Observe(here, 10, [32]byte{1})
+
+	require.NoError(t, s.Pull(context.Background()))
+	require.Equal(t, uint64(10), s.sync.start, "a peer behind the newest signed anchor set the target")
+}

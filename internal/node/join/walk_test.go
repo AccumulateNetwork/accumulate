@@ -44,6 +44,9 @@ type scriptedPeer struct {
 	// where it stands, in turn, before it says block: a peer that stood
 	// further back a moment ago.
 	ledger []uint64
+
+	// blockReads counts the block-ledger records asked of the peer.
+	blockReads int
 }
 
 func (p *scriptedPeer) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
@@ -87,6 +90,7 @@ func (p *scriptedPeer) Query(_ context.Context, scope *url.URL, query api.Query)
 			return &api.AccountRecord{Account: &protocol.SystemLedger{Url: scope, Index: p.block}}, nil
 		}
 	case *api.BlockQuery:
+		p.blockReads++
 		named, ok := p.records[*q.Minor]
 		if !ok || q.EntryRange.Start > 0 {
 			return nil, errors.NotFound.WithFormat("block %d is empty", *q.Minor)

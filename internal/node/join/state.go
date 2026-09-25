@@ -203,8 +203,12 @@ type syncing struct {
 	repair bool
 
 	// low is the oldest block the records have been read from: S, or the
-	// block of a walk page served before it (walk).
-	low uint64
+	// block of a walk page served before it (walk). want is the oldest block
+	// they must be read from: a walk page served before low moves want, and
+	// the records are read back to it at most maxRecordsPerRound blocks a
+	// round (readBack).
+	low  uint64
+	want uint64
 
 	// named are the leaves the walk's pages have named, by key hash; a leaf
 	// the node holds that none named is dropped when the walk completes.
@@ -489,7 +493,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	}
 	if s.sync == nil {
 		s.sync = newSyncing()
-		s.sync.start, s.sync.last, s.sync.low = peer, peer, peer
+		s.sync.start, s.sync.last, s.sync.low, s.sync.want = peer, peer, peer, peer
 		s.log.Info("Pulling the state: the whole BPT, and every block-ledger record from here on",
 			"partition", s.partition, "start", peer, "executed", s.executed)
 	}
@@ -537,12 +541,14 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	if !p.walked {
 		s.walk(ctx, q, p)
 	}
+	s.readBack(ctx, q, p)
 
-	// With the walk done and nothing owed, the state is the partition's at L
-	// if the pull is right. The node may execute from here, comparing at
-	// every block that anchors (Ready; DIFFERENCES.md E11: the spec's "Two
-	// mismatches" executes only once the root has matched).
-	p.ready = p.walked && len(p.retry) == 0
+	// With the walk done, nothing owed and the records read back to the
+	// oldest page's block, the state is the partition's at L if the pull is
+	// right. The node may execute from here, comparing at every block that
+	// anchors (Ready; DIFFERENCES.md E11: the spec's "Two mismatches"
+	// executes only once the root has matched).
+	p.ready = p.walked && len(p.retry) == 0 && p.low <= p.want
 	return nil
 }
 
@@ -585,7 +591,7 @@ func (s *PulledState) startRepair(ctx context.Context) {
 	from := s.repairFrom
 	s.repairFrom = 0
 	p := newSyncing()
-	p.start, p.last, p.low = from, from, from
+	p.start, p.last, p.low, p.want = from, from, from, from
 	p.walked, p.spine, p.repair = true, true, true
 	s.sync = p
 
@@ -656,6 +662,39 @@ func (s *PulledState) processRecords(ctx context.Context, q api.Querier2, p *syn
 	last := s.processRange(ctx, q, p, p.last, through)
 	if last > p.last {
 		p.last = last
+	}
+}
+
+// recordWindow is how many blocks back from the newest verified anchor the
+// records are read: the peers' retention (BPTHistoryDepth, 1024 blocks by
+// default; executor spec, "Sync").
+const recordWindow = 1024
+
+// recordFloor is the oldest block the records are ever read back to: the
+// newest block a quorum of the partition's validators signed an anchor for,
+// less the peers' retention window.
+func (s *PulledState) recordFloor() uint64 {
+	n := s.tracker.LatestObservedBlock()
+	if n <= recordWindow {
+		return 0
+	}
+	return n - recordWindow
+}
+
+// readBack reads the records from low back towards want, at most
+// maxRecordsPerRound blocks a round, as the forward direction is bounded
+// (processRecords). A record that cannot be read leaves low where it was, and
+// the next round reads the same span again.
+func (s *PulledState) readBack(ctx context.Context, q api.Querier2, p *syncing) {
+	if p.want >= p.low || ctx.Err() != nil {
+		return
+	}
+	from := p.want
+	if p.low-from > maxRecordsPerRound {
+		from = p.low - maxRecordsPerRound
+	}
+	if s.processRange(ctx, q, p, from, p.low) == p.low {
+		p.low = from
 	}
 }
 
@@ -733,11 +772,22 @@ func (s *PulledState) walk(ctx context.Context, q api.Querier2, p *syncing) {
 			return
 		}
 		p.pages++
-		if served < p.low {
+		if served < p.want {
+			// A peer's word for where it stands is not a floor the node
+			// must read back to: one that answers 0 would make the records
+			// a query per block since genesis. Nothing older than the
+			// newest verified anchor's block less the peers' retention
+			// can be served as of its block anyway (#4438 re-review F-1).
+			if floor := s.recordFloor(); served < floor {
+				s.log.Info("A walk page's peer stands further back than the peers retain; the records are read back only to the retention floor",
+					"partition", s.partition, "page-block", served, "floor", floor)
+				served = floor
+			}
+		}
+		if served < p.want {
 			s.log.Info("A walk page was served at a block before the records' start; the records are read from there",
 				"partition", s.partition, "page-block", served, "records-from", p.low)
-			s.processRange(ctx, q, p, served, p.low)
-			p.low = served
+			p.want = served
 		}
 
 		for _, e := range page.Record.Entries {
@@ -959,13 +1009,20 @@ func readExecutedBlock(db *database.Database, partition *url.URL) (uint64, error
 // peersBlock is the block the partition's peers stand at: the LOWEST block any
 // of them names. One peer's word is not a target the node must reach -- a
 // peer that named a block far ahead would set S there and hold the records
-// off, or make a round a query per block without end (#4438 threat F3); a
-// peer that names a block behind only makes the records start earlier.
+// off, or make a round a query per block without end (#4438 threat F3).
+//
+// The lowest is floored at the newest block a quorum of the partition's
+// validators signed an anchor for, as this node has verified it: the
+// partition has certainly reached that block, so a peer that names a block
+// before it is behind -- a laggard, or one answering 0 -- and is not counted
+// (#4438 re-review F-2). Otherwise one such peer would pin the target, and
+// with it L, where it stands.
 func (s *PulledState) peersBlock(ctx context.Context) (uint64, error) {
 	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
 	if err != nil {
 		return 0, errors.UnknownError.WithFormat("find the partition's peers: %w", err)
 	}
+	floor := s.tracker.LatestObservedBlock()
 	var low uint64
 	var found bool
 	var last error
@@ -973,6 +1030,10 @@ func (s *PulledState) peersBlock(ctx context.Context) (uint64, error) {
 		n, err := ledgerIndexOf(ctx, src, s.partition)
 		if err != nil {
 			last = err
+			continue
+		}
+		if n < floor {
+			last = errors.NotReady.WithFormat("%v stands at block %d, before the newest signed anchor's block %d", src, n, floor)
 			continue
 		}
 		if !found || n < low {
