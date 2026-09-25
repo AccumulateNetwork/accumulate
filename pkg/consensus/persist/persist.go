@@ -70,6 +70,14 @@ type Checkpoint struct {
 
 	// PendingBatches holds batch digests for pending transactions.
 	PendingBatches []string `json:"pending_batches,omitempty"`
+
+	// Tail names, in the DAGStore beside the checkpoint, the certificates of
+	// the DAG from RescueWindow below LastCommitRound up to the frontier, and
+	// the batches they name that this node held (#4448). Restore loads them
+	// into the DAG and the batch store before the primary starts, so the
+	// restored round has its parents and the uncommitted rounds can be
+	// ordered. A checkpoint written before #4448 has none.
+	Tail []string `json:"tail,omitempty"`
 }
 
 // CertificateData holds serialized certificate information for persistence.

@@ -13,7 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -67,6 +69,8 @@ type DAG struct {
 	// were never committed here (#4239): the executor halted and the network
 	// went on. A node that needed them is stranded, not lagging.
 	uncommittedDropped types.Round
+	// equivocations counts conflicting certificates refused (Equivocations).
+	equivocations atomic.Uint64
 }
 
 // NewDAG creates a new DAG with the specified garbage collection depth.
@@ -88,6 +92,29 @@ func NewDAG(gcDepth types.Round) *DAG {
 // Returns an error if parents are missing or if a certificate for this
 // author and round already exists.
 func (d *DAG) Insert(cert *types.Certificate) error {
+	return d.insert(cert, true)
+}
+
+// Restore inserts certificates a restarted node persisted with its
+// checkpoint (#4448), lowest round first, without requiring their parents:
+// the persisted tail begins RescueWindow below the commit floor, and the
+// certificates below it are committed history the node no longer needs.
+// Each was quorum-verified when this node first took it in.
+func (d *DAG) Restore(certs []*types.Certificate) error {
+	sort.Slice(certs, func(i, j int) bool { return certs[i].Round() < certs[j].Round() })
+	for _, c := range certs {
+		if err := d.insert(c, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Equivocations counts the conflicting certificates this DAG refused: a
+// different certificate for an author and round it already holds.
+func (d *DAG) Equivocations() uint64 { return d.equivocations.Load() }
+
+func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 	if cert == nil {
 		return errors.New("certificate is nil")
 	}
@@ -110,6 +137,7 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 			if existing.Digest() == cert.Digest() {
 				return nil // idempotent re-insert
 			}
+			d.equivocations.Add(1)
 			return fmt.Errorf("%w: author %x round %d", ErrEquivocation, key[:4], round)
 		}
 	}
@@ -123,7 +151,7 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 	// itself is quorum-verified before insertion, so accepting it without
 	// its pruned parents does not weaken trust.
 	pruned := d.lastCommitRound > 0 && round <= d.lastCommitRound+1
-	if round > 0 && !pruned && len(cert.Parents()) > 0 {
+	if checkParents && round > 0 && !pruned && len(cert.Parents()) > 0 {
 		for _, parentDigest := range cert.Parents() {
 			// Use digest index for O(1) lookup
 			if _, found := d.digestIndex[parentDigest]; !found {

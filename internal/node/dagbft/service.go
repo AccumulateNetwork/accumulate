@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -221,6 +222,11 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// Create consensus node with optional libp2p networking
 	nodeConfig := s.config.NodeConfig
+	// What a restart needs to continue consensus lives beside the
+	// checkpoint (#4448).
+	if s.config.DataDir != "" && nodeConfig.StateDir == "" {
+		nodeConfig.StateDir = filepath.Join(s.config.DataDir, consensusStateDir)
+	}
 	// Set up pre-batch transaction validation using the adapter
 	// This is equivalent to CometBFT's CheckTx
 	nodeConfig.WorkerConfig.Validator = s.adapter
@@ -457,12 +463,13 @@ func (s *Service) initializeCommittee() (*types.Committee, error) {
 const (
 	checkpointFile     = "consensus-checkpoint.json"
 	prevCheckpointFile = "consensus-checkpoint.prev.json"
+	consensusStateDir  = "consensus-dag"
 )
 
 // saveCheckpoint writes the node's consensus position for blockIndex, keeping
 // the previous block's position as well. A failure to write is reported, not
 // fatal: the next block writes again.
-func (s *Service) saveCheckpoint(blockIndex uint64) {
+func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 	if s.config.DataDir == "" {
 		return
 	}
@@ -472,7 +479,7 @@ func (s *Service) saveCheckpoint(blockIndex uint64) {
 		s.prevCheckpoint = persist.NewStore(s.config.DataDir)
 		s.prevCheckpoint.SetFilename(prevCheckpointFile)
 	}
-	cp := s.node.Checkpoint()
+	cp := s.node.CheckpointAt(leaderRound)
 	cp.BlockIndex = blockIndex
 	if s.lastSaved != nil {
 		if err := s.prevCheckpoint.Save(s.lastSaved); err != nil {
@@ -889,7 +896,7 @@ func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, le
 	// produced: a crash on either side of ProduceBlock leaves a checkpoint
 	// that matches the executor's last block (#4238).
 	if checkpoint {
-		s.saveCheckpoint(blockIndex)
+		s.saveCheckpoint(blockIndex, leader.Header.Round)
 	}
 
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)

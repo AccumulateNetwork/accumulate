@@ -93,6 +93,13 @@ type NodeConfig struct {
 	// primary.DefaultMaxBlockBytes.
 	MaxBlockBytes int
 
+	// StateDir, when set, is where the node keeps what a restart needs to
+	// continue consensus (#4448): the DAG's tail and the batches it names,
+	// written with each checkpoint, and the header this node last authored,
+	// written before it is broadcast. Empty keeps nothing: a partition that
+	// then restarts as a whole has no parent certificate anywhere.
+	StateDir string
+
 	// MinRoundInterval paces round advancement, and therefore block cadence:
 	// Bullshark commits a leader every other round, so blocks arrive at
 	// roughly twice this interval. Zero falls back to
@@ -167,6 +174,13 @@ type Node struct {
 	primary   *primary.Primary
 	bullshark *bullshark.Bullshark
 	protocols *gossip.ProtocolHandler
+
+	// Restart state (#4448); see restart.go.
+	dagStore *persist.DAGStore
+	orderMu  sync.Mutex    // held across ordering and recording what was handed over
+	handed   []handedGroup // groups handed to the executor not yet checkpointed
+	prevTail map[string]bool
+	restored []*types.Certificate // replayed through Bullshark at start
 
 	// Committed certificates channel
 	committed chan []*types.Certificate
@@ -282,6 +296,13 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		committed: make(chan []*types.Certificate, config.CommitBufferSize),
 	}
 	p.SetExecutionLagSource(n.ExecutionLag, config.MaxExecutionLag)
+	if config.StateDir != "" {
+		n.dagStore, err = persist.OpenDAGStore(config.StateDir)
+		if err != nil {
+			return nil, err
+		}
+		p.SetOnAuthored(n.persistAuthored)
+	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
 	// missing-batch pull: a committed certificate proves 2f+1 validators
@@ -898,24 +919,22 @@ func (n *Node) LastCommitRound() types.Round {
 	return n.bullshark.LastCommitRound()
 }
 
-// Checkpoint is this node's consensus position: the primary's round and
-// epoch, Bullshark's last committed leader round and its per-author commit
-// watermarks. The service saves one per block so a restart can resume where
-// the executor's state is (#4238).
+// Checkpoint is this node's consensus position as Bullshark has it now. The
+// service uses CheckpointAt, the position of the block it is producing.
 func (n *Node) Checkpoint() *persist.Checkpoint {
-	cp := persist.NewCheckpoint(n.config.Partition,
-		n.primary.CurrentRound(), n.primary.CurrentEpoch(),
-		n.bullshark.LastCommitRound(), n.bullshark.GetLastCommitted())
-	cp.Committed = n.bullshark.GetCommitted()
-	return cp
+	return n.CheckpointAt(0)
 }
 
 // Restore seeds the consensus position from a checkpoint, before Start: the
 // primary participates from the checkpoint's round, Bullshark orders nothing
 // at or below its last commit and knows what each author had committed, and
 // the DAG accepts certificates at the commit floor without their pruned
-// parents. Certificate catch-up covers the rounds between the checkpoint and
-// the live frontier, up to DAGGCDepth.
+// parents. The checkpoint's tail, if it has one, goes back into the DAG and
+// the batch store, and the header this node last authored back into vote
+// collection (#4448): a partition restarted as a whole has its parents in
+// memory again and continues from the round it stopped at. Certificate
+// catch-up covers the rounds between the checkpoint and the live frontier,
+// up to DAGGCDepth.
 func (n *Node) Restore(cp *persist.Checkpoint) {
 	n.primary.SetRound(cp.CurrentRound)
 	n.primary.SetEpoch(cp.CurrentEpoch)
@@ -925,8 +944,10 @@ func (n *Node) Restore(cp *persist.Checkpoint) {
 	}
 	n.bullshark.SetCommitted(cp.Committed)
 	n.dag.SetLastCommitRound(cp.LastCommitRound)
+	certs, batches := n.restoreTail(cp)
 	slog.Info("Restored consensus position", "partition", n.config.Partition,
-		"round", cp.CurrentRound, "lastCommit", cp.LastCommitRound, "block", cp.BlockIndex)
+		"round", n.primary.CurrentRound(), "lastCommit", cp.LastCommitRound, "block", cp.BlockIndex,
+		"certificates", certs, "batches", batches)
 }
 
 // Metrics returns node metrics.
@@ -937,6 +958,21 @@ func (n *Node) Metrics() (txSubmitted, certsCommitted uint64) {
 // processBullshark processes certificates from the primary and orders them.
 func (n *Node) processBullshark() {
 	defer n.wg.Done()
+
+	// A restored tail is ordered first, lowest round first, as the peers
+	// that took these certificates in live ordered them (#4448).
+	n.orderMu.Lock()
+	replay := n.restored
+	n.restored = nil
+	n.orderMu.Unlock()
+	if n.holdOrdering.Load() {
+		replay = nil
+	}
+	for _, cert := range replay {
+		if !n.order(cert) {
+			return
+		}
+	}
 
 	certs := n.primary.NewCertificates()
 	for {
@@ -952,50 +988,7 @@ func (n *Node) processBullshark() {
 				continue
 			}
 
-			// Process certificate through Bullshark
-			outputs := n.bullshark.ProcessCertificate(cert)
-
-			// Send committed certificates to the executor, grouped by the
-			// LEADER that committed them: one group = one leader's sub-DAG in
-			// canonical order = one executor block. The leader boundary is
-			// deterministic across validators whatever order certificates
-			// arrived in; the trigger boundary (this loop iteration) is not.
-			// NOTE: Batch pruning is handled by the executor (main.go) after reading
-			// batches from workers. We must NOT prune here because the committed
-			// channel is buffered - pruning before the executor reads would cause
-			// "Missing batch for certificate" errors.
-			var group []*types.Certificate
-			var groupLeader types.Round
-			flush := func() bool {
-				if len(group) == 0 {
-					return true
-				}
-				// BLOCK, never drop: a dropped committed certificate means
-				// this node silently skips transactions its peers execute —
-				// permanent state divergence (#4122's shape). If the executor
-				// lags, backpressure here is the correct response; consensus
-				// certificates keep accumulating in the channel's buffer and
-				// the DAG regardless.
-				select {
-				case n.committed <- group:
-					n.committedGroups.Add(1)
-					group = nil
-					return true
-				case <-n.ctx.Done():
-					return false
-				}
-			}
-			for _, output := range outputs {
-				if len(group) > 0 && output.Leader != groupLeader {
-					if !flush() {
-						return
-					}
-				}
-				groupLeader = output.Leader
-				group = append(group, output.Certificate)
-				n.certificatesCommitted.Add(1)
-			}
-			if !flush() {
+			if !n.order(cert) {
 				return
 			}
 

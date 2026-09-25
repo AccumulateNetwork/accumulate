@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -38,6 +39,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
@@ -123,6 +125,30 @@ type Config struct {
 	MaxExecutionLag int
 	MaxHeaderBytes  int
 	MaxBlockBytes   int // per block, shared by the validators' headers (#4230)
+
+	// StateDir, when set, gives every node a directory for its consensus
+	// checkpoints and the state a restart needs (#4448), and makes the
+	// executor stand-in write a checkpoint per block as the service does.
+	StateDir string
+
+	// Restarts stops nodes mid-run and restarts them from their persisted
+	// state (Sim.Restart), each once, when its partition first reaches
+	// AtHeight.
+	Restarts []Restart
+}
+
+// Restart names nodes of one partition to restart, by their index in the
+// partition, once the partition reaches AtHeight.
+//
+// ExecutorFirst stops the nodes' executors this long before the nodes
+// themselves, so consensus runs on past the last checkpoint, as it does when
+// a node stops with its executor behind.
+type Restart struct {
+	Part          string
+	Vals          []int
+	AtHeight      uint64
+	ExecutorFirst time.Duration
+	done          bool
 }
 
 // execCost reports the per-transaction execution cost for one partition.
@@ -181,14 +207,35 @@ func (c *Config) Defaults() {
 type simNode struct {
 	part   string
 	val    int
-	node   *consensus.Node
+	nodeP  atomic.Pointer[consensus.Node]
 	height atomic.Uint64
 	txs    atomic.Uint64
 	fatal  atomic.Value // error that stopped this node's consumer, if any
 
+	// What a restart needs to rebuild the node (Sim.Restart).
+	key       ed25519.PrivateKey
+	committee *types.Committee
+	ps        *pubsub.PubSub
+	cfg       consensus.NodeConfig
+
+	// Checkpoints, one per executed block as the real service keeps them,
+	// when Config.StateDir is set; and the executed sequence, one entry per
+	// block, that restarts must not change (#4448).
+	cpCur, cpPrev *persist.Store
+	lastSaved     *persist.Checkpoint
+	seqMu         sync.Mutex
+	seq           []string
+
+	stopConsume  context.CancelFunc
+	consumeDone  chan struct{}
+	stoppedEquiv uint64 // equivocations counted by DAGs of stopped nodes
+
 	maxBlockTxs atomic.Uint64 // the most transactions one executed block carried
 	maxLag      atomic.Int64  // the deepest execution lag observed after a block
 }
+
+// n is the node currently running for this validator and partition.
+func (sn *simNode) n() *consensus.Node { return sn.nodeP.Load() }
 
 // Sim is a running simulation.
 type Sim struct {
@@ -208,6 +255,8 @@ type Sim struct {
 	refusedOnce sync.Once
 
 	synthQ chan synthDue // synthetics owed to another partition, with when they are due
+
+	runCtx context.Context
 }
 
 // synthDue is a batch of synthetic transactions one partition owes another.
@@ -315,7 +364,7 @@ func New(cfg Config) (*Sim, error) {
 	}
 
 	mkNode := func(part string, committee *types.Committee, val int) (*simNode, error) {
-		n, err := consensus.NewNode(consensus.NodeConfig{
+		nodeCfg := consensus.NodeConfig{
 			Partition:  part,
 			KeyPair:    keys[val],
 			NumWorkers: cfg.NumWorkers,
@@ -332,11 +381,16 @@ func New(cfg Config) (*Sim, error) {
 			MaxExecutionLag:     cfg.MaxExecutionLag,
 			MaxHeaderBytes:      cfg.MaxHeaderBytes,
 			MaxBlockBytes:       cfg.MaxBlockBytes,
-		}, committee, s.hosts[val], pss[val])
+		}
+		if cfg.StateDir != "" {
+			nodeCfg.StateDir = filepath.Join(cfg.StateDir, part, fmt.Sprint(val), "dag")
+		}
+		n, err := consensus.NewNode(nodeCfg, committee, s.hosts[val], pss[val])
 		if err != nil {
 			return nil, err
 		}
-		sn := &simNode{part: part, val: val, node: n}
+		sn := &simNode{part: part, val: val, key: keys[val], committee: committee, ps: pss[val], cfg: nodeCfg}
+		sn.nodeP.Store(n)
 		s.nodes = append(s.nodes, sn)
 		s.byPart[part] = append(s.byPart[part], sn)
 		return sn, nil
@@ -372,7 +426,7 @@ func New(cfg Config) (*Sim, error) {
 			pkeys[i] = keys[sn.val]
 		}
 		for _, sn := range nodes {
-			if err := sn.node.InsertGenesisForAll(pkeys); err != nil {
+			if err := sn.n().InsertGenesisForAll(pkeys); err != nil {
 				s.Close()
 				return nil, fmt.Errorf("genesis %s: %w", part, err)
 			}
@@ -388,8 +442,8 @@ func (s *Sim) Close() {
 	}
 	s.wg.Wait()
 	for _, sn := range s.nodes {
-		if sn != nil && sn.node != nil {
-			sn.node.Stop()
+		if sn != nil && sn.n() != nil {
+			sn.n().Stop()
 		}
 	}
 	for _, h := range s.hosts {
@@ -403,11 +457,13 @@ func (s *Sim) Close() {
 // loop — collect the certificate's batches, "execute" them, prune them.
 func (s *Sim) consume(ctx context.Context, sn *simNode) {
 	defer s.wg.Done()
+	defer close(sn.consumeDone)
+	node := sn.n()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case group, ok := <-sn.node.Committed():
+		case group, ok := <-node.Committed():
 			if !ok {
 				return
 			}
@@ -415,10 +471,13 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				continue
 			}
 			// One committed leader group = one block, mirroring the real
-			// service (#4164).
+			// service (#4164). The service records the consensus position
+			// of the block before producing it (#4238, #4448).
+			s.checkpoint(sn, node, group)
 			executedAny := false
+			var executed []string
 			for _, cert := range group {
-				batches, err := sn.node.CollectBatches(ctx, cert)
+				batches, err := node.CollectBatches(ctx, cert)
 				if errors.Is(err, consensus.ErrAlreadyExecuted) {
 					continue
 				}
@@ -429,6 +488,7 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 					return
 				}
 				executedAny = true
+				executed = append(executed, cert.Digest().String())
 				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
 				for _, e := range cert.Header.Payload {
 					digests = append(digests, e.Digest)
@@ -457,19 +517,22 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 					case <-t.C:
 					}
 				}
-				for _, w := range sn.node.Workers() {
+				for _, w := range node.Workers() {
 					w.PruneCommitted(digests, worker.CommitInfo{Detail: fmt.Sprintf("block %d", sn.height.Load()+1), Cert: cert.Digest().String()})
 				}
 			}
 			if executedAny {
+				sn.seqMu.Lock()
+				sn.seq = append(sn.seq, fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ",")))
+				sn.seqMu.Unlock()
 				sn.height.Add(1)
 			}
 			// The node counts every committed group it hands over; the
 			// executor reports each one back when its block is done, and the
 			// difference is the execution lag the primary bounds (consensus
 			// spec, invariant 9). consim's executor is this loop.
-			sn.node.ReportExecuted()
-			if lag := int64(sn.node.ExecutionLag()); lag > sn.maxLag.Load() {
+			node.ReportExecuted()
+			if lag := int64(node.ExecutionLag()); lag > sn.maxLag.Load() {
 				sn.maxLag.Store(lag)
 			}
 		}
@@ -502,7 +565,7 @@ func (s *Sim) systemLoad(ctx context.Context, part string) {
 			n++
 			tx := []byte(fmt.Sprintf("consim-sys-%s-%d", part, n))
 			s.submitted.Add(1)
-			if err := nodes[int(n)%len(nodes)].node.SubmitTransaction(tx); err != nil {
+			if err := nodes[int(n)%len(nodes)].n().SubmitTransaction(tx); err != nil {
 				s.refused.Add(1)
 			}
 		}
@@ -548,9 +611,9 @@ func (s *Sim) load(ctx context.Context, part string) {
 			// Keep submitting after a refusal: the question is whether the
 			// network recovers, not whether the load backs off.
 			s.submitted.Add(1)
-			submit := nodes[int(n)%len(nodes)].node.SubmitTransaction
+			submit := nodes[int(n)%len(nodes)].n().SubmitTransaction
 			if s.cfg.UserLoad {
-				submit = nodes[int(n)%len(nodes)].node.SubmitUserTransaction
+				submit = nodes[int(n)%len(nodes)].n().SubmitUserTransaction
 			}
 			if err := submit(tx); err != nil {
 				s.refused.Add(1)
@@ -618,7 +681,7 @@ func (s *Sim) syntheticLoad(ctx context.Context) {
 				n++
 				tx := []byte(fmt.Sprintf("consim-synth-%s-%d", d.to, n))
 				s.submitted.Add(1)
-				if err := nodes[int(n)%len(nodes)].node.SubmitTransaction(tx); err != nil {
+				if err := nodes[int(n)%len(nodes)].n().SubmitTransaction(tx); err != nil {
 					s.refused.Add(1)
 				}
 			}
@@ -634,12 +697,12 @@ type snapshot struct {
 }
 
 func (sn *simNode) snap() snapshot {
-	h, c, vi, vo := sn.node.Primary().Metrics()
+	h, c, vi, vo := sn.n().Primary().Metrics()
 	return snapshot{
 		height:     sn.height.Load(),
 		txs:        sn.txs.Load(),
-		round:      sn.node.CurrentRound(),
-		lastCommit: sn.node.LastCommitRound(),
+		round:      sn.n().CurrentRound(),
+		lastCommit: sn.n().LastCommitRound(),
 		headers:    h, certs: c, votesIn: vi, votesOut: vo,
 	}
 }
@@ -674,14 +737,14 @@ func (l *lastMoved) update(now time.Time, s snapshot) {
 func (s *Sim) Run(parent context.Context) (*Result, error) {
 	ctx, cancel := context.WithCancel(parent)
 	s.cancel = cancel
+	s.runCtx = ctx
 	start := time.Now()
 
 	for _, sn := range s.nodes {
 		sn := sn
 		s.wg.Add(1)
-		go func() { defer s.wg.Done(); _ = sn.node.Start(ctx) }()
-		s.wg.Add(1)
-		go s.consume(ctx, sn)
+		go func() { defer s.wg.Done(); _ = sn.n().Start(ctx) }()
+		s.startConsume(ctx, sn)
 	}
 	// Let the gossip mesh form before load; production waits too.
 	time.Sleep(2 * time.Second)
@@ -735,7 +798,7 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 				if h := sn.height.Load(); h > maxH {
 					maxH = h
 				}
-				if r := sn.node.CurrentRound(); r > maxR {
+				if r := sn.n().CurrentRound(); r > maxR {
 					maxR = r
 				}
 			}
@@ -766,6 +829,9 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 				return s.finish(start, false, fmt.Sprintf("stalled: %s frozen at height %d", part, maxH)),
 					fmt.Errorf("%w: %s at height %d", ErrStalled, part, maxH)
 			}
+		}
+		if err := s.scheduledRestarts(logf); err != nil {
+			return s.finish(start, false, err.Error()), err
 		}
 		logf("%8s  %s | refused=%d/%d", time.Since(start).Truncate(time.Second), strings.Join(line, " | "), s.refused.Load(), s.submitted.Load())
 
@@ -805,7 +871,7 @@ func (s *Sim) diagnose(logf func(string, ...any), prev map[*simNode]snapshot, mo
 				}
 			}
 			r := cur.round
-			inRound := len(sn.node.DAG().GetRound(r)) + len(sn.node.DAG().GetRound(r-1))
+			inRound := len(sn.n().DAG().GetRound(r)) + len(sn.n().DAG().GetRound(r-1))
 			var fatal string
 			if v := sn.fatal.Load(); v != nil {
 				fatal = fmt.Sprint(v)

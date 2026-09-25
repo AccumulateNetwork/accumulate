@@ -255,6 +255,11 @@ type Primary struct {
 	hasAuthored       bool
 	lastAuthoredRound types.Round
 
+	// onAuthored persists a header this primary authored before any peer
+	// sees it (#4448): a restarted node must rebroadcast that header, never
+	// author another for its round. Nil means nothing is persisted.
+	onAuthored func(*types.Header) error
+
 	// Lifecycle management
 	// lifecycleMu guards ctx/cancel: Start runs in a goroutine spawned by
 	// Node.Start, so an early Stop raced the write (caught by -race once the
@@ -561,6 +566,18 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 			"error", err,
 			"round", currentRound)
 		return
+	}
+
+	// Durable before anyone can see it: a crash after the broadcast must
+	// not let the restarted node author this round again (#4448).
+	if p.onAuthored != nil {
+		if err := p.onAuthored(header); err != nil {
+			p.requeueHeaderBatches(header)
+			p.pendingMu.Unlock()
+			slog.Error("Cannot persist authored header; not broadcasting it",
+				"partition", p.config.Partition, "round", currentRound, "error", err)
+			return
+		}
 	}
 
 	// Store for vote collection
