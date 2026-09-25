@@ -632,7 +632,14 @@ still different, or not known:
   `DefaultHorizon` (600) blocks, and there a block this node executed reads
   as one it did not and is skipped (and `ownReceipts`, which reads the
   anchor pool's messages down to the same bound with hard errors, may fail
-  first). A skipped block is a dispatch this node does not make, never a
+  first). **The seed now reads deep** (`Executor.seedDeep`, #4405): the
+  window counts commits, not blocks, and a joining node commits once per
+  account it pulls, so at its first block the pool's messages were hundreds
+  of commits old and every handoff failed `load anchor pool main chain entry
+  N: Message.….Main not found` while the store held them (run
+  `20260925T020517Z`; `TestAFreshBVNNodeJoinsByPullOnBlockchainDB`). Every
+  other executor read of a record the pull wrote is still shallow and was not
+  audited for the same age. A skipped block is a dispatch this node does not make, never a
   wrong one. Two earlier versions on this branch were wrong and are recorded here:
   skipping every block at or below the join block left a restart that fell
   nothing behind with an empty cache — the #4241/#4277 restart hole (review

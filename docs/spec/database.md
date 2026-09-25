@@ -84,11 +84,18 @@ grew without bound with the chain.
 This is visible in the abstraction rather than hidden by it, because a reader
 that means to look back must say so:
 
-- The **executor** reads recent state and takes an ordinary change set.
+- The **executor** reads recent state and takes an ordinary change set —
+  except the synthetic-cache seed at its first block, which reads by position
+  what was written long before and takes a deep one (#4405).
 - A reader that knowingly reaches into history — the API, a tool walking the
   chain — takes a **deep** change set. Dispatch and healing are not such
   readers: they read the producer's cache (healing.md, "The cache"), and a
   read of history by either is a failure.
+
+The window is counted in commits, and a block is one commit only on a node
+that executes: a joining node commits once per account it pulls, so what its
+pull wrote is far older, by the window's count, than the block that wrote it
+on its peers.
 
 A store with no window ignores the distinction: its ordinary reads already see
 everything.
