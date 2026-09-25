@@ -119,12 +119,12 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 		go func() {
 			defer wg.Done()
 			// A batch caches what it reads, so one is not kept for long
-			batch := coredb.New(&verifiedStore{a}, nil).Begin(false)
+			batch := coredb.New(&verifiedStore{[]*archive{a}}, nil).Begin(false)
 			defer func() { batch.Discard() }()
 			for done := 0; ; done++ {
 				if done%2000 == 1999 {
 					batch.Discard()
-					batch = coredb.New(&verifiedStore{a}, nil).Begin(false)
+					batch = coredb.New(&verifiedStore{[]*archive{a}}, nil).Begin(false)
 				}
 				n := next.Add(1) - 1
 				if n > height {

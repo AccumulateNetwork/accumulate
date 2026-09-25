@@ -279,7 +279,7 @@ func blockSurvey(archiveArg, blockstore, accounts string, sample int) error {
 			return fmt.Errorf("-ledger-url: %w", err)
 		}
 		base, height := storeRange(store)
-		b := coredb.New(&verifiedStore{a}, nil).Begin(false)
+		b := coredb.New(&verifiedStore{[]*archive{a}}, nil).Begin(false)
 		for i := 0; i < sample; i++ {
 			h := base + uint64(i)*(height-base)/uint64(sample)
 			for j := uint64(0); j < 200 && h+j <= height; j++ {
@@ -318,7 +318,7 @@ func blockSurvey(archiveArg, blockstore, accounts string, sample int) error {
 	}
 	byKind := map[string]*tally{}
 	var blocks, noBlock, badTx, noLedger int
-	batch := coredb.New(&verifiedStore{a}, nil).Begin(false)
+	batch := coredb.New(&verifiedStore{[]*archive{a}}, nil).Begin(false)
 	defer batch.Discard()
 	for i := 0; i < len(ledgers); i += step {
 		u, err := url.Parse(ledgers[i])

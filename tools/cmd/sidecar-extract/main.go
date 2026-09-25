@@ -110,7 +110,7 @@ func main() {
 		return
 	}
 	if *flagRebuild {
-		if err := rebuildChains(flag.Arg(0), *flagSurvey); err != nil {
+		if err := rebuildChains(flag.Args(), *flagSurvey); err != nil {
 			log.Fatal(err)
 		}
 		return

@@ -38,7 +38,7 @@ func ledgers(archiveArgs []string) error {
 		}
 		a := &archive{name: name, db: db, log: &vlog{dir: path}}
 
-		batch := coredb.New(&verifiedStore{a}, nil).Begin(false)
+		batch := coredb.New(&verifiedStore{[]*archive{a}}, nil).Begin(false)
 		for _, p := range partitions {
 			var ledger *protocol.SystemLedger
 			err := batch.Account(protocol.PartitionUrl(p).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
@@ -56,30 +56,49 @@ func ledgers(archiveArgs []string) error {
 	return nil
 }
 
-// verifiedStore reads an archive through the verified value path. It cannot
-// write.
-type verifiedStore struct{ a *archive }
+// verifiedStore reads one or more copies of a partition through the verified
+// value path, newest first: a record comes from the first copy that holds a
+// value it can verify. It cannot write.
+type verifiedStore struct{ archives []*archive }
 
 func (s *verifiedStore) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
-	txn := s.a.db.NewTransaction(false)
-	moves := s.a.newMoves(txn)
+	txns := make([]*badger.Txn, len(s.archives))
+	moves := make([]*badger.Iterator, len(s.archives))
+	for i, a := range s.archives {
+		txns[i] = a.db.NewTransaction(false)
+		moves[i] = a.newMoves(txns[i])
+	}
 	return memory.NewChangeSet(memory.ChangeSetOptions{
 		Prefix: prefix,
 		Get: func(key *record.Key) ([]byte, error) {
 			h := key.Hash()
-			item, err := txn.Get(h[:])
-			if errors.Is(err, badger.ErrKeyNotFound) {
-				return nil, (*database.NotFoundError)(key)
+			var failed error
+			for i, a := range s.archives {
+				item, err := txns[i].Get(h[:])
+				if errors.Is(err, badger.ErrKeyNotFound) {
+					continue
+				}
+				if err == nil {
+					var v []byte
+					if v, err = a.resolve(item, moves[i]); err == nil {
+						return v, nil
+					}
+				}
+				if failed == nil {
+					failed = err
+				}
 			}
-			if err != nil {
-				return nil, err
+			if failed != nil {
+				return nil, failed
 			}
-			return s.a.resolve(item, moves)
+			return nil, (*database.NotFoundError)(key)
 		},
 		Commit: func(map[[32]byte]memory.Entry) error { return errors.New("read-only") },
 		Discard: func() {
-			moves.Close()
-			txn.Discard()
+			for i := range s.archives {
+				moves[i].Close()
+				txns[i].Discard()
+			}
 		},
 	})
 }

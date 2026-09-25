@@ -40,13 +40,22 @@ import (
 // Each chain starts from its state before its first entry in range, taken from
 // the archive; everything after that comes from blocks. A chain stops at its
 // first block that cannot be proven, and the reason is counted.
-func rebuildChains(archiveArg, blockstore string) error {
-	name, path, _ := strings.Cut(archiveArg, "=")
-	db, err := badger.Open(badger.DefaultOptions(path).WithReadOnly(true).WithLogger(nil))
-	if err != nil {
-		return fmt.Errorf("archive %s: %w", name, err)
+func rebuildChains(archiveArgs []string, blockstore string) error {
+	// Copies of the partition, newest first; a record the first cannot
+	// produce is read from the next
+	var copies []*archive
+	var name string
+	for _, arg := range archiveArgs {
+		n, path, _ := strings.Cut(arg, "=")
+		db, err := badger.Open(badger.DefaultOptions(path).WithReadOnly(true).WithLogger(nil))
+		if err != nil {
+			return fmt.Errorf("archive %s: %w", n, err)
+		}
+		copies = append(copies, &archive{name: n, db: db, log: &vlog{dir: path}})
+		if name == "" {
+			name = n
+		}
 	}
-	a := &archive{name: name, db: db, log: &vlog{dir: path}}
 	store, err := leveldb.OpenFile(blockstore, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
 	if err != nil {
 		return err
@@ -67,7 +76,7 @@ func rebuildChains(archiveArg, blockstore string) error {
 
 	// A batch caches what it reads, so it is replaced every so often; chains
 	// are looked up in the current one
-	batch := coredb.New(&verifiedStore{a}, nil).Begin(false)
+	batch := coredb.New(&verifiedStore{copies}, nil).Begin(false)
 	defer func() { batch.Discard() }()
 	root := batch.Account(lu).RootChain()
 
@@ -166,7 +175,7 @@ func rebuildChains(archiveArg, blockstore string) error {
 	for n := first; n <= height; n++ {
 		if (n-first)%2000 == 1999 {
 			batch.Discard()
-			batch = coredb.New(&verifiedStore{a}, nil).Begin(false)
+			batch = coredb.New(&verifiedStore{copies}, nil).Begin(false)
 			root = batch.Account(lu).RootChain()
 		}
 		if (n-from)%100000 == 0 {
