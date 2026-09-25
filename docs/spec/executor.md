@@ -990,21 +990,34 @@ peer — a node that never joined has no state machine at all and serves as
 `NotReady`, submissions relayed unexamined, and the gauge reading `BOOTING`
 until that handoff succeeds. **Two things do not wait for `ACTIVE`**
 (decided after the plan review, note_3901212756). *The sequencer answers for
-every anchor the node itself executed and signed, whatever its state:* the
-anchor collector gathers a partition's anchors from its validators, and a
-validator that answers only while `ACTIVE` makes a partition with more than
-N − threshold validators booting at once unable to prove anything to
-anyone, forever. *A node signs and dispatches block N's anchor and
-synthetic transactions only if the newest root it could check matched*
-(lag one): a node whose last checked root did not match signs nothing,
-dispatches nothing, and repairs. A wrongly executing node then stalls
-rather than forms a wrong quorum with others like it, and a partition whose
-validators are all booting still anchors. Neither signs for a block the node
-did not execute: the block a handoff stands at, and every block below it,
-are the peers' blocks. So the first block after a handoff at q does not sign
-q's anchor. A node that executed q wrongly, signed it, repaired and handed
-off again at q would otherwise sign one sequence number twice, under two
-roots (#4443). `COMPLETE` and `WAITING`, which
+every anchor the node itself signed, whatever its state:* the anchor
+collector gathers a partition's anchors from its validators, and a validator
+that answers only while `ACTIVE` makes a partition with more than
+N − threshold validators booting at once unable to prove anything to anyone,
+forever. *A node signs and dispatches block N's anchor and synthetic
+transactions only if the newest root it could check matched* (lag one): a
+node whose last checked root did not match signs nothing, dispatches
+nothing, and repairs, and a partition whose validators are all booting still
+anchors. Lag one stops a node signing after **its own** detected mismatch,
+and no more. Block N's anchor is signed under the check of N − 1, so every
+wrongly executing node signs its first wrong anchor before any check can see
+it; nodes that go wrong the same way in the same block, enough of them for a
+quorum, sign it together and then match the root they formed. That is
+outside the BFT bound and no check can stop it. What lag one stops is a node
+that already knows its state is wrong adding its key to a quorum another
+wrong node started (a staggered fault). *One key, one body per sequence
+number:* before it signs, a node records the anchor body it signs under each
+sequence number for each destination, where no pull, restart or handoff
+reaches it (`SystemData`), and it signs a number again only with the same
+body. The sequencer answers with the node's own signature for a body
+recorded there, and refuses a different body under a recorded number. An
+anchor the node never signed it signs, and records, only while `ACTIVE`: one
+its conductor never sent (a restore, a restart before the send) has no other
+signer. A `BOOTING` node's unrecorded anchors are the ones its join pulled,
+and it answers them with the held quorum alone. A node that executed q wrongly, signed q's anchor,
+repaired and built q's anchor again with the repaired root therefore does not
+sign it, and a restarted node signs and answers for every anchor it signed
+before (#4443). `COMPLETE` and `WAITING`, which
 named a backfilled history, are retired: nothing reached them and nothing
 could. What a joined node cannot answer *for a block it did not execute* —
 an entry the sequencer is asked for from before it joined — it refuses per

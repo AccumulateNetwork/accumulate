@@ -20,20 +20,29 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // validatorWithAnchors is a BVN0 validator's sequencer whose cache holds the
-// anchors for blocks 5 and 9, as numbers 1 and 2.
+// anchors for blocks 5 and 9, as numbers 1 and 2, both of which it signed
+// (SystemData.SignedAnchor, as the conductor records them).
 func validatorWithAnchors(t *testing.T, machine *nodestate.Machine, check *execute.RootCheck) (*Sequencer, *synthcache.Cache) {
 	t.Helper()
+	db := database.OpenInMemory(nil)
 	cache := synthcache.New(0)
 	tx := cache.Begin(10)
+	batch := db.Begin(true)
 	for n, block := range map[uint64]uint64{1: 5, 2: 9} {
-		tx.AddAnchor(n, block, &protocol.Transaction{Body: &protocol.BlockValidatorAnchor{
+		body := &protocol.BlockValidatorAnchor{
 			PartitionAnchor: protocol.PartitionAnchor{Source: protocol.PartitionUrl("BVN0"), MinorBlockIndex: block},
-		}})
+		}
+		tx.AddAnchor(n, block, &protocol.Transaction{Body: body})
+		hash, err := database.SignedAnchorHash(body)
+		require.NoError(t, err)
+		require.NoError(t, batch.SystemData("BVN0").SignedAnchor(protocol.DnUrl(), n).Put(hash))
 	}
+	require.NoError(t, batch.Commit())
 	tx.Commit()
 	cache.Begin(10 + synthcache.InFlightBlocks).Commit() // out of the in-flight window
 
@@ -43,7 +52,7 @@ func validatorWithAnchors(t *testing.T, machine *nodestate.Machine, check *execu
 	globals.Network = &protocol.NetworkDefinition{Version: 1}
 	globals.Network.AddValidator(key.Public().(ed25519.PublicKey), "BVN0", true)
 	return NewSequencer(SequencerParams{
-		Database:     database.OpenInMemory(nil),
+		Database:     db,
 		EventBus:     events.NewBus(nil),
 		Globals:      globals,
 		Partition:    "BVN0",
@@ -52,6 +61,23 @@ func validatorWithAnchors(t *testing.T, machine *nodestate.Machine, check *execu
 		NodeState:    machine,
 		RootCheck:    check,
 	}), cache
+}
+
+// recordSigned records body as the anchor this node signed under num for dst,
+// as the conductor does before it signs (#4443).
+func recordSigned(db *database.Database, part string, dst *url.URL, num uint64, body protocol.TransactionBody) {
+	hash, err := database.SignedAnchorHash(body)
+	if err != nil {
+		panic(err)
+	}
+	batch := db.Begin(true)
+	defer batch.Discard()
+	if err := batch.SystemData(part).SignedAnchor(dst, num).Put(hash); err != nil {
+		panic(err)
+	}
+	if err := batch.Commit(); err != nil {
+		panic(err)
+	}
 }
 
 var bvn0Anchors = protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool)
@@ -80,27 +106,48 @@ func TestSequencer_AnswersItsAnchorsWhileBooting(t *testing.T) {
 	require.Contains(t, err.Error(), "is joining")
 }
 
-// It refuses only the blocks it did not execute: at or below the block it
-// joined at, the cache holds anchors the join pulled, and this node's
-// signature on one would be on a root it never computed.
-func TestSequencer_RefusesAnchorsForBlocksItDidNotExecute(t *testing.T) {
-	s, cache := validatorWithAnchors(t, nodestate.New(protocol.PartitionUrl("BVN0")), nil)
-	cache.JoinedAt(7)
+// It signs only what it signed. An anchor it never signed -- the join pulled
+// it, or it was produced while this node was not signing -- goes out with the
+// held quorum alone, here none, so it is refused; one it signed with a
+// different body under the same number is refused whatever it holds.
+func TestSequencer_SignsOnlyTheAnchorsItSigned(t *testing.T) {
+	s, _ := validatorWithAnchors(t, nodestate.New(protocol.PartitionUrl("BVN0")), nil)
 	ctx := context.Background()
 
+	batch := s.db.(*database.Database).Begin(true)
+	require.NoError(t, batch.SystemData("BVN0").SignedAnchor(protocol.DnUrl(), 1).Put([32]byte{1}))
+	require.NoError(t, batch.Commit())
 	_, err := s.Sequence(ctx, bvn0Anchors, protocol.DnUrl(), 1, private.SequenceOptions{})
-	require.ErrorIs(t, err, errors.NotReady, "anchor 1 is for block 5, which this node joined past")
-	require.Contains(t, err.Error(), "did not execute block 5")
+	require.ErrorIs(t, err, errors.NotReady, "anchor 1 was signed with another body")
+	require.Contains(t, err.Error(), "signed a different anchor 1")
 
-	_, err = s.Sequence(ctx, bvn0Anchors, protocol.DnUrl(), 2, private.SequenceOptions{})
-	require.NoError(t, err, "anchor 2 is for block 9, which this node executed")
+	r, err := s.Sequence(ctx, bvn0Anchors, protocol.DnUrl(), 2, private.SequenceOptions{})
+	require.NoError(t, err, "anchor 2 is the body this node signed")
+	require.Equal(t, uint64(1), r.Signatures.Total)
 
-	// A range answers the part it executed; one that starts below it is refused.
-	_, err = s.SequenceRange(ctx, bvn0Anchors, protocol.DnUrl(), 1, 2, private.SequenceOptions{})
-	require.ErrorIs(t, err, errors.NotReady)
-	rs, err := s.SequenceRange(ctx, bvn0Anchors, protocol.DnUrl(), 2, 2, private.SequenceOptions{})
+	// Nothing recorded for another destination: while BOOTING, those are the
+	// anchors a join pulled, and they carry no signature of this node's.
+	_, err = s.Sequence(ctx, bvn0Anchors, protocol.PartitionUrl("BVN1"), 2, private.SequenceOptions{})
+	require.Error(t, err, "a BOOTING node signed an anchor it never signed")
+
+	// An ACTIVE node signs an anchor it never signed, as before #4443 --
+	// nobody else can re-sign one its conductor never sent -- and records
+	// it, so the number is bound to that body from then on.
+	active, _ := validatorWithAnchors(t, nil, nil)
+	r, err = active.Sequence(ctx, bvn0Anchors, protocol.PartitionUrl("BVN1"), 2, private.SequenceOptions{})
 	require.NoError(t, err)
-	require.Len(t, rs, 1)
+	require.Equal(t, uint64(1), r.Signatures.Total)
+	var recorded [32]byte
+	require.NoError(t, active.db.View(func(batch *database.Batch) error {
+		var err error
+		recorded, err = batch.SystemData("BVN0").SignedAnchor(protocol.PartitionUrl("BVN1"), 2).Get()
+		return err
+	}))
+	txn, _, ok := active.cache.PeekAnchor(2)
+	require.True(t, ok)
+	want, err := database.SignedAnchorHash(txn.Body)
+	require.NoError(t, err)
+	require.Equal(t, want, recorded, "the ACTIVE node did not record what it signed")
 }
 
 // A node whose newest checked root did not match signs nothing: no anchor, no

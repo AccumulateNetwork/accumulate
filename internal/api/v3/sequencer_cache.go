@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -238,17 +239,50 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 // principal is the destination's anchor pool, and the Directory does not ask
 // itself to open a major block.
 func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num uint64, produced *protocol.Transaction) (*api.MessageRecord[messaging.Message], error) {
-	// This node answers for the anchors of the blocks it executed, whatever
-	// its state, and for no others (executor spec, "Sync", §6). A node that
-	// joined executed no block at or below the block it joined at: an anchor
-	// for one of those is in its cache because the join pulled the anchor
-	// sequence chain, and signing it would put this node's key on a root it
-	// never computed. It is "not from me", and the collector asks the next
-	// validator.
-	if body, ok := produced.Body.(protocol.AnchorBody); ok {
-		if joined, block := s.cache.Joined(), body.GetPartitionAnchor().MinorBlockIndex; joined > 0 && block <= joined {
-			return nil, errors.NotReady.WithFormat("%v joined at block %d and did not execute block %d, which anchor %d is for; ask a node that did", s.partitionID, joined, block, num)
+	// One key, one body per sequence number (executor spec, "Sync", §6;
+	// #4443). What this node signed is SystemData.SignedAnchor, which the
+	// conductor writes before it signs and no pull, restart or handoff
+	// clears. This node signs an answer for every anchor recorded there,
+	// whatever its state, and refuses one the cache holds under a number it
+	// signed with a different body. An anchor it never signed it signs --
+	// and records -- only while ACTIVE, as it did before #4443: those are
+	// the anchors of a node that restored or was restarted before its
+	// conductor signed them, and nobody else can re-sign them. A BOOTING
+	// node's unrecorded anchors are the ones its join pulled, and they go out
+	// with the held quorum alone.
+	hash, err := database.SignedAnchorHash(produced.Body)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	active := (s.nodeState == nil || s.nodeState.State() == nodestate.StateActive) && s.signsAnswers(globals)
+	updater, canClaim := s.db.(database.Updater)
+	var signed bool
+	check := func(batch *database.Batch) error {
+		record := batch.SystemData(s.partitionID).SignedAnchor(dst, num)
+		prior, err := record.Get()
+		switch {
+		case err == nil:
+			if prior != hash {
+				return errors.NotReady.WithFormat("%v signed a different anchor %d for %v than the one it holds; ask another node", s.partitionID, num, dst)
+			}
+			signed = true
+			return nil
+		case !errors.Is(err, errors.NotFound):
+			return errors.UnknownError.WithFormat("load signed anchor: %w", err)
+		case active && canClaim:
+			signed = true
+			return record.Put(hash)
+		default:
+			return nil
 		}
+	}
+	if active && canClaim {
+		err = updater.Update(check)
+	} else {
+		err = s.db.View(check)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	txn := new(protocol.Transaction)
@@ -273,7 +307,7 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 	// the answer is the held quorum alone.
 	r.Signatures = &api.RecordRange[*api.SignatureSetRecord]{}
 	var ownKey protocol.KeySignature
-	if s.signsAnswers(globals) {
+	if signed && s.signsAnswers(globals) {
 		h := r.Sequence.Hash()
 		keySig, err := s.signRecord(globals, h[:])
 		if err != nil {
@@ -295,7 +329,7 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 	own.Header.Principal = s.partition.URL.JoinPath(protocol.AnchorPool)
 	own.Body = produced.Body
 	var held []protocol.KeySignature
-	err := s.db.View(func(batch *database.Batch) error {
+	err = s.db.View(func(batch *database.Batch) error {
 		var err error
 		held, err = batch.Account(own.Header.Principal).Transaction(own.ID().Hash()).ValidatorSignatures().Get()
 		return err

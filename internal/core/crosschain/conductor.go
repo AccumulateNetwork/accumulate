@@ -19,7 +19,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -64,12 +63,6 @@ type Conductor struct {
 	// match signs and dispatches no anchor (executor spec, "Sync", §6, lag
 	// one). Nil is "nothing checked", which signs.
 	RootCheck *execute.RootCheck
-
-	// Cache is the producer cache the executor fills and the sequencer
-	// answers from. The conductor reads one thing from it: the block the node
-	// last handed off at (Joined), at or below which it executed nothing and
-	// signs no anchor. Nil is a node that never joined.
-	Cache *synthcache.Cache
 
 	// Ready can be used to pause the conductor, for example to stop it from
 	// sending anchors while the node is catching up.
@@ -319,36 +312,11 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 		return nil
 	}
 
-	// A node signs the anchor only of a block it executed. At the first block
-	// after a handoff at q the ledger is the pulled one, at q, so the anchor
-	// built here is for q: a block this node did not execute, under the
-	// sequence number the partition gave q's anchor. If this node once
-	// executed q itself -- wrongly, then repaired and handed off again at q
-	// -- it signed that number already, and signing it again with the
-	// repaired root is one key on two roots for one number (#4443). The
-	// handoff block is the cache's Joined, raised by every handoff, and
-	// everything at or below it is not this node's to sign; the sequencer
-	// refuses the same anchors by the same rule.
-	if c.Cache != nil {
-		if joined, block := c.Cache.Joined(), anchor.GetPartitionAnchor().MinorBlockIndex; joined > 0 && block <= joined {
-			pa := anchor.GetPartitionAnchor()
-			slog.InfoContext(e.Context, "Anchor not sent", "module", "conductor",
-				"block", pa.MinorBlockIndex,
-				"source", c.Partition.ID,
-				"seq", sequenceNumber,
-				"root", logging.AsHex(pa.RootChainAnchor).Slice(0, 4),
-				"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
-				"joined", joined,
-				"reason", "this node handed off at or after this block and did not execute it")
-			return nil
-		}
-	}
-
 	// Lag one: block N's anchor is signed only if the newest root this node
 	// could check matched (executor spec, "Sync", §6, "Two things do not wait
 	// for ACTIVE"). A node that knows its state is wrong signs nothing and
-	// repairs, so nodes executing the same wrong block stall rather than
-	// form a quorum on it. Said once per block, as the follower's line is:
+	// repairs, so it adds no key to a quorum another wrong node started.
+	// Said once per block, as the follower's line is:
 	// the root it computed is still the instrument that finds the fault.
 	if !c.RootCheck.MaySign() {
 		pa := anchor.GetPartitionAnchor()
@@ -361,6 +329,39 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 			"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
 			"mismatched", checked,
 			"reason", "the newest root this node checked did not match its partition's signed root")
+		return nil
+	}
+
+	// One key, one body per sequence number (#4443). Before it signs, the
+	// node records in SystemData, which no pull reaches, the body it signs
+	// under this number for each destination; a number it already signed
+	// with a different body it does not sign again. A node that executed a
+	// block wrongly, signed its anchor, repaired and executed it again under
+	// the same number would otherwise put its key on two roots for one
+	// number. A restart or a handoff does not clear the record, so a node
+	// signs again, and the sequencer answers, for every anchor it signed.
+	var dests []*url.URL
+	switch c.Partition.Type {
+	case protocol.PartitionTypeDirectory:
+		for _, part := range c.Globals.Load().Network.Partitions {
+			dests = append(dests, protocol.PartitionUrl(part.ID))
+		}
+	case protocol.PartitionTypeBlockValidator:
+		dests = append(dests, protocol.DnUrl())
+	}
+	ok, err := c.claimAnchor(anchor, sequenceNumber, dests)
+	if err != nil {
+		return errors.UnknownError.WithFormat("record signed anchor: %w", err)
+	}
+	if !ok {
+		pa := anchor.GetPartitionAnchor()
+		slog.ErrorContext(e.Context, "Anchor not sent", "module", "conductor",
+			"block", pa.MinorBlockIndex,
+			"source", c.Partition.ID,
+			"seq", sequenceNumber,
+			"root", logging.AsHex(pa.RootChainAnchor).Slice(0, 4),
+			"bpt", logging.AsHex(pa.StateTreeAnchor).Slice(0, 4),
+			"reason", "this node already signed a different anchor under this sequence number")
 		return nil
 	}
 
@@ -394,6 +395,36 @@ func (c *Conductor) sendAnchorForLastBlock(e execute.WillBeginBlock, batch *data
 		}
 	}
 	return nil
+}
+
+// claimAnchor records the anchor's body under its sequence number for each
+// destination and reports whether this node may sign it: true when no
+// destination records a different body under the number.
+func (c *Conductor) claimAnchor(anchor protocol.AnchorBody, num uint64, dests []*url.URL) (bool, error) {
+	hash, err := database.SignedAnchorHash(anchor)
+	if err != nil {
+		return false, err
+	}
+	batch := c.Database.Begin(true)
+	defer batch.Discard()
+	sys := batch.SystemData(c.Partition.ID)
+	for _, dst := range dests {
+		prior, err := sys.SignedAnchor(dst, num).Get()
+		switch {
+		case err == nil:
+			if prior != hash {
+				return false, nil
+			}
+		case errors.Is(err, errors.NotFound):
+			err = sys.SignedAnchor(dst, num).Put(hash)
+			if err != nil {
+				return false, err
+			}
+		default:
+			return false, err
+		}
+	}
+	return true, batch.Commit()
 }
 
 func (c *Conductor) sendBlockAnchor(ctx context.Context, anchor protocol.AnchorBody, sequenceNumber uint64, destPart string, delivered uint64) error {

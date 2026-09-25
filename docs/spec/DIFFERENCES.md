@@ -354,28 +354,38 @@ does not report to the `RootCheck`. Until it does, nothing is ever checked
 in production, and every node signs as it did before #4443. Wiring that
 report is #4442.
 
-The half that needs no report is live. It is keyed by the block the node
-last handed off at (`synthcache.Joined`, which every handoff raises):
+The half that needs no report is live. It is keyed by what the node signed,
+recorded in `SystemData.SignedAnchor` (anchor sequence number and
+destination → the hash of the anchor body it signed), which the conductor
+writes before it signs and no pull, restart or handoff clears:
 
-- The sequencer answers an anchor in any node state. It refuses an anchor
-  for a block at or below the handoff block.
-- The conductor signs no anchor for a block at or below the handoff block.
-  Before #4443 the first block after a handoff at q built the anchor for q
-  from the pulled ledger, under the partition's sequence number for q, and
-  signed it. A node that had executed q wrongly, signed it, repaired and
-  handed off again at q therefore put its key on a second root under the
-  same number (`TestARepairedNodeDoesNotSignTheHandoffBlockAgain`).
+- The conductor signs number n only if it never signed n, or signed exactly
+  the same body. A node that executed q wrongly, signed it, repaired and
+  built q's anchor again refuses (`TestARepairedNodeDoesNotSignTheHandoffBlockAgain`).
+- The sequencer answers an anchor in any node state. It signs a body
+  recorded there, refuses a different body under a recorded number, and
+  signs and records an unrecorded anchor only while `ACTIVE` (a `BOOTING`
+  node's unrecorded anchors are the pulled ones; they go out with the held
+  quorum alone). The conductor and the sequencer each read then write the
+  record in their own batch; two different bodies claimed for one number at
+  the same instant are not excluded. A restarted validator still answers for what
+  it signed (`TestARestartedValidatorAnswersForTheAnchorsItSigned`), and two
+  of four handing off at one block keep the partition anchoring
+  (`TestTwoOfFourHandingOffAtOneBlockKeepAnchoring`).
 
-One limit remains: "executed" means "above the handoff block". That fits
-stop-repair-re-handoff (#4440). A repair that moves on without a handoff
-does not raise `Joined`. The anchors the node produced while its root was
-wrong would then stay in its cache, and neither the conductor nor the
-sequencer would know it had already signed them.
+An earlier version keyed both on the handoff block (`synthcache.Joined`).
+After a restart that is the current block, not the boundary of what the node
+executed, and it stalled anchoring when two of four validators restarted
+(review note_3901320839, F1).
+
+What lag one does in production, once #4442 wires a sensor: it stops a node
+signing after its own detected mismatch (`TestAStaggeredFaultFormsNoQuorum`).
+It cannot stop same-block faults on a quorum of nodes; see the spec
+paragraph.
 
 **Size**: the join's root watch calls `RootCheck.Mismatched` where it
-demotes and `Matched` where it promotes (#4442). If repair moves on without
-a handoff (#4440), that repair must raise the same handoff mark, or keep the
-highest sequence number the node has signed and refuse to sign it again.
+demotes and `Matched` where it promotes, and reports again after every
+handoff, since `RootCheck` is memory and a restart zeroes it (#4442).
 
 ### E11. A node cannot sync from the running protocol
 

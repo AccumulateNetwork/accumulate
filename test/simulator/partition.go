@@ -193,6 +193,9 @@ func (p *Partition) NodeConductor(i int) *crosschain.Conductor { return p.nodes[
 // SynthCache is the partition's producer cache (node 0's).
 func (p *Partition) SynthCache() *synthcache.Cache { return p.nodes[0].synthCache }
 
+// NodeSynthCache is node i's producer cache.
+func (p *Partition) NodeSynthCache(i int) *synthcache.Cache { return p.nodes[i].synthCache }
+
 func (p *Partition) Update(fn func(*database.Batch) error) error {
 	for i, n := range p.nodes {
 		err := n.database.Update(fn)

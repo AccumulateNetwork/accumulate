@@ -704,7 +704,6 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 		Peers:             f.getServices(),
 		Staging:           f.getStaging(),
 		RootCheck:         f.getRootCheck(),
-		Cache:             f.getSynthCache(),
 		Heals:             f.getHeals(),
 		RunTask:           execOpts.BackgroundTaskLauncher,
 		DropInitialAnchor: f.dropInitialAnchor,

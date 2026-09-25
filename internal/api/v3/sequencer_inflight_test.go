@@ -26,9 +26,12 @@ func anchorSequencer(lag int, newest uint64) *Sequencer {
 	cache.SetExecutionLagSource(func() int { return lag })
 	tx := cache.Begin(7)
 	tx.SetBlock(&synthcache.Block{Index: 7})
-	tx.AddAnchor(3, 7, &protocol.Transaction{Body: &protocol.BlockValidatorAnchor{
+	body := &protocol.BlockValidatorAnchor{
 		PartitionAnchor: protocol.PartitionAnchor{Source: protocol.PartitionUrl("BVN0"), MinorBlockIndex: 7},
-	}})
+	}
+	tx.AddAnchor(3, 7, &protocol.Transaction{Body: body})
+	db := database.OpenInMemory(nil)
+	recordSigned(db, "BVN0", protocol.DnUrl(), 3, body)
 	tx.Commit()
 	if newest > 7 {
 		cache.Begin(newest).Commit()
@@ -40,7 +43,7 @@ func anchorSequencer(lag int, newest uint64) *Sequencer {
 	globals.Network = &protocol.NetworkDefinition{Version: 1}
 	globals.Network.AddValidator(key.Public().(ed25519.PublicKey), "BVN0", true) // a validator signs its answers (#4424)
 	return NewSequencer(SequencerParams{
-		Database:     database.OpenInMemory(nil),
+		Database:     db,
 		EventBus:     events.NewBus(nil),
 		Globals:      globals,
 		Partition:    "BVN0",

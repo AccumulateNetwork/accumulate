@@ -67,6 +67,8 @@ func TestSequencer_OutsiderSignsNoAnchorAnswer(t *testing.T) {
 	batch := db.Begin(true)
 	require.NoError(t, batch.Account(own.Header.Principal).Transaction(own.ID().Hash()).ValidatorSignatures().Put([]protocol.KeySignature{held}))
 	require.NoError(t, batch.Commit())
+	recordSigned(db, part, protocol.DnUrl(), 1, anchor(7).Body)
+	recordSigned(db, part, protocol.DnUrl(), 2, anchor(8).Body)
 
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = protocol.ExecutorVersionLatest

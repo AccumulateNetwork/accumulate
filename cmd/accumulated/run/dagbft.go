@@ -355,7 +355,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Peers:        client,
 		Staging:      staging,
 		RootCheck:    rootCheck,
-		Cache:        synthCache,
 		Heals:        healCounters,
 		RunTask:      execOpts.BackgroundTaskLauncher,
 		// Healing is the ONLY retry mechanism for anchors — the conductor's

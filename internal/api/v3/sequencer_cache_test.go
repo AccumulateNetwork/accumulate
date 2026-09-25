@@ -85,8 +85,10 @@ func TestSequencer_AnswersFromTheCache(t *testing.T) {
 	globals.ExecutorVersion = protocol.ExecutorVersionLatest
 	globals.Network = &protocol.NetworkDefinition{Version: 1}
 	globals.Network.AddValidator(key.Public().(ed25519.PublicKey), "BVN0", true) // a validator signs its answers (#4424)
+	db := database.OpenInMemory(nil)
+	recordSigned(db, "BVN0", protocol.DnUrl(), 3, anchorTxn.Body)
 	svc := NewSequencer(SequencerParams{
-		Database:     database.OpenInMemory(nil),
+		Database:     db,
 		EventBus:     events.NewBus(nil),
 		Globals:      globals,
 		Partition:    "BVN0",

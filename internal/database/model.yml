@@ -442,3 +442,18 @@
       # (#4344). Nothing outside this node's own executor writes it.
       type: index
       dataType: uint
+    - name: SignedAnchor
+      # The hash of the anchor body THIS node signed under a sequence number
+      # for a destination (#4443). The conductor writes it before it signs,
+      # and signs a number again only with the same body; the sequencer adds
+      # this node's signature to an answer only for a body recorded here. It
+      # is under SystemData because no pull reaches it: a restart or a
+      # handoff leaves it as it was.
+      type: index
+      dataType: hash
+      parameters:
+      - name: Destination
+        type: url
+        pointer: true
+      - name: Number
+        type: uint

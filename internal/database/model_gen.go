@@ -2136,6 +2136,7 @@ type SystemData struct {
 
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexMapKey]values.Value[uint64]
 	executedBlock       values.Value[uint64]
+	signedAnchor        map[systemDataSignedAnchorMapKey]values.Value[[32]byte]
 }
 
 func (c *SystemData) Key() *record.Key { return c.key }
@@ -2152,6 +2153,20 @@ func (k systemDataSyntheticIndexIndexKey) ForMap() systemDataSyntheticIndexIndex
 	return systemDataSyntheticIndexIndexMapKey{k.Block}
 }
 
+type systemDataSignedAnchorKey struct {
+	Destination *url.URL
+	Number      uint64
+}
+
+type systemDataSignedAnchorMapKey struct {
+	Destination [32]byte
+	Number      uint64
+}
+
+func (k systemDataSignedAnchorKey) ForMap() systemDataSignedAnchorMapKey {
+	return systemDataSignedAnchorMapKey{values.MapKeyUrl(k.Destination), k.Number}
+}
+
 func (c *SystemData) SyntheticIndexIndex(block uint64) values.Value[uint64] {
 	return values.GetOrCreateMap(c, &c.syntheticIndexIndex, systemDataSyntheticIndexIndexKey{block}, (*SystemData).newSyntheticIndexIndex)
 }
@@ -2166,6 +2181,14 @@ func (c *SystemData) ExecutedBlock() values.Value[uint64] {
 
 func (c *SystemData) newExecutedBlock() values.Value[uint64] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("ExecutedBlock"), false, values.Wrapped(values.UintWrapper))
+}
+
+func (c *SystemData) SignedAnchor(destination *url.URL, number uint64) values.Value[[32]byte] {
+	return values.GetOrCreateMap(c, &c.signedAnchor, systemDataSignedAnchorKey{destination, number}, (*SystemData).newSignedAnchor)
+}
+
+func (c *SystemData) newSignedAnchor(k systemDataSignedAnchorKey) values.Value[[32]byte] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("SignedAnchor", k.Destination, k.Number), false, values.Wrapped(values.HashWrapper))
 }
 
 func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
@@ -2186,8 +2209,19 @@ func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error
 		return v, key.SliceI(2), nil
 	case "ExecutedBlock":
 		return c.ExecutedBlock(), key.SliceI(1), nil
+	case "SignedAnchor":
+		if key.Len() < 3 {
+			return nil, nil, errors.InternalError.With("bad key for system data (4)")
+		}
+		destination, okDestination := key.Get(1).(*url.URL)
+		number, okNumber := key.Get(2).(uint64)
+		if !okDestination || !okNumber {
+			return nil, nil, errors.InternalError.With("bad key for system data (5)")
+		}
+		v := c.SignedAnchor(destination, number)
+		return v, key.SliceI(3), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for system data (4)")
+		return nil, nil, errors.InternalError.With("bad key for system data (6)")
 	}
 }
 
@@ -2203,6 +2237,11 @@ func (c *SystemData) IsDirty() bool {
 	}
 	if values.IsDirty(c.executedBlock) {
 		return true
+	}
+	for _, v := range c.signedAnchor {
+		if v.IsDirty() {
+			return true
+		}
 	}
 
 	return false
@@ -2223,6 +2262,9 @@ func (c *SystemData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.executedBlock, c.newExecutedBlock, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.WalkMap(&err, c.signedAnchor, c.newSignedAnchor, nil, opts, fn)
+	}
 	return err
 }
 
@@ -2236,6 +2278,9 @@ func (c *SystemData) Commit() error {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.executedBlock)
+	for _, v := range c.signedAnchor {
+		values.Commit(&err, v)
+	}
 
 	return err
 }

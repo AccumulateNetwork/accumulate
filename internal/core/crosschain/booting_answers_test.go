@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -110,6 +111,21 @@ func TestTwoOfFourBootingStillLetEveryNodeCollectAndMatch(t *testing.T) {
 
 	ctx := context.Background()
 	src := protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool)
+
+	// Premise: the two are BOOTING to their production sequencers, which
+	// still refuse synthetics until ACTIVE. Without the simulator's NodeState
+	// wiring they would answer, and the anchor answers below would prove
+	// nothing about a booting node.
+	synth := protocol.PartitionUrl("BVN0").JoinPath(protocol.Synthetic)
+	for _, i := range []int{booting1, booting2} {
+		_, err := bvn.NodePrivate(i).Sequence(ctx, synth, protocol.DnUrl(), 1, private.SequenceOptions{})
+		require.ErrorIsf(t, err, errors.NotReady, "premise: booting node %d answered a synthetic", i)
+		require.ErrorContainsf(t, err, "is joining", "premise: booting node %d refused a synthetic for another reason", i)
+	}
+	_, err := bvn.NodePrivate(0).Sequence(ctx, synth, protocol.DnUrl(), 1, private.SequenceOptions{})
+	if err != nil {
+		require.NotContains(t, err.Error(), "is joining", "control: an ACTIVE node is not joining")
+	}
 	for collector := 0; collector < bvn.NodeCount(); collector++ {
 		// What the collector on this node gathers: every other validator's
 		// answer for anchor n, each with that validator's signature.
@@ -157,7 +173,7 @@ func TestTwoOfFourBootingStillLetEveryNodeCollectAndMatch(t *testing.T) {
 	ranger, ok := dn.NodeConductor(0).Sequencer.(private.SequenceRanger)
 	require.True(t, ok)
 	var envs []*messaging.Envelope
-	_, _, err := dn.NodeConductor(0).HealAnchorSpan(ctx, ranger, protocol.PartitionUrl("BVN0"), n, n, func(env *messaging.Envelope) {
+	_, _, err = dn.NodeConductor(0).HealAnchorSpan(ctx, ranger, protocol.PartitionUrl("BVN0"), n, n, func(env *messaging.Envelope) {
 		envs = append(envs, env)
 	})
 	require.NoError(t, err)

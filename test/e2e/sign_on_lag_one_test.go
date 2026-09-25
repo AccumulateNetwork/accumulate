@@ -19,6 +19,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -32,8 +33,7 @@ import (
 )
 
 // These are executor spec, "Sync", §6, "Two things do not wait for ACTIVE"
-// (#4443): a node answers for every anchor it executed and signed whatever
-// its state, and signs and dispatches block N's anchor and synthetics only if
+// (#4443): a node answers for every anchor it signed whatever its state, and signs and dispatches block N's anchor and synthetics only if
 // the newest root it could check matched (lag one).
 //
 // WHAT IS DONE HERE BY HAND, AND WHY. Two things production does, the tests
@@ -49,6 +49,9 @@ import (
 //     BOOTING and executing; a restarted simulator node collects instead, so
 //     SetNodeMachine stands a running node in a fresh BOOTING machine, which
 //     its production sequencer then refuses by.
+//   - Two handoffs. Where join.Run cannot finish because the proof it waits
+//     for is the signatures under test, the tests make the two calls it
+//     makes at a handoff. The single-restart test runs join.Run itself.
 //
 // Everything else is production: the simulator's real conductors, executors,
 // dispatchers and sequencers, reached through the per-peer routing.
@@ -171,15 +174,29 @@ func TestAMismatchedNodeSignsAndDispatchesNothing(t *testing.T) {
 	require.NoError(t, err, "control: a node whose root matched answers")
 }
 
-// Two nodes executing the same wrong block form no quorum on it.
+// A staggered fault forms no quorum: a node already mismatched when another
+// goes wrong the same way signs nothing, so the one wrong signature lag one
+// lets through is no quorum.
 //
-// BVN0 has three validators, so two signatures are its threshold, and two
-// nodes whose state is wrong in the same way compute the same wrong root:
-// without lag one they sign it, the Directory holds a quorum for it, and
-// executes a BVN0 anchor for a root BVN0 never had. With it, a node whose
-// last checked root did not match signs nothing, and the partition stalls
-// instead: the one right signature is no quorum either.
-func TestTwoNodesExecutingTheSameWrongBlockFormNoQuorum(t *testing.T) {
+// What lag one can do and what it cannot (executor spec, "Sync", §6). A node
+// signs block N's anchor under the check of N-1, so the first wrong anchor of
+// every wrongly executing node is signed before any check can say it is
+// wrong. Nodes that go wrong the same way in the same block and are enough for
+// a quorum sign it together, and their check compares against the root they
+// formed, so they match; that is outside the BFT bound, and no gate on a check
+// can stop it. What the gate stops is a node that ALREADY knows its state is
+// wrong adding its key to a quorum another wrong node started.
+//
+// BVN0 has three validators, so two signatures are its threshold. Node 2 is
+// mismatched before the fault (reported by hand at an earlier block; its state
+// is left right until the fault, so that from the fault on both wrong nodes
+// compute the same roots -- a node's roots carry its whole history, so two
+// nodes that went wrong in different blocks never agree). Nodes 1 and 2 then
+// take the same stray account. Node 1 signs the first wrong anchor, as lag one
+// allows, and its own mismatch is reported one block later, the earliest a
+// check could. Without node 2's gate the two sign that anchor together and the
+// Directory executes a root BVN0 never had.
+func TestAStaggeredFaultFormsNoQuorum(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 3),
 		simulator.Genesis(GenesisTime),
@@ -206,29 +223,37 @@ func TestTwoNodesExecutingTheSameWrongBlockFormNoQuorum(t *testing.T) {
 		return root, block
 	}
 
+	// Node 2 is already mismatched.
+	const first, already = 1, 2
+	_, before := rootOf(already)
+	bvn.NodeRootCheck(already).Mismatched(before - 1)
+	sim.StepN(3)
+
 	// Nodes 1 and 2 go wrong the same way: one account neither the network
-	// nor node 0 holds. Their check of the block they stand at mismatched.
-	const wrong1, wrong2 = 1, 2
+	// nor node 0 holds.
 	stray := &LiteIdentity{Url: acctesting.AcmeLiteAddressStdPriv(acctesting.GenerateKey("stray")).RootIdentity()}
-	for _, i := range []int{wrong1, wrong2} {
+	for _, i := range []int{first, already} {
 		require.NoError(t, bvn.NodeDatabase(i).Update(func(batch *database.Batch) error {
 			return batch.Account(stray.Url).Main().Put(stray)
 		}))
-		_, at := rootOf(i)
-		bvn.NodeRootCheck(i).Mismatched(at)
 	}
 	right, from := rootOf(0)
-	w1, _ := rootOf(wrong1)
-	w2, _ := rootOf(wrong2)
-	require.NotEqual(t, right, w1, "premise: node %d's root is wrong", wrong1)
+	w1, _ := rootOf(first)
+	w2, _ := rootOf(already)
+	require.NotEqual(t, right, w1, "premise: node %d's root is wrong", first)
 	require.Equal(t, w1, w2, "premise: the two wrong nodes' roots are the same")
+	wrongRoots := map[[32]byte]bool{w1: true}
+
+	// Node 1 signs the first wrong anchor (block from's, at the next block's
+	// open); then its check of that block mismatches.
+	sim.StepN(1)
+	bvn.NodeRootCheck(first).Mismatched(from)
 
 	// Every root the wrong nodes compute from here, block by block.
-	wrongRoots := map[[32]byte]bool{}
 	for i := 0; i < 40; i++ {
 		sim.StepN(1)
-		r1, _ := rootOf(wrong1)
-		r2, _ := rootOf(wrong2)
+		r1, _ := rootOf(first)
+		r2, _ := rootOf(already)
 		r0, _ := rootOf(0)
 		require.Equal(t, r1, r2)
 		require.NotEqual(t, r0, r1)
@@ -237,7 +262,7 @@ func TestTwoNodesExecutingTheSameWrongBlockFormNoQuorum(t *testing.T) {
 
 	// Premise: the wrong nodes produced anchors for blocks after the stray
 	// write, so there was something for a quorum to form on.
-	for _, i := range []int{wrong1, wrong2} {
+	for _, i := range []int{first, already} {
 		View(t, bvn.NodeDatabase(i), func(batch *database.Batch) {
 			chain, err := batch.Account(PartitionUrl("BVN0").JoinPath(AnchorPool)).AnchorSequenceChain().Get()
 			require.NoError(t, err)
@@ -251,7 +276,18 @@ func TestTwoNodesExecutingTheSameWrongBlockFormNoQuorum(t *testing.T) {
 		})
 	}
 
-	// What the Directory executed of BVN0's anchors after the stray write.
+	for _, pa := range directoryAnchors(t, sim, "BVN0") {
+		if pa.MinorBlockIndex < from {
+			continue
+		}
+		require.Falsef(t, wrongRoots[pa.StateTreeAnchor],
+			"the Directory executed BVN0's anchor for block %d under a root only the two wrong nodes computed", pa.MinorBlockIndex)
+	}
+}
+
+// directoryAnchors is every anchor from the partition the Directory executed.
+func directoryAnchors(t *testing.T, sim *Sim, part string) []*PartitionAnchor {
+	t.Helper()
 	q := api.Querier2{Querier: sim.S.Services()}
 	count, expand := uint64(1000), true
 	rec, err := q.QueryMainChainEntries(context.Background(), DnUrl().JoinPath(AnchorPool), &api.ChainQuery{
@@ -259,21 +295,199 @@ func TestTwoNodesExecutingTheSameWrongBlockFormNoQuorum(t *testing.T) {
 		Range: &api.RangeOptions{Start: 0, Count: &count, Expand: &expand},
 	})
 	require.NoError(t, err)
-	var executed int
+	var out []*PartitionAnchor
 	for _, entry := range rec.Records {
 		body, ok := entry.Value.Message.Transaction.Body.(AnchorBody)
 		if !ok {
 			continue
 		}
-		pa := body.GetPartitionAnchor()
-		if !PartitionUrl("BVN0").Equal(pa.Source) || pa.MinorBlockIndex <= from {
-			continue
+		if pa := body.GetPartitionAnchor(); PartitionUrl(part).Equal(pa.Source) {
+			out = append(out, pa)
 		}
-		executed++
-		require.Falsef(t, wrongRoots[pa.StateTreeAnchor],
-			"the Directory executed BVN0's anchor for block %d under a root only the two wrong nodes computed", pa.MinorBlockIndex)
 	}
-	t.Logf("the Directory executed %d BVN0 anchors after block %d", executed, from)
+	return out
+}
+
+// handOff hands a node off at block q with the two calls join.Run makes at a
+// handoff (the executor's SettleStagingAt, then the buffer's Handoff), for a
+// node whose state the test set by hand.
+func handOff(t *testing.T, bvn *simulator.Partition, i int, q uint64) {
+	t.Helper()
+	settler, ok := bvn.NodeExecutor(i).(interface{ SettleStagingAt(uint64) error })
+	require.True(t, ok)
+	require.NoError(t, settler.SettleStagingAt(q))
+	require.NoError(t, bvn.NodeJoin(i).Handoff(q))
+}
+
+// rejoin runs node i's join as the daemon runs it (join.Run over the node's
+// buffer, executor stage and join state), stepping the network after every
+// pull round, and returns the block it handed off at.
+func rejoin(t *testing.T, sim *Sim, p *simulator.Partition, i int) uint64 {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stepping := &steppingState{State: p.NodeJoinState(i), step: func(round int) {
+		sim.StepN(1)
+		if round >= 200 {
+			cancel()
+		}
+	}}
+	settler, ok := p.NodeExecutor(i).(join.Settler)
+	require.True(t, ok)
+	outcome, err := join.Run(ctx, join.Options{
+		Partition: p.ID,
+		Buffer:    p.NodeJoin(i),
+		Stage:     &join.ExecutorStage{Settler: settler, Staging: p.NodeStaging(i), Database: p.NodeDatabase(i)},
+		State:     stepping,
+		Peers:     &join.APIPeers{Partition: p.ID, Client: sim.S.Services(), Network: t.Name()},
+		Retry:     time.Millisecond,
+	})
+	require.NoError(t, err, "%s node %d did not join", p.ID, i)
+	require.Equal(t, join.Joined, outcome)
+	require.False(t, p.Joining(i))
+	return p.NodeSynthCache(i).Joined()
+}
+
+// executedBlock is the block node i's ledger stands at.
+func executedBlock(t *testing.T, bvn *simulator.Partition, i int) uint64 {
+	t.Helper()
+	var index uint64
+	View(t, bvn.NodeDatabase(i), func(batch *database.Batch) {
+		var ledger *SystemLedger
+		require.NoError(t, batch.Account(PartitionUrl(bvn.ID).JoinPath(Ledger)).Main().GetAs(&ledger))
+		index = ledger.Index
+	})
+	return index
+}
+
+// A validator that signed an anchor, restarted and handed off still answers
+// for it with its own signature (#4443 review F1). What it signed is in
+// SystemData, which a restart and a handoff leave as they were. Before, it
+// refused every anchor at or below the block it handed off at -- which after
+// a restart is its current block, not the boundary of what it executed.
+func TestARestartedValidatorAnswersForTheAnchorsItSigned(t *testing.T) {
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 4),
+		simulator.Genesis(GenesisTime),
+		// A collecting node's results are not the executing nodes'.
+		simulator.IgnoreDeliverResults(),
+		simulator.IgnoreCommitResults(),
+	)
+	sim.StepN(20)
+
+	bvn := sim.S.Partition("BVN0")
+	const node = 1
+	n, ok := bvn.SynthCache().LastAnchorNumber()
+	require.True(t, ok, "premise: BVN0 produced an anchor")
+
+	bvn.RestartNode(node)
+	sim.StepN(3)
+	q := rejoin(t, sim, bvn, node)
+	sim.StepN(3 + 16) // past the in-flight window
+	_, block, ok := bvn.NodeSynthCache(node).Anchor(n)
+	require.True(t, ok)
+	require.LessOrEqual(t, block, q, "premise: anchor %d is for a block at or below the handoff", n)
+	require.Greater(t, executedBlock(t, bvn, node), q, "premise: node %d executes again", node)
+
+	key := bvn.NodeConductor(node).ValidatorKey.Public().(ed25519.PublicKey)
+	r, err := bvn.NodePrivate(node).Sequence(context.Background(), PartitionUrl("BVN0").JoinPath(AnchorPool), DnUrl(), n, private.SequenceOptions{})
+	require.NoError(t, err, "node %d signed anchor %d before it restarted and must still answer for it", node, n)
+	var own bool
+	for _, set := range r.Signatures.Records {
+		for _, m := range set.Signatures.Records {
+			if sm, ok := m.Message.(*messaging.SignatureMessage); ok {
+				if ks, ok := sm.Signature.(KeySignature); ok && string(ks.GetPublicKey()) == string(key) {
+					own = true
+				}
+			}
+		}
+	}
+	require.True(t, own, "node %d's answer for anchor %d carries no signature of its own", node, n)
+}
+
+// Two of four validators restarting and handing off at the same block do not
+// stop the partition's anchoring (#4443 review F1): each signs the anchor of
+// the block it hands off at, which it executed, so the Directory still gets
+// three signatures for every BVN0 anchor and keeps executing them.
+//
+// The two stop right after block q, whose anchor is signed at q+1's open, so
+// neither has signed it. The simulator is deterministic, so a first run finds
+// such a q and a second, identical one stops there.
+func TestTwoOfFourHandingOffAtOneBlockKeepAnchoring(t *testing.T) {
+	anchored := map[uint64]bool{}
+	var mu sync.Mutex
+	newSim := func() *Sim {
+		return NewSim(t,
+			simulator.SimpleNetwork(t.Name(), 1, 4),
+			simulator.Genesis(GenesisTime),
+			// A collecting node's results are not the executing nodes'.
+			simulator.IgnoreDeliverResults(),
+			simulator.IgnoreCommitResults(),
+			simulator.CaptureDispatchedMessages(func(_ context.Context, env *messaging.Envelope) (bool, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				for _, m := range env.Messages {
+					if a, ok := m.(*messaging.BlockAnchor); ok {
+						seq := a.Anchor.(*messaging.SequencedMessage)
+						if PartitionUrl("BVN0").Equal(seq.Source.RootIdentity()) {
+							anchored[seq.Message.(*messaging.TransactionMessage).Transaction.Body.(AnchorBody).GetPartitionAnchor().MinorBlockIndex] = true
+						}
+					}
+				}
+				return true, nil
+			}),
+		)
+	}
+
+	// The first run: the first anchored block from 20 on.
+	newSim().StepN(40)
+	q := uint64(0)
+	mu.Lock()
+	for x := range anchored {
+		if x >= 20 && (q == 0 || x < q) {
+			q = x
+		}
+	}
+	anchored = map[uint64]bool{}
+	mu.Unlock()
+	require.NotZero(t, q, "premise: BVN0 anchored a block from 20 on")
+
+	// The second: stop at q.
+	sim := newSim()
+	bvn := sim.S.Partition("BVN0")
+	require.Equal(t, uint64(3), bvn.NodeConductor(0).Globals.Load().ValidatorThreshold("BVN0"),
+		"premise: three of four sign a BVN0 anchor")
+	const a, b = 2, 3
+	for i := 0; executedBlock(t, bvn, a) < q; i++ {
+		require.Less(t, i, 100)
+		sim.StepN(1)
+	}
+	require.Equal(t, q, executedBlock(t, bvn, a), "premise: node %d stands at block %d", a, q)
+	require.Equal(t, q, executedBlock(t, bvn, b), "premise: node %d stands at block %d", b, q)
+	mu.Lock()
+	require.False(t, anchored[q], "premise: block %d's anchor is not signed yet", q)
+	mu.Unlock()
+
+	bvn.RestartNode(a)
+	bvn.RestartNode(b)
+	sim.StepN(3)
+	// Neither can prove a root by itself here: q's anchor has only the two
+	// running nodes' signatures until these two sign it, so the join's proof
+	// waits on the very signatures this test is about. Both hand off at q
+	// with join.Run's two calls, as the reviewer's scenario does.
+	handOff(t, bvn, a, q)
+	handOff(t, bvn, b, q)
+	sim.StepN(40)
+
+	top := executedBlock(t, bvn, 0)
+	var highest uint64
+	for _, pa := range directoryAnchors(t, sim, "BVN0") {
+		if pa.MinorBlockIndex > highest {
+			highest = pa.MinorBlockIndex
+		}
+	}
+	require.Greaterf(t, highest, q+20,
+		"the Directory executed no BVN0 anchor past block %d while BVN0 ran on to %d; both nodes handed off at %d", highest, top, q)
 }
 
 // A node that executed block q wrongly and signed its anchor, then repaired
@@ -282,15 +496,18 @@ func TestTwoNodesExecutingTheSameWrongBlockFormNoQuorum(t *testing.T) {
 //
 // At the first block after a handoff at q the conductor builds the anchor for
 // q from the pulled ledger -- the partition's sequence number for q -- and the
-// node's repaired roots. Before the fix it signed and sent it.
+// node's repaired roots, a body other than the one it signed under that
+// number. It refuses, because SystemData.SignedAnchor records the first body;
+// without that record it signed and sent it. Afterwards it agrees with the
+// partition and signs its next anchors.
 //
 // Production throughout except where marked: the node's own executor opens
 // block q+1 (the conductor's hook is the executor's WillBeginBlock), the
 // handoff is the two calls join.Run makes at a handoff (the executor's
 // SettleStagingAt, then the buffer's Handoff), and the dispatch is captured
 // on its way out of the simulator's dispatcher. By hand: the wrong state (a
-// stray account), its repair (deleting it, which is what re-pulling that
-// account from a peer does), and the node's first opening of q+1 before it
+// stray account), its repair (node 0's store copied over this node's, but
+// for this node's SystemData, which is what a pull leaves), and the node's first opening of q+1 before it
 // went down -- the simulator cannot re-deliver a block a node has begun, so
 // that one Begin is made directly and discarded, as a crash before commit
 // discards it.
@@ -396,20 +613,15 @@ func TestARepairedNodeDoesNotSignTheHandoffBlockAgain(t *testing.T) {
 	n, _ := ledgerOf()
 	require.Equal(t, q, n, "premise: the begun block was not committed")
 
-	// It repairs -- the stray account is re-pulled from a peer, which has
-	// none -- and hands off again at q, as join.Run does.
-	require.NoError(t, bvn.NodeDatabase(node).Update(func(batch *database.Batch) error {
-		if err := batch.DeleteAccountState_TESTONLY(stray.Url); err != nil {
-			return err
-		}
-		return batch.BPT().Delete(record.NewKey("Account", stray.Url))
-	}))
+	// It repairs, and hands off again at q, as join.Run does. The repair is
+	// the pull's: node 0's state at q, every key but this node's own
+	// SystemData, which no pull reaches. Deleting the stray account alone
+	// would not do -- block q was executed over it, so its roots are in the
+	// chains q wrote.
+	pullFrom(t, bvn.NodeDatabase(0), bvn.NodeDatabase(node))
 	_, repaired := ledgerOf()
-	require.NotEqual(t, wrongRoot, repaired, "premise: the repair changed the root")
-	settler, ok := bvn.NodeExecutor(node).(interface{ SettleStagingAt(uint64) error })
-	require.True(t, ok)
-	require.NoError(t, settler.SettleStagingAt(q))
-	require.NoError(t, bvn.NodeJoin(node).Handoff(q))
+	require.Equal(t, rightRoot, repaired, "premise: the repair restores the right state at block %d", q)
+	handOff(t, bvn, node, q)
 
 	// The network's block q+1 reaches it, and it executes it.
 	mu.Lock()
@@ -420,9 +632,57 @@ func TestARepairedNodeDoesNotSignTheHandoffBlockAgain(t *testing.T) {
 	require.Greater(t, n, q, "premise: node %d executed a block after the handoff", node)
 
 	mu.Lock()
-	defer mu.Unlock()
 	for _, s := range byNode1 {
 		require.NotEqualf(t, first[0].seq, s.seq,
 			"node %d signed anchor %d a second time, with root %x after %x", node, s.seq, s.root[:4], first[0].root[:4])
 	}
+	mu.Unlock()
+
+	// And the repaired node agrees with the partition, and signs its next
+	// anchors with the partition's roots.
+	sim.StepN(3)
+	_, mine := ledgerOf()
+	View(t, bvn.NodeDatabase(0), func(batch *database.Batch) {
+		var err error
+		rightRoot, err = batch.GetBptRootHash()
+		require.NoError(t, err)
+	})
+	require.Equal(t, rightRoot, mine, "the repaired node disagrees with node 0")
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, byNode1, "the repaired node signs no later anchor")
+}
+
+// pullFrom makes dst's store src's, but for dst's own SystemData: what a
+// join's pull of every account and chain leaves.
+func pullFrom(t *testing.T, src, dst *database.Database) {
+	t.Helper()
+	own := func(k *record.Key) bool { return k.Len() > 0 && k.Get(0) == "SystemData" }
+	from, err := src.Store()
+	require.NoError(t, err)
+	to, err := dst.Store()
+	require.NoError(t, err)
+	r := from.Begin(nil, false)
+	defer r.Discard()
+	w := to.Begin(nil, true)
+	defer w.Discard()
+	keep := map[[32]byte]bool{}
+	require.NoError(t, r.ForEach(func(k *record.Key, v []byte) error {
+		if own(k) {
+			return nil
+		}
+		keep[k.Hash()] = true
+		return w.Put(k, v)
+	}))
+	var drop []*record.Key
+	require.NoError(t, w.ForEach(func(k *record.Key, _ []byte) error {
+		if !own(k) && !keep[k.Hash()] {
+			drop = append(drop, k)
+		}
+		return nil
+	}))
+	for _, k := range drop {
+		require.NoError(t, w.Delete(k))
+	}
+	require.NoError(t, w.Commit())
 }
