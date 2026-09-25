@@ -138,7 +138,9 @@ type PulledState struct {
 	// headOnly are the accounts taken by their chain heads alone, whose
 	// entries below the open mark set the node does not hold yet. Once the
 	// state has matched they are backfilled while the node executes
-	// (backfill).
+	// (backfill). It is kept under SystemData too, and read back at start,
+	// so a restart before the backfill ends does not forget them
+	// (markHeadOnly).
 	headOnly map[[32]byte]*url.URL
 
 	// entire are the accounts this node holds whole, every entry of every
@@ -286,6 +288,11 @@ func NewState(opts StateOptions) (*PulledState, error) {
 			return nil, errors.UnknownError.Wrap(err)
 		}
 		s.executed = n
+	}
+	// What an earlier process took by chain heads alone and did not
+	// backfill before it stopped.
+	if err := s.loadHeadOnly(); err != nil {
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	// The validator sets, from THIS NODE'S OWN STORE, before the pull
 	// overwrites anything. This is the trust root: a signature is verified
@@ -945,14 +952,11 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 			// while the node is not executing. An account already held
 			// entire needs only what the whole pull appended.
 			if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
-				delete(s.headOnly, accountKey(u))
+				s.unmarkHeadOnly(accountKey(u))
 				return
 			}
 		}
-		if s.headOnly == nil {
-			s.headOnly = map[[32]byte]*url.URL{}
-		}
-		s.headOnly[accountKey(u)] = u
+		s.markHeadOnly(u)
 	}()
 	switch {
 	case err == nil:

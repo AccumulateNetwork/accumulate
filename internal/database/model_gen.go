@@ -2138,6 +2138,7 @@ type SystemData struct {
 	executedBlock       values.Value[uint64]
 	trustedNetwork      values.Value[[]byte]
 	trustedGlobals      values.Value[[]byte]
+	headOnly            values.Set[*url.URL]
 }
 
 func (c *SystemData) Key() *record.Key { return c.key }
@@ -2186,6 +2187,14 @@ func (c *SystemData) newTrustedGlobals() values.Value[[]byte] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("TrustedGlobals"), false, values.Wrapped(values.BytesWrapper))
 }
 
+func (c *SystemData) HeadOnly() values.Set[*url.URL] {
+	return values.GetOrCreate(c, &c.headOnly, (*SystemData).newHeadOnly)
+}
+
+func (c *SystemData) newHeadOnly() values.Set[*url.URL] {
+	return values.NewSet(c.logger.L, c.store, c.key.Append("HeadOnly"), values.Wrapped(values.UrlWrapper), values.CompareUrl)
+}
+
 func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	if key.Len() == 0 {
 		return nil, nil, errors.InternalError.With("bad key for system data (1)")
@@ -2208,6 +2217,8 @@ func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error
 		return c.TrustedNetwork(), key.SliceI(1), nil
 	case "TrustedGlobals":
 		return c.TrustedGlobals(), key.SliceI(1), nil
+	case "HeadOnly":
+		return c.HeadOnly(), key.SliceI(1), nil
 	default:
 		return nil, nil, errors.InternalError.With("bad key for system data (4)")
 	}
@@ -2232,6 +2243,9 @@ func (c *SystemData) IsDirty() bool {
 	if values.IsDirty(c.trustedGlobals) {
 		return true
 	}
+	if values.IsDirty(c.headOnly) {
+		return true
+	}
 
 	return false
 }
@@ -2253,6 +2267,7 @@ func (c *SystemData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	}
 	values.WalkField(&err, c.trustedNetwork, c.newTrustedNetwork, opts, fn)
 	values.WalkField(&err, c.trustedGlobals, c.newTrustedGlobals, opts, fn)
+	values.WalkField(&err, c.headOnly, c.newHeadOnly, opts, fn)
 	return err
 }
 
@@ -2268,6 +2283,7 @@ func (c *SystemData) Commit() error {
 	values.Commit(&err, c.executedBlock)
 	values.Commit(&err, c.trustedNetwork)
 	values.Commit(&err, c.trustedGlobals)
+	values.Commit(&err, c.headOnly)
 
 	return err
 }

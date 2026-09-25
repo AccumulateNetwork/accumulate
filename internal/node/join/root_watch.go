@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -162,9 +163,74 @@ func (s *PulledState) backfill(ctx context.Context) {
 		}
 		n++
 		if s.backfillOne(ctx, u) {
-			delete(s.headOnly, k)
+			s.unmarkHeadOnly(k)
 		}
 	}
+}
+
+// markHeadOnly records that u was taken by its chain heads alone: in memory,
+// and under SystemData, where no pull reaches, so that a restart before the
+// backfill ends still backfills it. The next pull would not name it again:
+// its leaf is the peers'.
+func (s *PulledState) markHeadOnly(u *url.URL) {
+	k := accountKey(u)
+	if _, ok := s.headOnly[k]; ok {
+		return
+	}
+	if s.headOnly == nil {
+		s.headOnly = map[[32]byte]*url.URL{}
+	}
+	s.headOnly[k] = u
+	s.writeHeadOnly(u, func(set values.Set[*url.URL]) error { return set.Add(u) })
+}
+
+// unmarkHeadOnly records that the account keyed k is held whole.
+func (s *PulledState) unmarkHeadOnly(k [32]byte) {
+	u, ok := s.headOnly[k]
+	if !ok {
+		return
+	}
+	delete(s.headOnly, k)
+	s.writeHeadOnly(u, func(set values.Set[*url.URL]) error { return set.Remove(u) })
+}
+
+func (s *PulledState) writeHeadOnly(u *url.URL, fn func(values.Set[*url.URL]) error) {
+	id, ok := protocol.ParsePartitionUrl(s.partition)
+	if !ok {
+		return
+	}
+	batch := s.db.Begin(true)
+	defer batch.Discard()
+	err := fn(batch.SystemData(id).HeadOnly())
+	if err == nil {
+		err = batch.Commit()
+	}
+	if err != nil {
+		s.log.Info("What is left to backfill could not be recorded; a restart may not backfill it",
+			"account", u, "partition", s.partition, "error", err)
+	}
+}
+
+// loadHeadOnly reads what an earlier process recorded as taken by its chain
+// heads alone and did not backfill.
+func (s *PulledState) loadHeadOnly() error {
+	id, ok := protocol.ParsePartitionUrl(s.partition)
+	if !ok {
+		return nil
+	}
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	list, err := batch.SystemData(id).HeadOnly().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("read the accounts left to backfill: %w", err)
+	}
+	for _, u := range list {
+		if s.headOnly == nil {
+			s.headOnly = map[[32]byte]*url.URL{}
+		}
+		s.headOnly[accountKey(u)] = u
+	}
+	return nil
 }
 
 // backfillOne backfills one account and reports whether it holds all of it
