@@ -63,6 +63,12 @@ var flagOut = flag.String("out", "", "directory for the sidecar, the conflicts d
 var flagShards = flag.Int("shards", 32, "key ranges walked in parallel (at most 65536); fixed for the life of an output directory")
 var flagLedger = flag.Bool("ledger", false, "report the last block each archive's own system ledger records, and exit")
 var flagCheck = flag.String("check", "", "a sidecar to check: report how much of each account's main chain (the arguments) reads with and without it, and exit")
+var flagSurvey = flag.String("survey", "", "a CometBFT block store: sample -accounts' block ledgers from the archive argument and report which chain entries are messages of their block, and exit")
+var flagAccounts = flag.String("accounts", "", "an account list, one URL per line (for -survey)")
+var flagSample = flag.Int("sample", 2000, "block ledgers to sample (for -survey)")
+var flagWindow = flag.Int("window", 0, "blocks to search back for an entry missing from its block (for -survey)")
+var flagSearch = flag.Int("search", 50, "misses per chain kind to search back for (for -survey)")
+var flagDN = flag.String("dn-blockstore", "", "the Directory's CometBFT block store, to find outgoing anchors in (for -survey)")
 var flagCurrent listFlag
 var flagWritable listFlag
 
@@ -72,6 +78,12 @@ func main() {
 	flag.Parse()
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagSurvey != "" {
+		if err := blockSurvey(flag.Arg(0), *flagSurvey, *flagAccounts, *flagSample); err != nil {
 			log.Fatal(err)
 		}
 		return
