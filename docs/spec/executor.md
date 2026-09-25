@@ -228,7 +228,9 @@ where they disagree with it, this wins.
 
 1. **Pull every account the state tree holds, and every block-ledger record
    from the start of the pull to the present, in order.** The pull starts at
-   the peer's block S. The node walks the whole BPT, page by page, and pulls
+   S, the lowest block the partition's peers name, not counting a peer that
+   names a block before the newest one this node has verified a signed anchor
+   for (§3). The node walks the whole BPT, page by page, and pulls
    every account its leaves name; alongside it, it takes the block-ledger
    record of every block after S, in block order, and pulls again every
    account each record names (invariant 14). The walk may take many blocks;
@@ -374,7 +376,14 @@ whole scheme proved only that the peer agreed with itself.
 
 The node has a set to start from in every case. A restart holds the network
 definition it executed with; a node starting from genesis holds the genesis
-definition. **Churn is a leaf, not a walk** (#4301 statement (c), through the
+definition. **That definition is recorded where no pull reaches:**
+`SystemData(partition).TrustedNetwork` and `TrustedGlobals`, written from the
+node's own store before a join pulls anything and from the proven state at
+every match, and read at start (`anchorsrc.FromTrusted`). It is not read from
+`<partition>/network`, an account the pull overwrites with a peer's before
+anything is proven: a node restarted between a pull and its match would
+otherwise trust the validators a peer served (#4438 threat F1). An older
+store with no record seeds it from its own accounts on the first start. **Churn is a leaf, not a walk** (#4301 statement (c), through the
 protocol 2026-09-21): an operator change on this line is not carried by any
 anchor — the anchor of the block that changes the set is signed by the *new*
 set, and nothing signs the change in the old set's name — so a node that
@@ -418,8 +427,9 @@ read from a peer: it positions the read and decides nothing) and every read
 goes forward from where the last stopped, to the first number no validator
 has produced yet. The Directory's own anchors are collected from the
 Directory's validators the same way (`anchorsrc.Collector`). The pool reader
-(`anchorsrc.Source`, reading `dn.acme/anchors` or a BVN's pool) is no longer
-what the join reads.
+that read `dn.acme/anchors` or a BVN's pool (`anchorsrc.Source`) is deleted,
+with the history proof (`ProveRoot`) and the settle-by-receipt path
+(`pull.Settle`, `pull.Verify`) that went with it (#4438).
 
 **Until an anchor is signed by a quorum, no root is handed on.** A root that
 has not been verified against the trusted set is not a root; it is a number a
@@ -505,7 +515,12 @@ writes nothing at or above a chain's head, so it does not race the blocks the
 node executes; the entries are held to the node's own head, replayed from the
 first, so a peer serving another chain is refused and the next is asked. The
 node ends holding every account's chains and entries
-(`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
+(`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`). The accounts
+left to backfill are recorded under `SystemData(partition).HeadOnly` as they
+are taken and cleared as they are backfilled, so a restart before the
+backfill ends still backfills them: the next join finds their leaves equal to
+the peers' and takes nothing of them
+(`TestARestartBeforeTheBackfillEndsStillBackfills`).
 
 **A message is proven by its entry.** The leaf covers a chain's head, and the
 head covers its entries, but an entry of a transaction chain is the hash of a
@@ -600,9 +615,37 @@ belong.
 
 **The pull is the whole tree and every record from its start, in order**
 (the algorithm, steps 1–2; #4438). The pull starts at `S`, the block the
-peer's ledger names when the join starts, and keeps two cursors: the walk's
+peers' ledgers name when the join starts, and keeps two cursors: the walk's
 place in the peer's BPT, and `L`, the last block whose block-ledger record has
-been processed, which starts at `S`. Each round, in this order:
+been processed, which starts at `S`.
+
+**The target is the lowest block any peer names, floored at the newest signed
+anchor.** `S`, and each round's target for the records, is the lowest block
+the partition's peers' ledgers name. One peer's word is not a target: a peer
+naming a block far ahead would set `S` there and hold the records off. The
+lowest is floored at the newest block a quorum of the partition's validators
+signed an anchor for, as this node has verified it (the tracker's newest
+observed anchor): the partition has certainly reached that block, so a peer
+that names a block before it — a laggard, or a peer answering 0 — is behind
+and is not counted, and cannot pin `L` where it stands
+(`TestOnePeersBlockIsNotTheTarget`,
+`TestAPeerBehindTheNewestSignedAnchorDoesNotSetTheTarget`).
+
+**The records are read from the oldest page's block, within the peers'
+retention.** Each walk page is read from one named peer whose ledger is read
+first; a page served at a block before `S` shows the leaves of that block, so
+the records are read back to it as well — an account changed after the page's
+block and at or before `S` is named by no record after `S`
+(`TestRecordsAreReadFromTheOldestPageBlock`). A page's block is a peer's word,
+so it is floored at the newest verified anchor's block less the peers'
+retention (1024 blocks): a peer answering 0 does not make the records a query
+per block since genesis. Reading back is bounded as reading forward is, at
+most 1,024 blocks a round, and the state is not ready until the records have
+been read back to the floor
+(`TestAWalkPagesPeerAtZeroDoesNotSetTheRecordFloor`,
+`TestReadingTheRecordsBackIsBoundedPerRound`).
+
+Each round, in this order:
 
 1. **The records.** The block-ledger record of every block after `L` through
    the peer's block, in block order (`QueryMinorBlock` with the entries not

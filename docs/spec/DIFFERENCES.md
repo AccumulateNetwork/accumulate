@@ -399,7 +399,18 @@ departs:
   names hundreds of accounts, and a pull slower than the partition changes
   them does not converge (#4411).
 - **A retaken chain keeps the element-index entries of what it held** (the
-  #4327 shape; #4444).
+  #4327 shape; #4444). **The backfill past the match does too:**
+  `pull.Backfill` replaces the elements and mark states below the mark but
+  writes an `ElementIndex` only where none is held, so a hash the node held
+  at another position keeps its old index and a hash the chain no longer
+  holds keeps one; a later `AddEntry(unique)` of it is skipped and a proof of
+  it points at the wrong index (#4438 re-review F-8(a); #4444).
+- **Demoting the peers behind a pull that brought no match orders nothing.**
+  `RepairFrom` demotes every peer that served the pull, and with sources
+  asked in rotation every peer serves something in any pull of two accounts
+  or more, so all are demoted alike and the order is unchanged; the spec's
+  "moved to the back of the order" ("Two mismatches", 1) is not achieved
+  (#4438 re-review F-3; #4442).
 - **The repair is the join's only.** A running validator whose anchor differs
   does not repair (#4440).
 - **The backfill past the match runs inside the root watch**, 64 accounts per
