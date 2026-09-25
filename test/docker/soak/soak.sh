@@ -157,6 +157,18 @@ rm_late_followers() {   # $1 = why, for the log
   done
   return 0
 }
+# Every place that ends the network goes through here. An attached run
+# (ATTACH=1) did not start the network and must not end it: the validators,
+# the bootstrap and the config volume hold hours of history that a `down -v`
+# destroys. It removes only the late followers, which it did start.
+ATTACH="${ATTACH:-0}"
+net_down() {   # $1 = why, for the log
+  if [ "$ATTACH" = 1 ]; then
+    rm_late_followers "${1:-teardown}"
+  else
+    $compose down -v --remove-orphans >/dev/null 2>&1
+  fi
+}
 
 # ---- provenance -------------------------------------------------------------
 # Capture what is being tested BEFORE starting, because the tree will move on.
@@ -207,6 +219,11 @@ fi
 # build makes every conclusion drawn from the run unattributable.
 soak_image="${SOAK_IMAGE:-${COMPOSE_PROJECT_NAME}-bvn1-val1}"
 image_id=$(docker image inspect --format '{{.Id}}' "$soak_image" 2>/dev/null || echo unknown)
+# Attached, the validators run whatever image they were started with, which
+# the tag may no longer name: read it from the running container.
+if [ "${ATTACH:-0}" = 1 ]; then
+  image_id=$(docker inspect -f '{{.Image}}' "acc-${soak_image#"${COMPOSE_PROJECT_NAME}"-}" 2>/dev/null || echo unknown)
+fi
 if [ "$image_id" = unknown ]; then
   # Do not record "unknown" and carry on: an unidentifiable build is a run
   # nobody can reproduce or attribute, which is the one thing this file exists
@@ -361,13 +378,31 @@ if [ -n "$other" ] && [ "$other" != "$$" ] && kill -0 "$other" 2>/dev/null \
   [ "${SOAK_FORCE:-0}" = 1 ] || exit 1
 fi
 live=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c '^acc-')
-if [ "$live" -gt 0 ] && [ "${SOAK_FORCE:-0}" != 1 ]; then
+if [ "$ATTACH" = 1 ]; then
+  # The inverse requirement: the network must be up, every validator and the
+  # bootstrap running, and all of them in THIS compose project — attaching to
+  # some other project's containers would measure the wrong network.
+  att_missing=""
+  for c in $(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import topology
+print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null) acc-bootstrap; do
+    st=$(docker inspect -f '{{.State.Running}} {{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+    [ "$st" = "true $COMPOSE_PROJECT_NAME" ] || att_missing+=" $c(${st:-absent})"
+  done
+  if [ -n "$att_missing" ]; then
+    echo "ATTACH=1 but the network is not running as project $COMPOSE_PROJECT_NAME:$att_missing — refusing (nothing was changed)." | tee -a "$log"
+    exit 1
+  fi
+  echo "   attach: every validator and the bootstrap are running in project $COMPOSE_PROJECT_NAME; the network is not restarted" | tee -a "$log"
+elif [ "$live" -gt 0 ] && [ "${SOAK_FORCE:-0}" != 1 ]; then
   echo "$live acc-* containers are up from something else — refusing to start (SOAK_FORCE=1 in a -c override file to take over; the environment is not read)." | tee -a "$log"
   exit 1
 fi
 echo $$ > "$pidfile"
 rm_late_followers "left over before this run"
-$compose down -v --remove-orphans >/dev/null 2>&1
+[ "$ATTACH" = 1 ] || $compose down -v --remove-orphans >/dev/null 2>&1
 
 # Preflight the host ports the compose publishes. A single stray process on one
 # of them makes `up` fail on ONLY that node — the rest come up, so the failure
@@ -377,6 +412,8 @@ $compose down -v --remove-orphans >/dev/null 2>&1
 mapfile -t want_ports < <(grep -oE '"\s*[0-9]+\s*:\s*[0-9]+"|- [0-9]+:[0-9]+' "$compose_file" \
   | grep -oE '[0-9]+:' | tr -d ':' | sort -un)
 port_conflict=0
+# An attached network holds its own ports; only a fresh start needs them free.
+[ "$ATTACH" = 1 ] && want_ports=()
 for p in "${want_ports[@]}"; do
   holder=$(ss -ltnHp "sport = :$p" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)
   if [ -n "$holder" ]; then
@@ -395,7 +432,17 @@ done
 # left, or on a fresh box one built mid-chaos with its output thrown away —
 # the node whose join the run is there to prove, on a different binary from
 # the validators it joins.
-$compose --profile late-follower build >/dev/null 2>&1 || { echo "compose build failed" | tee -a "$log"; exit 1; }
+# Attached, ONLY the late followers are built: the validators are running
+# containers whose images must not move under them (a later `create` of a
+# validator service would otherwise pick the new one up).
+if [ "$ATTACH" = 1 ]; then
+  mapfile -t att_late < <(python3 "$here/followerchaos.py" late 2>/dev/null | awk '{print $1}')
+  [ "${#att_late[@]}" -gt 0 ] || { echo "ATTACH=1: no late-follower service to build" | tee -a "$log"; exit 1; }
+  $compose --profile late-follower build "${att_late[@]}" >/dev/null 2>&1 \
+    || { echo "compose build of the late followers failed" | tee -a "$log"; exit 1; }
+else
+  $compose --profile late-follower build >/dev/null 2>&1 || { echo "compose build failed" | tee -a "$log"; exit 1; }
+fi
 # Its image id goes in the manifest beside the validators', read AFTER the
 # build, and is frozen in config/. A run that will add the follower refuses an
 # image it cannot name, for the reason the validators' check above gives; a
@@ -419,9 +466,11 @@ done < <(python3 "$here/followerchaos.py" late 2>/dev/null)
 # the containers it already started running, i.e. an UNMONITORED network, which
 # is exactly what must never linger. The project is pinned to $COMPOSE_PROJECT_NAME
 # so this teardown can only ever reach this soak, never the asp-* mainnet fleet.
-if ! $compose up -d >>"$log" 2>&1; then
+if [ "$ATTACH" = 1 ]; then
+  : # attached: the network is already up and is not started, recreated or re-initialised
+elif ! $compose up -d >>"$log" 2>&1; then
   echo "up failed — see the error above; tearing down so nothing runs unmonitored" | tee -a "$log"
-  $compose down -v --remove-orphans >/dev/null 2>&1
+  net_down refused
   exit 1
 fi
 
@@ -437,6 +486,29 @@ if [ -n "$eff_c" ]; then
   echo "$(date -u +%FT%TZ) effective memory budget: mem_limit ${eff_mem_h}, GOMEMLIMIT ${eff_gml:-unset}" | tee -a "$log"
 fi
 
+# An attached run says so, with when the network it joined was started and
+# how far it had got: its results sit on hours this run did not see.
+if [ "$ATTACH" = 1 ]; then
+  att_vol=$(docker volume inspect -f '{{.CreatedAt}}' "${COMPOSE_PROJECT_NAME}_network-config" 2>/dev/null)
+  att_created=$(for c in $(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+import topology
+print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null); do
+      docker inspect -f '{{.Created}}' "$c" 2>/dev/null; done | sort | head -1)
+  python3 "$here/followerchaos.py" snapshot "$rd/attach-heights.json" 2>>"$log"
+  att_h=$(python3 -c 'import json,sys; h=json.load(open(sys.argv[1]))["heights"]; print(", ".join("%s %s" % (k, "not measured" if v is None else v) for k, v in sorted(h.items())))' \
+    "$rd/attach-heights.json" 2>/dev/null)
+  att_at=$(date -u +%FT%TZ)
+  sed -i "/^| topology | /a | attached | **yes** (ATTACH=1): to the running project \`$COMPOSE_PROJECT_NAME\` at $att_at; no down, init or up; validators and bootstrap run the image they were started with (image id above, read from the running container); only the late followers are built from this commit |\n| network started | config volume created ${att_vol:-— not measured}; first validator container created ${att_created:-— not measured} |\n| height at attach | ${att_h:-— not measured (the snapshot failed; see soak.log)} (block-ledger index, max over validators; \`attach-heights.json\`) |" "$manifest"
+  python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.update(attach=True, attachedUtc=sys.argv[2], networkVolumeCreated=sys.argv[3] or None, networkFirstValidatorCreated=sys.argv[4] or None)
+try: d["heightsAtAttach"] = json.load(open(sys.argv[5]))["heights"]
+except Exception: d["heightsAtAttach"] = None
+json.dump(d, open(p,"w"))' \
+    "$runjson" "$att_at" "$att_vol" "$att_created" "$rd/attach-heights.json" 2>>"$log"
+  echo "$(date -u +%FT%TZ) attached: network volume created ${att_vol:-?}; heights ${att_h:-not measured}" | tee -a "$log"
+fi
+
 # Record the image actually running, so a rebuild later cannot be confused for this run.
 docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
   > "$rd/config/image.txt" 2>/dev/null
@@ -447,7 +519,9 @@ docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
 # capture ran once at teardown and inherited whatever rotation had left.
 # Streaming into the run dir preserves everything; the file is large under
 # failure storms (gigabytes) and is gitignored — summarize, don't commit it.
+# Attached, from now: the network's earlier hours belong to the run that started it.
 nohup docker compose -f "$here/../docker-compose.yml" logs -f --no-color \
+  $([ "$ATTACH" = 1 ] && echo "--since $(date -u +%FT%TZ)") \
   >> "$rd/node-logs-live.txt" 2>&1 &
 LOGCAP=$!
 
@@ -522,7 +596,7 @@ fi
 # behaviour that produced five unobserved runs during the #4103 diagnosis.
 if [ ! -x "$here/soakmon.py" ]; then
   echo "soakmon.py missing or not executable — refusing to run unmonitored" | tee -a "$log"
-  $compose down -v --remove-orphans >/dev/null 2>&1
+  net_down refused
   exit 1
 fi
 # RUN_DIR so the dashboard reads THIS run's loadgen stats and chaos log.
@@ -540,7 +614,7 @@ fi
 # 213153Z. A monitor that is not ours is a reason to stop, not to proceed.
 if stale=$(pgrep -f "$here/soakmon.py" 2>/dev/null) && [ -n "$stale" ]; then
   echo "another soakmon is running (pid $stale) — an earlier run's monitor outlived its teardown; kill it and retry. Refusing to run against someone else's dashboard." | tee -a "$log"
-  $compose down -v --remove-orphans >/dev/null 2>&1
+  net_down refused
   exit 1
 fi
 ( while kill -0 $$ 2>/dev/null; do
@@ -556,7 +630,7 @@ done
 if ! curl -sf -m3 http://127.0.0.1:8099/data >/dev/null 2>&1; then
   echo "soakmon did not come up — refusing to run unmonitored; tearing down" | tee -a "$log"
   pkill -P "$MON" 2>/dev/null; kill "$MON" 2>/dev/null
-  $compose down -v --remove-orphans >/dev/null 2>&1
+  net_down refused
   exit 1
 fi
 echo "   soakmon: http://127.0.0.1:8099 (gate passed)" | tee -a "$log"
@@ -600,7 +674,7 @@ fi
 # loadgen, let this script write its verdict, then take the network down.
 # STALL_KILL_SECS=0 disables it for a run that is meant to sit in a stall.
 if [ -x "$here/stallkill.sh" ] && [ "${STALL_KILL_SECS:-240}" != "0" ]; then
-  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-240}" SOAK_PID=$$ \
+  nohup env RUN_DIR="$rd" STALL_KILL_SECS="${STALL_KILL_SECS:-240}" SOAK_PID=$$ ATTACH="$ATTACH" \
     "$here/stallkill.sh" > "$rd/stallkill.log" 2>&1 &
   STALLKILL=$!
   echo "   stallkill: armed (stop the run after ${STALL_KILL_SECS:-240}s stalled)" | tee -a "$log"
@@ -625,7 +699,7 @@ import topology
 print(",".join("http://localhost:%d" % p for p in topology.node_ports()))' "$here/.." 2>/dev/null)
 if [ -z "$EPS" ]; then
   echo "cannot derive loadgen endpoints from the topology — refusing to run blind" | tee -a "$log"
-  $compose down -v --remove-orphans >/dev/null 2>&1
+  net_down refused
   exit 1
 fi
 # The control API steers the running generator — rate and mix — without a
@@ -751,7 +825,13 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   added=(); declare -A added_at=() added_s=() seen_active=() seen_match=()
   pairs=0; fol_done=0
 
-  # Poll each added follower once: ACTIVE, then its first root match.
+  # Poll each added follower once: ACTIVE, then the follower's own word that
+  # it executes in agreement on every partition it runs. That line
+  # (join/state.go "This node is executing in agreement; it is ACTIVE") is
+  # logged when its root equals the partition's SIGNED anchored root. The
+  # old check compared its roots with the validators' anchor log lines,
+  # over every validator's whole log each pass, and said "never matched a
+  # validator's root" of followers whose join logs show the match.
   follower_watch() {
     local c out
     for c in "${added[@]}"; do
@@ -762,20 +842,24 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
         fi
       fi
       if [ "${seen_match[$c]}" -eq 0 ]; then
-        if out=$(python3 "$here/followerchaos.py" rootmatch "$c" "${added_at[$c]}" 2>/dev/null); then
+        if out=$(python3 "$here/followerchaos.py" agreement "$c" "${added_at[$c]}" 2>/dev/null); then
           seen_match[$c]=1
-          echo "$(date -u +%FT%TZ) follower $c first root match ($out), $(( $(date +%s) - ${added_s[$c]} ))s after it was added" >> "$chaos"
+          echo "$(date -u +%FT%TZ) follower $c first in agreement ($out), $(( $(date +%s) - ${added_s[$c]} ))s after it was added" >> "$chaos"
         fi
       fi
     done
     return 0
   }
-  # Wait $1 seconds, polling the followers every 10.
+  # Wait $1 seconds of WALL CLOCK, polling the followers about every 10.
+  # It used to count only its own sleeps, so every second follower_watch
+  # spent (a root match over the validators' whole `docker logs`, growing
+  # all run) was added to the wait: run 20260925T042703Z's removal due at
+  # 06:30 came at 07:12, and the second pair was removed 9443s after its
+  # add for a 3600s cadence.
   chaos_wait() {
-    local left=$1 step
-    while [ "$left" -gt 0 ]; do
-      step=$(( left < 10 ? left : 10 ))
-      sleep "$step"; left=$(( left - step ))
+    local deadline=$(( SECONDS + $1 )) left
+    while left=$(( deadline - SECONDS )); [ "$left" -gt 0 ]; do
+      sleep $(( left < 10 ? left : 10 ))
       follower_watch
     done
   }
@@ -811,7 +895,7 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
     python3 "$here/followerchaos.py" snapshot "$pre-at.json" 2>/dev/null
     for c in "${added[@]}"; do
       [ "${seen_active[$c]}" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $c NEVER ACTIVE: removed $(( $(date +%s) - ${added_s[$c]} ))s after it was added" >> "$chaos"
-      [ "${seen_match[$c]}" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $c never matched a validator's root before its removal" >> "$chaos"
+      [ "${seen_match[$c]}" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $c never logged executing in agreement on every partition before its removal" >> "$chaos"
       echo "$(date -u +%FT%TZ) remove-follower $c (removal $n)" >> "$chaos"
     done
     docker stop "${added[@]}" >/dev/null 2>&1
@@ -1480,10 +1564,13 @@ for l in lines:
     if m:
         cur["never"] = m.group(2)
     m = re.match(r"follower (\S+) first root match \((.*)\), (\d+)s after", rest)
-    if m:
+    if m:   # the form before the agreement check, in older runs' chaos.log
         f = dict(kv.split("=", 1) for kv in m.group(2).split() if "=" in kv)
         cur["match"] = "block %s (source %s), %ss after the add" % (
             f.get("block", "?"), f.get("source", "?"), m.group(3))
+    m = re.match(r"follower (\S+) first in agreement \((.*)\), (\d+)s after", rest)
+    if m:
+        cur["match"] = "%s, %ss after the add" % (m.group(2), m.group(3))
 
 if not lives and not removals:
     print("| add-follower / remove-follower | none in `chaos.log` |")
@@ -1544,8 +1631,8 @@ for life in lives:
                           for r in sorted(rs, key=lambda r: r["partition"])
                           if r["time"] == near), near[11:]))
 
-    parts.append("first root match %s" % life["match"] if life["match"]
-                 else "first root match %s" % NM)
+    parts.append("first in agreement %s" % life["match"] if life["match"]
+                 else "first in agreement %s" % NM)
 
     # NotReady on a read before ACTIVE, and which service answered it.
     rs = in_life(probe, life, col="follower")
@@ -1891,7 +1978,10 @@ printf '| [%s](%s/manifest.md) | `%s` | %s | %s | %sh | %s | %s→%s | %s→%s |
 # eight validators up with no monitor — the 20260829T003712Z network ran 22
 # minutes past its verdict before anyone noticed. KEEP_UP=1 keeps it for
 # probing, deliberately.
-if [ "${KEEP_UP:-0}" = 1 ]; then
+if [ "$ATTACH" = 1 ]; then
+  echo "ATTACH=1: the network this run attached to is left running (validators, bootstrap, volume); its late followers were removed" | tee -a "$log"
+  kill "$MON" 2>/dev/null; sleep 1; pkill -P "$MON" 2>/dev/null; pkill -f "soakmon.py" 2>/dev/null
+elif [ "${KEEP_UP:-0}" = 1 ]; then
   echo "KEEP_UP=1: network left up for probing — tear it down yourself:" | tee -a "$log"
   echo "  COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME $compose down -v --remove-orphans" | tee -a "$log"
 else

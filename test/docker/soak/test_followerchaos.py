@@ -146,5 +146,33 @@ class Unaffected(unittest.TestCase):
         self.assertIn("not measured", text)
 
 
+class Agreement(unittest.TestCase):
+    """The follower's own `executing in agreement` lines, as run
+    20260925T042703Z's acc-bvn1-fol1 logged them (ANSI colour and all)."""
+    E = "\x1b[90m%sZ\x1b[0m INFO This node is executing in agreement; it is ACTIVE \x1b[36mblock=\x1b[0m%d \x1b[36mmodule=\x1b[0mjoin \x1b[36mpartition=\x1b[0m%s"
+    LINES = [
+        "\x1b[90m2026-09-25T05:29:30Z\x1b[0m INFO Joining: collecting committed blocks, executing none",
+        E % ("2026-09-25T05:31:02", 3840, "acc://dn.acme"),
+        "\x1b[90m2026-09-25T05:31:03Z\x1b[0m WARN This node is not executing in agreement; it is BOOTING until it hands off again block=3841",
+        E % ("2026-09-25T05:33:10", 3901, "acc://dn.acme"),
+        E % ("2026-09-25T05:34:00", 3702, "acc://bvn-BVN1.acme"),
+    ]
+
+    def test_first_line_per_partition(self):
+        got = followerchaos.first_agreement(self.LINES)
+        self.assertEqual({"acc://dn.acme": ("2026-09-25T05:31:02Z", 3840),
+                          "acc://bvn-BVN1.acme": ("2026-09-25T05:34:00Z", 3702)}, got)
+        self.assertIn("acc://dn.acme block 3840 at 2026-09-25T05:31:02Z",
+                      followerchaos.describe_agreement(got))
+
+    def test_not_executing_in_agreement_is_not_agreement(self):
+        self.assertEqual({}, followerchaos.first_agreement(self.LINES[:1] + self.LINES[2:3]))
+
+    def test_one_partition_is_not_every_partition(self):
+        # The command requires one per partition the follower runs; the
+        # Directory alone must not satisfy a DN+BVN follower.
+        self.assertEqual(1, len(followerchaos.first_agreement(self.LINES[:2])))
+
+
 if __name__ == "__main__":
     unittest.main()

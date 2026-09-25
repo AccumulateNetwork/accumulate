@@ -502,8 +502,13 @@ slot adds every one of them — its databases cleared and `join-running-network
 = true` set in its `accumulate.toml` — and the next follower slot removes them
 all. So `chaos.log` has one `add-follower <container> (...)` line per follower
 at the add, `follower <container> ACTIVE (...), Ns after it was added` and
-`follower <container> first root match (...)` lines per follower as each is
-seen, and at the removal one `remove-follower <container> (removal N)` line
+`follower <container> first in agreement (...)` lines per follower as each is
+seen (the follower's own first `This node is executing in agreement; it is
+ACTIVE` line per partition, once every partition it runs has one — logged
+when its root equals the partition's signed anchored root; runs before
+2026-09-25 wrote `first root match (...)`, a comparison against validators'
+anchor lines that read only `docker logs` stdout, where the node does not
+log, and so never matched), and at the removal one `remove-follower <container> (removal N)` line
 per follower, all carrying the same N, then one `follower removal N, ...`
 verdict for the slot. The manifest gives a row per add-follower line (per
 follower) and ONE row per removal naming every follower it removed, because
@@ -520,7 +525,8 @@ Per add-follower:
 - **blocks behind at hand-off**, per partition, from the `follower.csv`
   sample nearest the moment the last partition went ACTIVE — not the lag
   before it;
-- **first root match**, the block and the validator, from `chaos.log`;
+- **first in agreement**, per partition the block and time, from `chaos.log`
+  (`first root match`, the block and the validator, in older runs);
 - **NotReady before ACTIVE**, the reads refused before the hand-off and the
   partition and service that refused them, from `readprobe-follower.csv`;
 - **accepted, relayed-taken (as a share of accepted), stranded** on that
@@ -649,6 +655,20 @@ Every run MUST record before load starts: commit, `git describe`, branch,
 uncommitted-file count and patch, image ID, executor version, topology,
 settings (duration, rate, drops, healing), and the config files as run.
 Results MUST be appended to the same manifest. (Implemented — `soak.sh`.)
+
+**An attached run says so (ATTACH=1).** A run that attaches to a network
+already running (project `COMPOSE_PROJECT_NAME`) instead of starting one
+carries three rows after `topology`: `attached` (when, and that no down, init
+or up ran, the validators running the image they were started with — the
+`image id` row is read from the running container, not the tag — and only the
+late followers built from this commit), `network started` (the config
+volume's creation and the first validator container's), and `height at
+attach` (every partition's block-ledger index, max over the validators, also
+in `attach-heights.json`). `run.json` carries `attach`, `attachedUtc`,
+`networkVolumeCreated`, `networkFirstValidatorCreated` and `heightsAtAttach`.
+`node-logs-live.txt` starts at the attach. The run's heights, streams and
+counts start from the network's state at the attach, not from genesis. At its
+end, or on a stall, it removes the late followers and leaves the network up.
 
 **A run stallkill stops is dated at the decision (#4425).** stallkill
 captures evidence before it signals the load generator, and the capture takes

@@ -72,6 +72,7 @@ sleep() {
   if [ "$(grep -cE ' (add-follower|remove-follower|restart|restart-validator|pause|pause-validator) ' "$chaos" 2>/dev/null)" -ge "$EVENTS" ]; then
     exit 0
   fi
+  SECONDS=$(( SECONDS + ${1%%.*} ))   # chaos_wait counts wall clock ($SECONDS)
   return 0
 }
 """
@@ -310,6 +311,7 @@ sleep() {
   if [ "$(grep -c ' sleeping ' "$chaos" 2>/dev/null)" -ge "$SLOTS" ]; then
     exit 0
   fi
+  SECONDS=$(( SECONDS + ${1%%.*} ))   # chaos_wait counts wall clock ($SECONDS)
   return 0
 }
 """
@@ -476,6 +478,34 @@ class ALateFollowerLeftUpIsRemoved(unittest.TestCase):
                         "a follower left by a killed run would hold the config volume `up` recreates")
         self.assertTrue([s for s in sites if up < s < down],
                         "teardown's `down` does not reach a profiled service; it must be removed first")
+
+
+class ChaosWaitIsWallClock(unittest.TestCase):
+    """The wait between disturbances ends at its deadline however long the
+    follower polls take. It used to count only its own sleeps: run
+    20260925T042703Z's removal due 06:30 came at 07:12, and a pair was
+    removed 9443s after its add on a 3600s cadence."""
+
+    def test_slow_polls_do_not_stretch_the_wait(self):
+        with open(SOAK) as f:
+            src = f.read()
+        i = src.index("  chaos_wait() {")
+        j = src.index("\n  }\n", i) + 4
+        script = src[i:j] + r"""
+calls=0
+sleep() { SECONDS=$(( SECONDS + $1 )); }
+follower_watch() { calls=$((calls + 1)); SECONDS=$(( SECONDS + 100 )); }  # a 100 s poll
+SECONDS=0
+chaos_wait 300
+echo "$calls $SECONDS"
+"""
+        out = subprocess.run(["bash", "-c", script], capture_output=True,
+                             text=True, timeout=20).stdout.split()
+        calls, elapsed = int(out[0]), int(out[1])
+        # 300 s of wall clock: three rounds of 10 s sleep + 100 s poll (330 s),
+        # not thirty (3300 s), which is what counting only the sleeps gives.
+        self.assertEqual(3, calls, out)
+        self.assertLess(elapsed, 300 + 110, out)
 
 
 if __name__ == "__main__":
