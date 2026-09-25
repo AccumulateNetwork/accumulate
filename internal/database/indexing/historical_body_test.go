@@ -177,3 +177,45 @@ func TestHistoricalBody_ReceiptWithoutBodyServesNoBody(t *testing.T) {
 		require.True(t, proof.Receipt.Validate(nil))
 	})
 }
+
+// A retained body is served only if its retained bytes are exactly the encoding
+// the BPT hashed. The decoder accepts an overlong varint the encoder never
+// writes: bytes carrying one decode to an account whose encoding still hashes
+// to the receipt's start, so the hash check alone passes them, yet they are not
+// what was retained from the BPT and the node cannot vouch for them.
+func TestHistoricalBody_BytesThatDoNotRoundTripAreNotServed(t *testing.T) {
+	sim, lite := changingLite(t, 10_000, 6)
+
+	var block uint64
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		blocks, err := batch.Account(lite).RetainedStateReceiptBlocks().Get()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(blocks), 2)
+		block = blocks[len(blocks)-2] // changed since, so the current body cannot stand in
+	})
+
+	Update(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		account := batch.Account(lite)
+		encoded, err := account.RetainedMainState(block).Get()
+		require.NoError(t, err)
+		// Field 1 is the account type: 0x01 then its value as a one-byte
+		// uvarint. Write the same value as an overlong two-byte uvarint.
+		require.Equal(t, byte(0x01), encoded[0])
+		require.Less(t, encoded[1], byte(0x80))
+		overlong := append([]byte{0x01, encoded[1] | 0x80, 0x00}, encoded[2:]...)
+		decoded, err := UnmarshalAccount(overlong)
+		require.NoError(t, err, "precondition: the decoder accepts the overlong form")
+		reencoded, err := decoded.MarshalBinary()
+		require.NoError(t, err)
+		require.Equal(t, encoded, reencoded, "precondition: it decodes to the retained account")
+		require.NoError(t, account.RetainedMainState(block).Put(overlong))
+	})
+
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		proof, err := indexing.HistoricalAccountStateProof(bvn0, batch, batch.Account(lite), block)
+		require.NoError(t, err)
+		require.False(t, proof.StartsAtMainState)
+		require.Nil(t, proof.State, "served a body from retained bytes that are not the bytes the BPT hashed")
+		require.True(t, proof.Receipt.Validate(nil))
+	})
+}

@@ -270,5 +270,19 @@ func retainedStateAt(account *database.Account, block uint64) (*merkle.Receipt, 
 	if err != nil {
 		return nil, nil, errors.UnknownError.WithFormat("unmarshal retained main state: %w", err)
 	}
+
+	// The caller checks that the re-encoded body hashes to the receipt's start
+	// (startsAt), but not that the retained bytes are that encoding. The
+	// decoder accepts forms the encoder never writes (an overlong varint, for
+	// one), so retained bytes that are not the ones the BPT hashed could still
+	// decode to a body that passes. Retained bytes that do not survive the
+	// round trip exactly are not a body this node can vouch for.
+	reencoded, err := body.MarshalBinary()
+	if err != nil {
+		return nil, nil, errors.UnknownError.WithFormat("re-marshal retained main state: %w", err)
+	}
+	if !bytes.Equal(reencoded, encoded) {
+		return r, nil, nil
+	}
 	return r, body, nil
 }

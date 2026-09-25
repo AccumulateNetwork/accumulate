@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- A retained historical body is served only if it is byte for byte what the BPT hashed (AIP-58 follow-up to !1233)
+  - A served body already had to hash to where its receipt starts: the node
+    decodes the retained bytes, re-encodes them and checks that hash. What it
+    did not check is the retained bytes themselves. The decoder accepts forms
+    the encoder never writes (an overlong varint, for one), so stored bytes
+    that are not the ones the BPT hashed could still decode to an account
+    that passes. A node now serves the retained body only if re-encoding it
+    reproduces the retained bytes exactly; otherwise the answer carries no
+    account, as for any block whose body the node cannot produce.
+  - Measured on live networks, retention costs about half a kilobyte per
+    state-changing block - 1-2% on top of BPT history itself.
+
 ## 1.4.6.7
 
 The release Kermit runs. A devnet can now turn on the BPT history retention

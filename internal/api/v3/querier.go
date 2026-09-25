@@ -342,10 +342,15 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 
 	// A historical request must branch BEFORE the current-state receipt is
 	// built. ReceiptOptions.Yes reports true for a ForHeight-only query
-	// (pkg/api/v3/query.go:104-106), so this path is already reached today and
-	// already answers such a request with a current-state receipt — which is
-	// the behaviour AIP-58 exists to stop. There is deliberately no fallback:
-	// a node that cannot prove the past refuses.
+	// (pkg/api/v3/query.go:104-106), so without this branch such a request
+	// would be answered with a current-state receipt - the behaviour AIP-58
+	// exists to stop.
+	//
+	// The historical answer refuses only when BPT history does not cover the
+	// block. Otherwise it always serves the account's entry and its path to
+	// the BPT root - a hash the node can prove is never withheld - with the
+	// account's main state as of the block when the node can produce it, and
+	// Receipt.StartsAtMainState says which (historicalStateReceipt).
 	if wantReceipt.ForHeight != 0 {
 		err = s.historicalStateReceipt(batch, record, r, wantReceipt.ForHeight)
 		return r, errors.UnknownError.Wrap(err)
