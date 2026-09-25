@@ -178,6 +178,10 @@ type Node struct {
 	mu     sync.RWMutex
 	closed atomic.Bool
 
+	// holdOrdering: the node takes certificates into its DAG and orders none
+	// of them, until Rejoin names the round to order from (#4405).
+	holdOrdering atomic.Bool
+
 	// Metrics
 	transactionsSubmitted atomic.Uint64
 	certificatesCommitted atomic.Uint64
@@ -871,7 +875,23 @@ func (n *Node) Rejoin(round types.Round) {
 	n.primary.SetRound(round)
 	n.bullshark.SetLastCommitRound(round)
 	n.dag.SetLastCommitRound(round)
+	n.holdOrdering.Store(false)
 	slog.Info("Rejoined consensus", "partition", n.config.Partition, "round", round)
+}
+
+// HoldOrdering, called before Start, makes the node order nothing until
+// Rejoin: a joining node with no checkpoint does not know where the network
+// is, and ordering from round zero orders history whose batches every peer
+// has retired, so the first group never arrives (#4405). Certificates still
+// reach the DAG; the leaders above the round Rejoin names are ordered from
+// the next certificate on.
+func (n *Node) HoldOrdering() {
+	n.holdOrdering.Store(true)
+}
+
+// OrderingHeld reports whether the node is waiting for Rejoin to order.
+func (n *Node) OrderingHeld() bool {
+	return n.holdOrdering.Load()
 }
 
 func (n *Node) LastCommitRound() types.Round {
@@ -928,7 +948,7 @@ func (n *Node) processBullshark() {
 			if !ok {
 				return
 			}
-			if cert == nil {
+			if cert == nil || n.holdOrdering.Load() {
 				continue
 			}
 

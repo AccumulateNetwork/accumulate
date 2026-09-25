@@ -14,6 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/bullshark"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -264,6 +265,23 @@ func (s *Service) pulledRound(q uint64) (types.Round, error) {
 	return types.Round(ledger.LeaderRound), nil
 }
 
+// seed starts consensus ordering at round, the leader round of the first
+// state the join brought, instead of at round zero: a joining node with no
+// checkpoint orders nothing from before it joined (#4405). The round is one
+// the network committed and near its frontier, so the certificates above it
+// are still in every peer's DAG and their batches still served. The first
+// leaders ordered after it walk RescueWindow rounds below it, where this node
+// does not know what its peers committed, so the groups up to seedFloor may
+// differ from theirs and no state there is handed off at: the join pulls
+// forward to one above it. It is called with the lock held.
+func (s *Service) seed(round types.Round) {
+	s.node.Rejoin(round)
+	s.awaitingSeed = false
+	s.seedFloor = round + bullshark.RescueWindow
+	s.logger.Info("Joining: consensus orders from the round of the pulled state; handing off above the rescue window",
+		"partition", s.config.Partition.ID, "round", round, "handoffAbove", s.seedFloor)
+}
+
 // checkRound says whether the buffer can be handed off at block q, whose
 // state was committed at round: the refusals performHandoffAt describes. It
 // is called with the lock held.
@@ -273,6 +291,13 @@ func (s *Service) checkRound(q uint64, round types.Round) error {
 	}
 	if s.bufferOverrun {
 		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
+	}
+	if s.awaitingSeed {
+		return errors.NotReady.WithFormat("%s: consensus has not been told where to order from", s.config.Partition.ID)
+	}
+	if round <= s.seedFloor {
+		return errors.Conflict.WithFormat("%s: cannot hand off at block %d (round %d): consensus joined at round %d and orders exactly as its peers only above round %d",
+			s.config.Partition.ID, q, round, s.seedFloor-bullshark.RescueWindow, s.seedFloor)
 	}
 	// The node stands at the round of the last block it produced, or, once
 	// its buffer started again after an overrun, at the last round it lost:
@@ -434,9 +459,21 @@ func (s *Service) StageThrough(block uint64) error {
 	if !s.Collecting() {
 		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
 	}
+	// The loop serves the request between groups. One that is stuck on a
+	// group — waiting for batches no peer serves — cannot, and the join must
+	// hear why rather than wait with it (#4405).
 	req := stageRequest{block: block, done: make(chan error, 1)}
+	wait := time.NewTimer(stageThroughWait)
+	defer wait.Stop()
 	select {
 	case s.stageThrough <- req:
+	case <-wait.C:
+		if r := s.producing.Load(); r != 0 {
+			return errors.NotReady.WithFormat("%s: the block production loop has not taken the request in %v: it is still producing the group committed at leader round %d",
+				s.config.Partition.ID, stageThroughWait, r)
+		}
+		return errors.NotReady.WithFormat("%s: the block production loop has not taken the request in %v",
+			s.config.Partition.ID, stageThroughWait)
 	case <-s.ctx.Done():
 		return errors.UnknownError.Wrap(s.ctx.Err())
 	}
@@ -447,6 +484,10 @@ func (s *Service) StageThrough(block uint64) error {
 		return errors.UnknownError.Wrap(s.ctx.Err())
 	}
 }
+
+// stageThroughWait is how long StageThrough waits for the block production
+// loop to take its request before saying the loop is busy.
+var stageThroughWait = 5 * time.Second
 
 // A stageRequest is the join asking to take the buffer into staging through a
 // block.
@@ -476,6 +517,9 @@ func (s *Service) stageThroughNow(block uint64) error {
 	}
 
 	s.mu.Lock()
+	if s.awaitingSeed {
+		s.seed(round)
+	}
 	if err := s.checkRound(q, round); err != nil {
 		s.mu.Unlock()
 		return err

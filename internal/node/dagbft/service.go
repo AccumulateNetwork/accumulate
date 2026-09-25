@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -141,6 +142,18 @@ type Service struct {
 	// produces blocks and the only thing that writes the buffer (#4294).
 	handoff      chan handoffRequest
 	stageThrough chan stageRequest
+	// awaitingSeed: the node is joining with no consensus checkpoint, so its
+	// consensus orders nothing until the join's first state names a round
+	// the network committed. seedFloor is that round plus the rescue window:
+	// a state at or below it cannot be handed off at, because the groups up
+	// to there may hold certificates the peers committed before the seed
+	// (#4405).
+	awaitingSeed bool
+	seedFloor    types.Round
+	// producing is the leader round of the group the block production loop
+	// is producing or collecting, zero between groups: what a request the
+	// loop cannot take says it is waiting on.
+	producing atomic.Uint64
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
 
@@ -173,7 +186,7 @@ func NewService(config ServiceConfig) (*Service, error) {
 		eventBus:         config.EventBus,
 		stateHashTracker: types.NewStateHashTracker(100), // Track last 100 rounds
 		handoff:          make(chan handoffRequest, 1),
-		stageThrough:     make(chan stageRequest, 1),
+		stageThrough:     make(chan stageRequest),
 	}
 	s.logger.L = config.Logger
 
@@ -221,8 +234,18 @@ func (s *Service) Start(ctx context.Context) error {
 		return errors.UnknownError.WithFormat("initialize genesis: %w", err)
 	}
 
-	// Resume the consensus position the executor's state was produced at
-	s.seedFromCheckpoint()
+	// Resume the consensus position the executor's state was produced at.
+	// A joining node with none orders nothing until the join names a round
+	// the network committed (#4405): from round zero it would order history
+	// whose batches every peer has retired, and wait for them for ever.
+	if !s.seedFromCheckpoint() && s.Collecting() {
+		s.node.HoldOrdering()
+		s.mu.Lock()
+		s.awaitingSeed = true
+		s.mu.Unlock()
+		s.logger.Info("Joining with no consensus checkpoint: ordering nothing until the join's state names the round to order from",
+			"partition", s.config.Partition.ID)
+	}
 
 	// Start consensus node
 	if err := s.node.Start(s.ctx); err != nil {
@@ -469,9 +492,9 @@ func (s *Service) saveCheckpoint(blockIndex uint64) {
 // block is the executor's last block is the position to resume; a node with
 // state but no matching checkpoint starts at round zero and cannot catch a
 // live network (DIFFERENCES E11).
-func (s *Service) seedFromCheckpoint() {
+func (s *Service) seedFromCheckpoint() bool {
 	if s.config.DataDir == "" || s.lastBlockIndex == 0 {
-		return
+		return false
 	}
 	for _, file := range []string{checkpointFile, prevCheckpointFile} {
 		store := persist.NewStore(s.config.DataDir)
@@ -489,10 +512,11 @@ func (s *Service) seedFromCheckpoint() {
 		// here are the ones after it; a join's handoff at a state below it
 		// would need groups this node will not be delivered (#4362).
 		s.lastLeaderRound = cp.LastCommitRound
-		return
+		return true
 	}
 	slog.Warn("No consensus checkpoint matches the executor's last block; starting at round zero",
 		"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex)
+	return false
 }
 
 // initializeGenesis initializes the DAG with genesis certificates.
@@ -589,7 +613,9 @@ func (s *Service) blockProductionLoop() {
 				continue
 			}
 
+			s.producing.Store(uint64(group[len(group)-1].Header.Round))
 			cert, err := s.processCommittedGroup(group)
+			s.producing.Store(0)
 			if err == nil && !s.Collecting() {
 				// A joining node has executed nothing, and must read as
 				// lagging: its primary proposes no batches it could not
