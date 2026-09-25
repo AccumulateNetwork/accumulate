@@ -212,7 +212,13 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 		require.Equal(t, 2.0, r.gauge, "%s: accumulate_node_state reads %v", phase, r.gauge)
 	}
 
+	// The node may hand off from a pulled state not yet proven, and it is
+	// ACTIVE only from the first executed block whose root matches (executor
+	// spec, "Sync", "Two mismatches"). So the "handed off"
+	// readings are taken at the first root check that finds it ACTIVE after a
+	// handoff, and handoffs are counted from the one it was proven after.
 	var matchedFailing, retried, handedOff, resyncing, rejoined *reading
+	var provenAfter int
 	buf.failing = func() { r := read(); matchedFailing = &r }
 	state := &steppedJoinState{PulledState: pulled}
 	watches := 0
@@ -228,7 +234,7 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 		case buf.failed && buf.handedOff == 0 && retried == nil:
 			r := read()
 			retried = &r
-		case buf.handedOff == 1 && buf.Collecting() && resyncing == nil:
+		case handedOff != nil && buf.Collecting() && resyncing == nil:
 			r := read()
 			resyncing = &r
 		}
@@ -236,9 +242,10 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 	state.watched = func() {
 		watches++
 		switch {
-		case buf.handedOff == 1 && handedOff == nil:
+		case buf.handedOff >= 1 && handedOff == nil && machine.State() == nodestate.StateActive:
 			r := read()
 			handedOff = &r
+			provenAfter = buf.handedOff
 			helpers.Update(t, p.NodeDatabase(joiner), func(batch *database.Batch) {
 				var tokens *protocol.TokenAccount
 				require.NoError(t, batch.Account(bob.JoinPath("tokens")).Main().GetAs(&tokens))
@@ -246,7 +253,7 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 				require.NoError(t, batch.Account(bob.JoinPath("tokens")).Main().Put(tokens))
 				require.NoError(t, batch.UpdateBPT())
 			})
-		case buf.handedOff == 2 && rejoined == nil:
+		case handedOff != nil && buf.handedOff > provenAfter && rejoined == nil && machine.State() == nodestate.StateActive:
 			r := read()
 			rejoined = &r
 			cancel()

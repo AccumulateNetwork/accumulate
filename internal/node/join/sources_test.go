@@ -84,7 +84,7 @@ func TestNewState_NeedsPeersNotAQuerier(t *testing.T) {
 	require.NoError(t, err)
 }
 
-type noSources struct{}
+type noSources struct{ noValidators }
 
 func (noSources) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
 	return nil, nil, errors.NotReady.With("no peers")

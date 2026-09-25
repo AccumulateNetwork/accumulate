@@ -407,6 +407,14 @@ func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) err
 	return nil
 }
 
+// seedDeep is seedCacheOnce over a read-only batch that reaches past a
+// windowed store's window.
+func (x *Executor) seedDeep(current uint64, isLeader bool) error {
+	return x.deepView(func(batch *database.Batch) error {
+		return x.seedCacheOnce(batch, current, isLeader)
+	})
+}
+
 // seedCacheOnce seeds the cache unless a seed has already succeeded. A seed
 // that fails is not counted, so the next block to open tries again rather than
 // running on a cache nothing filled (#4400).

@@ -8,11 +8,13 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
@@ -41,7 +43,35 @@ type pagelessSources struct {
 }
 
 func (s *pagelessSources) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
-	return s.inner.For(ctx, account)
+	srcs, partition, err := s.inner.For(ctx, account)
+	for i, src := range srcs {
+		srcs[i] = pagelessSource{Source: src, owner: s}
+	}
+	return srcs, partition, err
+}
+
+// pagelessSource is one named peer, whose BPT pages are counted and refused
+// as the owner says: the walk reads each page from a named peer (#4438).
+type pagelessSource struct {
+	pull.Source
+	owner *pagelessSources
+}
+
+func (s pagelessSource) String() string { return fmt.Sprint(s.Source) }
+
+func (s pagelessSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api.BptPageQuery) (*api.BptPageRecord, error) {
+	s.owner.asked.Add(1)
+	if s.owner.refuse.Load() {
+		return nil, errors.NotReady.WithFormat("%v: no peer will page its BPT for this node", scope)
+	}
+	s.owner.served.Add(1)
+	return s.Source.(interface {
+		QueryBptPage(context.Context, *url.URL, *api.BptPageQuery) (*api.BptPageRecord, error)
+	}).QueryBptPage(ctx, scope, q)
+}
+
+func (s *pagelessSources) ValidatorsOf(ctx context.Context, partition *url.URL) ([]anchorsrc.Validator, error) {
+	return s.inner.ValidatorsOf(ctx, partition)
 }
 
 func (s *pagelessSources) Querier(partition *url.URL) api.Querier {
@@ -65,26 +95,20 @@ func (q *pagelessQuerier) Query(ctx context.Context, scope *url.URL, query api.Q
 }
 
 // TestJoinKeepsUpFromTheBlockLedgerAlone is the guard on the #4306 fix that had
-// none (#4317): THE SET OF ACCOUNTS TO PULL COMES FROM THE BLOCK LEDGER.
+// none (#4317): THE ACCOUNTS A BLOCK CHANGED ARE NAMED BY THE BLOCK LEDGER.
 //
-// The auditor's mutation run established that making
-// PulledState.changedAccounts return nil always leaves the whole suite green,
-// while neutering staleAccounts turns TestJoinPullsFromPeersAndPromotes red.
-// The single join test is carried entirely by the BPT page-diff backstop, so
-// blockLedger, blockLedgerOf, ChangedAccounts-as-called and MaxLedgerSpan are
-// unconstrained: any of them can be broken and nothing notices.
+// The join walks the peer's whole BPT once and processes every block-ledger
+// record from the start of its pull, in order (executor spec, "Sync", "The
+// algorithm", steps 1-2; #4438). Once the walk has covered the tree, a block's
+// changes reach the node only through that block's record. So this test runs
+// the join in two phases. The first lets the walk cover the tree. The second
+// takes the peers' BPT pages away, has the network create an account the node
+// has never heard of, and requires the node to pull it: only the record of the
+// block that created it can name it.
 //
-// The reason that test cannot see the walk is a construction mismatch. It
-// starts the join on emptyDb(), so localBlock() is 0 and the round-one full
-// scan answers every question. The daemon never creates that configuration:
-// it joins a node that HAS state (cmd/accumulated/run/dagbft.go, joining :=
-// lastBlock > 0).
-//
-// So this test runs the join in two phases. The first is the ordinary join,
-// with the page diff available, and it exists only to produce the state the
-// second phase starts from: a node holding the partition at a block. The
-// second takes the backstop away, moves the network on, and requires the node
-// to follow it. Only the block ledger can say what those blocks changed.
+// A NEW account is the discriminating case: an account the join already
+// asked for could be re-pulled for another reason (a retry), a name that has
+// never been seen can only come from the record.
 func TestJoinKeepsUpFromTheBlockLedgerAlone(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
@@ -141,30 +165,17 @@ func TestJoinKeepsUpFromTheBlockLedgerAlone(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Phase one: the ordinary join, only so that phase two starts where a
-	// daemon starts one -- from a node that holds the partition at a block.
-	var promoted bool
-	for round := 0; round < 40 && !promoted; round++ {
+	// Phase one: the walk covers the tree. The partition is small, so one
+	// round's pages do; a few more rounds let the records run on.
+	for round := 0; round < 5; round++ {
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
 		sim.StepN(3)
-		_, promoted, err = state.Matched(ctx)
-		require.NoError(t, err)
 	}
-	require.True(t, promoted, "the join never caught up, so phase two has no state to start from")
-	require.NotZero(t, sources.served.Load(), "the page diff never ran in phase one")
-
+	require.NotZero(t, sources.served.Load(), "the walk was never served a page in phase one")
 	require.NotNil(t, balanceOf(t, local, tokens), "the join did not pull %v at all", tokens)
 
 	// Phase two: no peer will page its BPT from here on, and the network
 	// creates an account this node has never heard of.
-	//
-	// A NEW account is the discriminating case. The join retries what it
-	// refused for the life of the process (PulledState.refused), so an account
-	// it has already asked for once goes on being re-pulled at its newest
-	// state whether or not anything names it — which is why following a
-	// balance would prove nothing here. A name that has never been in that set
-	// can only arrive from the block ledger's record of the block that created
-	// it.
 	sources.refuse.Store(true)
 	servedBefore := sources.served.Load()
 
@@ -193,40 +204,21 @@ func TestJoinKeepsUpFromTheBlockLedgerAlone(t *testing.T) {
 		})
 	}
 
-	// No page was served in phase two. Whether the page diff was ASKED is
-	// not pinned: the spec runs it on the first round and on a cadence after
-	// that, and phase two is shorter than the cadence, so requiring an ask
-	// here pinned a cadence inside a window shorter than the cadence and was
-	// red for that reason alone. The refusal is armed either way; what the
-	// test proves is that with no page served, the block ledger alone named
-	// the new account.
-	require.Equal(t, servedBefore, sources.served.Load(), "a BPT page was served after the backstop was taken away")
-
+	require.Equal(t, servedBefore, sources.served.Load(), "a BPT page was served after the pages were taken away")
 	require.True(t, held,
-		"the node never pulled %v. With no BPT page diff and no earlier refusal to retry, "+
+		"the node never pulled %v. With no BPT page and no earlier refusal to retry, "+
 			"only the block ledger can say that a block created it (#4306)", savings)
 }
 
-// TestJoinWalksTheBlockLedgerPast128Blocks is #4356: a join that lasts more
-// than MaxLedgerSpan blocks still takes its changed set from the block ledger.
-//
-// PulledState.localBlock answers the block the executor stood at when the join
-// STARTED, and nothing moves it while the join runs. changedAccounts measures
-// the walk's span from there, so once the peers are more than 128 blocks past
-// that block every round is wide and walks nothing: the join runs on the BPT
-// page diff alone, every round, for the rest of its life. The peers move on
-// about a block a second, so that is any join longer than two minutes.
-//
-// The span the walk wants is since the block this node's state is at now, not
-// since the block it started from. This is TestJoinKeepsUpFromTheBlockLedgerAlone
-// with the network run more than 128 blocks past where the join started. After
-// phase one the node's state is a few blocks behind its peers, so a walk from
-// there is short; a walk from where the join started is not taken at all.
-//
-// It does not require the page diff to be attempted in phase two: a join that
-// walks the ledger has no reason to page on every round, and one that found
-// what it wanted in the first round never gets to the backstop's cadence.
-func TestJoinWalksTheBlockLedgerPast128Blocks(t *testing.T) {
+// TestJoinFollowsTheRecordsAcrossAnyNumberOfBlocks: the records are processed
+// from the last one processed through the peer's block, however many blocks
+// that is. Before #4438 a round measured a span and, past 128 blocks
+// (MaxLedgerSpan), walked no block ledger at all and fell back to the page
+// diff for the rest of the join (#4356). There is no span now: this is
+// TestJoinKeepsUpFromTheBlockLedgerAlone with the join paused for more than
+// 128 blocks between its rounds, and the account created in them still
+// reaches the node from the records alone.
+func TestJoinFollowsTheRecordsAcrossAnyNumberOfBlocks(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -269,8 +261,6 @@ func TestJoinWalksTheBlockLedgerPast128Blocks(t *testing.T) {
 		Router:  sim.S.Router(),
 	}}
 
-	// The join starts where a node holding only its genesis network accounts
-	// starts: its executor has executed nothing, so localBlock is zero.
 	local := genesisOf(t, sim, "BVN0")
 	state, err := join.NewState(join.StateOptions{
 		Partition: part,
@@ -279,30 +269,24 @@ func TestJoinWalksTheBlockLedgerPast128Blocks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The network runs on past one walk's reach of where the join started,
-	// as it does under any join that lasts more than a couple of minutes.
-	sim.StepN(join.MaxLedgerSpan + 20)
-	require.Greater(t, sim.S.BlockIndex("BVN0"), uint64(join.MaxLedgerSpan),
-		"the network is not %d blocks past where the join started", join.MaxLedgerSpan)
-
-	// Phase one: the ordinary join, with the page diff available, so that
-	// phase two starts from a node that holds the partition at a block.
-	var promoted bool
-	for round := 0; round < 40 && !promoted; round++ {
+	// Phase one: the walk covers the tree.
+	for round := 0; round < 5; round++ {
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
 		sim.StepN(3)
-		_, promoted, err = state.Matched(ctx)
-		require.NoError(t, err)
 	}
-	require.True(t, promoted, "the join never caught up, so phase two has no state to start from")
-	require.NotZero(t, sources.served.Load(), "the page diff never ran in phase one")
+	require.NotZero(t, sources.served.Load(), "the walk was never served a page in phase one")
 	require.NotNil(t, balanceOf(t, local, tokens), "the join did not pull %v at all", tokens)
+
+	// The join pauses while the network runs on well past what the old
+	// span allowed.
+	const paused = 150
+	before := sim.S.BlockIndex("BVN0")
+	sim.StepN(paused)
+	require.Greater(t, sim.S.BlockIndex("BVN0")-before, uint64(128), "the network did not run 128 blocks past the join")
 
 	// Phase two: no peer will page its BPT, and the network creates an
 	// account this node has never heard of. Only the block ledger's record of
-	// the block that created it can name it (see
-	// TestJoinKeepsUpFromTheBlockLedgerAlone for why a new account is the
-	// discriminating case).
+	// the block that created it can name it.
 	sources.refuse.Store(true)
 	servedBefore := sources.served.Load()
 
@@ -331,12 +315,10 @@ func TestJoinWalksTheBlockLedgerPast128Blocks(t *testing.T) {
 		})
 	}
 
-	require.Equal(t, servedBefore, sources.served.Load(), "a BPT page was served after the backstop was taken away")
+	require.Equal(t, servedBefore, sources.served.Load(), "a BPT page was served after the pages were taken away")
 	require.True(t, held,
-		"the node never pulled %v. The network is more than %d blocks past the block the join "+
-			"started from, so every round measured from there is wide and walks no block ledger; "+
-			"the walk must start from the block the node's state is at now (#4356)",
-		savings, join.MaxLedgerSpan)
+		"the node never pulled %v: the records after a pause of %d blocks were not all processed (#4356)",
+		savings, paused)
 }
 
 // balanceOf is the balance a store holds for a token account, or nil if it

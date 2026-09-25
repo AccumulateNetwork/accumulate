@@ -140,10 +140,10 @@ func TestTheWritesThatMadeEmptyLeavesMakeNone(t *testing.T) {
 // answer carrying one is a lie. It is refused as that source's failure — never
 // kept, never a reason to drop the name — and the next source is asked.
 func TestAPeerServingALeafWithNoBodyIsRefused(t *testing.T) {
-	src, root, block, part, _, void, bodied, partitionID := mainlessFixture(t)
+	src, _, _, part, _, void, bodied, partitionID := mainlessFixture(t)
 	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
 	liar := bodyless{Source: honest, receiptOf: bodied}
-	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
+	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 
 	fetch := func(t *testing.T, srcs []Source, u *url.URL) (int, error) {
 		t.Helper()
@@ -151,7 +151,7 @@ func TestAPeerServingALeafWithNoBodyIsRefused(t *testing.T) {
 		batch := dst.Begin(true)
 		p, i, err := FetchFrom(context.Background(), srcs, batch, u, opts)
 		if err == nil {
-			err = p.Settle(root)
+			err = p.Keep()
 		}
 		require.NoError(t, batch.UpdateBPT())
 		require.NoError(t, batch.Commit())
@@ -194,15 +194,14 @@ func TestAPeerServingALeafWithNoBodyIsRefused(t *testing.T) {
 
 // TestABodyServedUnderAnotherNameIsRefused (#4408, review R4). A liar serves
 // alice/data's body, receipt and chains under nobody/tokens. The pulled state
-// carries alice/data's URL, so it hashes to alice/data's true leaf and passes
-// the leaf check against the anchored root; the store's own URL check then
-// fired at commit, where it is a panic, and took the joining node down. A body
-// that does not name the account asked for is refused at the pull, and the
-// next source is asked.
+// carries alice/data's URL, so it hashes to alice/data's true leaf; the
+// store's own URL check then fired at commit, where it is a panic, and took
+// the joining node down. A body that does not name the account asked for is
+// refused at the pull, and the next source is asked.
 func TestABodyServedUnderAnotherNameIsRefused(t *testing.T) {
-	src, root, block, part, _, _, bodied, partitionID := mainlessFixture(t)
+	src, _, _, part, _, _, bodied, partitionID := mainlessFixture(t)
 	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
-	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: block}, Partition: part}
+	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 	phantom := url.MustParse("nobody/tokens")
 	liar := swapAll{Source: honest, for_: phantom, other: bodied}
 
@@ -218,7 +217,7 @@ func TestABodyServedUnderAnotherNameIsRefused(t *testing.T) {
 			batch := dst.Begin(true)
 			p, _, err := FetchFrom(context.Background(), c.srcs, batch, phantom, opts)
 			if err == nil {
-				err = p.Settle(root)
+				err = p.Keep()
 			}
 			require.Error(t, err, "a body served under a name it does not carry was kept")
 			require.NoError(t, batch.UpdateBPT())

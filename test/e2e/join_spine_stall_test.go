@@ -12,110 +12,34 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
-	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// #4419. A joining BVN whose Directory peers cannot serve an anchor signed --
-// the rolling restart of #4413: one peer joined by pull and refuses its pulled
-// range, the other is itself joining and refuses everything -- is held at the
-// FIRST entry no peer serves, not at the start of the page that holds it, and
-// says so: which entry, and which peers it asked.
-//
-// Since #4416 the pull brings an anchor's signatures, so a node that joined
-// by pull serves its pulled range signed and nothing stalls. The joined node
-// is therefore made into a peer that joined with an older binary, the one the
-// stall is still possible against, by forgetting what the pull wrote beside
-// each signature of an anchor it did not execute (forgetPulledSignatures, as
-// TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures does).
-//
-// Through the production wiring: join.QueryPeers finds the Directory's query
-// service and addresses each peer by name over the simulator's client; each
-// node answers with its registered querier behind its join's gate.
-func TestAJoinHeldAtAnAnchorNoPeerServesSaysWhereAndWhom(t *testing.T) {
-	const joiner, rebooted = 1, 2
-	sim, p, _, _ := joinADirectoryNodeByPull(t)
-	forgetPulledSignatures(t, p.NodeDatabase(joiner))
+// A joining BVN node collects its partition's own anchors from its
+// validators (executor spec, "Sync", "The algorithm", step 3; #4438), so a
+// Directory pool with holes in it no longer holds it up. What holds it is its
+// own partition's validators not signing: here one of BVN0's three nodes
+// stops and another restarts, so the joining node's own sequencer is never
+// asked (#4303), the stopped one answers nothing, and the one that answers
+// signs alone where the partition's threshold is two. The anchor is produced and no quorum
+// signed it, and the production join says so on the gauge -- in the join's
+// round and in the root watch's read (#4419, review F2).
+func TestAJoinHeldAtAnAnchorItsValidatorsDoNotSignSaysSo(t *testing.T) {
+	sim, _, _, _ := joinADirectoryNodeByPull(t)
 	ctx := context.Background()
-	dnPool := DnUrl().JoinPath(AnchorPool)
-	bvn := PartitionUrl("BVN0")
-	authority, err := anchorsrc.FromStore(sim.S.Partition("BVN0").NodeDatabase(0), bvn)
-	require.NoError(t, err)
-
-	// The first entry the joined node will not serve, asked one at a time of
-	// that node alone.
-	addr := api.ServiceTypeQuery.AddressFor(Directory).Multiaddr()
-	joined := api.Querier2{Querier: sim.S.Services().ForPeer(p.NodePeerID(joiner)).ForAddress(addr)}
-	chain, err := joined.QueryChain(ctx, dnPool, &api.ChainQuery{Name: "main"})
-	require.NoError(t, err)
-	first := chain.Count
-	for i := uint64(0); i < chain.Count; i++ {
-		one, expand := uint64(1), true
-		_, err := joined.QueryChainEntries(ctx, dnPool, &api.ChainQuery{
-			Name: "main", Range: &api.RangeOptions{Start: i, Count: &one, Expand: &expand},
-		})
-		if err != nil {
-			require.True(t, errors.Is(err, errors.NotReady), "entry %d: %v", i, err)
-			first = i
-			break
-		}
-	}
-	require.Less(t, first, chain.Count, "precondition: the joined node refuses some of its pulled range")
-	require.NotZero(t, first%anchorsrc.DefaultPageSize,
-		"precondition: the first refused entry (%d) is not at a page boundary, or the page boundary and the entry cannot be told apart", first)
-	t.Logf("dn.acme/anchors: %d entries; the joined node refuses from entry %d", chain.Count, first)
-
-	// The only other Directory node restarts, and refuses everything while it
-	// joins. The reader is node 0, which never asks itself.
-	p.RestartNode(rebooted)
-	peers := &join.QueryPeers{Client: sim.S.Services(), Network: t.Name(), Self: p.NodePeerID(0)}
-	querier := peers.Querier(DnUrl())
-	ring, ok := querier.(anchorsrc.Peers)
-	require.True(t, ok, "the join's querier says how many peers it asks and which")
-	require.Equal(t, 2, ring.PeerCount(ctx))
-
-	src, err := anchorsrc.New(querier, dnPool, bvn, authority)
-	require.NoError(t, err)
-	src.Backfill = chain.Count // the whole chain: the window is not the question here
-	var verified int
-	src.OnAnchor = func(*url.URL, uint64, [32]byte) { verified++ }
-
-	for read := 1; read <= 2; read++ {
-		err = src.Read(ctx)
-		require.Error(t, err)
-		require.True(t, errors.Is(err, errors.NotReady), "%v", err)
-		st, held := src.Stalled()
-		require.True(t, held, "read %d: the read is held and does not say so", read)
-		t.Logf("read %d: %d BVN0 anchors verified; held at entry %d, asked %v: %v", read, verified, st.Entry, st.Asked, st.Err)
-		require.Equal(t, first, st.Entry, "read %d: held at the page's start, not at the first entry no peer serves", read)
-		require.ElementsMatch(t, []string{p.NodePeerID(joiner).String(), p.NodePeerID(rebooted).String()}, st.Asked,
-			"read %d: the peers asked are named", read)
-	}
-
-	// The production join reads it the same way, and says so on the gauge
-	// (review F2): a BVN0 node restarts, and the join the simulator builds
-	// for it, as the daemon does, runs its round. Directory node 0 restarts
-	// too, so no Directory peer the BVN0 join can ask serves entry 25 signed.
-	p.RestartNode(0)
 	b := sim.S.Partition("BVN0")
-	const bvnJoiner = 1
+	const bvnJoiner, other = 1, 2
+
+	b.StopNode(other)
+	b.RestartNode(bvnJoiner)
+	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
+	_ = b.NodeJoinState(bvnJoiner).Pull(ctx)
+	require.Greater(t, spineStalledGauge(t, "BVN0"), float64(0), "the join's round does not report the stall")
 
 	// Diverged, the root watch's read after the handoff.
 	b.RestartNode(bvnJoiner)
 	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
-	_, _, err = b.NodeJoinState(bvnJoiner).Diverged(ctx)
-	require.Error(t, err)
-	require.Equal(t, float64(first), spineStalledGauge(t, "BVN0"), "the root watch's read does not report the stall")
-
-	// Pull, the join's round.
-	b.RestartNode(bvnJoiner)
-	require.Equal(t, float64(-1), spineStalledGauge(t, "BVN0"), "a join built fresh is not stalled")
-	_ = b.NodeJoinState(bvnJoiner).Pull(ctx)
-	require.Equal(t, float64(first), spineStalledGauge(t, "BVN0"), "the join's round does not report the stall")
+	_, _, _ = b.NodeJoinState(bvnJoiner).Diverged(ctx)
+	require.Greater(t, spineStalledGauge(t, "BVN0"), float64(0), "the root watch's read does not report the stall")
 }
 
 // spineStalledGauge is accumulate_join_spine_stalled_entry for a partition,

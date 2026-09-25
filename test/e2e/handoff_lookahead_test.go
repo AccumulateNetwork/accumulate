@@ -127,7 +127,7 @@ func handoffLookahead(t *testing.T, sendWhileJoin bool) {
 	// block the pull matches is always behind the last block collected, and
 	// the handoff produces several buffered groups -- eight in the run.
 	const maxRounds = 200
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		step(3, sendWhileJoin)
 		if round >= maxRounds {
 			cancel()

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,9 +18,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -87,24 +91,62 @@ func TestANodeHoldingPoolEntriesWithNoMessageJoins(t *testing.T) {
 	})
 }
 
+// TestAFreshBVNNodeJoinsByPullOnBlockchainDB — #4405, Docker run
+// 20260925T011332Z's successor 20260925T020517Z. The same join on the store
+// the network runs: BlockchainDB, at its minimum window. A shallow read of a
+// record older than the window is answered absent, and a block is a commit to
+// it, but a joining node commits once per account it pulls: the anchor pool's
+// messages, taken with the pool while the network ran on, are hundreds of
+// commits old by the handoff. The handoff's first block opens the seed, which
+// read them through the executor's windowed store and failed every time --
+// "load anchor pool main chain entry 595: Message.cc2c….Main not found", the
+// entry moving up as the window did -- while the node held every one of them
+// (the follower's API, which reads deep, served entry 595's message).
+func TestAFreshBVNNodeJoinsByPullOnBlockchainDB(t *testing.T) {
+	dir := t.TempDir()
+	open := func(partition *PartitionInfo, node int, _ logging.Logger) keyvalue.Beginner {
+		db, err := bcdb.Open(filepath.Join(dir, partition.ID, fmt.Sprint(node)))
+		require.NoError(t, err)
+		require.NoError(t, db.SetMergeLag(20))
+		t.Cleanup(func() { _ = db.Close() })
+		return db
+	}
+	// Enough accounts that pulling them is many more commits than the
+	// window, as a live network's state is.
+	// The validators hold them and the fresh node does not, so its walk
+	// pulls each, one commit apiece.
+	many := func(sim *Sim, part *simulator.Partition, fresh int, _ func()) {
+		alice := url.MustParse("alice")
+		for n := 0; n < part.NodeCount(); n++ {
+			if n == fresh {
+				continue
+			}
+			for i := 0; i < 100; i++ {
+				MakeAccount(t, part.NodeDatabase(n), &TokenAccount{Url: alice.JoinPath(fmt.Sprintf("t%d", i)), TokenUrl: AcmeUrl()})
+			}
+		}
+	}
+	freshNodeJoinsByPull(t, "BVN0", many, simulator.WithDatabase(open))
+}
+
 // freshNodeJoinsByPull stands the follower's node of the partition on a
 // genesis store, lets the network run, drops what the node collected (a
 // process start), optionally damages its store, and runs the production join
 // under load. The node must hand off, and hold no entry of a spine account's
 // transaction chain without the message behind it.
-func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, part *simulator.Partition, node int, send func())) {
+func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, part *simulator.Partition, node int, send func()), opts ...simulator.Option) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
 
 	net, _ := networkWithAFollower(t.Name(), 1, 3)
-	sim := NewSim(t,
+	sim := NewSim(t, append([]simulator.Option{
 		simulator.WithNetwork(net),
 		simulator.Genesis(GenesisTime),
 		simulator.IgnoreDeliverResults(),
 		simulator.IgnoreCommitResults(),
 		simulator.BPTHistoryDepth(1024),
-	)
+	}, opts...)...)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN0")
 
@@ -145,7 +187,7 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 200
-	stepping := &steppingState{State: part.NodeJoinState(fresh), step: func(round int) {
+	stepping := &steppingState{cancel: cancel, State: part.NodeJoinState(fresh), step: func(round int) {
 		if round%5 == 0 {
 			send()
 		}
@@ -165,7 +207,10 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 		Peers:     &join.APIPeers{Partition: partition, Client: sim.S.Services(), Network: t.Name()},
 		Retry:     time.Millisecond,
 	})
-	missing := entriesWithNoMessage(t, part.NodeDatabase(fresh), partition)
+	// Read through Deep: a windowed store (BlockchainDB) calls a record
+	// older than its window absent to a shallow read, and "held" is what
+	// the store has, not what a shallow read reaches.
+	missing := entriesWithNoMessage(t, part.NodeDatabase(fresh).Deep(), partition)
 	require.NoError(t, err, "a fresh %s node did not join within %d pull rounds", partition, maxRounds)
 	require.Equal(t, join.Joined, outcome)
 	require.False(t, part.Joining(fresh))
@@ -181,7 +226,7 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	}
 	sim.StepN(10)
 	require.Empty(t, missing, "the joined node holds spine entries with no message behind them")
-	require.Empty(t, entriesWithNoMessage(t, part.NodeDatabase(fresh), partition),
+	require.Empty(t, entriesWithNoMessage(t, part.NodeDatabase(fresh).Deep(), partition),
 		"after executing, the node holds spine entries with no message behind them")
 	require.Empty(t, anchorsNotRecordedAsByAValidator(t, part.NodeDatabase(fresh), part.NodeDatabase(0), partition),
 		"the joined node holds pool anchors without what executing them wrote (#4416)")

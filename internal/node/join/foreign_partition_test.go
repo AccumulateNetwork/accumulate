@@ -24,6 +24,7 @@ import (
 // routingSources answers with the partition it is told to, so a test can put an
 // account somewhere other than the joining node's own partition.
 type routingSources struct {
+	noValidators
 	partition *url.URL
 }
 
@@ -57,7 +58,7 @@ func quietState(t *testing.T, partition *url.URL, srcs Sources) *PulledState {
 // leaves the anchored series, and because the leaf is durable a restart does
 // not clear it -- the node can never join again without wiping its database.
 //
-// The account must therefore be DROPPED and not refused. A refusal is retried
+// The account must therefore be DROPPED and not owed. What is owed is asked again
 // for the life of the process, and this name is never going to become this
 // partition's.
 func TestFetch_DropsAnAccountOfAnotherPartition(t *testing.T) {
@@ -66,41 +67,34 @@ func TestFetch_DropsAnAccountOfAnotherPartition(t *testing.T) {
 	elsewhere := protocol.PartitionUrl("BVN1")
 
 	s := quietState(t, here, &routingSources{partition: elsewhere})
+	p := newSyncing()
 
-	s.spine = true // the spine is not what this is about
-	s.fetchPass(ctx, []*url.URL{
-		protocol.AccountUrl("alice", "tokens"),
-	})
-
-	require.Nil(t, s.pass, "nothing of another partition is ever pulled")
-	require.Empty(t, s.refused,
-		"an account of another partition is dropped, not refused: refusing it asks "+
+	require.Equal(t, dropped, s.pullOne(ctx, p, protocol.AccountUrl("alice", "tokens")),
+		"nothing of another partition is ever pulled")
+	require.Empty(t, p.retry,
+		"an account of another partition is dropped, not owed: owing it asks "+
 			"every peer for it again every round, for the life of the process")
 }
 
-// TestFetch_StillRefusesAnAccountOfThisPartition is the control on the test
-// above. Without it, "refused is empty" would also pass if fetchPass had stopped
-// refusing anything at all, and the assertion would prove nothing.
-func TestFetch_StillRefusesAnAccountOfThisPartition(t *testing.T) {
+// TestFetch_StillOwesAnAccountOfThisPartition is the control on the test
+// above. Without it, "nothing is owed" would also pass if pullOne had stopped
+// owing anything at all, and the assertion would prove nothing.
+func TestFetch_StillOwesAnAccountOfThisPartition(t *testing.T) {
 	ctx := context.Background()
 	here := protocol.PartitionUrl("BVN0")
 
 	// Routed here, but with no source that can answer, so the fetch fails the
 	// ordinary way and the account is asked for again next round.
 	s := quietState(t, here, &routingSources{partition: here})
+	p := newSyncing()
 
-	s.spine = true // the spine is not what this is about
-	s.fetchPass(ctx, []*url.URL{
-		protocol.AccountUrl("alice", "tokens"),
-	})
-
-	require.Nil(t, s.pass)
-	require.Len(t, s.refused, 1,
-		"an account of this partition that could not be pulled is retried")
+	require.Equal(t, owed, s.pullOne(ctx, p, protocol.AccountUrl("alice", "tokens")))
+	require.Len(t, p.retry, 1,
+		"an account of this partition that could not be pulled is asked for again")
 }
 
 // TestSourcesFor_RefusesAnotherPartition pins the decision itself, so that the
-// reason fetchPass drops the account is visible where it is made.
+// reason pullOne drops the account is visible where it is made.
 func TestSourcesFor_RefusesAnotherPartition(t *testing.T) {
 	ctx := context.Background()
 	here := protocol.PartitionUrl("BVN0")

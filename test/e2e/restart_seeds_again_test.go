@@ -135,7 +135,7 @@ func TestARestartedSimulatorNodeSeedsAtItsFirstBlock(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stepping := &steppingState{State: part.NodeJoinState(node), step: func(round int) {
+	stepping := &steppingState{cancel: cancel, State: part.NodeJoinState(node), step: func(round int) {
 		sim.StepN(3)
 		if round >= 200 {
 			cancel()

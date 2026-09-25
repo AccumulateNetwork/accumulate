@@ -53,7 +53,15 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	// Only a seed that succeeds counts: one that failed is tried again at the
 	// next open, or that block would run on a cache nothing filled (#4400).
 	// Seeding is idempotent -- what the cache already holds is kept.
-	err = x.seedCacheOnce(block.Batch, params.Index, params.IsLeader)
+	//
+	// The seed reads by position what was written long before this block: the
+	// anchor pool's messages, the synthetic ledger's. A windowed store
+	// (BlockchainDB) answers a shallow read of a record older than its window
+	// as absent, and a joined node's pulled records are hundreds of commits
+	// old at its first block -- the pull commits once per account -- so the
+	// seed reads deep, as every reader that knowingly looks back does
+	// (Database.Deep; #4405, run 20260925T020517Z). It only reads.
+	err = x.seedDeep(params.Index, params.IsLeader)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("seed synthetic cache: %w", err)
 	}

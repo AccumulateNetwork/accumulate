@@ -129,7 +129,7 @@ func TestARollingRestartOfTheDirectoryLeavesItsAnchorsServable(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		const maxRounds = 200
-		stepping := &steppingState{State: p.NodeJoinState(node), step: func(round int) {
+		stepping := &steppingState{cancel: cancel, State: p.NodeJoinState(node), step: func(round int) {
 			if round%5 == 0 {
 				send()
 			}
@@ -209,22 +209,16 @@ func TestARollingRestartOfTheDirectoryLeavesItsAnchorsServable(t *testing.T) {
 	bvn := PartitionUrl("BVN0")
 	authority, err := anchorsrc.FromStore(bvnPart.NodeDatabase(0), bvn)
 	require.NoError(t, err)
-	bvnPool, err := anchorsrc.PoolFor(bvn, authority.BvnNames())
-	require.NoError(t, err)
+	bvnPool := DnUrl().JoinPath(AnchorPool)
 	require.True(t, bvnPool.Equal(pool))
 	peers := &join.QueryPeers{Client: sim.S.Services(), Network: t.Name()}
 	readThrough := func(name string, querier api.Querier) {
 		t.Helper()
-		src, err := anchorsrc.New(querier, bvnPool, bvn, authority)
-		require.NoError(t, err)
-		refused := map[uint64]string{}
-		verified := 0
-		src.OnRefused = func(block uint64, err error) { refused[block] = err.Error() }
-		src.OnAnchor = func(*url.URL, uint64, [32]byte) { verified++ }
-		require.NoError(t, src.Read(context.Background()), "%s cannot serve dn.acme/anchors", name)
+		verified, refused, err := readPoolAnchors(context.Background(), querier, bvnPool, bvn, authority, 4)
+		require.NoError(t, err, "%s cannot serve dn.acme/anchors", name)
 		require.Empty(t, refused, "%s serves anchors that do not verify", name)
-		require.NotZero(t, verified)
-		t.Logf("%s: %d BVN0 anchors, all verified", name, verified)
+		require.NotZero(t, len(verified))
+		t.Logf("%s: %d BVN0 anchors, all verified", name, len(verified))
 	}
 	readThrough("the Directory's peers", peers.Querier(dn))
 

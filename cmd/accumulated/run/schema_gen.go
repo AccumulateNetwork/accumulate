@@ -391,6 +391,15 @@ func init() {
 				},
 			},
 			{
+				Name:        "JoinRunningNetwork",
+				Description: "says this node is being added to a partition that is already running, so a store holding only genesis joins instead of executing from genesis (#4340). A node that has executed a block of its own joins whatever this says",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
+				},
+			},
+			{
 				Name:        "BlockInterval",
 				Description: "is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself",
 				Optional:    true,
@@ -480,6 +489,15 @@ func init() {
 				Type: &schema.PointerType{
 					TypeBase: schema.TypeBase{},
 					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
+			},
+			{
+				Name:        "JoinRunningNetwork",
+				Description: "says this node is being added to a partition that is already running (#4340)",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeBool},
 				},
 			},
 			{

@@ -42,6 +42,7 @@ func (p partOpts) apply(cfg *Config) error {
 			NumWorkers:           p.NumWorkers,
 			ExecutionShards:      p.ExecutionShards,
 			BPTHistoryDepth:      p.CoreValidatorConfiguration.BPTHistoryDepth,
+			JoinRunningNetwork:   p.CoreValidatorConfiguration.JoinRunningNetwork,
 			DAGGCDepth:           p.DagGcDepth,
 			BlockInterval:        p.BlockInterval,
 		},

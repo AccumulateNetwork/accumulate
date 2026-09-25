@@ -46,6 +46,7 @@ type Node struct {
 	join       *joinState
 	nodeState  *nodeState
 	joinState  *join.PulledState
+	pullHook   func()
 	stopped    bool
 	conductor  *crosschain.Conductor
 	synthCache *synthcache.Cache

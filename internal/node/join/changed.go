@@ -17,13 +17,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// MaxLedgerSpan is how many blocks of block ledger one round walks. The walk
-// is one call per block, so a node joining from genesis against a network at
-// block 35,000,000 would spend its life in the walk and never ask for an
-// account. A join further behind than this takes the BPT page diff instead,
-// which answers the same question in one scan.
-const MaxLedgerSpan = 128
-
 // maxBlockEntries is how many entries of one block's ledger are read per call.
 const maxBlockEntries = 512
 
@@ -56,8 +49,8 @@ const maxBlockEntries = 512
 // Names that cannot be routed are dropped. acc://unknown is the one that
 // occurs: normalize.go gives a SignatureMessage carrying only a hash a TxID
 // whose account is protocol.UnknownUrl(), nothing can route it, and a name
-// that can never be satisfied pins the retry set and disables the page-diff
-// backstop for the life of the process.
+// that can never be satisfied would be asked for again every round for the
+// life of the process.
 func ChangedAccounts(partition *url.URL, entries []*protocol.BlockEntry) []*url.URL {
 	seen := map[string]*url.URL{}
 	add := func(u *url.URL) {
@@ -100,30 +93,11 @@ func Routable(u *url.URL) bool {
 	return !u.Equal(unknown) && !u.Identity().Equal(unknown)
 }
 
-// blockLedger reads the accounts the blocks in (after, through] changed, from
-// a peer, through the block query -- which answers from the block ledger
+// blockLedgerOf reads the accounts one block changed, from a peer, through the
+// block query -- which answers from the block ledger
 // (internal/api/v3/querier.go, queryMinorBlock) and, with EntryRange.Expand
-// false, answers with the (account, chain, index) triples alone.
-//
-// A block the peer has no record of is an empty block, not a failure: an empty
-// block writes nothing, not even its index, so there is nothing for it to have
-// changed.
-func blockLedger(ctx context.Context, q api.Querier2, partition *url.URL, after, through uint64) ([]*protocol.BlockEntry, error) {
-	var all []*protocol.BlockEntry
-	for n := after + 1; n <= through; n++ {
-		entries, err := blockLedgerOf(ctx, q, partition, n)
-		switch {
-		case err == nil:
-			all = append(all, entries...)
-		case errors.Is(err, errors.NotFound):
-			// An empty block, or one the peer has pruned.
-		default:
-			return all, errors.UnknownError.WithFormat("read the block ledger of %v block %d: %w", partition, n, err)
-		}
-	}
-	return all, nil
-}
-
+// false, answers with the (account, chain, index) triples alone. NotFound is a
+// block with no record: an empty block writes nothing, not even its index.
 func blockLedgerOf(ctx context.Context, q api.Querier2, partition *url.URL, block uint64) ([]*protocol.BlockEntry, error) {
 	var out []*protocol.BlockEntry
 	var start uint64

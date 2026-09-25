@@ -246,7 +246,7 @@ func TestReceivedIsThePeersOnARejoinedNodeWhoseStagingIsNot(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 100
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		h.sim.StepN(3)
 		if round >= maxRounds {
 			cancel()

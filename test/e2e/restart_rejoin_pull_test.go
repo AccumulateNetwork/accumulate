@@ -10,8 +10,10 @@ import (
 	"context"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -54,7 +56,7 @@ import (
 // root its receipts end at is proven: it equals a verified anchor's
 // StateTreeAnchor, or the bpt chain's history from one such root to it,
 // read from the peers, hashes into the root chain anchor a later verified
-// anchor signs (anchorsrc.ProveRoot). So a pass served at block N is proven
+// anchor signs (the retired anchorsrc.ProveRoot, removed with #4438). So a pass served at block N is proven
 // once any anchor after N is verified, whether or not block N sent one, and
 // there is no settle bound: a pass is held only until the next verified
 // anchor, or dropped and fetched again when the history has passed it.
@@ -168,33 +170,59 @@ func TestRestartedNodeWithAPopulatedDatabaseResyncs(t *testing.T) {
 	state := p.NodeJoinState(joiner)
 	require.NotNil(t, state)
 
-	var matchedAt uint64
-	var matched bool
-	for round := 0; round < 60 && !matched; round++ {
-		require.NoError(t, state.Pull(ctx), "pull round %d", round)
-		if round == 0 {
-			t.Logf("after the first pull the local root is %x (changed by the spine pull: %v)",
-				bptRoot(t, p.NodeDatabase(joiner)), bptRoot(t, p.NodeDatabase(joiner)) != rootAtStop)
-		}
-
-		// The network runs on while the node pulls, which is the case a
-		// restart always meets: the peers are at a later block every time.
+	// The join, as the daemon runs it, on a partition that has gone IDLE: no
+	// transaction is submitted from here, so the partition anchors only on
+	// its heartbeat, and its head stands most of the time at a block that
+	// sent no anchor. The pulled state cannot be matched by equality there.
+	// The node hands off from the pulled state unproven, executes the quiet
+	// blocks like any node, and is proven at the next heartbeat anchor
+	// (executor spec, "Sync", "Two mismatches"). Before
+	// it, a join that only pulled records waited at the peer's head for an
+	// anchor of that block that never came: 29 releases, every one at a block
+	// that sent no anchor (#4438).
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	const maxRounds = 120
+	stepping := &steppingState{cancel: cancel, State: state, step: func(round int) {
 		sim.StepN(3)
+		if round >= maxRounds {
+			cancel()
+		}
+	}}
+	settler, ok := p.NodeExecutor(joiner).(join.Settler)
+	require.True(t, ok, "the executor must settle staging")
+	_, err = join.Run(runCtx, join.Options{
+		Partition: "BVN0",
+		Buffer:    p.NodeJoin(joiner),
+		Stage:     &join.ExecutorStage{Settler: settler, Staging: p.NodeStaging(joiner), Database: p.NodeDatabase(joiner)},
+		State:     stepping,
+		Peers:     &join.APIPeers{Partition: "BVN0", Client: sim.S.Services(), Network: t.Name()},
+		Retry:     time.Millisecond,
+	})
+	require.NoError(t, err)
 
-		matchedAt, matched, err = state.Matched(ctx)
-		require.NoError(t, err)
+	ad := state.Machine().Get()
+	require.Equal(t, nodestate.StateActive, ad.State,
+		"the restarted node never matched a root its partition signed on an idle partition, so it can never serve again.\n"+
+			"  it stopped at block %d holding root %x; the peers are at block %d",
+		r, rootAtStop, partitionBlock(t, p.NodeDatabase(0), part))
+	require.NotZero(t, ad.VerifiedAnchor)
+	require.False(t, p.Joining(joiner), "the joined node executes")
+	t.Logf("the node was proven at block %d, executing on an idle partition", ad.SinceBlock)
+
+	// Executing from there, it stays on its peers' root chain.
+	sim.StepN(20)
+	var anchors [][]byte
+	for i := 0; i < p.NodeCount(); i++ {
+		View(t, p.NodeDatabase(i), func(batch *database.Batch) {
+			a, err := batch.Account(part.JoinPath(Ledger)).RootChain().Anchor()
+			require.NoError(t, err)
+			anchors = append(anchors, a)
+		})
 	}
-
-	require.True(t, matched,
-		"the restarted node never reached a root the Directory anchored, so it can never hand off and execute again.\n"+
-			"  it stopped at block %d holding root %x, which every peer held too\n"+
-			"  its local root is now %x, and its ledger record says block %d\n"+
-			"  the peers are at block %d and the Directory has anchored BVN0 through block %d\n"+
-			"  nothing it pulled ever settled: it needs only the accounts that change every block, and those are\n"+
-			"  served as of the peer's current block, which is never anchored within the settle window",
-		r, rootAtStop, bptRoot(t, p.NodeDatabase(joiner)), partitionBlock(t, p.NodeDatabase(joiner), part),
-		partitionBlock(t, p.NodeDatabase(0), part), directoryAnchoredThrough(t, sim, "BVN0"))
-	require.NotZero(t, matchedAt)
+	for i := 1; i < len(anchors); i++ {
+		require.Equal(t, anchors[0], anchors[i], "node %d's root chain differs from node 0's after the join", i)
+	}
 }
 
 // partitionBlock is the block a node's state is: the record

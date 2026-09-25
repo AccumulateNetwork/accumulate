@@ -13,13 +13,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -31,8 +31,7 @@ import (
 // bentBy is what the dishonest peer adds to the balance it serves. Any
 // difference at all changes the account's hash, which is the point: the
 // receipt it serves with it is the true one, so the only thing that can catch
-// this is the verifier asking whether the state served hashes into the root
-// the receipt ends at.
+// this is the local root failing to equal any root the Directory anchored.
 const bentBy = 7
 
 // bendingSources serves one account's body bent and everything else honestly,
@@ -44,16 +43,21 @@ const bentBy = 7
 type bendingSources struct {
 	inner  join.Sources
 	target *url.URL
+	bend   bool
 
 	mu     sync.Mutex
 	served int
+}
+
+func (b *bendingSources) ValidatorsOf(ctx context.Context, partition *url.URL) ([]anchorsrc.Validator, error) {
+	return b.inner.ValidatorsOf(ctx, partition)
 }
 
 func (b *bendingSources) Querier(partition *url.URL) api.Querier { return b.inner.Querier(partition) }
 
 func (b *bendingSources) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
 	srcs, partition, err := b.inner.For(ctx, account)
-	if err != nil || !account.Equal(b.target) {
+	if err != nil || !b.bend || !account.Equal(b.target) {
 		return srcs, partition, err
 	}
 	bent := make([]pull.Source, len(srcs))
@@ -99,26 +103,33 @@ func (s *bendingSource) QueryAccount(ctx context.Context, scope *url.URL, query 
 	return rec, nil
 }
 
-// TestJoinRefusesStateThatDoesNotHashIntoTheAnchoredRoot is the assertion the
-// join had no test for (#4318): NOTHING A PEER SERVED THAT DOES NOT HASH INTO
-// THE ANCHORED ROOT IS EVER WRITTEN.
+// TestJoinDoesNotMatchOnStateThatDoesNotHashIntoTheAnchoredRoot: a peer serves
+// alice/tokens with the true receipt and a balance that is not the balance
+// that receipt proves, and the join must never match or promote on it.
 //
-// The verification surface is one call — internal/node/join/state.go,
-// a.pending.Settle(root) in settleBatch. Package pull has adversarial tests, but
-// they drive pull.Account and pull.Settle directly and hold the verifier up on
-// their own, so replacing that one call with pull.Pending.Keep — which writes
-// what a peer served without verifying it — left the entire suite green,
-// TestJoinPullsFromPeersAndPromotes included. The whole of
-// internal/core/bootstrap/pull/verify.go was dead to its only caller and
-// nothing noticed.
+// The join writes what it pulls and proves nothing account by account: its
+// one proof is the whole local root equal to a verified anchor's
+// StateTreeAnchor (executor spec, "Sync", "The algorithm", step 3; #4438). So
+// the bent balance is written -- the assertion this test made before #4438,
+// that it is never written, belonged to the per-account proof the algorithm
+// retired -- and what the proof must do is keep the node from matching while
+// it holds it. The honest arm is the control: the same wiring, the same
+// traffic, the same number of rounds, and it matches, so the bent arm's
+// "never matched" is not a join that could not match anything.
 //
-// So this test does not check that a verifier works. It checks that the JOIN
-// calls one: a peer serves alice/tokens with the true receipt and a balance
-// that is not the balance that receipt proves, and the join must neither write
-// it nor promote on it. #4310 and #4301 both rest on "every account is still
-// verified against the anchored root"; this is what makes that a property of
-// the code rather than of nobody having deleted the line.
-func TestJoinRefusesStateThatDoesNotHashIntoTheAnchoredRoot(t *testing.T) {
+// Every block carries a send, so every block sends an anchor and a match is
+// possible at whatever block the pull stands at.
+func TestJoinDoesNotMatchOnStateThatDoesNotHashIntoTheAnchoredRoot(t *testing.T) {
+	for _, bend := range []bool{true, false} {
+		name := "a peer bends a body"
+		if !bend {
+			name = "control: every peer honest"
+		}
+		t.Run(name, func(t *testing.T) { joinAgainstABentBody(t, bend) })
+	}
+}
+
+func joinAgainstABentBody(t *testing.T, bend bool) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -138,15 +149,17 @@ func TestJoinRefusesStateThatDoesNotHashIntoTheAnchoredRoot(t *testing.T) {
 	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	var ts uint64
-	for i := 0; i < 3; i++ {
+	step := func() {
 		ts++
-		st := sim.BuildAndSubmitTxnSuccessfully(
+		sim.BuildAndSubmitTxnSuccessfully(
 			build.Transaction().For(alice, "tokens").
 				SendTokens(1, 0).To(bob, "tokens").
 				SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
-		sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
+		sim.Step()
 	}
-	sim.StepN(20)
+	for i := 0; i < 20; i++ {
+		step()
+	}
 
 	ctx := context.Background()
 	part := PartitionUrl("BVN0")
@@ -160,13 +173,12 @@ func TestJoinRefusesStateThatDoesNotHashIntoTheAnchoredRoot(t *testing.T) {
 			Router:  sim.S.Router(),
 		},
 		target: tokens,
+		bend:   bend,
 	}
 
 	// What a joining node really holds before it asks anybody anything: its
 	// own genesis network accounts. They are the keys it verifies anchors
-	// against, and they are the one thing it must not take from a peer
-	// (#4301). An empty store is not a case: every node loads genesis before
-	// it joins, and a node with no key to start from cannot verify a root.
+	// against (#4301).
 	local := genesisOf(t, sim, "BVN0")
 	state, err := join.NewState(join.StateOptions{
 		Partition: part,
@@ -175,47 +187,31 @@ func TestJoinRefusesStateThatDoesNotHashIntoTheAnchoredRoot(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	var promoted bool
-	for round := 0; round < 10 && !promoted; round++ {
+	var matched bool
+	for round := 0; round < 30 && !matched; round++ {
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
-		sim.StepN(3)
-		_, promoted, err = state.Matched(ctx)
+		step()
+		step()
+		_, matched, err = state.Matched(ctx)
 		require.NoError(t, err)
 	}
 
+	if !bend {
+		require.True(t, matched, "the control never matched, so the bent arm's refusal to match proves nothing")
+		return
+	}
+
 	// The join really ran: the dishonest peer was asked, and the honest ones
-	// were believed. Without this the assertions below would hold of a join
-	// that did nothing at all.
+	// were believed.
 	require.NotZero(t, sources.timesServed(),
 		"the peer never served the bent account, so nothing was under test")
 	View(t, local, func(batch *database.Batch) {
 		_, err := batch.Account(bob.JoinPath("tokens")).Main().Get()
-		require.NoError(t, err, "the join pulled nothing at all, so it refused nothing")
+		require.NoError(t, err, "the join pulled nothing at all")
 	})
 
-	// The two things a join must never do with state that does not hash into
-	// the root the Directory anchored.
-	require.False(t, promoted,
-		"the join promoted while holding an account no anchored root accounts for")
+	require.False(t, matched,
+		"the join matched while holding an account no anchored root accounts for")
 	require.NotEqual(t, nodestate.StateActive, state.Machine().State(),
-		"the node went ACTIVE on state it did not verify")
-
-	View(t, local, func(batch *database.Batch) {
-		var acct *TokenAccount
-		err := batch.Account(tokens).Main().GetAs(&acct)
-		if errors.Is(err, errors.NotFound) {
-			return // refused and never written, which is the whole ask
-		}
-		require.NoError(t, err)
-
-		// If it is there at all it must be the state that was proven, never
-		// the state that was served.
-		var want *TokenAccount
-		View(t, sim.DatabaseFor(alice), func(peer *database.Batch) {
-			require.NoError(t, peer.Account(tokens).Main().GetAs(&want))
-		})
-		require.Equal(t, 0, acct.Balance.Cmp(&want.Balance),
-			"the join wrote a balance no peer proved: %v, and the peers hold %v",
-			&acct.Balance, &want.Balance)
-	})
+		"the node went ACTIVE on state no anchored root accounts for")
 }

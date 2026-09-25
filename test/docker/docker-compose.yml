@@ -1,12 +1,15 @@
 # Docker Compose for the DAG-BFT soak network
-# 3 BVNs × 4 validators, plus one follower (#4365), plus bootstrap; and a
-# second follower (#4364) that `up` does not start — the chaos walk adds it
+# 3 BVNs × 4 validators, plus one follower (#4365), plus bootstrap; and three
+# late followers, one per BVN (#4364, #4438), that `up` does not start — the
+# chaos walk adds them
 #
 # The header said "8-Node" and "2 BVNs" long after the network went back to
 # three; the shape of record is docker-network.yml, and ../topology.py derives
-# everything from it. Ports 26680..26691 are the twelve validators and 26692
-# is the follower, allocated in that file's declaration order; 26693 is the
-# follower the chaos walk adds (#4364).
+# everything from it. Host ports are allocated in that file's declaration
+# order from 26680: BVN1 validators 26680-26683 and its late follower 26684,
+# BVN2 validators 26685-26688 and its late follower 26689, BVN3 validators
+# 26690-26693, the follower 26694 and BVN3's late follower 26695 (#4364,
+# #4438). Read them from ../topology.py, never from here.
 #
 # Block interval defaults to 1s here (ACC_BLOCK_INTERVAL), not the binary's 3s.
 # A soak exists to reach failures, and at 3s/block every failure that needs
@@ -236,7 +239,7 @@ services:
       - -w=/root/.accumulate/bvn2-1
       - /root/.accumulate/bvn2-1/accumulate.toml
     ports:
-      - "26684:26660"
+      - "26685:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -257,7 +260,7 @@ services:
       - -w=/root/.accumulate/bvn2-2
       - /root/.accumulate/bvn2-2/accumulate.toml
     ports:
-      - "26685:26660"
+      - "26686:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -278,7 +281,7 @@ services:
       - -w=/root/.accumulate/bvn2-3
       - /root/.accumulate/bvn2-3/accumulate.toml
     ports:
-      - "26686:26660"
+      - "26687:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -299,7 +302,7 @@ services:
       - -w=/root/.accumulate/bvn2-4
       - /root/.accumulate/bvn2-4/accumulate.toml
     ports:
-      - "26687:26660"
+      - "26688:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -320,7 +323,7 @@ services:
       - -w=/root/.accumulate/bvn3-1
       - /root/.accumulate/bvn3-1/accumulate.toml
     ports:
-      - "26688:26660"
+      - "26690:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -341,7 +344,7 @@ services:
       - -w=/root/.accumulate/bvn3-2
       - /root/.accumulate/bvn3-2/accumulate.toml
     ports:
-      - "26689:26660"
+      - "26691:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -362,7 +365,7 @@ services:
       - -w=/root/.accumulate/bvn3-3
       - /root/.accumulate/bvn3-3/accumulate.toml
     ports:
-      - "26690:26660"
+      - "26692:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -383,7 +386,7 @@ services:
       - -w=/root/.accumulate/bvn3-4
       - /root/.accumulate/bvn3-4/accumulate.toml
     ports:
-      - "26691:26660"
+      - "26693:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -422,7 +425,7 @@ services:
       - -w=/root/.accumulate/bvn3-5
       - /root/.accumulate/bvn3-5/accumulate.toml
     ports:
-      - "26692:26660"
+      - "26694:26660"
     depends_on:
       init:
         condition: service_completed_successfully
@@ -440,7 +443,7 @@ services:
   #
   # Otherwise identical to bvn3-fol1: the same image, limits and volume, the
   # bootstrap for its peers, and docker-network.yml's entry — declared last,
-  # so its port is 26693 and no validator's port moved — for its key and
+  # so its port is 26695 — for its key and
   # role. Its data directory is bvn3-6.
   bvn3-fol2:
     profiles: ["late-follower"]
@@ -457,7 +460,59 @@ services:
       - -w=/root/.accumulate/bvn3-6
       - /root/.accumulate/bvn3-6/accumulate.toml
     ports:
-      - "26693:26660"
+      - "26695:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  # A late follower on BVN1 (#4438): bvn3-fol2's shape exactly — the
+  # late-follower profile, so `up` does not start it; the add-follower
+  # disturbance starts it, with every other late follower, and removes it with
+  # them. Its data directory is bvn1-5 (fifth node of BVN1), its port 26684.
+  bvn1-fol1:
+    profiles: ["late-follower"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn1-fol1
+    logging: *bounded-logging
+    environment: *node-env
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn1-5
+      - /root/.accumulate/bvn1-5/accumulate.toml
+    ports:
+      - "26684:26660"
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      bootstrap:
+        condition: service_started
+
+  # A late follower on BVN2 (#4438): bvn3-fol2's shape exactly — the
+  # late-follower profile, so `up` does not start it; the add-follower
+  # disturbance starts it, with every other late follower, and removes it with
+  # them. Its data directory is bvn2-5 (fifth node of BVN2), its port 26689.
+  bvn2-fol1:
+    profiles: ["late-follower"]
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: acc-bvn2-fol1
+    logging: *bounded-logging
+    environment: *node-env
+    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    volumes:
+      - network-config:/root/.accumulate
+    command:
+      - -w=/root/.accumulate/bvn2-5
+      - /root/.accumulate/bvn2-5/accumulate.toml
+    ports:
+      - "26689:26660"
     depends_on:
       init:
         condition: service_completed_successfully

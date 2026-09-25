@@ -1,0 +1,263 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
+package anchorsrc
+
+import (
+	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+)
+
+// answering is one validator's sequencer: anchor n is answers[n], whatever
+// number was asked for when lie is set.
+type answering struct {
+	answers map[uint64]*api.MessageRecord[messaging.Message]
+	lie     *api.MessageRecord[messaging.Message]
+}
+
+func (a answering) Sequence(_ context.Context, _, _ *url.URL, n uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	if a.lie != nil {
+		return a.lie, nil
+	}
+	rec, ok := a.answers[n]
+	if !ok {
+		return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", n)
+	}
+	return rec, nil
+}
+
+type validatorList []Validator
+
+func (v validatorList) ValidatorsOf(context.Context, *url.URL) ([]Validator, error) { return v, nil }
+
+// lastAnchor is one peer's anchor ledger, at a sequence number.
+type lastAnchor uint64
+
+func (n lastAnchor) QueryAccount(_ context.Context, scope *url.URL, _ *api.DefaultQuery) (*api.AccountRecord, error) {
+	return &api.AccountRecord{Account: &protocol.AnchorLedger{Url: scope, MinorBlockSequenceNumber: uint64(n)}}, nil
+}
+
+// ledgersAt is the producer's peers, each answering its anchor ledger at the
+// number given.
+func ledgersAt(numbers ...uint64) func(context.Context) ([]AccountReader, error) {
+	return func(context.Context) ([]AccountReader, error) {
+		var out []AccountReader
+		for _, n := range numbers {
+			out = append(out, lastAnchor(n))
+		}
+		return out, nil
+	}
+}
+
+// signedBy is anchor number n of BVN0, for block n, signed by one validator.
+func (f *netFixture) signedBy(t *testing.T, n uint64, root [32]byte, signer int) *api.MessageRecord[messaging.Message] {
+	return f.anchor(t, anchorOpts{source: bvn0(), destination: dn(), block: n, root: root, signers: []int{signer}})
+}
+
+type observed map[uint64][32]byte
+
+func (o observed) record(_ *url.URL, block uint64, root [32]byte) { o[block] = root }
+
+func collectorOver(t *testing.T, f *netFixture, vals validatorList, last uint64) (*Collector, observed) {
+	t.Helper()
+	c, err := NewCollector(bvn0(), f.authority(t), vals, ledgersAt(last))
+	require.NoError(t, err)
+	got := observed{}
+	c.OnAnchor = got.record
+	return c, got
+}
+
+// TestTheCollectorTakesAnAnchorItsValidatorsSignTogether — the anchor of a
+// block is a partition's own, and each validator answers it signed with its
+// own key alone (Sequencer.anchorRecord, #4424). No one answer carries a
+// quorum; the collector counts the distinct members across the answers, to
+// the partition's threshold (executor spec, "Sync", "The algorithm", step 3).
+func TestTheCollectorTakesAnAnchorItsValidatorsSignTogether(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1) // threshold 3 of 4
+
+	vals := func(signers ...int) validatorList {
+		var out validatorList
+		for _, i := range signers {
+			out = append(out, Validator{Name: "v", Sequencer: answering{answers: map[uint64]*api.MessageRecord[messaging.Message]{
+				7: f.signedBy(t, 7, root(7), i),
+			}}})
+		}
+		return out
+	}
+
+	t.Run("three of four validators", func(t *testing.T) {
+		c, got := collectorOver(t, f, vals(0, 1, 2), 7)
+		require.NoError(t, c.Read(ctx))
+		require.Equal(t, observed{7: root(7)}, got)
+		_, held := c.Stalled()
+		require.False(t, held)
+	})
+
+	t.Run("two of four validators", func(t *testing.T) {
+		c, got := collectorOver(t, f, vals(0, 1), 7)
+		require.NoError(t, c.Read(ctx))
+		require.Empty(t, got, "an anchor two of four signed was taken where three are required")
+		st, held := c.Stalled()
+		require.True(t, held, "an anchor produced and not signed by a quorum is where the collector is held")
+		require.Equal(t, uint64(7), st.Entry)
+	})
+
+	t.Run("one validator answering three times", func(t *testing.T) {
+		c, got := collectorOver(t, f, vals(0, 0, 0), 7)
+		require.NoError(t, c.Read(ctx))
+		require.Empty(t, got, "a second answer from one validator is no second signature")
+	})
+}
+
+// TestTheCollectorCountsSignaturesWithinOneAnchor: a validator that answers
+// another body under the same number -- another root for the block -- signs
+// that body, and its signature is not counted toward the honest one; nor do
+// the honest signatures carry the lie.
+func TestTheCollectorCountsSignaturesWithinOneAnchor(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+
+	honest := func(i int) Validator {
+		return Validator{Name: "honest", Sequencer: answering{answers: map[uint64]*api.MessageRecord[messaging.Message]{
+			7: f.signedBy(t, 7, root(7), i),
+		}}}
+	}
+	liar := Validator{Name: "liar", Sequencer: answering{answers: map[uint64]*api.MessageRecord[messaging.Message]{
+		7: f.signedBy(t, 7, root(0x66), 2),
+	}}}
+
+	c, got := collectorOver(t, f, validatorList{honest(0), honest(1), liar}, 7)
+	require.NoError(t, c.Read(ctx))
+	require.Empty(t, got, "two honest signatures and one over another root were counted as three")
+
+	c, got = collectorOver(t, f, validatorList{honest(0), honest(1), liar, honest(3)}, 7)
+	require.NoError(t, c.Read(ctx))
+	require.Equal(t, observed{7: root(7)}, got, "three honest signatures beside a liar did not take the anchor")
+}
+
+// TestTheCollectorRefusesAnAnswerToAnotherNumber: an anchor is asked for by
+// its number, and an answer under another number is not the anchor asked for,
+// however well signed.
+func TestTheCollectorRefusesAnAnswerToAnotherNumber(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+
+	var vals validatorList
+	for i := 0; i < 3; i++ {
+		vals = append(vals, Validator{Name: "v", Sequencer: answering{lie: f.signedBy(t, 99, root(99), i)}})
+	}
+	c, got := collectorOver(t, f, vals, 7)
+	require.NoError(t, c.Read(ctx))
+	require.Empty(t, got, "an anchor answered under number 99 was taken for a number asked before it")
+}
+
+// TestTheCollectorReadsForwardFromJustBeforeTheNewestAnchor: the first read
+// starts collectBackfill anchors before the newest the partition's ledger
+// names -- a node restarted a few blocks behind may match its own state -- and
+// each read takes every anchor produced since, in order, and stops at the
+// first not produced yet.
+func TestTheCollectorReadsForwardFromJustBeforeTheNewestAnchor(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+
+	const newest = 30
+	answers := make([]map[uint64]*api.MessageRecord[messaging.Message], 3)
+	for i := range answers {
+		answers[i] = map[uint64]*api.MessageRecord[messaging.Message]{}
+		for n := uint64(1); n <= newest+3; n++ {
+			answers[i][n] = f.signedBy(t, n, root(byte(n)), i)
+		}
+	}
+	var vals validatorList
+	for i := range answers {
+		vals = append(vals, Validator{Name: "v", Sequencer: answering{answers: answers[i]}})
+	}
+
+	c, got := collectorOver(t, f, vals, newest)
+	require.NoError(t, c.Read(ctx))
+	want := observed{}
+	for n := uint64(newest - collectBackfill); n <= newest+3; n++ {
+		want[n] = root(byte(n))
+	}
+	require.Equal(t, want, got,
+		"the first read starts collectBackfill before the newest anchor and takes what follows")
+	_, held := c.Stalled()
+	require.False(t, held, "a number no validator has produced yet is not a stall")
+
+	for i := range answers {
+		answers[i][newest+4] = f.signedBy(t, newest+4, root(newest+4), i)
+	}
+	require.NoError(t, c.Read(ctx))
+	require.Equal(t, root(newest+4), got[newest+4], "the next read did not go on from where the last stopped")
+}
+
+// TestTheCollectorRefusesAnotherPartitionsAnchor — #4438 F2. A validator's
+// key sits on the Directory and on its BVN at once, so the Directory's anchor
+// for block 7, signed by a quorum of the Directory's validators, passes BVN0's
+// threshold too. A peer that relays it under BVN0's name, answering first,
+// must neither be taken as BVN0's root for block 7 nor hide BVN0's own anchor.
+func TestTheCollectorRefusesAnotherPartitionsAnchor(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+
+	relayed := f.anchor(t, anchorOpts{source: dn(), destination: dn(), block: 7, root: root(0xdd), signers: []int{0, 1, 2}})
+	vals := validatorList{{Name: "relay", Sequencer: answering{lie: relayed}}}
+	for i := 0; i < 3; i++ {
+		vals = append(vals, Validator{Name: "v", Sequencer: answering{answers: map[uint64]*api.MessageRecord[messaging.Message]{
+			7: f.signedBy(t, 7, root(7), i),
+		}}})
+	}
+
+	c, _ := collectorOver(t, f, vals, 7)
+	var seen [][32]byte
+	c.OnAnchor = func(_ *url.URL, _ uint64, r [32]byte) { seen = append(seen, r) }
+	require.NoError(t, c.Read(ctx))
+	require.Contains(t, seen, root(7), "BVN0's own anchor for block 7 was not taken: the relayed one stood in front of it")
+	require.NotContains(t, seen, root(0xdd), "the Directory's anchor was taken as BVN0's")
+}
+
+// TestTheCollectorIsNotPlacedByOnePeersLedger — #4438 F4. The first read is
+// positioned by the producer's anchor ledger, a peer's word. One peer naming a
+// number far above every anchor there is must not place the read there: the
+// lowest any peer names is taken. And a position no validator can answer is
+// said, not held in silence.
+func TestTheCollectorIsNotPlacedByOnePeersLedger(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	var vals validatorList
+	for i := 0; i < 3; i++ {
+		vals = append(vals, Validator{Name: "v", Sequencer: answering{answers: map[uint64]*api.MessageRecord[messaging.Message]{
+			7: f.signedBy(t, 7, root(7), i),
+		}}})
+	}
+	const lie = 1 << 62
+
+	c, err := NewCollector(bvn0(), f.authority(t), vals, ledgersAt(lie, 7))
+	require.NoError(t, err)
+	got := observed{}
+	c.OnAnchor = got.record
+	require.NoError(t, c.Read(ctx))
+	require.Equal(t, observed{7: root(7)}, got, "one peer's ledger placed the read above every anchor there is")
+
+	// Every peer lies: the read cannot be placed right, and it says so.
+	c, err = NewCollector(bvn0(), f.authority(t), vals, ledgersAt(lie))
+	require.NoError(t, err)
+	for i := 0; i < 50; i++ {
+		require.NoError(t, c.Read(ctx))
+	}
+	st, held := c.Stalled()
+	require.True(t, held, "a read placed where no validator answers is held in silence")
+	require.Equal(t, uint64(lie), st.Entry)
+}

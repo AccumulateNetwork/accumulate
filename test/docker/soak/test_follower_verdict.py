@@ -236,5 +236,60 @@ class FollowerVerdict(unittest.TestCase):
         self.assertIn("BVN1->BVN3", rm2, "the stream that stopped is named")
 
 
+# #4438: every late follower is added in one slot and removed together in the
+# next. The ACTIVE lines interleave, and one removal (one set of readings)
+# covers all of them.
+CHAOS_MANY = """\
+2026-09-20T01:00:00Z add-follower acc-bvn1-fol1 (bvn1-fol1, data bvn1-5; key in no committee; databases cleared; join-running-network)
+2026-09-20T01:00:00Z add-follower acc-bvn2-fol1 (bvn2-fol1, data bvn2-5; key in no committee; databases cleared; join-running-network)
+2026-09-20T01:00:01Z add-follower acc-bvn3-fol2 (bvn3-fol2, data bvn3-6; key in no committee; databases cleared; join-running-network)
+2026-09-20T01:01:10Z follower acc-bvn2-fol1 ACTIVE (bvn2=ACTIVE directory=ACTIVE), 70s after it was added
+2026-09-20T01:01:40Z follower acc-bvn1-fol1 ACTIVE (bvn1=ACTIVE directory=ACTIVE), 100s after it was added
+2026-09-20T01:02:00Z follower acc-bvn1-fol1 first root match (source=acc-bvn1-val2 block=640 root=aa), 120s after it was added
+2026-09-20T01:05:00Z follower acc-bvn3-fol2 NEVER ACTIVE: removed 299s after it was added
+2026-09-20T01:05:00Z follower acc-bvn3-fol2 never matched a validator's root before its removal
+2026-09-20T01:05:00Z follower acc-bvn2-fol1 never matched a validator's root before its removal
+2026-09-20T01:05:00Z remove-follower acc-bvn1-fol1 (removal 1)
+2026-09-20T01:05:00Z remove-follower acc-bvn2-fol1 (removal 1)
+2026-09-20T01:05:00Z remove-follower acc-bvn3-fol2 (removal 1)
+"""
+
+
+class SeveralLateFollowers(FollowerVerdict):
+    def setUp(self):
+        super().setUp()
+        for name in ("nodestate.csv", "follower.csv", "submissions.csv",
+                     "readprobe-follower.csv"):
+            os.unlink(os.path.join(self.rd, name))
+        with open(os.path.join(self.rd, "chaos.log"), "w") as f:
+            f.write(CHAOS_MANY)
+
+    def test_each_add_and_remove_gets_a_verdict(self):
+        pass  # the single-follower fixture's assertions; not this one's
+
+    def add_row(self, lines, c):
+        got = [ln for ln in lines if "add-follower %s " % c in ln]
+        self.assertEqual(1, len(got), "\n".join(lines))
+        return got[0]
+
+    def test_one_row_per_follower_and_one_per_removal(self):
+        lines = self.rows()
+        self.assertEqual(3, sum(1 for ln in lines if "add-follower" in ln), "\n".join(lines))
+        rm = [ln for ln in lines if "remove-follower" in ln]
+        self.assertEqual(1, len(rm), "one removal for the slot:\n" + "\n".join(lines))
+        self.assertIn("acc-bvn1-fol1, acc-bvn2-fol1, acc-bvn3-fol2 (removal 1)", rm[0])
+        self.assertIn("unaffected", rm[0])
+
+        b1 = self.add_row(lines, "acc-bvn1-fol1")
+        self.assertIn("ACTIVE 100s after the add", b1)
+        self.assertIn("block 640", b1)
+        b2 = self.add_row(lines, "acc-bvn2-fol1")
+        self.assertIn("ACTIVE 70s after the add", b2, "its ACTIVE line came while another life was open")
+        self.assertIn("first root match not measured", b2)
+        self.assertNotIn("640", b2, "a number from another follower")
+        b3 = self.add_row(lines, "acc-bvn3-fol2")
+        self.assertIn("NEVER ACTIVE", b3)
+
+
 if __name__ == "__main__":
     unittest.main()

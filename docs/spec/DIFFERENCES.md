@@ -309,8 +309,7 @@ is gone.
 
 **Size**: decided by Paul: no fill-in and no kept proof. Every node attempts
 to execute, and a node whose root misses its partition's anchor repairs from
-the block ledger and tries again (executor.md Sync, "One rule for every
-node"). Until #4440 builds that repair for a running node, the node that
+the block ledger and tries again (executor.md Sync, "Two mismatches"). Until #4440 builds that repair for a running node, the node that
 dropped a proof executes the package when the requester's fetch lands. That
 happens only while the source still serves the span, which is its
 `RejoinGrace` of 300 blocks (`synthcache`). Past that the ask is `NotFound`,
@@ -381,24 +380,97 @@ call it).
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
 
 **Against the algorithm (executor.md "Sync", "The algorithm"; 2026-09-25).**
-The code on `issue-4205-lead` departs from it in three places:
+The code on `issue-4205-lead` departed from it in three places; the first two are retired by #4438:
 
-- **It proves each pass, not the final match** (steps 1–3). `PulledState`
-  fetches the accounts the ledger names in passes, requires every account in
-  a pass to be served at one root (`oneRoot`), proves that root
-  (`anchorsrc.ProveRoot`), and holds, drops or refetches the pass
-  (`settlePass`). The algorithm has one proof — the whole local root equal to
-  a signed anchor's — and no per-pass one. On a partition that moves every
-  block the per-pass loop never converges for a node more than a few blocks
-  behind (#4411; runs 20260924T074702Z, 20260924T093936Z, 20260924T111811Z).
-- **The full BPT walk is a backstop, not step 1.** The page diff runs on the
-  first round and on a cadence (§3, #4395); the algorithm pulls every account
-  the tree holds first.
+- **It proves each pass, not the final match** (steps 1–3) — *retired
+  2026-09-25 (#4438, branch `issue-4438-join-follows-the-algorithm`)*.
+  `PulledState` fetched in passes, required one root per pass (`oneRoot`),
+  proved it (`anchorsrc.ProveRoot`) and held, dropped or refetched the pass
+  (`settlePass`); on a partition that moves every block that never converged
+  for a node more than a few blocks behind (#4411). All of it is deleted: the
+  pull writes what it takes, and its one proof is the whole local root equal to
+  the partition's own anchor, collected from its validators (executor.md
+  "Sync" §1–§2).
+- **The full BPT walk is a backstop, not step 1** — *retired 2026-09-25
+  (#4438)*. The page diff on the first round and on a cadence (#4395) is
+  deleted; the pull walks the whole tree from `S` and processes every
+  block-ledger record after `S` in block order, and the walk skips what a
+  record brought current (executor.md "Sync" §3).
 - **It collects before the state exists** (steps 4–5). The DAG service
   buffers every committed group from the restart on, maps the buffer onto
   blocks by leader round (#4362e), stages through Q + 1 at the handoff
   (#4398), and restarts the buffer on an overrun (#4407). The algorithm
   establishes the state and the floor first and stages after.
+
+**Against "Two mismatches" (#4438, branch
+`issue-4438-join-follows-the-algorithm`).** The spec separates a wrong pull
+(the BPT root does not match: pull again, every leaf, executing nothing) from
+a differing execution (the anchor does not match after the root has: repair
+the accounts the block ledger names, move to the next block). Where the code
+departs:
+
+- **The code executes before the pulled root has matched.** It hands off
+  unproven, `BOOTING`, once the walk is done and nothing is owed
+  (`PulledState.Ready`), executes, and treats every mismatch as an anchor
+  mismatch; the root watch (`Diverged`) promotes it at the first executed
+  block whose root equals the partition's signed anchor. The spec executes
+  nothing until the pulled root matches, keeps processing records to the next
+  anchored block, and answers a root mismatch by pulling again. Kept, by
+  decision, until the as-of-block pulls land (#4442).
+- **A repair stops executing, repairs, and hands off again** at the block the
+  repaired ledger names, rather than repairing and moving to the next block;
+  the spec allows this until #4440. A repair reaches back to the last
+  comparison (the last block that matched, or the block handed off at).
+- **Accounts are pulled as the peer holds them now, not as of the block**
+  (#4442), so a block's records bring the tree to that block's root only in
+  a lull.
+- **A root mismatch re-pulls only after a repair from the block ledger
+  brought no match.** The repair after one that did not match walks the tree
+  again (`startRepair`), taking whole every account whose leaf differs from a
+  page's (Paul, 2026-09-25: "the joining node has to pull the accounts
+  again"); the spec re-pulls at the first root mismatch.
+- **Nothing serves BPT interior hashes as of a block** (#4441), so the join
+  compares its root only at anchored blocks and cannot locate a miss by
+  subtree; a re-pull is the whole walk.
+- **Records are read without a receipt** to a signed root, so a peer can
+  drop or add names in a record; the match detects it, the repair or re-walk
+  recovers it.
+- **A leaf no page named is deleted only when every peer answers NotFound**
+  for it (`dropUnnamed`, `forget`); the spec's other way — at a signed
+  block, confirmed by the match that follows — is not built.
+- **Pulls are sequential**, about one account at a time; at 100 tps a block
+  names hundreds of accounts, and a pull slower than the partition changes
+  them does not converge (#4411).
+- **A retaken chain keeps the element-index entries of what it held** (the
+  #4327 shape; #4444). **The backfill past the match does too:**
+  `pull.Backfill` replaces the elements and mark states below the mark but
+  writes an `ElementIndex` only where none is held, so a hash the node held
+  at another position keeps its old index and a hash the chain no longer
+  holds keeps one; a later `AddEntry(unique)` of it is skipped and a proof of
+  it points at the wrong index (#4438 re-review F-8(a); #4444).
+- **Demoting the peers behind a pull that brought no match orders nothing.**
+  `RepairFrom` demotes every peer that served the pull, and with sources
+  asked in rotation every peer serves something in any pull of two accounts
+  or more, so all are demoted alike and the order is unchanged; the spec's
+  "moved to the back of the order" ("Two mismatches", 1) is not achieved
+  (#4438 re-review F-3; #4442).
+- **The repair is the join's only.** A running validator whose anchor differs
+  does not repair (#4440).
+- **The backfill past the match runs inside the root watch**, 64 accounts per
+  check, only while the node is `ACTIVE`, and concurrently with the executor
+  on a running daemon. It writes only below a chain's head and open mark set,
+  and an element index only where none is held. That the writes never meet the
+  executor's has been reasoned, not tested under a concurrent executor; the
+  simulator runs the join and the blocks on one goroutine.
+- **A `BOOTING` node signs and dispatches.** The spec (§6) signs and
+  dispatches block N only if the newest root the node could check matched.
+  Today the conductor signs and sends every block's anchor gated only by
+  `inCommittee()` (`crosschain/conductor.go`), and the executor dispatches
+  synthetic transactions regardless of the node's state
+  (`block_begin.go`); nothing in `internal/core/crosschain` or
+  `internal/core/execute` reads `nodestate` (threat review F7, code review
+  F3). A node executing from an unproven or wrong state therefore signs its
+  roots with its committee key. The gating is #4443.
 
 
 **Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
@@ -510,9 +582,13 @@ runs with the hole.
 per block and restores the one matching the executor's last block on restart
 (consensus.md, "Restart"), so a restarted validator starts at its own round
 rather than zero and certificate catch-up can reach the frontier within
-`DAGGCDepth` (2,000 rounds, about eight minutes at four rounds a second). Not
-done: a node down longer than that is beyond catch-up and only sync can bring
-it back; certificates at or below the checkpoint's round that a later leader
+`DAGGCDepth` (2,000 rounds, about eight minutes at four rounds a second). A
+node joining with no checkpoint is seeded at its first pulled state's leader
+round (#4405, consensus.md "Restart"); before this it ordered from round zero
+and waited for ever on batches no peer held (run `20260925T011332Z`). Not
+done: a node restarted with a checkpoint more than `DAGGCDepth` below the
+frontier is not seeded — `Node.Rejoin` is called only when no checkpoint
+matched — so it is still beyond catch-up (#4405); certificates at or below the checkpoint's round that a later leader
 commits are not pulled by catch-up, so the first block after a rejoin can
 still differ from its peers' — sync must deliver staging and the DAG floor
 together; the stranded condition is a Warn a minute, not a state. The
@@ -599,7 +675,26 @@ still different, or not known:
   `DefaultHorizon` (600) blocks, and there a block this node executed reads
   as one it did not and is skipped (and `ownReceipts`, which reads the
   anchor pool's messages down to the same bound with hard errors, may fail
-  first). A skipped block is a dispatch this node does not make, never a
+  first). **The seed now reads deep** (`Executor.seedDeep`, #4405): the
+  window counts commits, not blocks, and a joining node commits once per
+  account it pulls, so at its first block the pool's messages were hundreds
+  of commits old and every handoff failed `load anchor pool main chain entry
+  N: Message.….Main not found` while the store held them (run
+  `20260925T020517Z`; `TestAFreshBVNNodeJoinsByPullOnBlockchainDB`). The
+  same window hid a record the executor wrote itself one block earlier: after
+  the handoff the join's root watch backfills head-only accounts between
+  blocks, two commits an account and 64 accounts a check, so the local
+  delivery block N queued was absent to block N + 1's drain, which failed
+  before clearing the queue -- every later block with it, and the follower
+  stood at block 731 for ten minutes in the same run. **The drain falls back
+  to a deep read** on a miss (`drainDeliveryQueues`;
+  `TestAJoinedNodeKeepsPaceWhileItBackfills`). Not done: a store whose
+  window counts commits cannot promise any shallow reader of a record older
+  than the last block that it will see it while another writer commits
+  between blocks; every other executor read of a permanent record (a
+  message, a transaction, a chain element) is exposed the same way and was
+  not audited, and one that takes "absent" for an answer rather than an
+  error executes differently from its peers without saying so. A skipped block is a dispatch this node does not make, never a
   wrong one. Two earlier versions on this branch were wrong and are recorded here:
   skipping every block at or below the join block left a restart that fell
   nothing behind with an empty cache — the #4241/#4277 restart hole (review
@@ -699,16 +794,13 @@ and true only in a hand-written test. `Run`'s `found == 0` is now
 unconditionally `NotReady`, which is #4296's rule with nothing to switch it
 off.
 
-**A genesis-only node deployed into a running partition executes from block 1,
-and that is wrong (#4340)**. It reads the same `lastBlock == 1` as the first
-node of a new network and there is no local fact that separates them; the
-difference is whether the partition has moved on, which is a network fact the
-daemon does not ask for. Not reachable by any deployment path today —
-`init` and netsim create every node of a network at once — and filed rather
-than guessed at, because the obvious alternative (let a fresh node join and
-ask) is what #4304 removed: in a fresh network every node is then joining,
-every node refuses every other, and the network starts only when they all time
-out.
+**A genesis-only node deployed into a running partition joins only when its
+configuration says so (#4340).** `join-running-network = true` in the
+core-validator configuration makes it join; nothing sets it but the Docker
+harness's add-follower step. A deployment that forgets it executes from
+block 1 and diverges. Found on the first Docker add-follower run
+(runs/20260925T003825Z): the follower reported ACTIVE at block 2 while the
+network was at 1,100.
 
 **What the wiring does when no peer can answer**: every validator of the
 partition is asked for its staging, and if none can serve any — which is what

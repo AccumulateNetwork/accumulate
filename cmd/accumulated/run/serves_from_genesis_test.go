@@ -57,7 +57,7 @@ func TestAFromGenesisNodeAnswersTheTwoPullReads(t *testing.T) {
 	c := jsonrpc.NewClient(api)
 	ctx := context.Background()
 
-	// The BPT page: what a joining peer's enumerate.Stale reads, and the
+	// The BPT page: what a joining peer's walk reads (enumerate.ReadPage), and the
 	// first of the two `servingFor` refuses while a node is joining.
 	for _, part := range []string{protocol.Directory, "BVN1"} {
 		_, err := c.Query(ctx, protocol.PartitionUrl(part), &apiv3.BptPageQuery{Count: 4})

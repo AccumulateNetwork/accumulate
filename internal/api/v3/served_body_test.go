@@ -25,8 +25,8 @@ import (
 // main state (internal/database/observer_prod.go, hashState), so the check is
 // sha256(body) == Receipt.Start and nothing else.
 //
-// It is the check a joining node makes — pull.Verify's third, the one that
-// says the peer served a true body and not just a true receipt — and it is
+// It is the check a joining node's pull made (the retired pull.Verify's
+// third), the one that says the peer served a true body and not just a true receipt — and it is
 // the one that failed on every anchor ledger on the live twelve-node network
 // of 2026-09-18, which left acc-bvn1-val1 at block 76 while its peers passed
 // 1,099, refusing "the state served does not hash into the anchored root"

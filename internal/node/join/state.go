@@ -11,7 +11,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"log/slog"
-	"strings"
+	"sort"
 	"sync"
 	"time"
 
@@ -24,8 +24,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	bpt "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -38,32 +40,31 @@ import (
 // it for every partition it runs, joining or not. The join reports its own
 // transitions through the same door.
 
-const (
-	// passLimit is how many accounts one pass fetches. Every fetched account
-	// holds an open child batch until the pass settles (pull.MaxHeld), so it
-	// bounds what a pass holds in memory; what is left over is asked for in
-	// the next pass.
-	passLimit = pull.MaxHeld / 2
+// walkPagesPerRound is how many pages of the peer's BPT one round walks. The
+// walk and the block-ledger records share a round, the records first, so a
+// round is bounded by what the walk takes of it and the records keep up with
+// the partition however large its tree is (executor spec, "Sync", "The
+// algorithm", steps 1 and 2).
+const walkPagesPerRound = 8
 
-	// staleEvery is how often the BPT page diff runs regardless of what the
-	// block ledger named. It is the backstop, and a backstop that only runs
-	// when the primary named nothing is not one (#4306).
-	staleEvery = 8
-)
+// walkPageSize is how many leaves one page asks for.
+const walkPageSize = 256
 
-// PulledState is the join's state half (#4293): it pulls what the node lacks
-// from running peers, verified against the root the Directory anchored for the
-// block the peer served it at, and says when the local root equals one of
-// those roots — the block the node then executes from (executor spec, "Sync",
-// steps 3 and 4).
+// PulledState is the join's state half (#4293). It follows the algorithm of
+// the executor spec, "Sync", "The algorithm", steps 1-3:
 //
-// What it pulls is what the BLOCK LEDGER says the blocks changed, read from a
-// peer: every block records (account, chain, index) for every chain it
-// changed, and the state root commits to that record. A block's envelopes name
-// principals, signers and anchor pools — never the system accounts every block
-// changes, and sometimes a name that cannot be routed — so a tree built from
-// them chases a root it can never reach (#4306). The BPT page diff is the
-// backstop, on a cadence and whenever the ledger walk cannot cover the span.
+//  1. The pull starts at the peer's block S. It walks the peer's whole BPT,
+//     page by page, and pulls every account whose leaf this node does not
+//     hold or holds differently; alongside it, it takes the block-ledger
+//     record of every block after S, in block order, and pulls every account
+//     each record names. The walk never overwrites a value the records
+//     wrote: an account a record has brought current is skipped when the walk
+//     reaches it, because the walk's page may be older than that record.
+//  2. Until the match, every new block's record is processed as it comes.
+//  3. The match is the proof: the local root equal to the StateTreeAnchor of
+//     an anchor a quorum of this partition's validators signed (tracker,
+//     anchorsrc). Nothing before it is proven, and nothing before it needs
+//     to be.
 //
 // Every read is addressed at a NAMED PEER. The node's own routed client
 // answers from the node's own store for any service it provides, which for a
@@ -73,16 +74,15 @@ type PulledState struct {
 	db        *database.Database
 	sources   Sources
 
-	// anchors is where this partition's verified roots come from: the pool of
-	// the partition that RECEIVES this one's anchors, because a produced
-	// anchor never lives on its own partition's pool (#4301).
-	anchors *anchorsrc.Source
+	// anchors is where this partition's verified roots come from: its own
+	// anchors, collected from its validators (anchorsrc.Collector).
+	anchors anchorSource
 
 	// authority is the validator sets this node trusts. It is seeded from
 	// this node's OWN store before anything is pulled, and it moves only
-	// when the spine settles: <partition>/network and /globals are spine
-	// accounts, so the definition arrives verified against a root a quorum
-	// signed (#4301).
+	// when the state has matched: <partition>/network and /globals are
+	// pulled like every account, and what the pull writes is proven by the
+	// match and by nothing before it (#4301, #4438).
 	authority *anchorsrc.Authority
 
 	machine *nodestate.Machine
@@ -116,39 +116,119 @@ type PulledState struct {
 	// the local root is no longer the root that matched.
 	matched tracker.Match
 
-	spine bool   // this partition's spine has been pulled and verified
-	round uint64 // how many rounds have fetched, for the backstop's cadence
-	wide  bool   // the last ledger walk could not cover (localBlock, Q]
-
-	// executed is the block this node's EXECUTOR last executed: the number
-	// the daemon logs as lastBlock. It is read once, before anything is
-	// pulled, and never from the store again — see localBlock. After the
-	// handoff it is the last block whose root matched its anchor (HandedOff,
-	// Diverged).
+	// executed is the block this node's EXECUTOR last executed. It is read
+	// once, before anything is pulled, and never from the store again: the
+	// ledger account is one of the accounts the pull overwrites (#4295,
+	// #4344). After the handoff it is the last block whose root matched its
+	// anchor (HandedOff, Diverged).
 	executed uint64
 
-	// synced is the block the pulled state is at: the ledger index of the
-	// last pass whose proven root the whole local root equals. It moves as
-	// the join converges, while executed stands still, and it is where the
-	// ledger walk starts once it is past executed — see localBlock. The
-	// handoff clears it: from there executed is the block the state is at.
-	synced uint64
+	// sync is the pull in progress: nil until the first round starts one, and
+	// again after the handoff, so that a node that syncs again starts a new
+	// pull from the peer's block then.
+	sync *syncing
 
-	// pass is what has been fetched and not yet settled: the peer's CURRENT
-	// state, held until the root its receipts end at is proven — it equals
-	// the StateTreeAnchor of a verified signed anchor, or the bpt chain's
-	// history from one such root to it hashes into the root chain anchor a
-	// later one signs (anchorsrc.ProveRoot). Nothing new is fetched while it
-	// is held, so a pass is never committed over a newer one.
-	pass *pass
+	// provenAt is the last block whose root matched its signed anchor.
+	provenAt uint64
 
-	// refused are the accounts a round could not pull — served at a block the
-	// Directory has not anchored yet, or served by a peer that could not be
-	// verified. They are asked for again next round: an account dropped once
-	// is an account the local root can never account for, and the join would
-	// wait for a match that cannot come.
-	refused []*url.URL
+	// repairFrom, when not zero, is where the next pull starts as a repair
+	// (RepairFrom; startRepair).
+	repairFrom uint64
+
+	// headOnly are the accounts taken by their chain heads alone, whose
+	// entries below the open mark set the node does not hold yet. Once the
+	// state has matched they are backfilled while the node executes
+	// (backfill). It is kept under SystemData too, and read back at start,
+	// so a restart before the backfill ends does not forget them
+	// (markHeadOnly).
+	headOnly map[[32]byte]*url.URL
+
+	// entire are the accounts this node holds whole, every entry of every
+	// chain with the message behind it (backfillOne). A whole pull of one
+	// goes on from what it holds, so it stays entire.
+	entire map[[32]byte]bool
+
+	// pageTurn and sourceTurn rotate which peer a walk page and an account
+	// are asked of first, so no one peer answers every time (#4438 threat
+	// F6).
+	pageTurn   int
+	sourceTurn int
+
+	// served names the peers whose answers the last pull handed off from
+	// took, and demoted counts, per peer, the pulls it served that did not
+	// bring the match (order).
+	served  map[string]bool
+	demoted map[string]int
+
+	// repairs counts the repairs since the last match. A repair from the
+	// block ledger that did not bring a match is followed by one that walks
+	// the tree again (startRepair).
+	repairs int
+
+	// checkedHeld is whether this process has checked the entries the node
+	// already holds on the accounts it takes whole for their messages
+	// (pull.Options.CheckHeld). Once a process.
+	checkedHeld bool
 }
+
+// syncing is one pull: the two cursors of the algorithm, and what the records
+// have brought current.
+type syncing struct {
+	// start is S, the peer's block when the pull started.
+	start uint64
+
+	// last is L, the last block whose block-ledger record has been
+	// processed. It starts at S.
+	last uint64
+
+	// cursor is where the next page of the walk starts, and walked says the
+	// walk has covered the whole tree.
+	cursor [32]byte
+	walked bool
+	pages  int
+
+	// current is every account a processed record named. The walk skips
+	// them: its page may be older than the record (step 1).
+	current map[[32]byte]bool
+
+	// retry is what a pull could not take and must take again: an account
+	// a record named, or a leaf the walk found stale, that no peer served
+	// this time. It is asked for again every round until it is taken or
+	// every peer says it has no leaf for it.
+	retry map[[32]byte]*url.URL
+
+	// spine is whether the partition's spine has been taken whole once.
+	spine bool
+
+	// repair is whether this pull repairs what the node executed
+	// (startRepair).
+	repair bool
+
+	// low is the oldest block the records have been read from: S, or the
+	// block of a walk page served before it (walk). want is the oldest block
+	// they must be read from: a walk page served before low moves want, and
+	// the records are read back to it at most maxRecordsPerRound blocks a
+	// round (readBack).
+	low  uint64
+	want uint64
+
+	// named are the leaves the walk's pages have named, by key hash; a leaf
+	// the node holds that none named is dropped when the walk completes.
+	named map[[32]byte]bool
+
+	// servedBy names the peers whose answers this pull took.
+	servedBy map[string]bool
+
+	// ready is whether the last round left the walk done and nothing owed:
+	// the state stands at last, and the node may execute from there (Ready).
+	ready bool
+}
+
+func newSyncing() *syncing {
+	return &syncing{current: map[[32]byte]bool{}, retry: map[[32]byte]*url.URL{}, named: map[[32]byte]bool{}, servedBy: map[string]bool{}}
+}
+
+func accountKey(u *url.URL) [32]byte { return u.AccountID32() }
 
 // StateOptions are what the state half needs.
 type StateOptions struct {
@@ -209,13 +289,22 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		}
 		s.executed = n
 	}
+	// What an earlier process took by chain heads alone and did not
+	// backfill before it stopped.
+	if err := s.loadHeadOnly(); err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
 	// The validator sets, from THIS NODE'S OWN STORE, before the pull
 	// overwrites anything. This is the trust root: a signature is verified
 	// against a key, not against a root, so nothing has to be fetched before
 	// verification can start. A restart holds the network definition it
 	// executed with and a node started from genesis holds the genesis one
 	// (executor spec, "Sync", step 1; #4301).
-	authority, err := anchorsrc.FromStore(opts.Database, opts.Partition)
+	// Recorded under SystemData, where no pull reaches, and not read from
+	// <partition>/network, an account the pull overwrites before anything is
+	// proven: a node that restarted between a pull and its match would
+	// otherwise trust a peer's validators (#4438 F1).
+	authority, err := anchorsrc.FromTrusted(opts.Database, opts.Partition)
 	if err != nil {
 		// A node that cannot say who the validators are cannot verify a root,
 		// and a join that cannot verify a root is the defect this closes. It
@@ -225,27 +314,35 @@ func NewState(opts StateOptions) (*PulledState, error) {
 			opts.Partition, err)
 	}
 
-	// Producer routing. To verify THIS partition's root the node needs an
-	// anchor this partition PRODUCED, and a produced anchor lives on the
-	// RECEIVING partition's pool: a BVN's in dn.acme/anchors. The Directory
-	// anchors to itself as well as to every BVN, so its own root is in both
-	// pools under the same signatures; the join reads it from a BVN's so
-	// that the copy it takes is a second partition's. What the old code
-	// could not do was not obtain the Directory's root — it was check who
-	// signed it (#4301).
-	pool, err := anchorsrc.PoolFor(opts.Partition, authority.BvnNames())
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("find the pool that holds %v's anchors: %w", opts.Partition, err)
-	}
-	// Read from a peer that has executed those anchors — never from this
-	// node, whose anchor pool is the one the pull has not filled yet (#4303).
+	// The partition's OWN anchors, collected from its validators: each
+	// signs its own copy of the anchor of block B as B closes, and the anchor
+	// is taken when distinct members reaching the partition's threshold have
+	// signed it (executor spec, "Sync", "The algorithm", step 3). Not the
+	// Directory's copy: that reaches the Directory's pool only after the
+	// Directory executes it, far too late to match a partition that moves
+	// every block (Paul, 2026-09-25). The Directory's own anchors are
+	// collected from the Directory's validators the same way. Never from this
+	// node (#4303).
 	s.authority = authority
-	s.anchors, err = anchorsrc.New(opts.Sources.Querier(pool.Identity()), pool, opts.Partition, authority)
+	sources := opts.Sources
+	pool := opts.Partition.JoinPath(protocol.AnchorPool)
+	collector, err := anchorsrc.NewCollector(opts.Partition, authority, sources, func(ctx context.Context) ([]anchorsrc.AccountReader, error) {
+		srcs, _, err := sources.For(ctx, pool)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]anchorsrc.AccountReader, len(srcs))
+		for i, src := range srcs {
+			out[i] = src
+		}
+		return out, nil
+	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	s.anchors.OnAnchor = track.Observe
-	s.anchors.OnRefused = s.anchorRefused
+	collector.OnAnchor = track.Observe
+	collector.OnRefused = s.anchorRefused
+	s.anchors = collector
 
 	// Watchable from the moment the node starts joining, and on every change.
 	// The daemon has already reported this partition's state — the series
@@ -264,15 +361,24 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	return s, nil
 }
 
-// mSpineStalled is the anchor-pool entry this node's anchor source is held
-// at, or -1. A join held there reads no root after it and so settles nothing
-// after it, while every other sign of the join says only BOOTING (#4419).
+// anchorSource is what the join reads its partition's verified roots from.
+type anchorSource interface {
+	Read(ctx context.Context) error
+	Stalled() (anchorsrc.Stall, bool)
+	Rewind()
+}
+
+// mSpineStalled is the sequence number of the anchor this node's anchor
+// source is held at, or -1: an anchor a validator produced and no quorum of
+// the partition's validators signed. A join held there reads no root after it
+// and so matches nothing after it, while every other sign of the join says
+// only BOOTING (#4419).
 var mSpineStalled = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Namespace: "accumulate",
 	Subsystem: "join",
 	Name:      "spine_stalled_entry",
-	Help: "The anchor-pool entry the join's anchor source is held at because no peer asked " +
-		"serves it whole and signed; -1 when it is not held",
+	Help: "The sequence number of the partition's own anchor the join's anchor source is held at " +
+		"because no quorum of the partition's validators signed it; -1 when it is not held",
 }, []string{"partition"})
 
 // stallSayEvery is how often a stall, and a refusal repeated word for word,
@@ -299,8 +405,8 @@ func (s *PulledState) readAnchors(ctx context.Context) error {
 	if !held {
 		mSpineStalled.WithLabelValues(s.label).Set(-1)
 		if s.stallLog.on {
-			s.log.Info("The anchor source moved past the entry it was held at",
-				"partition", s.partition, "entry", s.stallLog.entry, "after", now.Sub(s.stallLog.since).Round(time.Second))
+			s.log.Info("The anchor source moved past the anchor it was held at",
+				"partition", s.partition, "anchor", s.stallLog.entry, "after", now.Sub(s.stallLog.since).Round(time.Second))
 			s.stallLog.on = false
 		}
 		return err
@@ -313,8 +419,8 @@ func (s *PulledState) readAnchors(ctx context.Context) error {
 		return err
 	}
 	s.stallLog.at = now
-	s.log.Info("This partition's spine is stalled: no peer asked serves this anchor-pool entry whole and signed, so no root after it is read",
-		"partition", s.partition, "pool", s.anchors.Pool, "entry", st.Entry,
+	s.log.Info("This partition's spine is stalled: no quorum of its validators signed this anchor, so no root after it is read",
+		"partition", s.partition, "anchor", st.Entry,
 		"for", now.Sub(s.stallLog.since).Round(time.Second), "asked", st.Asked, "error", st.Err)
 	return err
 }
@@ -359,23 +465,19 @@ func (s *PulledState) Machine() *nodestate.Machine { return s.machine }
 // rather than a second one built beside it.
 func (s *PulledState) Sources() Sources { return s.sources }
 
-// Pull fetches what the blocks changed, and this partition's spine the first
-// time, as ONE PASS: the peer's current state, held until the root its
-// receipts end at is proven, then written whole. Every account is verified
-// against that root; one that cannot be verified is not written, and is asked
-// for again in the next pass.
+// Pull runs one round of the algorithm (executor spec, "Sync", "The
+// algorithm", steps 1 and 2): the block-ledger records of every block after the
+// last one processed, in block order, then the next pages of the walk, then
+// what an earlier round could not take. Everything it pulls it writes; the
+// match is the one proof (Matched).
 func (s *PulledState) Pull(ctx context.Context) error {
-	// The anchors first: they are what everything else is verified against.
+	// The anchors first: they are what the match is judged against.
 	//
 	// A failure here ends the round, never the join. Every read is addressed
 	// at a named peer, so any of them can fail for the ordinary reason that
-	// the peer it picked is restarting — and under chaos that is a certainty.
-	// Returning an error reaches join.Run, which returns, and the daemon then
-	// abandons the join for good.
-	//
-	// The sets this node trusts, before anything is judged against them.
-	s.refreshAuthority()
-
+	// the peer it picked is restarting -- and under chaos that is a
+	// certainty. Returning an error reaches join.Run, which returns, and the
+	// daemon then abandons the join for good.
 	err := s.readAnchors(ctx)
 	if err != nil && !(errors.Is(err, errors.NotReady) && s.spineStalled()) {
 		// A read held at an entry every peer refuses is the stall, said
@@ -384,124 +486,510 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			"partition", s.partition, "error", err)
 	}
 
-	// A pass that is held settles first, and nothing new is fetched while it
-	// waits: the state it holds is the peer's at one root, and a second pass
-	// fetched now would be at a later one.
-	if s.pass != nil {
-		s.settlePass(ctx)
+	q := api.Querier2{Querier: s.sources.Querier(s.partition)}
+	peer, err := s.peersBlock(ctx)
+	if err != nil {
+		// No peer could say where the partition is. Nothing is lost by
+		// waiting: the records are read from where they stopped.
+		s.log.Info("No peer could say which block the partition is at this round", "partition", s.partition, "error", err)
 		return nil
 	}
 
-	// The cadence counts the rounds that fetch, and only those. A round that
-	// settles returns above without reaching the page diff, so a count of
-	// every round is decided only on the fetching ones, and a pass that
-	// always settles in a number of rounds sharing a factor with staleEvery
-	// makes those miss every multiple of it for ever (#4395).
-	s.round++
-
-	// What the last pass could not pull is asked for again, with whatever
-	// this round's blocks changed.
-	accounts := s.refused
-	s.refused = nil
-
-	changed, err := s.changedAccounts(ctx)
-	if err != nil {
-		// A peer that cannot serve its block ledger this second is not a
-		// reason to abandon the join: the backstop below covers the round.
-		s.log.Info("The block ledger could not be read this round", "partition", s.partition, "error", err)
+	if s.sync == nil && s.repairFrom != 0 {
+		s.startRepair(ctx)
 	}
-	accounts = append(accounts, changed...)
+	if s.sync == nil {
+		s.sync = newSyncing()
+		s.sync.start, s.sync.last, s.sync.low, s.sync.want = peer, peer, peer, peer
+		s.log.Info("Pulling the state: the whole BPT, and every block-ledger record from here on",
+			"partition", s.partition, "start", peer, "executed", s.executed)
+	}
+	p := s.sync
+	p.ready = false
 
-	// The page diff is the backstop, and it runs on its own cadence rather
-	// than only when the ledger named nothing. Gating it on an empty set made
-	// it unreachable: one name that can never be satisfied keeps the set
-	// non-empty for the life of the process (#4306).
-	// The first round scans too: a node that has just started does not know
-	// whether the store it holds is the state of block R -- a fresh node's is
-	// genesis and the network is at half a million -- so the walk alone can
-	// leave it missing everything it never changed.
-	if s.round == 1 || len(changed) == 0 || s.wide || s.round%staleEvery == 0 {
-		stale, err := s.staleAccounts(ctx)
-		if err != nil {
-			s.log.Info("The peer's BPT could not be paged this round", "partition", s.partition, "error", err)
+	// The spine, whole, once: this partition's anchors, ledger, operators and
+	// network definition, with their chains and the messages behind them
+	// (§1, §3). It is pulled like the walk -- a record processed later pulls
+	// again whatever of it a later block changed.
+	if !p.spine {
+		ok := true
+		for _, u := range pull.SpineAccounts(s.partition) {
+			if p.current[accountKey(u)] {
+				continue
+			}
+			if s.pullOne(ctx, p, u) != taken {
+				ok = false
+			}
 		}
-		accounts = append(accounts, stale...)
+		p.spine = ok
+		if ok {
+			s.checkedHeld = true
+		}
 	}
 
-	s.fetchPass(ctx, dedupe(accounts))
-	if s.pass != nil {
-		s.settlePass(ctx)
+	// Step 1, the records: every block after L through the peer's block, in
+	// block order, and every account each names pulled and written. Every
+	// account is marked current as its record names it, whether or not the
+	// pull takes it this round, so the walk never writes over it.
+	s.processRecords(ctx, q, p, peer)
+
+	// What an earlier round could not take, once each this round.
+	owed := p.retry
+	p.retry = map[[32]byte]*url.URL{}
+	for _, u := range owed {
+		if ctx.Err() != nil {
+			p.retry[accountKey(u)] = u
+			continue
+		}
+		s.pullOne(ctx, p, u)
 	}
+
+	// Step 1, the walk: the next pages of the peer's BPT.
+	if !p.walked {
+		s.walk(ctx, q, p)
+	}
+	s.readBack(ctx, q, p)
+
+	// With the walk done, nothing owed and the records read back to the
+	// oldest page's block, the state is the partition's at L if the pull is
+	// right. The node may execute from here, comparing at every block that
+	// anchors (Ready; DIFFERENCES.md E11: the spec's "Two mismatches"
+	// executes only once the root has matched).
+	p.ready = p.walked && len(p.retry) == 0 && p.low <= p.want
 	return nil
 }
 
-// ledger's answer, not the envelopes' (executor spec, "Sync", step 3).
-func (s *PulledState) changedAccounts(ctx context.Context) ([]*url.URL, error) {
-	s.wide = false
-
-	r, err := s.localBlock()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+// Ready reports the block the pulled state stands at once the walk has covered
+// the tree and nothing is owed a retry: the block the node may hand off at and
+// execute from, unproven, comparing its root with the partition's signed
+// anchor at every block that sends one. A match there is the proof, and
+// Diverged promotes the node at it; a mismatch is repaired from the block
+// ledger. The spec's "Two mismatches" executes nothing until the root has
+// matched; handing off unproven is today's departure from it (DIFFERENCES.md
+// E11), kept until the as-of-block pulls land (#4442).
+//
+// The block is the one the pulled ledger names, not the last record read: the
+// ledger is pulled as it is on the peer now, and the peer may have moved past
+// the last record while the round pulled. A block the records have not reached
+// is wrong only in the accounts its record names, which the repair brings
+// current if the root does not match.
+func (s *PulledState) Ready() (uint64, bool) {
+	if s.sync == nil || !s.sync.ready {
+		return 0, false
 	}
-
-	q := api.Querier2{Querier: s.sources.Querier(s.partition)}
-	peer, err := s.peerBlock(ctx, q)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+	n, err := readExecutedBlock(s.db, s.partition)
+	if err != nil || n < s.sync.last {
+		return 0, false
 	}
-	if peer <= r {
-		// This node's state is at or past what the peer has executed. There
-		// is nothing for the walk to say; the backstop decides the round.
-		return nil, nil
-	}
-
-	if peer-r > MaxLedgerSpan {
-		// Further behind than a walk is worth, and the walk would be wasted:
-		// the page diff runs instead and answers the same question in one
-		// scan. That is the case of a node joining from genesis.
-		s.wide = true
-		return nil, nil
-	}
-
-	entries, err := blockLedger(ctx, q, s.partition, r, peer)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	return ChangedAccounts(s.partition, entries), nil
+	return n, true
 }
 
-// localBlock is the block this node's state is: the block its EXECUTOR last
-// executed, remembered from before the pull started, until a pass has synced
-// the state past it. A node that has executed nothing and synced nothing is at
-// zero.
-//
-// It is NOT read from the store each time it is asked for. `<partition>/ledger`
-// is an account, and it is one of the accounts the pull overwrites with the
-// peer's — so after the first round the store's answer is the PEER's block and
-// not this node's. Measured on the live twelve-node network of 2026-09-18: the
-// joining node's own store answered 929 and the peer 946, while its executor
-// was at block 76. The join therefore believed it was 17 blocks behind when it
-// was 853 behind, s.wide was never set, the page diff never ran as the primary,
-// and the walk covered 17 blocks instead of 853 (#4295).
-//
-// It is the executor's block OR the block the pulled state is synced to,
-// whichever is later. A joining node's executor stands still until the
-// handoff (join.Run, step 1), but its state does not: every pass whose proven
-// root the whole local root equals puts the state at that root's block, and
-// every block after it is all the walk has to cover. Measuring from the
-// executor's block alone made every round of a join longer than MaxLedgerSpan
-// blocks wide, and the join ran on the page diff for the rest of its life
-// (#4356). A state that is only partly pulled past synced is still covered:
-// the walk from synced names everything since.
-//
-// After the handoff HandedOff and Diverged move executed to the last block
-// whose root matched its anchor, which is where a node that syncs again
-// starts from; HandedOff clears synced so that it cannot outrun them.
-func (s *PulledState) localBlock() (uint64, error) {
-	if s.synced > s.executed {
-		return s.synced, nil
+// startRepair begins the pull that repairs the state after an executed
+// block's root differed from its signed anchor (executor spec, "Sync",
+// "Two mismatches"). There is no walk: for every block
+// since the last match -- or since the pull began, if the state has never
+// matched -- it pulls again every account the partition's record names (the
+// records, from repairFrom on) and every account this node's own record names
+// (read here, from its own block ledger, through the block its executor last
+// executed). An account no peer holds a leaf for is deleted (pullOne): a node
+// that executed an account into existence that no peer holds loses it here,
+// because its own record names it.
+func (s *PulledState) startRepair(ctx context.Context) {
+	from := s.repairFrom
+	s.repairFrom = 0
+	p := newSyncing()
+	p.start, p.last, p.low, p.want = from, from, from, from
+	p.walked, p.spine, p.repair = true, true, true
+	s.sync = p
+
+	// A repair from the block ledger that did not bring a match is followed
+	// by one that pulls the accounts again: the walk, against the peers,
+	// taking whole every account whose leaf differs and dropping the leaves
+	// no peer holds (Paul, 2026-09-25: "If the pull of accounts doesn't
+	// create a matching BPT root, then the joining node has to pull the
+	// accounts again. I don't see what else it can do."). An account the
+	// walk took wrongly, that no later block names, is beyond any record.
+	s.repairs++
+	if s.repairs > 1 {
+		p.walked = false
+		s.log.Info("A repair from the block ledger did not bring a match; walking the tree again",
+			"partition", s.partition, "repairs", s.repairs)
 	}
-	return s.executed, nil
+
+	var executed uint64
+	if id, ok := protocol.ParsePartitionUrl(s.partition); ok {
+		n, err := LastExecutedBlock(s.db, id)
+		if err != nil {
+			s.log.Info("This node's executed block could not be read for the repair", "partition", s.partition, "error", err)
+		}
+		executed = n
+	}
+	var own []*url.URL
+	batch := s.db.Begin(false)
+	ledger := batch.Account(s.partition.JoinPath(protocol.Ledger))
+	for n := from + 1; n <= executed; n++ {
+		_, entries, err := indexing.LoadBlockLedger(ledger, n)
+		switch {
+		case err == nil:
+			own = append(own, ChangedAccounts(s.partition, entries)...)
+		case errors.Is(err, errors.NotFound):
+			// A block this node executed empty, or did not execute.
+		default:
+			s.log.Info("This node's own block-ledger record could not be read", "partition", s.partition, "block", n, "error", err)
+		}
+	}
+	batch.Discard()
+
+	s.log.Info("Repairing the state from the block ledger: every account named since the last match, by the partition's records and this node's own",
+		"partition", s.partition, "from", from, "executed", executed, "own", len(own))
+	seen := map[[32]byte]bool{}
+	for _, u := range own {
+		k := accountKey(u)
+		if seen[k] || ctx.Err() != nil {
+			continue
+		}
+		seen[k] = true
+		p.current[k] = true
+		s.pullOne(ctx, p, u)
+	}
+}
+
+// maxRecordsPerRound bounds how many blocks of records one round reads, so a
+// target set by a peer cannot make one round a query per block without end
+// (#4438 threat F3). The next round goes on from where this one stopped.
+const maxRecordsPerRound = 1024
+
+// processRecords processes the block-ledger records of the blocks after L
+// through through, in block order, and moves L to the last one read. A record
+// that cannot be read stops it there, and the next round goes on from it.
+func (s *PulledState) processRecords(ctx context.Context, q api.Querier2, p *syncing, through uint64) {
+	if through > p.last+maxRecordsPerRound {
+		through = p.last + maxRecordsPerRound
+	}
+	last := s.processRange(ctx, q, p, p.last, through)
+	if last > p.last {
+		p.last = last
+	}
+}
+
+// recordWindow is how many blocks back from the newest verified anchor the
+// records are read: the peers' retention (BPTHistoryDepth, 1024 blocks by
+// default; executor spec, "Sync").
+const recordWindow = 1024
+
+// recordFloor is the oldest block the records are ever read back to: the
+// newest block a quorum of the partition's validators signed an anchor for,
+// less the peers' retention window.
+func (s *PulledState) recordFloor() uint64 {
+	n := s.tracker.LatestObservedBlock()
+	if n <= recordWindow {
+		return 0
+	}
+	return n - recordWindow
+}
+
+// readBack reads the records from low back towards want, at most
+// maxRecordsPerRound blocks a round, as the forward direction is bounded
+// (processRecords). A record that cannot be read leaves low where it was, and
+// the next round reads the same span again.
+func (s *PulledState) readBack(ctx context.Context, q api.Querier2, p *syncing) {
+	if p.want >= p.low || ctx.Err() != nil {
+		return
+	}
+	from := p.want
+	if p.low-from > maxRecordsPerRound {
+		from = p.low - maxRecordsPerRound
+	}
+	if s.processRange(ctx, q, p, from, p.low) == p.low {
+		p.low = from
+	}
+}
+
+// processRange reads the records of the blocks after after through through,
+// in block order, marks every account they name current and pulls it, and
+// returns the last block read. Every pull is of the peer's state now, which is
+// at or after every block read, so an account two blocks named is current
+// after one pull.
+func (s *PulledState) processRange(ctx context.Context, q api.Querier2, p *syncing, after, through uint64) uint64 {
+	var named []*url.URL
+	last := after
+	for n := after + 1; n <= through; n++ {
+		entries, err := blockLedgerOf(ctx, q, s.partition, n)
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			// An empty block writes nothing, not even its index: it changed
+			// nothing.
+		default:
+			s.log.Info("The block ledger could not be read; the records go on from here next round",
+				"partition", s.partition, "block", n, "error", err)
+			through = n - 1
+		}
+		if n > through {
+			break
+		}
+		for _, u := range ChangedAccounts(s.partition, entries) {
+			p.current[accountKey(u)] = true
+			named = append(named, u)
+		}
+		last = n
+	}
+
+	seen := map[[32]byte]bool{}
+	for _, u := range named {
+		k := accountKey(u)
+		if seen[k] || ctx.Err() != nil {
+			continue
+		}
+		seen[k] = true
+		s.pullOne(ctx, p, u)
+	}
+	return last
+}
+
+// walk takes the next pages of the peer's BPT and pulls every account whose
+// leaf this node does not hold, or holds and does not agree with, unless a
+// record has already brought it current: the page may be older than that
+// record, and the walk never overwrites what a record wrote (step 1). A page
+// newer than the records needs no rule: the account it wrote was changed by a
+// block the records have not reached, and that block's record pulls it again.
+//
+// A page OLDER than the records' start is the other hazard: an account
+// changed at a block after the page's and at or before S shows its old leaf,
+// which the node may hold too, so the walk skips it, and no record after S
+// names it. Each page is read from one named peer whose block is read first,
+// and the records are processed from the oldest block a page was served at,
+// not from S (Paul, 2026-09-25; #4438 review F1).
+//
+// Once the walk has covered the tree, every leaf the node holds that no page
+// named, and that no record brought current, is an account no peer holds: it
+// is deleted (Paul: "It must also drop leaves it holds that no peer holds").
+func (s *PulledState) walk(ctx context.Context, q api.Querier2, p *syncing) {
+	for i := 0; i < walkPagesPerRound && !p.walked && ctx.Err() == nil; i++ {
+		pager, served, ok := s.pageSource(ctx)
+		if !ok {
+			pager, served = q, p.low
+		}
+		batch := s.db.Begin(false)
+		page, err := enumerate.ReadPage(ctx, pager, s.partition, batch, p.cursor, walkPageSize)
+		batch.Discard()
+		if err != nil {
+			s.log.Info("The peer's BPT could not be paged this round; the walk goes on from here next round",
+				"partition", s.partition, "pages", p.pages, "error", err)
+			return
+		}
+		p.pages++
+		if served < p.want {
+			// A peer's word for where it stands is not a floor the node
+			// must read back to: one that answers 0 would make the records
+			// a query per block since genesis. Nothing older than the
+			// newest verified anchor's block less the peers' retention
+			// can be served as of its block anyway (#4438 re-review F-1).
+			if floor := s.recordFloor(); served < floor {
+				s.log.Info("A walk page's peer stands further back than the peers retain; the records are read back only to the retention floor",
+					"partition", s.partition, "page-block", served, "floor", floor)
+				served = floor
+			}
+		}
+		if served < p.want {
+			s.log.Info("A walk page was served at a block before the records' start; the records are read from there",
+				"partition", s.partition, "page-block", served, "records-from", p.low)
+			p.want = served
+		}
+
+		for _, e := range page.Record.Entries {
+			if e != nil {
+				p.named[e.KeyHash] = true
+			}
+		}
+		for _, u := range page.Stale {
+			if p.current[accountKey(u)] {
+				continue
+			}
+			s.pullOne(ctx, p, u)
+		}
+
+		if page.Record.Done {
+			p.walked = true
+			s.log.Info("The walk has covered the peer's whole BPT", "partition", s.partition,
+				"pages", p.pages, "records-through", p.last, "start", p.start, "records-from", p.low)
+			s.dropUnnamed(ctx, p)
+			return
+		}
+		p.cursor = page.Record.NextStart
+	}
+}
+
+// pageSource is the peer the next walk page is read from, named, and the block
+// its ledger says it stands at: the page is of that block or a later one. The
+// peers are taken in rotation. False when the peers cannot be read that way.
+func (s *PulledState) pageSource(ctx context.Context) (enumerate.Source, uint64, bool) {
+	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
+	if err != nil || len(srcs) == 0 {
+		return nil, 0, false
+	}
+	src := srcs[s.pageTurn%len(srcs)]
+	s.pageTurn++
+	pager, ok := src.(enumerate.Source)
+	if !ok {
+		return nil, 0, false
+	}
+	n, err := ledgerIndexOf(ctx, src, s.partition)
+	if err != nil {
+		return nil, 0, false
+	}
+	return pager, n, true
+}
+
+// dropUnnamed asks the peers for every account the node holds a leaf for that
+// no page of the walk named and no record brought current. Nothing is deleted
+// on the pages' word, which is a peer's: an account every peer answers
+// NotFound for is deleted (pullOne, forget), and one some peer serves is
+// taken (executor spec, "Sync", "Two mismatches", 1: "It deletes nothing on
+// this comparison").
+func (s *PulledState) dropUnnamed(ctx context.Context, p *syncing) {
+	var unnamed []*url.URL
+	batch := s.db.Begin(false)
+	err := batch.ForEachAccount(func(a *database.Account, _ [32]byte) error {
+		u := a.Url()
+		if p.named[bpt.NewKey("Account", u).Hash()] || p.current[accountKey(u)] {
+			return nil
+		}
+		unnamed = append(unnamed, u)
+		return nil
+	})
+	batch.Discard()
+	if err != nil {
+		s.log.Info("This node's leaves could not be listed after the walk", "partition", s.partition, "error", err)
+		return
+	}
+	for _, u := range unnamed {
+		if ctx.Err() != nil {
+			return
+		}
+		s.pullOne(ctx, p, u)
+	}
+}
+
+// An outcome is what became of one account's pull.
+type outcome int
+
+const (
+	taken   outcome = iota // pulled and written
+	dropped                // no peer has a leaf for it, or it is not this partition's
+	owed                   // not taken this time; asked for again next round
+)
+
+// pullOne pulls one account from this partition's peers and writes it, with
+// the BPT, in a batch of its own. What it cannot take is owed to the next
+// round, whoever named it.
+//
+// The spine and the partition's synthetic ledger are taken whole, with every
+// chain entry and the message behind each (pull.WholeAccounts, #4421, #4434);
+// every other account state-only. Nothing is verified against a root here:
+// the match is the proof (step 3). What the pull refuses as malformed it still
+// refuses -- a body served under another name (#4408), an answer with no body
+// (#4437), an entry with no message behind it (#4400) -- and the next peer is
+// asked.
+func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outcome {
+	if !Routable(u) {
+		return dropped
+	}
+	srcs, partition, err := s.sourcesFor(ctx, u)
+	switch {
+	case errors.Is(err, errNotThisPartition):
+		// Dropped, not owed: a peer named an account this store must not
+		// hold, and asking again will not change that.
+		s.log.Info("A named account is not this partition's and was dropped",
+			"account", u, "partition", s.partition)
+		return dropped
+	case err != nil:
+		s.log.Info("No peer could be found for an account", "account", u, "error", err)
+		p.retry[accountKey(u)] = u
+		return owed
+	}
+
+	// A repair takes every account whole: main state, every chain with its
+	// entries and the messages behind them, pending and directory (executor
+	// spec, "Sync", "Two mismatches").
+	srcs = s.order(srcs)
+
+	whole := s.takenWhole(u) || p.repair
+	mode := pull.ModeStateOnly
+	if whole {
+		mode = pull.ModeFullSpine
+	}
+	batch := s.db.Begin(true)
+	defer batch.Discard()
+	pending, served, err := pull.FetchFrom(ctx, srcs, batch, u, pull.Options{
+		Mode:      mode,
+		Partition: partition,
+		// The answer with a receipt is the one that carries the rest of the
+		// leaf beside the body (#4399), and the one whose NotFound says the
+		// peer holds no leaf (#4397).
+		WithReceipt: true,
+		// Once a process, every account taken whole is checked for what an
+		// earlier join left without its message -- the synthetic ledger
+		// included, which every join before #4434 took state-only.
+		CheckHeld: whole && !s.checkedHeld,
+		// A node that has executed since its last match repairs what it
+		// executed: a chain of its own longer than the peer's is taken again.
+		RetakeLonger: p.repair,
+	})
+	if err == nil && served >= 0 && served < len(srcs) {
+		p.servedBy[sourceKey(srcs[served])] = true
+	}
+	defer func() {
+		// What was taken by its heads alone is backfilled once the state
+		// has matched (backfill). A whole pull goes on from the entries the
+		// node holds, so an account taken by its heads before stays to be
+		// backfilled below them.
+		if err != nil || whole && !p.repair {
+			return
+		}
+		if p.repair {
+			// The repair takes the account whole, entries included, now,
+			// while the node is not executing. An account already held
+			// entire needs only what the whole pull appended.
+			if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
+				s.unmarkHeadOnly(accountKey(u))
+				return
+			}
+		}
+		s.markHeadOnly(u)
+	}()
+	switch {
+	case err == nil:
+	case stderrors.Is(err, pull.ErrNoLeaf):
+		// Dropped, not owed (#4397): every source was asked and every one
+		// answered that its tree holds no leaf for the name. Asking again
+		// changes nothing, and a record names it again if a block ever
+		// gives it one.
+		s.forget(u)
+		return dropped
+	default:
+		s.log.Info("An account could not be pulled; it is asked for again next round", "account", u, "error", err)
+		p.retry[accountKey(u)] = u
+		return owed
+	}
+
+	// The BPT, then the commit. Batch.Commit commits the BPT store and never
+	// calls Account.putBpt, so a perfectly pulled account leaves the local
+	// root exactly where it was and the match can never come (#4305).
+	err = pending.Keep()
+	if err == nil {
+		err = batch.UpdateBPT()
+	}
+	if err == nil {
+		err = batch.Commit()
+	}
+	if err != nil {
+		s.log.Info("What was pulled could not be written; it is asked for again next round",
+			"account", u, "partition", s.partition, "error", err)
+		p.retry[accountKey(u)] = u
+		return owed
+	}
+	return taken
 }
 
 // readExecutedBlock is what the daemon reads to decide whether a node must
@@ -522,293 +1010,88 @@ func readExecutedBlock(db *database.Database, partition *url.URL) (uint64, error
 	}
 }
 
-// peerBlock is the block a peer's state is: what its ledger says.
-func (s *PulledState) peerBlock(ctx context.Context, q api.Querier2) (uint64, error) {
-	rec, err := q.QueryAccount(ctx, s.partition.JoinPath(protocol.Ledger), nil)
+// peersBlock is the block the partition's peers stand at: the LOWEST block any
+// of them names. One peer's word is not a target the node must reach -- a
+// peer that named a block far ahead would set S there and hold the records
+// off, or make a round a query per block without end (#4438 threat F3).
+//
+// The lowest is floored at the newest block a quorum of the partition's
+// validators signed an anchor for, as this node has verified it: the
+// partition has certainly reached that block, so a peer that names a block
+// before it is behind -- a laggard, or one answering 0 -- and is not counted
+// (#4438 re-review F-2). Otherwise one such peer would pin the target, and
+// with it L, where it stands.
+func (s *PulledState) peersBlock(ctx context.Context) (uint64, error) {
+	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("find the partition's peers: %w", err)
+	}
+	floor := s.tracker.LatestObservedBlock()
+	var low uint64
+	var found bool
+	var last error
+	for _, src := range srcs {
+		n, err := ledgerIndexOf(ctx, src, s.partition)
+		if err != nil {
+			last = err
+			continue
+		}
+		if n < floor {
+			last = errors.NotReady.WithFormat("%v stands at block %d, before the newest signed anchor's block %d", src, n, floor)
+			continue
+		}
+		if !found || n < low {
+			low, found = n, true
+		}
+	}
+	if !found {
+		return 0, errors.UnknownError.WithFormat("no peer served its ledger: %w", last)
+	}
+	return low, nil
+}
+
+// ledgerIndexOf is the block one peer's ledger names.
+func ledgerIndexOf(ctx context.Context, src pull.Source, partition *url.URL) (uint64, error) {
+	rec, err := src.QueryAccount(ctx, partition.JoinPath(protocol.Ledger), nil)
 	if err != nil {
 		return 0, errors.UnknownError.WithFormat("read a peer's ledger: %w", err)
 	}
 	ledger, ok := rec.Account.(*protocol.SystemLedger)
 	if !ok {
 		return 0, errors.Conflict.WithFormat("a peer served %v as %v, not a system ledger",
-			s.partition.JoinPath(protocol.Ledger), rec.Account.Type())
+			partition.JoinPath(protocol.Ledger), rec.Account.Type())
 	}
 	return ledger.Index, nil
 }
 
-// staleAccounts is the BPT page diff: the accounts whose leaf this node does
-// not hold, or holds and does not agree with. Nothing is written — a leaf
-// taken from a peer's word would make the local root the peer's, and the local
-// root is what the tracker matches (package enumerate).
-func (s *PulledState) staleAccounts(ctx context.Context) ([]*url.URL, error) {
-	batch := s.db.Begin(false)
-	defer batch.Discard()
-	stale, err := enumerate.Stale(ctx, api.Querier2{Querier: s.sources.Querier(s.partition)},
-		s.partition, batch, enumerate.Options{})
-	if err != nil {
-		return stale, errors.UnknownError.WithFormat("find what the peer holds that this node does not: %w", err)
-	}
-	return stale, nil
-}
-
-// pass is one fetch: the accounts it pulled and the batch they were pulled
-// into. Nothing in it is written until every account in it is settled or
-// refused, because a Pending writes into this batch when it settles and a
-// batch cannot be committed while a child of it is open.
-type pass struct {
-	batch    *database.Batch
-	accounts []*heldAccount
-	since    time.Time
-
-	// spine says the pass carries this partition's spine, and spineFailed
-	// that one of its accounts could not be fetched, so the pass cannot
-	// verify the spine whatever else it settles.
-	spine       bool
-	spineFailed bool
-}
-
-// heldAccount is one fetched account waiting for its root to be proven.
-type heldAccount struct {
-	url     *url.URL
-	pending *pull.Pending
-	spine   bool
-}
-
-// settlePass settles the held pass once the root its receipts end at is
-// proven, and writes what verified.
-//
-// **The accounts a peer serves are current, and the root is proven by a
-// signed anchor and the history.** A peer serves an account as of its current
-// block, with a receipt to its current BPT root. That root is proven when it
-// EQUALS the StateTreeAnchor of an anchor a quorum signed and this node
-// verified, or when the bpt chain's history from one such root to it hashes
-// into the root chain anchor a later verified anchor signs, and in no other
-// way (anchorsrc.ProveRoot): the anchor of block N carries the root block N
-// committed, which is the root the peer is current at while its ledger says
-// N, and block N+1 records it on the bpt chain. So a pass served at block N
-// is proven once any anchor after N is verified, whether or not block N sent
-// one -- under load every block does; idle, only a heartbeat block does, and
-// the passes served between heartbeats are proven by the next one.
-//
-// **A pass is held only while waiting can end.** The one wait is a root no
-// verified anchor reaches yet, and the next anchor may. A root the history
-// has PASSED -- an anchor of a later block is verified and the bpt chain does
-// not record it -- is not a wait, because no anchor to come changes it, so
-// the pass is dropped and fetched again, and no count of rounds is involved.
-//
-// **One pass is one root.** The peers move while a pass is fetched, so its
-// accounts can end at different roots, each of them true. Written together
-// they are a state no block ever had, which the local root can match nothing
-// with. The root most of the pass ends at is the pass; the rest are fetched
-// again, as are accounts served with no receipt at all.
-func (s *PulledState) settlePass(ctx context.Context) {
-	p := s.pass
-	asked := len(p.accounts)
-	root, servedAt := p.oneRoot(func(a *heldAccount, why string) {
-		s.log.Debug("A pulled account is fetched again", "account", a.url, "reason", why)
-		a.pending.Discard()
-		if a.spine {
-			p.spineFailed = true
-		} else {
-			s.refused = append(s.refused, a.url)
-		}
-	})
-	if len(p.accounts) < asked {
-		s.log.Info("Part of a pass was served at another root, or at none, and is fetched again",
-			"partition", s.partition, "kept", len(p.accounts), "again", asked-len(p.accounts))
-	}
-	if len(p.accounts) == 0 {
-		s.pass = nil
-		p.batch.Discard()
-		return
-	}
-
-	ok, err := s.anchors.ProveRoot(ctx, s.sources.Querier(s.partition), root, servedAt)
-	if err != nil {
-		// Nothing to come will prove this root. What was served at it is not
-		// written; the pass is asked for again, and the peers are asked in
-		// rotation, so the next fetch starts at another one.
-		s.log.Info("The root a pass was served at did not prove; the pass is asked for again",
-			"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]), "error", err)
-		s.dropPass()
-		return
-	}
-	if !ok {
-		// No verified anchor carries it yet, and the next one may. Held.
-		s.log.Debug("The root a pass was served at is not proven yet",
-			"partition", s.partition, "root", fmt.Sprintf("%x", root[:4]),
-			"waited", time.Since(p.since).Round(time.Millisecond))
-		return
-	}
-	s.pass = nil
-	pulled := 0
-	for _, a := range p.accounts {
-		if err := a.pending.Settle(a.pending.Root()); err != nil {
-			s.log.Info("A pulled account did not verify", "account", a.url, "error", err)
-			if a.spine {
-				// Asked for again with the spine, whole, and not by name.
-				p.spineFailed = true
-			} else {
-				s.refused = append(s.refused, a.url)
-			}
-			continue
-		}
-		pulled++
-	}
-
-	if pulled > 0 {
-		// The BPT, then the commit. Batch.Commit commits the BPT store and
-		// never calls Account.putBpt, so a perfectly pulled account leaves the
-		// local root exactly where it was and the tracker can never match it
-		// (#4305).
-		err := p.batch.UpdateBPT()
-		if err == nil {
-			err = p.batch.Commit()
-		} else {
-			p.batch.Discard()
-		}
-		if err != nil {
-			s.log.Info("What was pulled could not be written", "partition", s.partition, "error", err)
-			s.refused = append(s.refused, p.urls()...)
-			return
-		}
-	} else {
-		p.batch.Discard()
-	}
-
-	if p.spine {
-		s.spineSettled(p)
-	}
-	s.log.Info("Pulled the accounts the block ledger named", "partition", s.partition,
-		"asked", len(p.accounts), "pulled", pulled, "refused", len(p.accounts)-pulled, "root", fmt.Sprintf("%x", root[:4]))
-	s.observe(root)
-}
-
-// observe tells the tracker the block this node's state now is, when its
-// local root is the one the pass proved. The block is read from the ledger
-// account in that state: the state hashes into the proven root, so its ledger
-// is that root's ledger, where a block number in a peer's answer would be the
-// peer's word (#4361, F1).
-func (s *PulledState) observe(proven [32]byte) {
-	batch := s.db.Begin(false)
-	defer batch.Discard()
-	local, err := batch.GetBptRootHash()
-	if err != nil || local != proven {
-		return
-	}
-	var ledger *protocol.SystemLedger
-	if err := batch.Account(s.partition.JoinPath(protocol.Ledger)).Main().GetAs(&ledger); err != nil {
-		s.log.Info("The pulled ledger could not be read", "partition", s.partition, "error", err)
-		return
-	}
-	s.tracker.Observe(s.partition, ledger.Index, local)
-	if ledger.Index > s.synced {
-		s.synced = ledger.Index
-	}
-}
-
-// dropPass throws the held pass away and asks for all of it again.
-func (s *PulledState) dropPass() {
-	p := s.pass
-	s.pass = nil
-	for _, a := range p.accounts {
-		a.pending.Discard()
-	}
-	p.batch.Discard()
-	s.refused = append(s.refused, p.urls()...)
-}
-
-// oneRoot keeps the accounts that end at the root most of the pass ends at,
-// and hands every other one to drop. It returns that root and the block the
-// peer said it served it at.
-func (p *pass) oneRoot(drop func(a *heldAccount, why string)) (root [32]byte, servedAt uint64) {
-	count := map[[32]byte]int{}
-	block := map[[32]byte]uint64{}
-	for _, a := range p.accounts {
-		r := a.pending.Root()
-		if r == ([32]byte{}) {
-			continue
-		}
-		count[r]++
-		if block[r] == 0 {
-			block[r] = a.pending.Block
-		}
-	}
-	for r, n := range count {
-		// The later root breaks a tie, so which root wins does not depend on
-		// the order a map is walked in.
-		if n > count[root] || n == count[root] && block[r] > block[root] {
-			root = r
-		}
-	}
-
-	kept := p.accounts[:0]
-	for _, a := range p.accounts {
-		switch a.pending.Root() {
-		case [32]byte{}:
-			drop(a, "it was served with no receipt, so there is no root to prove it against")
-		case root:
-			kept = append(kept, a)
-		default:
-			drop(a, "it was served at another root than most of its pass")
-		}
-	}
-	for i := len(kept); i < len(p.accounts); i++ {
-		p.accounts[i] = nil
-	}
-	p.accounts = kept
-	return root, block[root]
-}
-
-func (p *pass) urls() []*url.URL {
-	var out []*url.URL
-	for _, a := range p.accounts {
-		if !a.spine {
-			out = append(out, a.url)
-		}
-	}
-	return out
-}
-
-// spineSettled records what became of the spine, and moves the validator sets
-// if it verified.
-//
-// **This is how a joining node crosses a change to the validator sets**, and
-// on this line it is the only way. <partition>/network and /globals are
-// spine accounts, so they arrive with a receipt that ends at a root proven by
-// a quorum of this partition's validators and passes through the leaf the
-// pulled body hashes to; adopting them from the store afterwards is
-// therefore an induction step and not a peer's word. A change never travels
-// in an anchor past Vandenberg (#4301, review finding 1).
-func (s *PulledState) spineSettled(p *pass) {
-	if p.spineFailed {
-		s.log.Info("The spine did not verify; it is asked for again", "partition", s.partition)
-		return
-	}
-	s.spine = true
-	s.refreshAuthority()
-	s.log.Info("Pulled the spine, verified against a proven root", "partition", s.partition)
-}
-
 // TrustedVersion is the network definition version this join verifies
 // anchors against. It moves only when refreshAuthority takes a definition
-// out of verified state.
+// out of a state that matched.
 func (s *PulledState) TrustedVersion() uint64 { return s.authority.Version() }
 
 // refreshAuthority takes the validator sets out of this node's store.
 //
-// **Everything in that store arrived verified**, which is what makes this an
-// induction step and not a peer's word: every account the pull writes has a
-// receipt that is valid, that ends at a root a quorum of this partition's
-// validators signed, and that passes through the leaf the pulled body hashes
-// to (pull.Verify). <partition>/network and /globals are spine accounts so
-// they arrive early, but the guarantee is the pull's and not the spine's.
+// **It is called only when the store is proven**, which is what makes this an
+// induction step and not a peer's word: at the start, when the store is the
+// node's own execution, and when the local root has just matched a root a
+// quorum of the trusted set signed (Matched). Between the two the store holds
+// what the pull wrote, which nothing has proven yet (executor spec, "Sync",
+// "The algorithm", step 3): a network definition read from it then would be
+// whatever a peer served, and anchors verified against it would be that
+// peer's too (#4301).
 //
-// It runs every round rather than once, because a network can change while a
-// node is joining and a join that read the sets once would be stranded by
-// the next change exactly as it was by the last (#4301, review finding 1).
+// So a change to the validator sets during a join is crossed at the match and
+// not before it: until then anchors are judged by the set the node started
+// with, to its threshold, with the anchor's declared version a floor (§1). A
+// change that turns over more of the set than the old threshold can bridge
+// holds the match off, as it did before (§1's stated limit).
 func (s *PulledState) refreshAuthority() {
 	moved, err := s.authority.UpdateFrom(s.db, s.partition)
+	if err == nil {
+		// The state is proven: what the sets are now is what a restart
+		// trusts (FromTrusted).
+		err = s.authority.Remember(s.db, s.partition)
+	}
 	switch {
 	case err != nil:
 		s.log.Debug("The network definition could not be read from this node's store",
@@ -823,134 +1106,67 @@ func (s *PulledState) refreshAuthority() {
 	}
 }
 
-// fetchPass fetches one pass: the spine until it has verified, then the
-// accounts named, up to passLimit. It settles nothing.
-//
-// The spine is THIS PARTITION'S — its anchors, ledger and operators, with
-// their chains — so the chains a join reads are there at all.
-//
-// **It is verified like everything else.** It used to be settled with Keep,
-// unverified, on the rationale that it is "what the verifier reads from, and
-// there is nothing to verify it against until it is there". That rationale
-// was false and it cost #4301: a signature is verified against a KEY, and the
-// keys come from this node's own store (anchorsrc.Authority), so nothing has
-// to be pulled before verification can begin. Taking the spine on a peer's
-// word made the peer the source of both the root and the state that hashes
-// into it, and the whole scheme then proved only that the peer agreed with
-// itself.
-//
-// It does NOT take the Directory's. A BVN's state tree holds no acc://dn.acme
-// account: writing four of them into a BVN's store puts four leaves in its
-// BPT that no peer has, so the local root differs from every root the
-// Directory ever anchored for that partition, however perfectly everything
-// else is pulled. A node runs the Directory alongside its BVN and the
-// Directory's own join pulls the Directory's spine into the Directory's
-// store, where those accounts belong.
-func (s *PulledState) fetchPass(ctx context.Context, accounts []*url.URL) {
-	p := &pass{batch: s.db.Begin(true), since: time.Now(), spine: !s.spine}
-
-	spine := map[string]bool{}
-	if p.spine {
-		for _, u := range pull.SpineAccounts(s.partition) {
-			spine[strings.ToLower(u.String())] = true
-			s.fetchOne(ctx, p, u, true)
-		}
+// order is the order the peers are asked in for one account: in rotation, so
+// a peer that serves a wrong body is not the one asked first every time
+// (#4438 threat F6), and with a peer whose answers were part of a pull that
+// did not bring the match moved to the back, the more such pulls the further
+// back (executor spec, "Sync", "Two mismatches", 1).
+func (s *PulledState) order(srcs []pull.Source) []pull.Source {
+	n := len(srcs)
+	if n < 2 {
+		return srcs
 	}
-	for i, u := range accounts {
-		if ctx.Err() != nil {
-			break
-		}
-		if len(p.accounts) >= passLimit {
-			s.refused = append(s.refused, accounts[i:]...)
-			break
-		}
-		if spine[strings.ToLower(u.String())] {
-			continue
-		}
-		s.fetchOne(ctx, p, u, false)
-	}
-
-	if len(p.accounts) == 0 {
-		p.batch.Discard()
-		if p.spine && !p.spineFailed {
-			// Everything the peers have for the spine, this node already has.
-			s.spine = true
-		}
-		return
-	}
-	s.pass = p
+	turn := s.sourceTurn % n
+	s.sourceTurn++
+	out := append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return s.demoted[sourceKey(out[i])] < s.demoted[sourceKey(out[j])]
+	})
+	return out
 }
 
-// fetchOne fetches one account into the pass, or records why it could not.
-//
-// spine is the pass that carries the spine: a failure fails the spine, and
-// the entries already held are checked for their messages (pull.CheckHeld),
-// once a process. A spine account named in any later pass -- the block ledger
-// names <partition>/anchors in every one, since every block writes the pool
-// -- is still taken whole, resuming from the local head so each pass brings
-// only the new entries and the messages behind them. Taken state-only, those
-// entries arrived with no message behind them and the first block the node
-// opened failed reading the newest (#4421). A failure there is refused by
-// name and asked again; the spine has settled and is not failed by it. The
-// partition's synthetic ledger is taken whole the same way, and is never part
-// of the spine (pull.WholeAccounts, #4434).
-func (s *PulledState) fetchOne(ctx context.Context, p *pass, u *url.URL, spine bool) {
-	fail := func() {
-		if spine {
-			p.spineFailed = true
-		} else {
-			s.refused = append(s.refused, u)
-		}
+// sourceKey names a source: the peer it reaches, where it says.
+func sourceKey(src pull.Source) string {
+	if s, ok := src.(fmt.Stringer); ok {
+		return s.String()
 	}
-	srcs, partition, err := s.sourcesFor(ctx, u)
+	return fmt.Sprintf("%T", src)
+}
+
+// forget deletes an account no peer holds a leaf for, if this node holds it
+// (executor spec, "Sync", "Two mismatches": "deleting any
+// the peers do not hold"). A node that executed an account into existence, or
+// that holds one from before a block that removed it, would otherwise keep a
+// leaf no peer has, and its root could never match.
+func (s *PulledState) forget(u *url.URL) {
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	_, err := batch.BPT().Get(bpt.NewKey("Account", u))
 	switch {
-	case errors.Is(err, errNotThisPartition):
-		// Dropped, not refused: a peer named an account this store must not
-		// hold, and asking again will not change that.
-		s.log.Info("A named account is not this partition's and was dropped",
-			"account", u, "partition", s.partition)
-		return
-	case err != nil:
-		s.log.Info("No peer could be found for an account", "account", u, "error", err)
-		fail()
-		return
-	}
-	mode := pull.ModeStateOnly
-	whole := spine || s.takenWhole(u)
-	if whole {
-		mode = pull.ModeFullSpine
-	}
-	pending, _, err := pull.FetchFrom(ctx, srcs, p.batch, u, pull.Options{
-		Mode:      mode,
-		Verify:    s.anchors,
-		Partition: partition,
-		// In the pass that carries the spine, every account taken whole is
-		// checked for what an earlier join left without its message -- the
-		// synthetic ledger included, which every join before #4434 took
-		// state-only (pull.WholeAccounts).
-		CheckHeld: whole && p.spine,
-	})
-	switch {
-	case err == nil:
-	case !spine && stderrors.Is(err, pull.ErrNoLeaf):
-		// Dropped, not refused (#4397): every source was asked and every one
-		// answered that its tree holds no leaf for the name. Asking again
-		// every pass changes nothing, and the page diff names it again if a
-		// leaf ever appears. A name some source failed to answer is refused
-		// below and asked again.
+	case errors.Is(err, errors.NotFound):
 		s.log.Info("No peer holds a leaf for a named account; it was dropped",
 			"account", u, "partition", s.partition)
 		return
-	default:
-		s.log.Info("An account could not be pulled", "account", u, "error", err)
-		fail()
+	case err != nil:
+		s.log.Info("This node's leaf for an account could not be read", "account", u, "error", err)
 		return
 	}
-	p.accounts = append(p.accounts, &heldAccount{url: u, pending: pending, spine: spine})
+	batch2 := s.db.Begin(true)
+	defer batch2.Discard()
+	err = batch2.ForgetAccount(u)
+	if err == nil {
+		err = batch2.Commit()
+	}
+	if err != nil {
+		s.log.Info("An account no peer holds could not be deleted", "account", u, "error", err)
+		return
+	}
+	s.log.Info("No peer holds a leaf for an account this node holds; it was deleted",
+		"account", u, "partition", s.partition)
 }
 
 // takenWhole is whether u is one of the accounts this partition's join takes
-// whole in every pass that names it (pull.WholeAccounts).
+// whole whenever it pulls it (pull.WholeAccounts).
 func (s *PulledState) takenWhole(u *url.URL) bool {
 	for _, a := range pull.WholeAccounts(s.partition) {
 		if a.Equal(u) {
@@ -1073,6 +1289,12 @@ func (s *PulledState) Demote(block uint64) {
 // against a state it is not (#4362). It changes nothing about the node's
 // state: the join promotes when it hands off (Promote).
 func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
+	// The anchors first: the anchor of the block the state stands at is
+	// collected as that block closes, and without this read the state would
+	// be compared only with anchors read before the round that put it there.
+	if err := s.readAnchors(ctx); err != nil && !(errors.Is(err, errors.NotReady) && s.spineStalled()) {
+		s.log.Debug("This partition's anchors could not be read", "partition", s.partition, "error", err)
+	}
 	m, ok, err := s.tracker.Check(ctx)
 	if err != nil {
 		return 0, false, errors.UnknownError.Wrap(err)
@@ -1081,23 +1303,10 @@ func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
 		return 0, false, nil
 	}
 	s.matched = m
-	return m.Block, true, nil
-}
+	s.provenAt = m.Block
+	s.repairs = 0
 
-// dedupe keeps the first of each name and drops the ones no pull can satisfy.
-func dedupe(accounts []*url.URL) []*url.URL {
-	seen := map[string]bool{}
-	out := accounts[:0]
-	for _, u := range accounts {
-		if !Routable(u) {
-			continue
-		}
-		k := strings.ToLower(u.String())
-		if seen[k] {
-			continue
-		}
-		seen[k] = true
-		out = append(out, u)
-	}
-	return out
+	// The state is proven now, and with it the network definition it holds.
+	s.refreshAuthority()
+	return m.Block, true, nil
 }

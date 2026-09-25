@@ -70,8 +70,7 @@ func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
 	refusedBy := func(node int) map[uint64]string {
 		authority, err := anchorsrc.FromStore(sim.S.Partition("BVN0").NodeDatabase(0), bvn)
 		require.NoError(t, err)
-		pool, err := anchorsrc.PoolFor(bvn, authority.BvnNames())
-		require.NoError(t, err)
+		pool := DnUrl().JoinPath(AnchorPool)
 		params := apiimpl.QuerierParams{Partition: Directory, Database: p.NodeDatabase(node)}
 		if js := p.NodeJoinState(node); js != nil {
 			// The gate the daemon puts in front of the querier (#4368): a
@@ -79,14 +78,9 @@ func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
 			params.NodeState = js.Machine()
 		}
 		served := apiimpl.NewQuerier(params)
-		src, err := anchorsrc.New(served, pool, bvn, authority)
+		verified, refused, err := readPoolAnchors(context.Background(), served, pool, bvn, authority, 1)
 		require.NoError(t, err)
-		refused := map[uint64]string{}
-		verified := 0
-		src.OnRefused = func(block uint64, err error) { refused[block] = err.Error() }
-		src.OnAnchor = func(*url.URL, uint64, [32]byte) { verified++ }
-		require.NoError(t, src.Read(context.Background()))
-		t.Logf("node %d: %d BVN0 anchors verified, %d refused", node, verified, len(refused))
+		t.Logf("node %d: %d BVN0 anchors verified, %d refused", node, len(verified), len(refused))
 		return refused
 	}
 
@@ -191,7 +185,7 @@ func joinADirectoryNodeByPull(t *testing.T) (*Sim, *simulator.Partition, uint64,
 	// The join, as the daemon runs it, with the production pull.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stepping := &steppingState{step: func(round int) {
+	stepping := &steppingState{cancel: cancel, step: func(round int) {
 		sim.StepN(3)
 		if round >= 200 {
 			cancel()

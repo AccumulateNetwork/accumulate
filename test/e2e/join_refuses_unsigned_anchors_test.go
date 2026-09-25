@@ -16,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
 )
@@ -51,8 +50,7 @@ func TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures(t *testing.T) {
 	bvn := PartitionUrl("BVN0")
 	authority, err := anchorsrc.FromStore(sim.S.Partition("BVN0").NodeDatabase(0), bvn)
 	require.NoError(t, err)
-	pool, err := anchorsrc.PoolFor(bvn, authority.BvnNames())
-	require.NoError(t, err)
+	pool := DnUrl().JoinPath(AnchorPool)
 	require.True(t, pool.Equal(dnPool))
 
 	peers := &join.QueryPeers{Client: sim.S.Services(), Network: t.Name()}
@@ -64,17 +62,19 @@ func TestAJoinedNodeRefusesTheAnchorsItHoldsWithoutSignatures(t *testing.T) {
 	}
 
 	read := func(name string, querier api.Querier, reads int) (verified map[uint64]bool, refused map[uint64]string, errs []error) {
-		src, err := anchorsrc.New(querier, pool, bvn, authority)
-		require.NoError(t, err)
 		verified, refused = map[uint64]bool{}, map[uint64]string{}
-		src.OnRefused = func(block uint64, err error) { refused[block] = err.Error() }
-		src.OnAnchor = func(_ *url.URL, block uint64, _ [32]byte) { verified[block] = true }
 		for i := 0; i < reads; i++ {
-			// A fresh read of the whole window each time, so every read asks
+			// A fresh read of the whole pool each time, so every read asks
 			// for the pulled range again.
-			src.Rewind()
-			if err := src.Read(ctx); err != nil {
+			v, r, err := readPoolAnchors(ctx, querier, pool, bvn, authority, 4)
+			if err != nil {
 				errs = append(errs, err)
+			}
+			for b := range v {
+				verified[b] = true
+			}
+			for b, e := range r {
+				refused[b] = e
 			}
 		}
 		t.Logf("%s: %d BVN0 anchors verified, %d refused, %d reads failed", name, len(verified), len(refused), len(errs))

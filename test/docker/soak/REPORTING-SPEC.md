@@ -496,6 +496,21 @@ network. An add is read over **that container's life only**, from its
 `add-follower` line to its `remove-follower`, matched by container name; a
 second add of the same container never borrows the first one's numbers.
 
+There is one late follower per BVN (#4438): `acc-bvn1-fol1` (`bvn1-5`),
+`acc-bvn2-fol1` (`bvn2-5`) and `acc-bvn3-fol2` (`bvn3-6`). One add-follower
+slot adds every one of them — its databases cleared and `join-running-network
+= true` set in its `accumulate.toml` — and the next follower slot removes them
+all. So `chaos.log` has one `add-follower <container> (...)` line per follower
+at the add, `follower <container> ACTIVE (...), Ns after it was added` and
+`follower <container> first root match (...)` lines per follower as each is
+seen, and at the removal one `remove-follower <container> (removal N)` line
+per follower, all carrying the same N, then one `follower removal N, ...`
+verdict for the slot. The manifest gives a row per add-follower line (per
+follower) and ONE row per removal naming every follower it removed, because
+the readings either side of it are taken once for all of them. A
+`remove-follower` line without `(removal N)` (runs before #4438) is its own
+removal. Each follower's log is kept as `node-logs-<container>-N.txt`.
+
 Per add-follower:
 
 - **container start → ACTIVE (s)**, the worst partition, from the `reached`

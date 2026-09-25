@@ -118,8 +118,7 @@ func TestAPartitionLedgerWithScheduledEventsCanBePulled(t *testing.T) {
 			p, err := pull.Fetch(ctx, src, jb, sysLedger, pull.Options{Mode: pull.ModeStateOnly, Partition: part}, true)
 			require.NoError(t, err)
 			require.Equal(t, peerRoot, p.Root(), "the receipt must end at the peer's root")
-			require.NoError(t, p.Settle(peerRoot),
-				"an honest peer's partition ledger does not verify against the peer's own root")
+			require.NoError(t, p.Keep(), "an honest peer's partition ledger could not be written")
 
 			// The events themselves, not only their root: the executor
 			// processes them at the blocks they name.

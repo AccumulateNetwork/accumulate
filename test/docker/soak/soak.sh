@@ -143,7 +143,7 @@ export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-disoak}"
 # "no drops" whether or not drops were configured (#4126).
 compose_file="$here/../docker-compose.yml"
 compose="docker compose -f $compose_file"
-# The follower the chaos walk adds (#4364) is in the compose's late-follower
+# The followers the chaos walk adds (#4364, one per BVN since #4438) are in the compose's late-follower
 # profile, which `down` does not activate: a container of it left up — a run
 # that ended between its add and its remove, or a killed run — would outlive
 # the network and hold the config volume. Removed by name, its log kept.
@@ -244,7 +244,7 @@ FOL_LIST=${FOL_LIST:--}; FOL_PORTS=${FOL_PORTS:--}; FOL_PARTS=${FOL_PARTS:--}
 # Nodes this run has, not nodes the file declares.
 n_node=$(( n_val + n_fol ))
 if [ "$n_fol" -gt 0 ]; then
-  topo_desc="$n_bvn BVNs, $n_val validators + $n_fol follower ($FOL_LIST, partitions ${FOL_PARTS//\// })$([ "$n_late" -gt 0 ] && echo ", of which the last $n_late is started only by the add-follower disturbance") + bootstrap"
+  topo_desc="$n_bvn BVNs, $n_val validators + $n_fol follower$([ "$n_fol" -gt 1 ] && echo s) ($FOL_LIST, partitions ${FOL_PARTS//\// })$([ "$n_late" -gt 0 ] && echo ", of which the last $n_late $([ "$n_late" -gt 1 ] && echo are || echo is) started only by the add-follower disturbance") + bootstrap"
 else
   topo_desc="$n_bvn BVNs, $n_val validators + bootstrap"
 fi
@@ -708,55 +708,69 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   [ "$val_on" -eq 0 ] && echo "$(date -u +%FT%TZ) validators: not disturbed (CHAOS_VALIDATORS=${CHAOS_VALIDATORS:-on})" >> "$chaos"
 
   # The follower kinds (#4364), when CHAOS_FOLLOWERS=on: add-follower starts
-  # the follower whose compose service is in the `late-follower` profile — a
-  # node `compose up` did not start, with its own key in no committee, its
-  # peers from the bootstrap and its storage from docker-network.yml — and
-  # remove-follower stops and removes it. They alternate, one follower up at
-  # a time, CHAOS_FOLLOWER_CYCLES pairs (0: for the whole run). With the
-  # validator walk on too, the slots alternate validator, follower, so each
-  # kind keeps its turn.
+  # EVERY follower whose compose service is in the `late-follower` profile —
+  # one per BVN (#4438), each a node `compose up` did not start, with its own
+  # key in no committee, its peers from the bootstrap and its storage from
+  # docker-network.yml — all in one slot, and remove-follower stops and
+  # removes them all together a slot later. The two alternate,
+  # CHAOS_FOLLOWER_CYCLES pairs (0: for the whole run). With the validator
+  # walk on too, the slots alternate validator, follower, so each kind keeps
+  # its turn.
   #
-  # Each add clears the follower's two databases first (bvnN-M/{dnn,bvnn}/
-  # data/accumulate.db, in the shared config volume that outlives the
-  # container), so every add is a node that has never run, not a restart.
+  # Each add clears every late follower's two databases first (bvnN-M/{dnn,
+  # bvnn}/data/accumulate.db, in the shared config volume that outlives the
+  # container), so every add is a node that has never run, not a restart, and
+  # sets join-running-network in its accumulate.toml (#4340).
   #
-  # While it is up, every wait below polls it: the chaos log gets a line when
-  # accumulate_node_state reads ACTIVE on every partition it runs, and one at
-  # its first block whose root equals a validator's, each with the seconds
-  # since the add. The removal is bracketed by readings FOLLOWER_WINDOW_SECS
-  # before and after it, and the log states whether every partition's block
-  # cadence and every stream's delivered count were unaffected. The readings
-  # are followerchaos.py's; it is tested there.
-  fol_on=0; fol_svc=""; fol=""; fol_dir=""
+  # While they are up, every wait below polls each one: the chaos log gets a
+  # line per follower when accumulate_node_state reads ACTIVE on every
+  # partition it runs, and one at its first block whose root equals a
+  # validator's, each with the seconds since the add. The removal is
+  # bracketed by readings FOLLOWER_WINDOW_SECS before and after it — one set
+  # for the slot, since all of them leave at once — and the log states
+  # whether every partition's block cadence and every stream's delivered
+  # count were unaffected. The readings are followerchaos.py's; it is tested
+  # there.
+  fol_on=0; fol_svcs=(); fols=(); fol_dirs=()
   if [ "${CHAOS_FOLLOWERS:-off}" = on ]; then
-    read -r fol_svc fol fol_dir < <(python3 "$here/followerchaos.py" late 2>/dev/null | head -1)
-    if [ -n "$fol" ]; then
+    while read -r s c d; do
+      [ -n "$c" ] || continue
+      fol_svcs+=("$s"); fols+=("$c"); fol_dirs+=("$d")
+    done < <(python3 "$here/followerchaos.py" late 2>/dev/null)
+    if [ "${#fols[@]}" -gt 0 ]; then
       fol_on=1
-      echo "$(date -u +%FT%TZ) followers: $fol (service $fol_svc, data $fol_dir) is added and removed in turn, ${CHAOS_FOLLOWER_CYCLES:-0} pair(s) (0: unbounded)" >> "$chaos"
+      for k in "${!fols[@]}"; do
+        echo "$(date -u +%FT%TZ) followers: ${fols[$k]} (service ${fol_svcs[$k]}, data ${fol_dirs[$k]}) is added and removed with the other late followers, ${CHAOS_FOLLOWER_CYCLES:-0} pair(s) (0: unbounded)" >> "$chaos"
+      done
     else
       echo "$(date -u +%FT%TZ) followers: CHAOS_FOLLOWERS=on but no follower is in the compose's late-follower profile — none will be added" >> "$chaos"
     fi
   fi
-  added=""; added_at=""; added_s=0; seen_active=0; seen_match=0; pairs=0; fol_done=0
+  # added: the late followers up now (empty: none). Per follower: when it was
+  # added, and whether ACTIVE and a root match have been seen since.
+  added=(); declare -A added_at=() added_s=() seen_active=() seen_match=()
+  pairs=0; fol_done=0
 
-  # Poll the added follower once: ACTIVE, then its first root match.
+  # Poll each added follower once: ACTIVE, then its first root match.
   follower_watch() {
-    [ -n "$added" ] || return 0
-    local out
-    if [ "$seen_active" -eq 0 ]; then
-      if out=$(python3 "$here/followerchaos.py" state "$added" 2>/dev/null); then
-        seen_active=1
-        echo "$(date -u +%FT%TZ) follower $added ACTIVE ($out), $(( $(date +%s) - added_s ))s after it was added" >> "$chaos"
+    local c out
+    for c in "${added[@]}"; do
+      if [ "${seen_active[$c]}" -eq 0 ]; then
+        if out=$(python3 "$here/followerchaos.py" state "$c" 2>/dev/null); then
+          seen_active[$c]=1
+          echo "$(date -u +%FT%TZ) follower $c ACTIVE ($out), $(( $(date +%s) - ${added_s[$c]} ))s after it was added" >> "$chaos"
+        fi
       fi
-    fi
-    if [ "$seen_match" -eq 0 ]; then
-      if out=$(python3 "$here/followerchaos.py" rootmatch "$added" "$added_at" 2>/dev/null); then
-        seen_match=1
-        echo "$(date -u +%FT%TZ) follower $added first root match ($out), $(( $(date +%s) - added_s ))s after it was added" >> "$chaos"
+      if [ "${seen_match[$c]}" -eq 0 ]; then
+        if out=$(python3 "$here/followerchaos.py" rootmatch "$c" "${added_at[$c]}" 2>/dev/null); then
+          seen_match[$c]=1
+          echo "$(date -u +%FT%TZ) follower $c first root match ($out), $(( $(date +%s) - ${added_s[$c]} ))s after it was added" >> "$chaos"
+        fi
       fi
-    fi
+    done
+    return 0
   }
-  # Wait $1 seconds, polling the follower every 10.
+  # Wait $1 seconds, polling the followers every 10.
   chaos_wait() {
     local left=$1 step
     while [ "$left" -gt 0 ]; do
@@ -766,29 +780,48 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
     done
   }
   add_follower() {
-    $compose run --rm --no-deps --entrypoint sh "$fol_svc" -c \
-      "rm -rf /root/.accumulate/$fol_dir/dnn/data/accumulate.db /root/.accumulate/$fol_dir/bvnn/data/accumulate.db" >/dev/null 2>&1
-    $compose --profile late-follower create --no-recreate "$fol_svc" >/dev/null 2>&1
-    added_at=$(date -u +%FT%TZ); added_s=$(date +%s)
-    echo "$added_at add-follower $fol (key in no committee; databases cleared)" >> "$chaos"
-    docker start "$fol" >/dev/null 2>&1
-    added=$fol; seen_active=0; seen_match=0
+    local k c d clear="" join=""
+    for d in "${fol_dirs[@]}"; do
+      clear+=" /root/.accumulate/$d/dnn/data/accumulate.db /root/.accumulate/$d/bvnn/data/accumulate.db"
+      join+=" /root/.accumulate/$d/accumulate.toml"
+    done
+    # One throwaway container for all of them: the directories share one
+    # volume, and a `compose run` per follower costs seconds each.
+    $compose run --rm --no-deps --entrypoint sh "${fol_svcs[0]}" -c "rm -rf$clear" >/dev/null 2>&1
+    # A node added to a running partition says so in its config: a store holding
+    # only genesis cannot tell that from being the first node of a network, and
+    # without it the follower executes from genesis instead of joining (#4340).
+    $compose run --rm --no-deps --entrypoint sh "${fol_svcs[0]}" -c \
+      "for f in$join; do grep -q join-running-network \$f || sed -i '/type = \"coreValidator\"/a\\  join-running-network = true' \$f; done" >/dev/null 2>&1
+    $compose --profile late-follower create --no-recreate "${fol_svcs[@]}" >/dev/null 2>&1
+    for k in "${!fols[@]}"; do
+      c=${fols[$k]}
+      added_at[$c]=$(date -u +%FT%TZ); added_s[$c]=$(date +%s)
+      seen_active[$c]=0; seen_match[$c]=0
+      echo "${added_at[$c]} add-follower $c (${fol_svcs[$k]}, data ${fol_dirs[$k]}; key in no committee; databases cleared; join-running-network)" >> "$chaos"
+    done
+    docker start "${fols[@]}" >/dev/null 2>&1
+    added=("${fols[@]}")
   }
   remove_follower() {
-    local n=$((pairs + 1)) w=${FOLLOWER_WINDOW_SECS:-30}
+    local n=$((pairs + 1)) w=${FOLLOWER_WINDOW_SECS:-30} c
     local pre="$rd/follower-removal-$n"
     python3 "$here/followerchaos.py" snapshot "$pre-before.json" 2>/dev/null
     chaos_wait "$w"
     python3 "$here/followerchaos.py" snapshot "$pre-at.json" 2>/dev/null
-    [ "$seen_active" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $added NEVER ACTIVE: removed $(( $(date +%s) - added_s ))s after it was added" >> "$chaos"
-    [ "$seen_match" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $added never matched a validator's root before its removal" >> "$chaos"
-    echo "$(date -u +%FT%TZ) remove-follower $added" >> "$chaos"
-    docker stop "$added" >/dev/null 2>&1
-    # Its log goes with the container, and the run's live log capture only
-    # follows the containers `up` started: keep it, in followerlog's shape.
-    docker logs "$added" 2>&1 | sed "s/^/$added | /" > "$rd/node-logs-$added-$n.txt"
-    docker rm -v "$added" >/dev/null 2>&1
-    added=""; pairs=$n
+    for c in "${added[@]}"; do
+      [ "${seen_active[$c]}" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $c NEVER ACTIVE: removed $(( $(date +%s) - ${added_s[$c]} ))s after it was added" >> "$chaos"
+      [ "${seen_match[$c]}" -eq 0 ] && echo "$(date -u +%FT%TZ) follower $c never matched a validator's root before its removal" >> "$chaos"
+      echo "$(date -u +%FT%TZ) remove-follower $c (removal $n)" >> "$chaos"
+    done
+    docker stop "${added[@]}" >/dev/null 2>&1
+    # Their logs go with the containers, and the run's live log capture only
+    # follows the containers `up` started: keep each, in followerlog's shape.
+    for c in "${added[@]}"; do
+      docker logs "$c" 2>&1 | sed "s/^/$c | /" > "$rd/node-logs-$c-$n.txt"
+    done
+    docker rm -v "${added[@]}" >/dev/null 2>&1
+    added=(); pairs=$n
     sleep "$w"
     python3 "$here/followerchaos.py" snapshot "$pre-after.json" 2>/dev/null
     echo "$(date -u +%FT%TZ) follower removal $n, ${w}s either side: $(python3 "$here/followerchaos.py" unaffected "$pre-before.json" "$pre-at.json" "$pre-after.json" 2>&1)" >> "$chaos"
@@ -806,13 +839,13 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
     # Whose slot: with both walks on, even slots are the follower's.
     fslot=0
     if [ "$fol_on" -eq 1 ] && { [ "$val_on" -eq 0 ] || [ $((slot % 2)) -eq 0 ]; }; then fslot=1; fi
-    if [ "$fslot" -eq 1 ] && [ -z "$added" ] && [ "${CHAOS_FOLLOWER_CYCLES:-0}" -gt 0 ] \
+    if [ "$fslot" -eq 1 ] && [ "${#added[@]}" -eq 0 ] && [ "${CHAOS_FOLLOWER_CYCLES:-0}" -gt 0 ] \
        && [ "$pairs" -ge "${CHAOS_FOLLOWER_CYCLES:-0}" ]; then
       [ "$fol_done" -eq 0 ] && echo "$(date -u +%FT%TZ) followers: done, $pairs pair(s) (CHAOS_FOLLOWER_CYCLES=$CHAOS_FOLLOWER_CYCLES)" >> "$chaos"
       fol_done=1; fslot=0
     fi
     if [ "$fslot" -eq 1 ]; then
-      if [ -z "$added" ]; then add_follower; else remove_follower; fi
+      if [ "${#added[@]}" -eq 0 ]; then add_follower; else remove_follower; fi
       continue
     fi
     [ "$val_on" -eq 1 ] || continue
@@ -1407,7 +1440,12 @@ except OSError:
     raise SystemExit
 
 # --- the lives, from chaos.log ----------------------------------------------
-lives, removals, cur = [], [], None
+# Several late followers are up at once (#4438), so a life is open per
+# container. A removal is one slot: every `remove-follower` line carrying the
+# same `(removal N)` is one removal, judged once, since all of them left
+# together. A line without the suffix (runs before #4438) is its own removal.
+lives, removals, open_ = [], [], {}
+by_n = {}
 for l in lines:
     m = re.match(r"^(\S+Z) (.*)$", l)
     if not m:
@@ -1415,27 +1453,34 @@ for l in lines:
     t, rest = m.group(1), m.group(2)
     a = re.match(r"add-follower (\S+)", rest)
     if a:
-        cur = {"node": a.group(1), "at": t, "end": None, "active": None,
-               "activeS": None, "never": None, "match": None}
-        lives.append(cur)
+        open_[a.group(1)] = {"node": a.group(1), "at": t, "end": None, "active": None,
+                             "activeS": None, "never": None, "match": None}
+        lives.append(open_[a.group(1)])
         continue
-    r = re.match(r"remove-follower (\S+)", rest)
+    r = re.match(r"remove-follower (\S+)(?: \(removal (\d+)\))?", rest)
     if r:
-        removals.append({"node": r.group(1), "at": t, "n": len(removals) + 1})
-        if cur is not None and cur["node"] == r.group(1):
-            cur["end"] = t
-            cur = None
+        n = int(r.group(2)) if r.group(2) else len(removals) + 1
+        if n in by_n:
+            by_n[n]["nodes"].append(r.group(1))
+        else:
+            by_n[n] = {"nodes": [r.group(1)], "at": t, "n": n}
+            removals.append(by_n[n])
+        life = open_.pop(r.group(1), None)
+        if life is not None:
+            life["end"] = t
         continue
+    m = re.match(r"follower (\S+) ", rest)
+    cur = open_.get(m.group(1)) if m else None
     if cur is None:
         continue
     m = re.match(r"follower (\S+) ACTIVE .*, (\d+)s after it was added", rest)
-    if m and m.group(1) == cur["node"]:
+    if m:
         cur["active"], cur["activeS"] = t, int(m.group(2))
     m = re.match(r"follower (\S+) NEVER ACTIVE: (.*)$", rest)
-    if m and m.group(1) == cur["node"]:
+    if m:
         cur["never"] = m.group(2)
     m = re.match(r"follower (\S+) first root match \((.*)\), (\d+)s after", rest)
-    if m and m.group(1) == cur["node"]:
+    if m:
         f = dict(kv.split("=", 1) for kv in m.group(2).split() if "=" in kv)
         cur["match"] = "block %s (source %s), %ss after the add" % (
             f.get("block", "?"), f.get("source", "?"), m.group(3))
@@ -1559,7 +1604,7 @@ for rm in removals:
     else:
         text = followerchaos.unaffected(*snaps)[1]
     out.append((rm["at"], "| %s remove-follower %s (removal %d) | %s |" % (
-        hhmm(rm["at"]), rm["node"], rm["n"], text)))
+        hhmm(rm["at"]), ", ".join(rm["nodes"]), rm["n"], text)))
 for _, row in sorted(out, key=lambda x: x[0]):
     print(row)
 PYEOF

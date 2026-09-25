@@ -178,6 +178,82 @@ func newObservedDB(t *testing.T) *database.Database {
 	return db
 }
 
+// servedBlock is the block a peer fixture claims to have served state at.
+const servedBlock = 17
+
+// peer serves state out of a database and, with it, the receipt the real
+// querier serves: the account's state proven into that database's BPT root.
+type peer struct {
+	*dbSource
+
+	// empty makes the peer answer with a record carrying no account, which is
+	// how a peer that has nothing to serve answers.
+	empty bool
+}
+
+func (s *peer) QueryAccount(_ context.Context, u *url.URL, q *api.DefaultQuery) (*api.AccountRecord, error) {
+	if s.empty {
+		return new(api.AccountRecord), nil
+	}
+
+	b := s.db.Begin(false)
+	defer b.Discard()
+
+	var acct protocol.Account
+	if err := b.Account(u).Main().GetAs(&acct); err != nil {
+		return nil, err
+	}
+	rec := &api.AccountRecord{Account: acct}
+
+	if q != nil && q.IncludeReceipt.Yes() {
+		r, err := b.Account(u).StateReceipt()
+		if err != nil {
+			return nil, err
+		}
+		rec.Receipt = &api.Receipt{LocalBlock: servedBlock}
+		rec.Receipt.Receipt = *r
+	}
+	return rec, nil
+}
+
+// alice builds a database holding one non-trivial account and returns it with
+// the account's URL and the database's BPT root.
+func alice(t *testing.T) (*database.Database, *url.URL, [32]byte) {
+	t.Helper()
+	u := protocol.DnUrl().JoinPath("alice")
+	db := newObservedDB(t)
+
+	b := db.Begin(true)
+	if err := b.Account(u).Main().Put(&protocol.DataAccount{Url: u}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		e := make([]byte, 32)
+		e[0] = byte(i)
+		e[31] = 0xab
+		if err := b.Account(u).MainChain().Inner().AddEntry(e, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := b.Account(u).Directory().Add(u.JoinPath("child")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.UpdateBPT(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	ro := db.Begin(false)
+	defer ro.Discard()
+	root, err := ro.GetBptRootHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db, u, root
+}
+
 // TestStateOnly_BPTLeafMatches is the central correctness check for
 // ModeStateOnly. Build a reference DB with a non-trivial account
 // (state + Directory + Pending + chains with entries). Pull just

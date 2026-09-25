@@ -116,19 +116,27 @@ type Stage interface {
 }
 
 // A State is the state half: it pulls what the node lacks and says when the
-// local root equals a root the Directory anchored (#4293).
+// local root equals a root the partition's validators signed (#4293).
 type State interface {
-	// Pull fetches what the node lacks, verified against the anchored root.
-	// It decides for itself what that is: the accounts the block ledger says
-	// the blocks changed, read from a peer, with the BPT page diff as the
-	// backstop (executor spec, "Sync", step 3). The caller does not supply a
-	// set, because a block's envelopes are not the set (#4306).
+	// Pull runs one round of the pull: the block-ledger records since the
+	// last one processed, then the next pages of the walk of the peer's BPT
+	// (executor spec, "Sync", "The algorithm", steps 1-2). It decides for
+	// itself what to pull; the caller does not supply a set, because a
+	// block's envelopes are not the set (#4306).
 	Pull(ctx context.Context) error
 
 	// Matched reports the block whose anchored root the local root equals,
 	// and whether it has been reached. It follows the state: after a pull
 	// that advanced the sync, it reports the block the sync advanced to.
 	Matched(ctx context.Context) (uint64, bool, error)
+
+	// Ready reports the block the pulled state may be executed from before it
+	// is proven: the walk is done and the records are processed through it.
+	// The node hands off there and stays BOOTING; the root watch promotes it
+	// at the first executed block whose root equals the partition's signed
+	// anchor, and the state is repaired from the block ledger at a mismatch
+	// (executor spec, "Sync", "Two mismatches").
+	Ready() (uint64, bool)
 
 	// Promote says the node handed off at block, the block Matched last
 	// reported, and is executing from the block after it: it is ACTIVE from
@@ -379,12 +387,19 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			overran = false
 		}
 
-		q, ok, err := opts.State.Matched(ctx)
+		q, proven, err := opts.State.Matched(ctx)
 		if err != nil {
 			return 0, errors.UnknownError.WithFormat("match the anchored root: %w", err)
 		}
+		ok := proven
+		if !ok {
+			// Not proven, but the walk is done: the node may execute from
+			// here and compare at every block that anchors (executor spec,
+			// "Sync", "Two mismatches").
+			q, ok = opts.State.Ready()
+		}
 		if ok {
-			done, err := stageAndHandOff(opts, log, q, &failures)
+			done, err := stageAndHandOff(opts, log, q, proven, &failures)
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)
 			}
@@ -406,11 +421,13 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 	}
 }
 
-// stageAndHandOff is step 3 at the block q the state matched: stage the kept
-// blocks through q + 1, ask whether q + 1 has a gap, and if not settle staging
-// at q and hand off. It reports whether the node handed off; false with no
-// error means the join pulls again. failures counts the handoffs that failed.
-func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (bool, error) {
+// stageAndHandOff stages the kept blocks through q + 1, asks whether q + 1 has
+// a gap, and if not settles staging at q and hands off. proven says the state
+// at q matched a signed anchor; only then is the node promoted here, and
+// otherwise at the first executed block that matches. It reports whether the
+// node handed off; false with no error means the join pulls again. failures
+// counts the handoffs that failed.
+func stageAndHandOff(opts Options, log *slog.Logger, q uint64, proven bool, failures *int) (bool, error) {
 	// Staging holds everything collected through q + 1 and nothing after it
 	// (#4398): the gap check asks what q + 1 carries, and a block delivers
 	// the run it can from what is held, so a staging that also held what
@@ -436,13 +453,16 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 	reportGaps(opts.Partition, gaps)
 	if len(gaps) > 0 {
 		// An entry from before the node was listening: the peers hold it and
-		// this node does not. The sync advances instead.
+		// this node does not. The node executes anyway, with whatever
+		// staging holds: a block executed without an entry it needed is
+		// wrong only in the accounts its record names, and the root check
+		// repairs them from the block ledger (executor spec, "Sync", "Two
+		// mismatches", and step 6). The gap is said and put on the gauge.
 		streams := make([]string, len(gaps))
 		for i, g := range gaps {
 			streams[i] = g.String()
 		}
-		log.Info("The next block has a gap; advancing the sync", "synced", q, "block", q+1, "gaps", streams)
-		return false, nil
+		log.Info("The next block has a gap; executing anyway, and repairing on a mismatch", "synced", q, "block", q+1, "gaps", streams)
 	}
 
 	err = opts.Stage.SettleStagingAt(q)
@@ -456,6 +476,10 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 		// match, is where it becomes ACTIVE (#4385). A handoff that is
 		// refused or fails below never promotes, so a retried handoff never
 		// flips the node's state.
+		if !proven {
+			log.Info("Executing from the pulled state, unproven; comparing at every block that anchors", "block", q, "executes", q+1)
+			return true, nil
+		}
 		log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
 		opts.State.Promote(q)
 		return true, nil
@@ -468,7 +492,7 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 	case errors.Is(err, errors.Conflict):
 		// Syncing again, the state matched a block before the one this node
 		// had executed to. Those blocks are not in the buffer, so the node
-		// cannot execute from there; the next pass is at the peers' newer
+		// cannot execute from there; the pull goes on to the peers' newer
 		// state.
 		log.Info("The state is behind the block this node stood at; pulling again", "block", q, "error", err)
 		return false, nil

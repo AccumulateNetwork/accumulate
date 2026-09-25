@@ -130,6 +130,13 @@ func (b *Bullshark) orderLeaders(leader *types.Certificate) []*types.Certificate
 // the wider walk from re-emitting anything.
 const rescueWindow = 32
 
+// RescueWindow is rescueWindow for a node seeding its position: the first
+// leaders it commits after a seed walk this far below it, and certificates
+// its peers committed there before the seed are in no digest set this node
+// holds. A group committed at a leader more than RescueWindow above the seed
+// is the group its peers committed (#4405).
+const RescueWindow = rescueWindow
+
 // orderDag flattens the sub-dag referenced by a leader.
 // Returns all reachable, not-yet-committed certificates in deterministic
 // order (by round ascending, then by author).

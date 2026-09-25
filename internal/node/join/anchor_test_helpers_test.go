@@ -7,18 +7,14 @@
 package join
 
 import (
-	"context"
 	"crypto/ed25519"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -74,44 +70,4 @@ func signedAnchor(t *testing.T, values *core.GlobalValues, keys []ed25519.Privat
 		Sequence:   seq,
 		Signatures: &api.RecordRange[*api.SignatureSetRecord]{Records: []*api.SignatureSetRecord{set}, Total: 1},
 	}
-}
-
-// anchorPool answers the two queries a Source makes against the Directory's
-// anchor pool -- the chain's count and a range of its entries -- out of a list
-// of anchors, the way the API answers them. It answers nothing else.
-type anchorPool struct {
-	entries []*api.MessageRecord[messaging.Message]
-}
-
-func (p *anchorPool) Query(_ context.Context, scope *url.URL, q api.Query) (api.Record, error) {
-	cq, ok := q.(*api.ChainQuery)
-	if !ok || !scope.Equal(protocol.DnUrl().JoinPath(protocol.AnchorPool)) {
-		return nil, errors.NotFound.WithFormat("no such record")
-	}
-	if cq.Range == nil {
-		return &api.ChainRecord{Name: "main", Count: uint64(len(p.entries))}, nil
-	}
-	rr := new(api.RecordRange[api.Record])
-	for i := cq.Range.Start; i < uint64(len(p.entries)); i++ {
-		rr.Records = append(rr.Records, &api.ChainEntryRecord[api.Record]{
-			Name: "main", Index: i, Value: p.entries[i],
-		})
-	}
-	rr.Start = cq.Range.Start
-	rr.Total = uint64(len(p.entries))
-	return rr, nil
-}
-
-// anchoredSource is a real anchor source over a Directory pool holding the
-// given anchors, so the roots those anchors carry are the ones it proves.
-func anchoredSource(t *testing.T, values *core.GlobalValues, anchors ...*api.MessageRecord[messaging.Message]) *anchorsrc.Source {
-	t.Helper()
-	a, err := anchorsrc.FromValues(values)
-	require.NoError(t, err)
-	here := protocol.PartitionUrl("BVN0")
-	pool, err := anchorsrc.PoolFor(here, a.BvnNames())
-	require.NoError(t, err)
-	s, err := anchorsrc.New(&anchorPool{entries: anchors}, pool, here, a)
-	require.NoError(t, err)
-	return s
 }

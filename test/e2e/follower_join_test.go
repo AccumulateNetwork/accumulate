@@ -135,8 +135,8 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 		"a joining follower must refuse a read as NotReady, got %v", err)
 
 	// The join, as the daemon runs it. The simulator has no clock, so the
-	// network steps — under load — after every pull round. In the first round
-	// a transaction is handed to the follower itself, while it is joining.
+	// network steps — under load — after every pull round and every root
+	// check.
 	// The state is the one RestartNode built as the daemon builds it, and
 	// its machine is what the follower's querier refuses by: a state built
 	// here would be one the follower's services never see.
@@ -150,12 +150,22 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	require.True(t, part.Equal(srcPart), "the account routed to %v, not %v", srcPart, part)
 	require.Len(t, srcs, p.NodeCount()-1, "the follower must be excluded from its own peer list")
 
+	// A transaction is handed to the follower itself, while it is joining.
+	// It is handed over before the join runs: a follower that stopped a
+	// block or two behind matches its own state at the join's first look and
+	// hands off before any pull round (#4411).
+	require.True(t, p.Joining(follower), "precondition: the follower is still joining")
+	env := send()
+	relayed := env.Transaction[0].ID()
+	subs, err := followerSubmit.Submit(ctx, env, api.SubmitOptions{})
+	require.NoError(t, err, "the follower refused a transaction while it was joining")
+	require.NotEmpty(t, subs)
+
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	const maxRounds = 200
-	var relayed *url.TxID
 	var joiningRounds, matchedRounds int
-	stepping := &steppingState{State: state, step: func(round int) {
+	stepping := &steppingState{cancel: cancel, State: state, step: func(round int) {
 		// A node that has not handed off executes nothing and is BOOTING,
 		// whether or not its root has matched yet (#4385: ACTIVE at the
 		// match served stale anchors to the next joiner, #4413).
@@ -167,16 +177,7 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 			require.Equal(t, nodestate.StateBooting, state.Machine().State(),
 				"round %d: the follower is still joining and reads %v", round, state.Machine().State())
 		}
-		if round == 1 {
-			require.True(t, p.Joining(follower), "precondition: the follower is still joining")
-			env := send()
-			relayed = env.Transaction[0].ID()
-			subs, err := followerSubmit.Submit(ctx, env, api.SubmitOptions{})
-			require.NoError(t, err, "the follower refused a transaction while it was joining")
-			require.NotEmpty(t, subs)
-		} else {
-			sim.SubmitTxnSuccessfully(send())
-		}
+		sim.SubmitTxnSuccessfully(send())
 		sim.StepN(3)
 		if round >= maxRounds {
 			cancel()

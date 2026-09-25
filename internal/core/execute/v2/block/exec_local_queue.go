@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -123,6 +124,21 @@ func (b *Block) drainDeliveryQueues() error {
 	var msgs []messaging.Message
 	for _, id := range locals {
 		msg, err := b.Batch.Message(id.Hash()).Main().Get()
+		if errors.Is(err, errors.NotFound) {
+			// The block before this one stored it. A windowed store
+			// (BlockchainDB) answers a shallow read past its window as
+			// absent, and the window counts commits: a joined node's root
+			// watch backfills between two blocks, a commit an account, and
+			// pushed the message out of it. The block then failed here
+			// before clearing the queue, and so did every block after it
+			// (#4405, run 20260925T020517Z). The message is there; read it
+			// where it is.
+			err = b.Executor.deepView(func(deep *database.Batch) error {
+				var err error
+				msg, err = deep.Message(id.Hash()).Main().Get()
+				return err
+			})
+		}
 		if err != nil {
 			return errors.UnknownError.WithFormat("load queued local delivery %v: %w", id, err)
 		}
