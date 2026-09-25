@@ -175,8 +175,9 @@ func (l *lying) QueryMessage(ctx context.Context, id *url.TxID, q *api.DefaultQu
 // proven root and the message is not, so the message is believed only if it
 // hashes to its entry. A peer that serves another message, a transaction
 // without its body, no message at all, or a stored form whose transaction is
-// not the one it names, has not served the chain: nothing is kept from it and
-// the next peer is asked.
+// not the one it names, has not served the chain: nothing it lied about is
+// kept and the next peer is asked. A message it served that hashes to its
+// entry is written with its page and stays (#4446): it is the entry's.
 func TestFullSpine_RefusesAMessageThatIsNotItsEntry(t *testing.T) {
 	src, u, entries := spineWithMessages(t)
 
@@ -262,9 +263,18 @@ func TestFullSpine_RefusesAMessageThatIsNotItsEntry(t *testing.T) {
 
 			_, _, err := FetchFrom(context.Background(), []Source{liar}, b, u, Options{Mode: ModeFullSpine})
 			require.Error(t, err, "a peer that served %s was believed", name)
+			// A message proven by its entry is written with its page and
+			// stays (#4446); nothing the peer lied about is kept.
 			for i, h := range entries {
-				_, err := b.Message(h).Main().Get()
-				require.Error(t, err, "entry %d: a refused peer's message was kept", i)
+				got, err := b.Message(h).Main().Get()
+				if err != nil {
+					continue
+				}
+				sb := src.Begin(false)
+				want, err := sb.Message(h).Main().Get()
+				sb.Discard()
+				require.NoError(t, err)
+				require.True(t, messaging.EqualMessage(got, want), "entry %d: a refused peer's lie was kept", i)
 			}
 			_, err = b.Message(otherHash).Main().Get()
 			require.Error(t, err, "a transaction a refused peer served was kept")
