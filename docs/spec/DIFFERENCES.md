@@ -448,6 +448,23 @@ departs:
   at another position keeps its old index and a hash the chain no longer
   holds keeps one; a later `AddEntry(unique)` of it is skipped and a proof of
   it points at the wrong index (#4438 re-review F-8(a); #4444).
+- **Streamed pages are on disk before the chain is held to its head**
+  ([#4446](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4446)).
+  A whole-chain pull and a backfill write each page as it arrives and check
+  the entries against the head only after the last. A peer refused there, or
+  a pull killed part way, leaves its elements, mark points, intermediates and
+  element-index entries written: under the old head for a pull, below the
+  head for a backfill. The next source's pages overwrite every position, but
+  an `ElementIndex` of a hash the refused peer served and the right chain
+  does not hold at that position stays (the #4444 hazard, reached now by a
+  refused peer as well as by a retake), and a backfill writes an index only
+  where none is held, so its refused peer's are never replaced. A retake
+  after a mismatch must clear them; #4444 builds that. Until then a refused
+  backfill source can also leave wrong elements readable below the head of
+  a chain no source then serves whole. The signature pages likewise write a
+  transaction's history and signer entries before the chain is held to its
+  head. Before #4446 nothing was written until the whole chain matched, at
+  the cost of holding it all in memory.
 - **Demoting the peers behind a pull that brought no match orders nothing.**
   `RepairFrom` demotes every peer that served the pull, and with sources
   asked in rotation every peer serves something in any pull of two accounts

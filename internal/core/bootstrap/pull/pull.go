@@ -36,7 +36,10 @@
 // Ported from bootstrap-v3 (issue #4293). Changed on this line: the pull
 // writes through a nested batch, discarded on anything Fetch itself refuses
 // (a malformed body, a mismatched name, a missing message) rather than
-// straight through.
+// straight through. What lies under a chain's head -- its entries, the
+// messages behind them -- is the exception: it is written to Options.Store a
+// page at a time as it arrives, so the pull's memory does not grow with the
+// history (#4446).
 package pull
 
 import (
