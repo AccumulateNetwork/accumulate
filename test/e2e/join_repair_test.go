@@ -320,7 +320,11 @@ func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 		require.NoError(t, err)
 		require.Zero(t, head.Count, "the joiner still holds the main chain of %v, which it deleted", extra)
 	})
-	t.Logf("%d repairs before the match", counter.repairs)
+	// One repair, from the block ledger: the joiner's own record names the
+	// account. Were its own records not read, that repair would bring no
+	// match and a second one would walk the tree to delete it (#4438
+	// re-review F-4).
+	require.Equal(t, 1, counter.repairs, "the repair from the joiner's own block-ledger records did not bring the match")
 
 	// The chains the joiner grew wrongly are the peers' again, not the
 	// peers' appended to its own.
