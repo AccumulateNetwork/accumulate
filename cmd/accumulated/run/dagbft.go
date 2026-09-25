@@ -515,7 +515,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// absent series (#4345b). The executor moves it from here on.
 	nodestate.ReportExecuted(s.Partition.ID, lastBlock)
 
-	joining := nodeMustJoin(lastBlock)
+	// A store holding only genesis cannot tell the first node of a network
+	// from a node added to a running one; the deployment says which (#4340).
+	joining := nodeMustJoin(lastBlock) || s.JoinRunningNetwork != nil && *s.JoinRunningNetwork
 	if !joining {
 		// Said out loud, because it is the one condition under which a node
 		// executes without asking anyone (executor spec, "Sync", step 2), and

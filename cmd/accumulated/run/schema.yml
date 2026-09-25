@@ -248,6 +248,10 @@ Configuration:
           description: is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join
           type: '*uint'
           optional: true
+        - name: JoinRunningNetwork
+          description: says this node is being added to a partition that is already running, so a store holding only genesis joins instead of executing from genesis (#4340). A node that has executed a block of its own joins whatever this says
+          type: '*bool'
+          optional: true
         - name: BlockInterval
           description: is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself
           type: '*encoding.Duration'
@@ -396,6 +400,10 @@ Service:
         - name: BPTHistoryDepth
           description: is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join. Defaults to 1024
           type: '*uint'
+          optional: true
+        - name: JoinRunningNetwork
+          description: says this node is being added to a partition that is already running (#4340)
+          type: '*bool'
           optional: true
         - name: CommitBufferSize
           type: '*int'

@@ -1019,7 +1019,11 @@ join to ask the others for a state none of them had (#4304). The two cases this
 cannot tell apart are the first node of a **new network** and a node added to a
 **running partition** holding nothing but genesis: both read block 1, and there
 is no local fact that separates them — the distinction is whether the partition
-has moved on, which is a network fact (#4340).
+has moved on, which is a network fact (#4340). **The deployment says which:**
+a node being added to a running partition carries `join-running-network =
+true` in its core-validator configuration, and a genesis-only store with it
+set joins. A node that has executed a block of its own joins whatever the
+setting says.
 
 #### 6. Serve last
 

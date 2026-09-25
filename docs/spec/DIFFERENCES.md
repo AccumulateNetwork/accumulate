@@ -728,16 +728,13 @@ and true only in a hand-written test. `Run`'s `found == 0` is now
 unconditionally `NotReady`, which is #4296's rule with nothing to switch it
 off.
 
-**A genesis-only node deployed into a running partition executes from block 1,
-and that is wrong (#4340)**. It reads the same `lastBlock == 1` as the first
-node of a new network and there is no local fact that separates them; the
-difference is whether the partition has moved on, which is a network fact the
-daemon does not ask for. Not reachable by any deployment path today —
-`init` and netsim create every node of a network at once — and filed rather
-than guessed at, because the obvious alternative (let a fresh node join and
-ask) is what #4304 removed: in a fresh network every node is then joining,
-every node refuses every other, and the network starts only when they all time
-out.
+**A genesis-only node deployed into a running partition joins only when its
+configuration says so (#4340).** `join-running-network = true` in the
+core-validator configuration makes it join; nothing sets it but the Docker
+harness's add-follower step. A deployment that forgets it executes from
+block 1 and diverges. Found on the first Docker add-follower run
+(runs/20260925T003825Z): the follower reported ACTIVE at block 2 while the
+network was at 1,100.
 
 **What the wiring does when no peer can answer**: every validator of the
 partition is asked for its staging, and if none can serve any — which is what

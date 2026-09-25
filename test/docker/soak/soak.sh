@@ -768,9 +768,14 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   add_follower() {
     $compose run --rm --no-deps --entrypoint sh "$fol_svc" -c \
       "rm -rf /root/.accumulate/$fol_dir/dnn/data/accumulate.db /root/.accumulate/$fol_dir/bvnn/data/accumulate.db" >/dev/null 2>&1
+    # A node added to a running partition says so in its config: a store holding
+    # only genesis cannot tell that from being the first node of a network, and
+    # without it the follower executes from genesis instead of joining (#4340).
+    $compose run --rm --no-deps --entrypoint sh "$fol_svc" -c \
+      "f=/root/.accumulate/$fol_dir/accumulate.toml; grep -q join-running-network \$f || sed -i '/type = \"coreValidator\"/a\\  join-running-network = true' \$f" >/dev/null 2>&1
     $compose --profile late-follower create --no-recreate "$fol_svc" >/dev/null 2>&1
     added_at=$(date -u +%FT%TZ); added_s=$(date +%s)
-    echo "$added_at add-follower $fol (key in no committee; databases cleared)" >> "$chaos"
+    echo "$added_at add-follower $fol (key in no committee; databases cleared; join-running-network)" >> "$chaos"
     docker start "$fol" >/dev/null 2>&1
     added=$fol; seen_active=0; seen_match=0
   }

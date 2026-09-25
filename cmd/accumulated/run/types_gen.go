@@ -258,6 +258,8 @@ type CoreValidatorConfiguration struct {
 	DagGcDepth      *int64
 	// BPTHistoryDepth is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join.
 	BPTHistoryDepth *uint64
+	// JoinRunningNetwork says this node is being added to a partition that is already running, so a store holding only genesis joins instead of executing from genesis (#4340). A node that has executed a block of its own joins whatever this says.
+	JoinRunningNetwork *bool
 	// BlockInterval is the target time between blocks, pinned into every generated node config. Halving it halves the wall time a failure takes to show itself.
 	BlockInterval *encoding.Duration
 }
@@ -329,8 +331,10 @@ type DAGBFTService struct {
 	ExecutionShards *int64
 	DAGGCDepth      *int64
 	// BPTHistoryDepth is how many minor blocks of superseded BPT state to retain, so this node can serve an account or a BPT page AS OF an anchored block rather than as of its own current block (#4361). Zero retains none and refuses every such request; a node retaining none cannot serve a join. Defaults to 1024.
-	BPTHistoryDepth  *uint64
-	CommitBufferSize *int64
+	BPTHistoryDepth *uint64
+	// JoinRunningNetwork says this node is being added to a partition that is already running (#4340).
+	JoinRunningNetwork *bool
+	CommitBufferSize   *int64
 	// MaxExecutionLag is how many committed blocks the executor may fall behind before headers carry no batches and user work is refused (consensus spec, invariant 9). Defaults to 8.
 	MaxExecutionLag *int64
 	// BlockInterval target time between blocks; rounds are paced at half this, since Bullshark commits every other round. Defaults to 3s (#4098).
