@@ -483,7 +483,9 @@ type Receipt struct {
 	Complete bool `json:"complete,omitempty" form:"complete" query:"complete"`
 	// Partition names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against.
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition"`
-	extraData []byte
+	// StartsAtMainState reports that the receipt starts at a plain hash of the account's main state, and that the account served beside it is that state as of ForHeight rather than the current one. It is only ever set on a historical receipt; without it the receipt starts at the account's whole BPT entry and no body is served, because a verifier holding the account state could not recompute that starting point.
+	StartsAtMainState bool `json:"startsAtMainState,omitempty" form:"startsAtMainState" query:"startsAtMainState"`
+	extraData         []byte
 }
 
 type ReceiptOptions struct {
@@ -1679,6 +1681,7 @@ func (v *Receipt) Copy() *Receipt {
 	u.ForHeight = v.ForHeight
 	u.Complete = v.Complete
 	u.Partition = v.Partition
+	u.StartsAtMainState = v.StartsAtMainState
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3046,6 +3049,9 @@ func (v *Receipt) Equal(u *Receipt) bool {
 		return false
 	}
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.StartsAtMainState == u.StartsAtMainState) {
 		return false
 	}
 
@@ -6510,6 +6516,7 @@ var fieldNames_Receipt = []string{
 	5: "ForHeight",
 	6: "Complete",
 	7: "Partition",
+	8: "StartsAtMainState",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -6540,6 +6547,9 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Partition) == 0) {
 		writer.WriteString(7, v.Partition)
+	}
+	if !(!v.StartsAtMainState) {
+		writer.WriteBool(8, v.StartsAtMainState)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -9015,6 +9025,9 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadString(7); ok {
 		v.Partition = x
 	}
+	if x, ok := reader.ReadBool(8); ok {
+		v.StartsAtMainState = x
+	}
 
 	seen, err := reader.Reset(fieldNames_Receipt)
 	if err != nil {
@@ -9719,6 +9732,7 @@ func init() {
 		encoding.NewTypeField("forHeight", "uint64"),
 		encoding.NewTypeField("complete", "bool"),
 		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("startsAtMainState", "bool"),
 	}, "Receipt", "receipt")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -10646,19 +10660,20 @@ func (v *PublicKeySearchQuery) MarshalJSON() ([]byte, error) {
 
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Start          *string                                 `json:"start,omitempty"`
-		StartIndex     int64                                   `json:"startIndex,omitempty"`
-		End            *string                                 `json:"end,omitempty"`
-		EndIndex       int64                                   `json:"endIndex,omitempty"`
-		Anchor         *string                                 `json:"anchor,omitempty"`
-		Entries        encoding.JsonList[*merkle.ReceiptEntry] `json:"entries,omitempty"`
-		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
-		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
-		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
-		ForHeight      uint64                                  `json:"forHeight,omitempty"`
-		Complete       bool                                    `json:"complete,omitempty"`
-		Partition      string                                  `json:"partition,omitempty"`
-		ExtraData      *string                                 `json:"$epilogue,omitempty"`
+		Start             *string                                 `json:"start,omitempty"`
+		StartIndex        int64                                   `json:"startIndex,omitempty"`
+		End               *string                                 `json:"end,omitempty"`
+		EndIndex          int64                                   `json:"endIndex,omitempty"`
+		Anchor            *string                                 `json:"anchor,omitempty"`
+		Entries           encoding.JsonList[*merkle.ReceiptEntry] `json:"entries,omitempty"`
+		LocalBlock        uint64                                  `json:"localBlock,omitempty"`
+		LocalBlockTime    time.Time                               `json:"localBlockTime,omitempty"`
+		MajorBlock        uint64                                  `json:"majorBlock,omitempty"`
+		ForHeight         uint64                                  `json:"forHeight,omitempty"`
+		Complete          bool                                    `json:"complete,omitempty"`
+		Partition         string                                  `json:"partition,omitempty"`
+		StartsAtMainState bool                                    `json:"startsAtMainState,omitempty"`
+		ExtraData         *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Receipt.Start) == 0) {
 		u.Start = encoding.BytesToJSON(v.Receipt.Start)
@@ -10695,6 +10710,9 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Partition) == 0) {
 		u.Partition = v.Partition
+	}
+	if !(!v.StartsAtMainState) {
+		u.StartsAtMainState = v.StartsAtMainState
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -11898,19 +11916,20 @@ func (v *PublicKeySearchQuery) UnmarshalJSON(data []byte) error {
 
 func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Start          *string                                 `json:"start,omitempty"`
-		StartIndex     int64                                   `json:"startIndex,omitempty"`
-		End            *string                                 `json:"end,omitempty"`
-		EndIndex       int64                                   `json:"endIndex,omitempty"`
-		Anchor         *string                                 `json:"anchor,omitempty"`
-		Entries        encoding.JsonList[*merkle.ReceiptEntry] `json:"entries,omitempty"`
-		LocalBlock     uint64                                  `json:"localBlock,omitempty"`
-		LocalBlockTime time.Time                               `json:"localBlockTime,omitempty"`
-		MajorBlock     uint64                                  `json:"majorBlock,omitempty"`
-		ForHeight      uint64                                  `json:"forHeight,omitempty"`
-		Complete       bool                                    `json:"complete,omitempty"`
-		Partition      string                                  `json:"partition,omitempty"`
-		ExtraData      *string                                 `json:"$epilogue,omitempty"`
+		Start             *string                                 `json:"start,omitempty"`
+		StartIndex        int64                                   `json:"startIndex,omitempty"`
+		End               *string                                 `json:"end,omitempty"`
+		EndIndex          int64                                   `json:"endIndex,omitempty"`
+		Anchor            *string                                 `json:"anchor,omitempty"`
+		Entries           encoding.JsonList[*merkle.ReceiptEntry] `json:"entries,omitempty"`
+		LocalBlock        uint64                                  `json:"localBlock,omitempty"`
+		LocalBlockTime    time.Time                               `json:"localBlockTime,omitempty"`
+		MajorBlock        uint64                                  `json:"majorBlock,omitempty"`
+		ForHeight         uint64                                  `json:"forHeight,omitempty"`
+		Complete          bool                                    `json:"complete,omitempty"`
+		Partition         string                                  `json:"partition,omitempty"`
+		StartsAtMainState bool                                    `json:"startsAtMainState,omitempty"`
+		ExtraData         *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
 	u.StartIndex = v.Receipt.StartIndex
@@ -11924,6 +11943,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.ForHeight = v.ForHeight
 	u.Complete = v.Complete
 	u.Partition = v.Partition
+	u.StartsAtMainState = v.StartsAtMainState
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -11952,6 +11972,7 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	v.ForHeight = u.ForHeight
 	v.Complete = u.Complete
 	v.Partition = u.Partition
+	v.StartsAtMainState = u.StartsAtMainState
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

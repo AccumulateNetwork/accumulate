@@ -82,6 +82,12 @@ func (a *Account) putBpt() error {
 // At 250 dirty accounts per block and a depth of 10,000 that is roughly 365 MB,
 // on top of BPT history itself.
 //
+// The body the receipt starts at is retained beside it (RetainedMainState), so
+// a historical answer can serve the state the receipt proves rather than the
+// state the account holds now. That adds the account's marshalled main state
+// per retained block - for a key page, a few hundred bytes - on the same window
+// and the same pruning.
+//
 // # A dormant account keeps more than it needs
 //
 // Pruning runs here, so it runs only when an account is written. An account that
@@ -120,12 +126,37 @@ func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
 		return errors.UnknownError.WithFormat("retain state receipt: %w", err)
 	}
 
+	// And the body that receipt starts at. A historical receipt served beside
+	// the CURRENT body proves nothing a caller can check: the body it was
+	// handed does not hash to the receipt's start.
+	state, err := a.Main().Get()
+	switch {
+	case err == nil:
+		// Kept as the marshalled form, which is what the hasher hashed, so a
+		// caller recomputes the receipt's start from the bytes it was served
+		// with no re-marshalling in between to differ.
+		encoded, err := state.MarshalBinary()
+		if err != nil {
+			return errors.UnknownError.WithFormat("marshal main state: %w", err)
+		}
+		err = a.RetainedMainState(height).Put(encoded)
+		if err != nil {
+			return errors.UnknownError.WithFormat("retain main state: %w", err)
+		}
+	case errors.Is(err, errors.NotFound):
+		// An account with chains and no main state: there is no body to
+		// retain and nothing will be served for it.
+	default:
+		return errors.UnknownError.WithFormat("load main state: %w", err)
+	}
+
 	blocks = append(blocks, height)
 	keep, dropped := bpt.PruneHeights(blocks, height, depth)
 	for _, d := range dropped {
-		// Best effort: an unreferenced receipt leaks bytes, it does not
-		// corrupt anything.
+		// Best effort: an unreferenced receipt or body leaks bytes, it does
+		// not corrupt anything.
 		_ = a.RetainedStateReceipt(d).Put(nil)
+		_ = a.RetainedMainState(d).Put(nil)
 	}
 	err = a.RetainedStateReceiptBlocks().Put(keep)
 	return errors.UnknownError.Wrap(err)
@@ -143,6 +174,20 @@ func (a *Account) BptReceipt() (*merkle.Receipt, error) {
 	}
 
 	return receipt, nil
+}
+
+// StateTreeReceipt returns the receipt from a simple hash of the account's
+// current main state to its current BPT entry, or nil when there is no such
+// path because the debug observer collapses the components into one hash.
+func (a *Account) StateTreeReceipt() (*merkle.Receipt, error) {
+	hasher, err := a.parent.observer.DidChangeAccount(a.parent, a)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if len(hasher) < 2 {
+		return nil, nil
+	}
+	return hasher.Receipt(0, len(hasher)-1), nil
 }
 
 // StateReceipt returns a Merkle receipt for the account state in the BPT.

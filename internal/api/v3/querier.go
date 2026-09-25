@@ -388,21 +388,24 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 // current — reporting the resolved block there would make it disagree with the
 // root the receipt actually ends at.
 //
-// WHERE THE RECEIPT STARTS DEPENDS ON WHAT THE NODE RETAINED, and a caller must
-// read HistoricalStateProof.StartsAtMainState rather than assume.
+// WHERE THE RECEIPT STARTS DEPENDS ON WHAT THE NODE CAN PRODUCE, and a caller
+// must read Receipt.StartsAtMainState rather than assume.
 //
-// When the node retained the account's state receipt for the resolved block, the
-// proof starts at a simple hash of the MAIN STATE, as the current-state path
-// does — so a verifier recomputes the starting point from the state this
-// response carries, and the proof checks offline.
+// When the node can produce the account's main state as of the resolved block -
+// retained beside its state receipt, or unchanged since - the proof starts at a
+// simple hash of that MAIN STATE, as the current-state path does, and THAT
+// STATE is the body this response carries. A verifier recomputes the starting
+// point from the body it was handed, and the proof checks offline.
 //
-// When it did not — retention off, nothing retained at or before the block, or a
-// retained receipt that does not reach the entry — the proof starts at the
+// When it cannot - retention off, nothing retained at or before the block, or a
+// retained receipt that does not reach the entry - the proof starts at the
 // account's whole BPT entry: the merkle hash over main state, secondary state,
-// chain anchors and pending. That is still a correct proof, but a verifier
-// holding only the account state cannot compute its starting point, so
-// StartsAtMainState reports false rather than implying a start the node cannot
-// support.
+// chain anchors and pending. That is still a correct proof, but no body is
+// served beside it: the only body the node has is the current one, and a
+// current body beside a past receipt is two halves that do not fit.
+//
+// Directory and Pending are not retained per block, so on every historical
+// answer they are cleared rather than served as if they were that block's.
 func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database.Account, r *api.AccountRecord, height uint64) error {
 	proof, err := indexing.HistoricalAccountStateProof(s.partition, batch, record, height)
 	if err != nil {
@@ -422,9 +425,16 @@ func (s *Querier) historicalStateReceipt(batch *database.Batch, record *database
 		return errors.InternalError.With("root index chain is empty")
 	}
 
+	// THE BODY IS THE BODY AT THAT BLOCK, or there is none. queryAccount filled
+	// this record from the account as it stands NOW.
+	r.Account = proof.State
+	r.Directory = nil
+	r.Pending = nil
+
 	r.Receipt = new(api.Receipt)
 	r.Receipt.Receipt = *proof.Receipt
 	r.Receipt.ForHeight = proof.Block
+	r.Receipt.StartsAtMainState = proof.StartsAtMainState
 	r.Receipt.LocalBlock = block.BlockIndex
 	if block.BlockTime != nil {
 		r.Receipt.LocalBlockTime = *block.BlockTime

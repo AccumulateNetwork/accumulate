@@ -20,6 +20,10 @@ Receipt:
       description: names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against
       type: string
       optional: true
+    - name: StartsAtMainState
+      description: reports that the receipt starts at a plain hash of the account's main state, and that the account served beside it is that state as of ForHeight rather than the current one. It is only ever set on a historical receipt; without it the receipt starts at the account's whole BPT entry and no body is served, because a verifier holding the account state could not recompute that starting point
+      type: bool
+      optional: true
 
 LastBlock:
   fields:

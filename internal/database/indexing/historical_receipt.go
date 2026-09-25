@@ -8,12 +8,14 @@ package indexing
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // HistoricalStateProof is a proof that an account held a particular state at a
@@ -56,9 +58,16 @@ type HistoricalStateProof struct {
 	// It matters because a verifier holds the account state and nothing else. If
 	// this is false the verifier cannot compute the receipt's starting point and
 	// must take the server's word for it, which is the trust this proof exists to
-	// remove. It is true when the node retained the account's state receipt for
-	// Block, which requires retention to have been on at the time.
+	// remove. It is true exactly when State is set: the receipt starts at the
+	// hash of State and of nothing else.
 	StartsAtMainState bool
+
+	// State is the account's main state AS OF Block - the body the receipt
+	// starts at, not the body the account holds now. It is nil when the node
+	// cannot produce that body, and then StartsAtMainState is false. Serving the
+	// current body beside a past receipt would hand a caller two things that do
+	// not fit: the body does not hash to the receipt's start.
+	State protocol.Account
 }
 
 // HistoricalAccountStateProof proves what an account held at a past block.
@@ -122,19 +131,28 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 		return nil, errors.UnknownError.WithFormat("combine membership and binding receipts: %w", err)
 	}
 
-	// Start at the main state hash where the node kept the receipt for it, so a
-	// verifier can recompute the starting point from the state it was handed.
+	// Start at the main state hash where the node can produce the body that
+	// hash is of, so a verifier recomputes the starting point from the state it
+	// was handed. A body is used only when its receipt reaches exactly the entry
+	// this proof starts at AND the body hashes to exactly where that receipt
+	// starts: then it is the state at the block, proven, not assumed.
 	startsAtMain := false
-	state, err := retainedStateReceipt(account, entry.BlockIndex)
+	var body protocol.Account
+	state, retainedBody, err := retainedStateAt(account, entry.BlockIndex)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	if state != nil && bytes.Equal(state.Anchor, full.Start) {
-		full, err = state.Combine(full)
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("combine state and membership receipts: %w", err)
+		// A receipt retained without its body - retained before bodies were -
+		// is not a main-state start a caller can check, so it is not used as
+		// one. The current body can still serve if the account has not changed.
+		if retainedBody != nil && startsAt(state, retainedBody) {
+			full, err = state.Combine(full)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("combine state and membership receipts: %w", err)
+			}
+			startsAtMain, body = true, retainedBody
 		}
-		startsAtMain = true
 	} else if state != nil {
 		// The retained receipt does not reach the entry this proof starts at, so
 		// it cannot support a main-state start. That is the same condition as
@@ -152,6 +170,37 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 		}
 	}
 
+	// The account as it stands now, when its entry now IS its entry at the
+	// block. That is not an assumption about retention: the current receipt
+	// runs from the current main state hash to the current entry, and that
+	// entry is the one the historical membership receipt starts at, so the
+	// current body is the body at the block by the hashes themselves. It is
+	// what makes an account that has not changed since the block cost nothing
+	// to serve.
+	if !startsAtMain {
+		current, err := account.StateTreeReceipt()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("current state receipt: %w", err)
+		}
+		if current != nil && bytes.Equal(current.Anchor, full.Start) {
+			now, err := account.Main().Get()
+			switch {
+			case err == nil:
+				if startsAt(current, now) {
+					full, err = current.Combine(full)
+					if err != nil {
+						return nil, errors.UnknownError.WithFormat("combine state and membership receipts: %w", err)
+					}
+					startsAtMain, body = true, now
+				}
+			case errors.Is(err, errors.NotFound):
+				// No main state, so no body to serve
+			default:
+				return nil, errors.UnknownError.WithFormat("load main state: %w", err)
+			}
+		}
+	}
+
 	return &HistoricalStateProof{
 		Receipt:           full,
 		Block:             block,
@@ -159,36 +208,67 @@ func HistoricalAccountStateProof(partition config.NetworkUrl, batch *database.Ba
 		AnchorBound:       false,
 		Partition:         partition.PartitionID(),
 		StartsAtMainState: startsAtMain,
+		State:             body,
 	}, nil
 }
 
-// retainedStateReceipt returns the receipt from the account's main state hash
-// to its BPT entry as of the given block, or nil if the node did not retain one.
+// startsAt reports whether the receipt starts at the hash of the body, as the
+// BPT hashes a main state: SHA-256 of its binary marshalling.
+func startsAt(r *merkle.Receipt, body protocol.Account) bool {
+	data, err := body.MarshalBinary()
+	if err != nil {
+		return false
+	}
+	h := sha256.Sum256(data)
+	return bytes.Equal(r.Start, h[:])
+}
+
+// retainedStateAt returns the receipt from the account's main state hash to its
+// BPT entry as of the given block, and the main state that receipt starts at.
+// Either is nil when the node did not retain it.
 //
-// Receipts are retained at the blocks where the account changed, so the one
-// covering a block is the newest retained at or before it — the same rule the
+// Both are retained at the blocks where the account changed, so the one
+// covering a block is the newest retained at or before it - the same rule the
 // BPT uses for the entry itself.
-func retainedStateReceipt(account *database.Account, block uint64) (*merkle.Receipt, error) {
+func retainedStateAt(account *database.Account, block uint64) (*merkle.Receipt, protocol.Account, error) {
 	blocks, err := account.RetainedStateReceiptBlocks().Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("load retained state receipt blocks: %w", err)
 	}
 	if len(blocks) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	i := sort.Search(len(blocks), func(i int) bool { return blocks[i] > block })
 	if i == 0 {
-		return nil, nil // Nothing retained at or before the block
+		return nil, nil, nil // Nothing retained at or before the block
 	}
 
 	r, err := account.RetainedStateReceipt(blocks[i-1]).Get()
 	switch {
 	case err == nil:
-		return r, nil
+		// Ok
 	case errors.Is(err, errors.NotFound):
-		return nil, nil
+		return nil, nil, nil
 	default:
-		return nil, errors.UnknownError.WithFormat("load retained state receipt: %w", err)
+		return nil, nil, errors.UnknownError.WithFormat("load retained state receipt: %w", err)
 	}
+
+	encoded, err := account.RetainedMainState(blocks[i-1]).Get()
+	switch {
+	case err == nil:
+		// Ok
+	case errors.Is(err, errors.NotFound):
+		return r, nil, nil // Retained before bodies were
+	default:
+		return nil, nil, errors.UnknownError.WithFormat("load retained main state: %w", err)
+	}
+	if len(encoded) == 0 {
+		return r, nil, nil
+	}
+	body, err := protocol.UnmarshalAccount(encoded)
+	if err != nil {
+		return nil, nil, errors.UnknownError.WithFormat("unmarshal retained main state: %w", err)
+	}
+	return r, body, nil
 }
