@@ -305,6 +305,7 @@ type Account struct {
 	transaction                map[accountTransactionMapKey]*AccountTransaction
 	retainedStateReceipt       map[accountRetainedStateReceiptMapKey]values.Value[*merkle.Receipt]
 	retainedStateReceiptBlocks values.Set[uint64]
+	retainedMainState          map[accountRetainedMainStateMapKey]values.Value[[]byte]
 	mainChain                  *Chain2
 	scratchChain               *Chain2
 	signatureChain             *Chain2
@@ -355,6 +356,18 @@ type accountRetainedStateReceiptMapKey struct {
 
 func (k accountRetainedStateReceiptKey) ForMap() accountRetainedStateReceiptMapKey {
 	return accountRetainedStateReceiptMapKey{k.Block}
+}
+
+type accountRetainedMainStateKey struct {
+	Block uint64
+}
+
+type accountRetainedMainStateMapKey struct {
+	Block uint64
+}
+
+func (k accountRetainedMainStateKey) ForMap() accountRetainedMainStateMapKey {
+	return accountRetainedMainStateMapKey{k.Block}
 }
 
 type accountSyntheticSequenceChainKey struct {
@@ -469,6 +482,14 @@ func (c *Account) RetainedStateReceiptBlocks() values.Set[uint64] {
 
 func (c *Account) newRetainedStateReceiptBlocks() values.Set[uint64] {
 	return values.NewSet(c.logger.L, c.store, c.key.Append("RetainedStateReceiptBlocks"), values.Wrapped(values.UintWrapper), values.CompareUint)
+}
+
+func (c *Account) RetainedMainState(block uint64) values.Value[[]byte] {
+	return values.GetOrCreateMap(c, &c.retainedMainState, accountRetainedMainStateKey{block}, (*Account).newRetainedMainState)
+}
+
+func (c *Account) newRetainedMainState(k accountRetainedMainStateKey) values.Value[[]byte] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("RetainedMainState", k.Block), false, values.Wrapped(values.BytesWrapper))
 }
 
 func (c *Account) MainChain() *Chain2 {
@@ -627,6 +648,16 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return v, key.SliceI(2), nil
 	case "RetainedStateReceiptBlocks":
 		return c.RetainedStateReceiptBlocks(), key.SliceI(1), nil
+	case "RetainedMainState":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (8)")
+		}
+		block, okBlock := key.Get(1).(uint64)
+		if !okBlock {
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
+		}
+		v := c.RetainedMainState(block)
+		return v, key.SliceI(2), nil
 	case "MainChain":
 		return c.MainChain(), key.SliceI(1), nil
 	case "ScratchChain":
@@ -643,21 +674,21 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (8)")
-		}
-		partition, okPartition := key.Get(1).(string)
-		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
-		}
-		v := c.getSyntheticSequenceChain(partition)
-		return v, key.SliceI(2), nil
-	case "AnchorChain":
-		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (10)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (11)")
+		}
+		v := c.getSyntheticSequenceChain(partition)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (12)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (13)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -668,7 +699,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (12)")
+		return nil, nil, errors.InternalError.With("bad key for account (14)")
 	}
 }
 
@@ -712,6 +743,11 @@ func (c *Account) IsDirty() bool {
 	}
 	if values.IsDirty(c.retainedStateReceiptBlocks) {
 		return true
+	}
+	for _, v := range c.retainedMainState {
+		if v.IsDirty() {
+			return true
+		}
 	}
 	if values.IsDirty(c.mainChain) {
 		return true
@@ -802,6 +838,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.retainedStateReceiptBlocks, c.newRetainedStateReceiptBlocks, opts, fn)
 	}
+	values.WalkMap(&err, c.retainedMainState, c.newRetainedMainState, nil, opts, fn)
 	values.WalkField(&err, c.mainChain, c.newMainChain, opts, fn)
 	values.WalkField(&err, c.scratchChain, c.newScratchChain, opts, fn)
 	values.WalkField(&err, c.signatureChain, c.newSignatureChain, opts, fn)
@@ -841,6 +878,9 @@ func (c *Account) baseCommit() error {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.retainedStateReceiptBlocks)
+	for _, v := range c.retainedMainState {
+		values.Commit(&err, v)
+	}
 	values.Commit(&err, c.mainChain)
 	values.Commit(&err, c.scratchChain)
 	values.Commit(&err, c.signatureChain)

@@ -45,17 +45,35 @@ state as of H. Resolving *forward* would return state containing changes that ha
 not happened at H, which for a caller checking a signature against the key page
 version it was made under is a confident, checkable, wrong answer.
 
-## What the receipt starts at
+## What the receipt starts at, and what is served beside it
 
-It starts at the account's **whole BPT entry** — the merkle hash over its main
-state, its secondary state, the anchor of every one of its chains, and its
-pending transactions.
+Where the node can produce the account's **main state as of the resolved
+block**, the receipt starts at a plain hash of that main state — SHA-256 of its
+binary marshalling, as a current-state receipt does — and **that state is the
+account the response carries**. `Receipt.StartsAtMainState` is set. A verifier
+hashes the account it was handed, compares it with the receipt's start, and
+checks the rest offline.
 
-This differs from a current-state receipt, which starts at the account's **main
-state** hash. The historical path cannot do the same, because rebuilding the
-account hasher at a past block would need the account's main state at that block,
-and only BPT nodes are retained, not account state. **A caller that assumes both
-starts mean the same thing will compare the wrong value.**
+A node produces that state in one of two ways, and uses either only when the
+hashes bind it to the block:
+
+- **Retained.** With retention on, a node keeps each account's marshalled main
+  state beside the receipt from it to the account's BPT entry, at every block
+  the account changed, on the same window and pruning as BPT history.
+- **Unchanged since.** When the account's BPT entry now is the entry it had at
+  the block, the current main state is the state at the block — the current
+  receipt from it reaches exactly the entry the historical proof starts at.
+
+Otherwise the receipt starts at the account's **whole BPT entry** — the merkle
+hash over its main state, its secondary state, the anchor of every one of its
+chains, and its pending transactions — `StartsAtMainState` is not set, and **no
+account is served**. The only account the node has is the current one, and a
+current account beside a past receipt does not hash to anything in it. **A
+caller that assumes both starts mean the same thing will compare the wrong
+value.**
+
+The account's directory and pending list are not retained per block, so a
+historical answer never carries them.
 
 ## Retention: what an operator must enable
 
@@ -73,9 +91,17 @@ accounts, of which 34 KB is the top block, which is rewritten every time and doe
 not grow. On MainNet's BVN that is about 0.6 GB per year; on a busier network it
 is proportionally more.
 
-Retention writes only under a new key shape, `("BPT", "History", …)`. Existing
+On top of that, for every account written in a block, retention keeps the
+receipt from its main state to its BPT entry (146 bytes) and the marshalled main
+state itself — for a key page or token account, a few hundred bytes — for as
+long as the window covers that block.
+
+Retention writes only under new key shapes — `("BPT", "History", …)` and the
+account's `RetainedStateReceipt` and `RetainedMainState` records. Existing
 databases stay readable, no migration runs, and the BPT root is unchanged — so
 enabling it is not a consensus change and needs no executor-version gate.
+Receipts retained before main states were have no state beside them; for those
+blocks the answer carries no account unless the account is unchanged since.
 
 ## The retained range, and why it is predictive
 

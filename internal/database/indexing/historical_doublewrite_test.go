@@ -180,7 +180,11 @@ func TestHistoricalStateProof_MismatchedReceiptShouldDegrade(t *testing.T) {
 		if len(blocks) == 0 {
 			t.Skip("nothing retained")
 		}
-		block = blocks[len(blocks)-1]
+		// An earlier change, not the latest: the account has changed since, so
+		// its current state cannot stand in for the state at the block and
+		// the retained receipt is the only route to a main-state start.
+		require.GreaterOrEqual(t, len(blocks), 2, "the account changes at every block it is written")
+		block = blocks[len(blocks)-2]
 
 		// It works before the receipt is corrupted
 		proof, err := indexing.HistoricalAccountStateProof(partition, batch, batch.Account(lite), block)

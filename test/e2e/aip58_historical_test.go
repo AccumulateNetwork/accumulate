@@ -174,6 +174,22 @@ func TestAIP58_ProveAKeyPageAtItsOwnVersion(t *testing.T) {
 	// And it verifies with nothing but itself
 	require.True(t, past.Receipt.Validate(nil), "the receipt does not verify offline")
 
+	// AND THE PAGE SERVED IS THE PAGE AS IT WAS. A receipt for the page at
+	// version 1 served beside the page at version 2 gives a verifier nothing
+	// to check: the body it was handed does not hash to the receipt's start.
+	require.True(t, past.Receipt.StartsAtMainState, "the receipt should say it starts at the main state")
+	pastPage, ok := past.Account.(*KeyPage)
+	require.Truef(t, ok, "the historical answer carries no key page (%T)", past.Account)
+	require.Equal(t, wasVersion, pastPage.Version,
+		"the historical answer serves the page as it is NOW beside a receipt for the page as it was")
+	servedBytes, err := pastPage.MarshalBinary()
+	require.NoError(t, err)
+	servedHash := sha256.Sum256(servedBytes)
+	require.Equal(t, past.Receipt.Start, servedHash[:],
+		"the page served does not hash to where the receipt starts")
+	require.Nil(t, past.Directory, "the directory is not retained per block and must not be served as if it were")
+	require.Nil(t, past.Pending, "the pending list is not retained per block and must not be served as if it were")
+
 	t.Logf("proved the page at block %d (resolved %d): start %x, anchor %x",
 		execBlock, past.Receipt.ForHeight, past.Receipt.Start[:8], past.Receipt.Anchor[:8])
 }
