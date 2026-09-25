@@ -307,6 +307,32 @@ checkpoint whose block is the executor's last block
 (`Service.seedFromCheckpoint`, `Node.Restore`), so it participates in
 consensus from that round rather than from zero.
 
+**A joining node with no checkpoint orders nothing until the join names a
+round** (#4405). Round zero is not a position: a network past `DAGGCDepth`
+has collected those certificates, and every peer retired their batches as it
+executed them, so a node ordering from zero waits for the first group for
+ever (Docker run `20260925T011332Z`, `fol2-stall`: a fresh follower waiting on
+the batches of a round-4 certificate while the network was past block 640).
+Such a node starts with ordering held (`Node.HoldOrdering`): certificates
+reach its DAG and none is ordered. The join's first state names the round
+(`Service.StageThrough` reads the leader round `P` its system ledger
+records) and consensus is seeded there (`Node.Rejoin(P)`): Bullshark orders
+nothing at or below `P`, the DAG accepts certificates at `P` and `P + 1`
+without their parents, and the primary participates from `P`. `P` is the
+round of a leader the network committed, recorded in a state the join
+itself pulled seconds earlier, so it is near the frontier: the certificates
+above it are in every peer's DAG and their batches are still served. A
+peer's current round or the first certificates to arrive would be neither —
+certificate catch-up delivers low rounds first, and a round that is no
+committed leader gives a leader chain that is not the peers'. The seed has
+no committed-digest set, so the first leaders ordered after it walk the
+rescue window below `P` and may take in certificates the peers committed
+before `P`: no state at a round at or below `P + RescueWindow` (32) is handed
+off at (`Conflict`), and the join pulls forward to one above it, about
+sixteen blocks later. A node restarted with a checkpoint more than
+`DAGGCDepth` below the frontier is not seeded this way (DIFFERENCES,
+"Seeding").
+
 **What it does not do is execute from there.** A restart is a join
 (executor.md, "Sync"): the node keeps every committed block in a buffer
 instead of executing it, pulls the state a signed anchor proves, takes the

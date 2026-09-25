@@ -539,9 +539,13 @@ runs with the hole.
 per block and restores the one matching the executor's last block on restart
 (consensus.md, "Restart"), so a restarted validator starts at its own round
 rather than zero and certificate catch-up can reach the frontier within
-`DAGGCDepth` (2,000 rounds, about eight minutes at four rounds a second). Not
-done: a node down longer than that is beyond catch-up and only sync can bring
-it back; certificates at or below the checkpoint's round that a later leader
+`DAGGCDepth` (2,000 rounds, about eight minutes at four rounds a second). A
+node joining with no checkpoint is seeded at its first pulled state's leader
+round (#4405, consensus.md "Restart"); before this it ordered from round zero
+and waited for ever on batches no peer held (run `20260925T011332Z`). Not
+done: a node restarted with a checkpoint more than `DAGGCDepth` below the
+frontier is not seeded — `Node.Rejoin` is called only when no checkpoint
+matched — so it is still beyond catch-up (#4405); certificates at or below the checkpoint's round that a later leader
 commits are not pulled by catch-up, so the first block after a rejoin can
 still differ from its peers' — sync must deliver staging and the DAG floor
 together; the stranded condition is a Warn a minute, not a state. The

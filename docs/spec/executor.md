@@ -971,6 +971,17 @@ The handoff does not happen, and the buffer is left as it is, when:
   from (consensus.md, "Restart"): the groups between were committed before
   the node listened, so they are in neither the buffer nor the state. The
   join pulls again, to a newer state (`Conflict`).
+- `P` is at or below the round consensus was seeded at plus the rescue
+  window, on a node that joined with no checkpoint (consensus.md,
+  "Restart"): the groups there may hold certificates the peers committed
+  before the seed. The join pulls forward (`Conflict`). The first
+  `StageThrough` of such a node is what seeds it, from the round of the
+  state it is asked about, so that first call is always refused this way.
+- The block production loop, which serves the join's requests between
+  groups, has not taken the request within five seconds: it is inside a group,
+  waiting for its batches. The join is told so (`NotReady`, naming the
+  group's leader round) and asks again, rather than waiting with the loop
+  (#4405).
 - No group this node's consensus committed is at `P`, or the ledger records
   no round at all (a block written before v2-kourou). The first is a state
   this node's consensus did not produce (`Conflict`); the second says
