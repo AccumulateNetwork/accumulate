@@ -75,6 +75,7 @@ var flagTo = flag.Uint64("to", 0, "last block for -rebuild (default the block st
 var flagFrom = flag.Uint64("from", 0, "first block for -lostmap (default the block store's base)")
 var flagRebuild = flag.Bool("rebuild", false, "rebuild every main, signature and scratch chain the blocks from -from on touch, from the block store (-survey), proving each block against the anchors it wrote, and exit")
 var flagProfile = flag.String("cpuprofile", "", "write a CPU profile here")
+var flagMerge = flag.String("merge", "", "a store to copy into -out (a sidecar), and exit")
 var flagDest listFlag
 var flagCurrent listFlag
 var flagWritable listFlag
@@ -98,6 +99,12 @@ func main() {
 	}
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagMerge != "" {
+		if err := merge(*flagMerge, *flagOut); err != nil {
 			log.Fatal(err)
 		}
 		return
