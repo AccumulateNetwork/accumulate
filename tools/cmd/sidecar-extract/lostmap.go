@@ -8,6 +8,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"log"
@@ -77,7 +78,7 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 	hits := map[string]int{}       // record kind -> lost keys hit
 	found := map[[32]byte]string{} // lost key -> kind
 	var bodies, badBodies, blocks, ledgers int64
-	var ctlTxns, ctlMessage, ctlTxMain, ctlTxStatus int64
+	var ctlTxns, ctlMessage, ctlTxMain, ctlTxStatus, ctlSame, ctlDiffer int64
 	exists := func(k *record.Key) bool {
 		h := k.Hash()
 		txn := a.db.NewTransaction(false)
@@ -186,6 +187,21 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 							if atomic.AddInt64(&ctlTxns, 1) <= 2000 {
 								if exists(batch.Message(th).Main().Key()) {
 									atomic.AddInt64(&ctlMessage, 1)
+									// A recovered body is the block's message
+									// marshaled again; it must be the bytes the
+									// node stored
+									kh := batch.Message(th).Main().Key().Hash()
+									txn := a.db.NewTransaction(false)
+									if item, err := txn.Get(kh[:]); err == nil {
+										stored, err1 := a.value(item)
+										mine, err2 := m.MarshalBinary()
+										if err1 == nil && err2 == nil && bytes.Equal(stored, mine) {
+											atomic.AddInt64(&ctlSame, 1)
+										} else {
+											atomic.AddInt64(&ctlDiffer, 1)
+										}
+									}
+									txn.Discard()
 								}
 								if exists(txKey(th, "Main")) {
 									atomic.AddInt64(&ctlTxMain, 1)
@@ -270,8 +286,8 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 
 	fmt.Printf("%s: blocks %d..%d, %d blocks read, %d block ledgers; %d of %d lost keys named; %d bodies recovered (%d would not marshal)\n",
 		name, base, height, blocks, ledgers, len(found), len(lost), bodies, badBodies)
-	fmt.Printf("control, first 2000 transactions: Message.Main held %d, hand-built Transaction.Main held %d, Transaction.Status held %d\n",
-		ctlMessage, ctlTxMain, ctlTxStatus)
+	fmt.Printf("control, first 2000 transactions: Message.Main held %d (stored bytes = remarshaled %d, differ %d), hand-built Transaction.Main held %d, Transaction.Status held %d\n",
+		ctlMessage, ctlSame, ctlDiffer, ctlTxMain, ctlTxStatus)
 	var kinds []string
 	for k := range hits {
 		kinds = append(kinds, k)
