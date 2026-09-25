@@ -878,6 +878,44 @@ stopped is not in those runs' logs, and the gap line below is what will say
 `Delivered`, and no message's status: what a message records when it is held
 (#4423) does not enter it.
 
+**A partition that restarts as a whole resumes from each validator's own
+block (#4447).** When every validator of a partition stops and starts again
+together — a host or daemon restart takes them all — each one joins, and each
+refuses the others (step 6: a `BOOTING` node answers no read). No peer can say
+which block the partition is at and no anchor can be read, so no join can
+match anything, and before #4447 every validator collected for ever. The join
+takes one exit from that, and only when both of these hold:
+
+1. **Every peer that answered is joining.** A round that asks the partition's
+   peers for their block finds at least one refusing as joining (the
+   `NotReady` whose reason is that it is joining, not any `NotReady`: an
+   `ACTIVE` node out of query capacity says `NotReady` too), and none serving
+   a ledger or busy. A peer that cannot be reached says nothing either way. A
+   peer that serves is one to join from, so a restart of some validators while
+   others are `ACTIVE` always takes the ordinary path.
+2. **The node's store is its own execution.** No pull has started, in this
+   process or in an earlier one that did not hand off — `SystemData.PullStarted`
+   is written before a pull writes anything and cleared at the handoff — and
+   `SystemData.ExecutedBlock`, which the executor writes with every block,
+   names the block `<partition>/ledger` does. A store holding some of a peer's
+   accounts is no block's state; such a node waits, and joins from its peers
+   once they have resumed.
+
+Then the node resumes: consensus leaves collecting where the node's own
+checkpoint put it — the position that produced its last block (consensus.md,
+"Restart") — and produces every group committed after it, as a validator that
+never stopped would. Nothing is staged or settled first: staging is what
+consensus delivers from here. **It never seeds** (#4405): a node that restored
+no checkpoint does not know the round its state was produced at, and is
+refused and keeps collecting. The node is `ACTIVE` on its own root, since no
+peer had a root to verify it against and every one of them takes the same
+exit; from there every executed block is checked against its signed anchor as
+after any handoff, and a mismatch is repaired ("Two mismatches").
+
+This is safe for the reason the join exists: a join takes a peer's state
+because the peers hold what this node lacks, and here no peer holds anything
+it did not execute itself.
+
 **The gap line names what it found** (`join.StreamGap`, #4432). For every
 stream with a gap, `The next block has a gap; executing anyway, and repairing on
 a mismatch` carries, under

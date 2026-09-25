@@ -598,7 +598,12 @@ func (s *Service) blockProductionLoop() {
 			// The join has matched the root and settled staging: leave
 			// collecting mode and produce what was buffered, here, where
 			// nothing else is producing blocks (#4294).
-			err := s.performHandoff(req.q)
+			var err error
+			if req.resume {
+				err = s.performResume()
+			} else {
+				err = s.performHandoff(req.q)
+			}
 			if err != nil {
 				s.logger.Error("Handoff failed; the join syncs again",
 					"partition", s.config.Partition.ID, "block", req.q, "error", err)

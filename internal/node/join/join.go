@@ -97,6 +97,18 @@ type Buffer interface {
 	// holding the groups it did not produce, and the join syncs again
 	// (#4401).
 	Handoff(q uint64) error
+
+	// Resume leaves collecting mode where this node's own consensus stands —
+	// the position it restored from its checkpoint, the one that produced
+	// its last block — and produces every buffered group committed after
+	// it, as a validator that never stopped would have. It is the handoff of
+	// a partition restarted as a whole (State.Resumable; #4447), and hands
+	// off at no pulled state. NotReady: this node's consensus does not know
+	// the position its state was produced at — it restored no checkpoint
+	// and is waiting for a join's seed (#4405) — or has lost groups after it
+	// (a buffer overrun). Any other error is a group that could not be
+	// produced, as for Handoff.
+	Resume() error
 }
 
 // A Stage is the executor's staging half of a join (#4292).
@@ -153,6 +165,19 @@ type State interface {
 	// Both are part of State, not optional extras, so that a State that
 	// wraps another cannot drop them without failing to compile.
 	Demote(block uint64)
+
+	// Resumable reports the block this node executed itself, and whether it
+	// may execute from there with nothing matched: every validator of the
+	// partition that answered is joining too, and nothing has been pulled
+	// into this store. That is a partition restarted as a whole, and no peer
+	// holds a state to start from but its own (executor spec, "Sync", "A
+	// partition that restarts as a whole"; #4447).
+	Resumable() (uint64, bool)
+
+	// Executing says the node handed off at block, its own last block, by
+	// that exit. It is ACTIVE on its own root: no peer had one to verify it
+	// against, and every one of them takes the same exit.
+	Executing(block uint64) error
 }
 
 // A Peers finds the partition's other validators and their private API.
@@ -398,6 +423,15 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			// "Sync", "Two mismatches").
 			q, ok = opts.State.Ready()
 		}
+		if !ok {
+			// Nothing to join from: every peer that answered is joining
+			// too, and this node holds only what it executed. The partition
+			// restarted as a whole, and each validator executes from its own
+			// last block, as it would had it never stopped (#4447).
+			if q, own := opts.State.Resumable(); own && resume(opts, log, q, &failures) {
+				return q, nil
+			}
+		}
 		if ok {
 			done, err := stageAndHandOff(opts, log, q, proven, &failures)
 			if err != nil {
@@ -510,6 +544,34 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, proven bool, fail
 		opts.State.Demote(q)
 		opts.Buffer.StartCollecting()
 		return false, nil
+	}
+}
+
+// resume is the handoff of a partition restarted as a whole: the node's state
+// is its own block q, nothing was pulled, and every peer that answered is
+// joining too. Nothing is staged or settled — staging is what consensus
+// delivers from here, as on a node that never stopped — and the buffer
+// resumes from the position the node's own consensus restored. It reports
+// whether the node is executing; false means the join asks again next round.
+func resume(opts Options, log *slog.Logger, q uint64, failures *int) bool {
+	err := opts.Buffer.Resume()
+	switch {
+	case err == nil:
+		log.Info("Every peer that answered is joining too: the partition restarted as a whole; executing from this node's own last block",
+			"block", q)
+		if err := opts.State.Executing(q); err != nil {
+			log.Error("The node is executing from its own last block and could not say so; it stays BOOTING", "block", q, "error", err)
+		}
+		return true
+	case errors.Is(err, errors.NotReady), errors.Is(err, errors.NotAllowed):
+		log.Info("The partition restarted as a whole, and this node cannot resume from its own block", "block", q, "error", err)
+		return false
+	default:
+		*failures++
+		mHandoffFailures.WithLabelValues(opts.Partition).Inc()
+		log.Error("Resuming from this node's own block failed; asking again", "block", q, "attempt", *failures, "error", err)
+		opts.Buffer.StartCollecting()
+		return false
 	}
 }
 

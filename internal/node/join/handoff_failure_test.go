@@ -23,6 +23,8 @@ type failingHandoffBuffer struct {
 	failures int
 }
 
+func (*failingHandoffBuffer) Resume() error { return errors.NotReady.With("not a restart") }
+
 func (b *failingHandoffBuffer) Handoff(q uint64) error {
 	if b.failures > 0 {
 		b.failures--

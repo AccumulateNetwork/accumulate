@@ -216,6 +216,23 @@ func (j *joinState) Handoff(q uint64) error {
 	return nil
 }
 
+// Resume implements [join.Buffer]: it leaves collecting mode where this node
+// stood when it started collecting and produces every block it buffered, as
+// the DAG service does from the position its checkpoint restored (#4447).
+func (j *joinState) Resume() error {
+	j.mu.Lock()
+	if !j.joining {
+		j.mu.Unlock()
+		return errors.NotAllowed.With("this node is not joining")
+	}
+	from, err := j.from()
+	j.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	return j.Handoff(from)
+}
+
 // nodeState is the join state a node's API services refuse by, as
 // cmd/accumulated/run/dagbft.go hands them the join's machine (#4295, #4363).
 //

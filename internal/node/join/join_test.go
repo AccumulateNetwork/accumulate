@@ -65,6 +65,8 @@ func (b *fakeBuffer) StageThrough(block uint64) error {
 	}
 	return nil
 }
+func (*fakeBuffer) Resume() error { return errors.NotReady.With("not a restart") }
+
 func (b *fakeBuffer) Handoff(q uint64) error {
 	record(b.log, "handoff", q)
 	if b.handoffErr != nil {
@@ -134,8 +136,10 @@ type fakeState struct {
 	demoted  []uint64
 }
 
-func (s *fakeState) Promote(block uint64) { s.promoted = append(s.promoted, block) }
-func (s *fakeState) Demote(block uint64)  { s.demoted = append(s.demoted, block) }
+func (s *fakeState) Promote(block uint64)    { s.promoted = append(s.promoted, block) }
+func (s *fakeState) Demote(block uint64)     { s.demoted = append(s.demoted, block) }
+func (*fakeState) Resumable() (uint64, bool) { return 0, false }
+func (*fakeState) Executing(uint64) error    { return nil }
 
 func (s *fakeState) Pull(context.Context) error {
 	if s.pulls == 0 && s.collectingAtPull != nil {
@@ -323,8 +327,10 @@ func (s *gapState) Pull(context.Context) error {
 	return nil
 }
 
-func (s *gapState) Promote(uint64) {}
-func (s *gapState) Demote(uint64)  {}
+func (s *gapState) Promote(uint64)          {}
+func (s *gapState) Demote(uint64)           {}
+func (*gapState) Resumable() (uint64, bool) { return 0, false }
+func (*gapState) Executing(uint64) error    { return nil }
 
 // Ready: this fake's state is never executed from before it matches.
 func (s *gapState) Ready() (uint64, bool) { return 0, false }

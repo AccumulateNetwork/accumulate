@@ -150,8 +150,7 @@ func (s *Querier) servingFor(query api.Query) error {
 		return nil
 	}
 	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), queryCall(query)).Inc()
-	return errors.NotReady.WithFormat(
-		"%s is joining and cannot answer for state it has not executed", s.partition.PartitionID())
+	return nodestate.RefuseJoining(s.partition.PartitionID())
 }
 
 // queryCall names a query for the not-querying metric by its type, with an

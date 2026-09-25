@@ -442,6 +442,16 @@
       # (#4344). Nothing outside this node's own executor writes it.
       type: index
       dataType: uint
+    - name: PullStarted
+      # The block this node's executor had executed when a join's pull began
+      # writing a peer's state into this store; zero when no pull is under
+      # way. It is set before the pull writes anything and cleared when the
+      # join hands off, so a store that says a pull started and did not hand
+      # off holds some of a peer's accounts and not the rest. Such a node may
+      # not resume from its own last block when its peers are all joining
+      # too: its state is no block's (#4447).
+      type: index
+      dataType: uint
     - name: TrustedNetwork
       # The network definition THIS node trusts to verify its partition's
       # anchors, marshalled. It is here and not read from <partition>/network

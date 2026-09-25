@@ -217,6 +217,8 @@ func (b *resumeBuffer) StageThrough(uint64) error { return nil }
 // Handoff hands off at q only if the buffer holds every block from q + 1 to
 // the network's block: never from a buffer that overran, never below the
 // block collecting started at, and never above the blocks committed so far.
+func (*resumeBuffer) Resume() error { return errors.NotReady.With("not a restart") }
+
 func (b *resumeBuffer) Handoff(q uint64) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()

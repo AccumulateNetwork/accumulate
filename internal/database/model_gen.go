@@ -2136,6 +2136,7 @@ type SystemData struct {
 
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexMapKey]values.Value[uint64]
 	executedBlock       values.Value[uint64]
+	pullStarted         values.Value[uint64]
 	trustedNetwork      values.Value[[]byte]
 	trustedGlobals      values.Value[[]byte]
 	headOnly            values.Set[*url.URL]
@@ -2169,6 +2170,14 @@ func (c *SystemData) ExecutedBlock() values.Value[uint64] {
 
 func (c *SystemData) newExecutedBlock() values.Value[uint64] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("ExecutedBlock"), false, values.Wrapped(values.UintWrapper))
+}
+
+func (c *SystemData) PullStarted() values.Value[uint64] {
+	return values.GetOrCreate(c, &c.pullStarted, (*SystemData).newPullStarted)
+}
+
+func (c *SystemData) newPullStarted() values.Value[uint64] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("PullStarted"), false, values.Wrapped(values.UintWrapper))
 }
 
 func (c *SystemData) TrustedNetwork() values.Value[[]byte] {
@@ -2213,6 +2222,8 @@ func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error
 		return v, key.SliceI(2), nil
 	case "ExecutedBlock":
 		return c.ExecutedBlock(), key.SliceI(1), nil
+	case "PullStarted":
+		return c.PullStarted(), key.SliceI(1), nil
 	case "TrustedNetwork":
 		return c.TrustedNetwork(), key.SliceI(1), nil
 	case "TrustedGlobals":
@@ -2235,6 +2246,9 @@ func (c *SystemData) IsDirty() bool {
 		}
 	}
 	if values.IsDirty(c.executedBlock) {
+		return true
+	}
+	if values.IsDirty(c.pullStarted) {
 		return true
 	}
 	if values.IsDirty(c.trustedNetwork) {
@@ -2265,6 +2279,9 @@ func (c *SystemData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.executedBlock, c.newExecutedBlock, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.WalkField(&err, c.pullStarted, c.newPullStarted, opts, fn)
+	}
 	values.WalkField(&err, c.trustedNetwork, c.newTrustedNetwork, opts, fn)
 	values.WalkField(&err, c.trustedGlobals, c.newTrustedGlobals, opts, fn)
 	values.WalkField(&err, c.headOnly, c.newHeadOnly, opts, fn)
@@ -2281,6 +2298,7 @@ func (c *SystemData) Commit() error {
 		values.Commit(&err, v)
 	}
 	values.Commit(&err, c.executedBlock)
+	values.Commit(&err, c.pullStarted)
 	values.Commit(&err, c.trustedNetwork)
 	values.Commit(&err, c.trustedGlobals)
 	values.Commit(&err, c.headOnly)

@@ -33,6 +33,10 @@ import (
 // compared, or the block handed off at.
 func (s *PulledState) HandedOff(q uint64) {
 	s.executed = q
+	// The store is a block's state again: the pull that began is done.
+	if err := s.writePullStarted(0); err != nil {
+		s.log.Info("The end of the pull could not be recorded", "partition", s.partition, "error", err)
+	}
 	if s.sync != nil {
 		s.served = s.sync.servedBy
 	}

@@ -143,8 +143,10 @@ type overrunNetwork struct {
 
 func (n *overrunNetwork) Pull(context.Context) error { n.pull(); return nil }
 
-func (n *overrunNetwork) Promote(uint64) {}
-func (n *overrunNetwork) Demote(uint64)  {}
+func (n *overrunNetwork) Promote(uint64)          {}
+func (n *overrunNetwork) Demote(uint64)           {}
+func (*overrunNetwork) Resumable() (uint64, bool) { return 0, false }
+func (*overrunNetwork) Executing(uint64) error    { return nil }
 
 // Ready: this fake's state is never executed from before it matches.
 func (n *overrunNetwork) Ready() (uint64, bool) { return 0, false }

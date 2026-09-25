@@ -165,6 +165,14 @@ type PulledState struct {
 	// the tree again (startRepair).
 	repairs int
 
+	// peersJoining is whether the last round that asked the partition's
+	// peers for their block found every one that answered refusing as
+	// joining, and none serving (peersBlock). pulled is whether this process
+	// has started a pull: from then its store holds a peer's accounts
+	// (Resumable).
+	peersJoining bool
+	pulled       bool
+
 	// checkedHeld is whether this process has checked the entries the node
 	// already holds on the accounts it takes whole for their messages
 	// (pull.Options.CheckHeld). Once a process.
@@ -493,6 +501,16 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		// waiting: the records are read from where they stopped.
 		s.log.Info("No peer could say which block the partition is at this round", "partition", s.partition, "error", err)
 		return nil
+	}
+
+	// Recorded before the pull writes anything, where no pull reaches: a
+	// store with part of a peer's state in it is no block's state, and must
+	// not be resumed from as this node's own (Resumable; #4447).
+	if s.sync == nil {
+		err = s.markPullStarted()
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
 	}
 
 	if s.sync == nil && s.repairFrom != 0 {
@@ -1020,6 +1038,7 @@ func readExecutedBlock(db *database.Database, partition *url.URL) (uint64, error
 // (#4438 re-review F-2). Otherwise one such peer would pin the target, and
 // with it L, where it stands.
 func (s *PulledState) peersBlock(ctx context.Context) (uint64, error) {
+	s.peersJoining = false
 	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
 	if err != nil {
 		return 0, errors.UnknownError.WithFormat("find the partition's peers: %w", err)
@@ -1028,8 +1047,18 @@ func (s *PulledState) peersBlock(ctx context.Context) (uint64, error) {
 	var low uint64
 	var found bool
 	var last error
+	var joining, other int
+	defer func() { s.peersJoining = joining > 0 && other == 0 }()
 	for _, src := range srcs {
 		n, err := ledgerIndexOf(ctx, src, s.partition)
+		switch {
+		case nodestate.IsJoiningRefusal(err):
+			joining++
+		case errors.Is(err, errors.NotReady), err == nil:
+			// A peer that answered: with its ledger, or busy. Either is a
+			// peer that is not joining.
+			other++
+		}
 		if err != nil {
 			last = err
 			continue
@@ -1208,11 +1237,78 @@ func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source
 	return srcs, partition, nil
 }
 
-// Executing records that the node is executing from a block it reached
-// without a root match — the whole-network restart, where no peer had staging
-// to give and the node starts from its own state. Its services answer for
-// themselves again from here; leaving it BOOTING would make a node that is
-// running refuse every request for the rest of its life (#4295).
+// Resumable implements [State]: the block this node executed itself, when it
+// may execute from there with nothing matched — the partition restarted as a
+// whole (executor spec, "Sync", "A partition that restarts as a whole";
+// #4447). That is so when both hold:
+//
+//   - the last round found every peer that answered refusing as joining, and
+//     none serving or busy. An unreachable peer says nothing either way; a
+//     peer that serves is one to join from.
+//   - the store is this node's own execution through that block: no pull has
+//     started, in this process or in one before it that did not hand off
+//     (PullStarted), and the record the executor writes with every block
+//     names the block the ledger does.
+func (s *PulledState) Resumable() (uint64, bool) {
+	if !s.peersJoining || s.pulled || s.sync != nil || s.repairFrom != 0 || s.executed == 0 {
+		return 0, false
+	}
+	id, ok := protocol.ParsePartitionUrl(s.partition)
+	if !ok {
+		return 0, false
+	}
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	started, err := batch.SystemData(id).PullStarted().Get()
+	switch {
+	case errors.Is(err, errors.NotFound):
+	case err != nil || started != 0:
+		return 0, false
+	}
+	executed, err := batch.SystemData(id).ExecutedBlock().Get()
+	if err != nil || executed != s.executed {
+		return 0, false
+	}
+	ledger, err := readExecutedBlock(s.db, s.partition)
+	if err != nil || ledger != s.executed {
+		return 0, false
+	}
+	return s.executed, true
+}
+
+// markPullStarted records that a pull is about to write a peer's state into
+// this store (Resumable).
+func (s *PulledState) markPullStarted() error {
+	s.pulled = true
+	// Zero is "no pull"; a node that had executed nothing still started one.
+	return s.writePullStarted(max(s.executed, 1))
+}
+
+// writePullStarted writes the PullStarted record: the block the node had
+// executed when a pull began, or zero once it handed off.
+func (s *PulledState) writePullStarted(block uint64) error {
+	id, ok := protocol.ParsePartitionUrl(s.partition)
+	if !ok {
+		return nil
+	}
+	batch := s.db.Begin(true)
+	defer batch.Discard()
+	err := batch.SystemData(id).PullStarted().Put(block)
+	if err == nil {
+		err = batch.Commit()
+	}
+	if err != nil {
+		return errors.UnknownError.WithFormat("record that a pull started: %w", err)
+	}
+	return nil
+}
+
+// Executing implements [State]: the node handed off at block, its own last
+// block, because its partition restarted as a whole (Resumable). It is ACTIVE
+// on its own root: no peer had a root to verify it against, and every one of
+// them is taking the same exit. Its services answer again from here; leaving
+// it BOOTING would leave every validator of the partition refusing the others
+// the anchors the root watch checks its blocks against (#4295, #4447).
 func (s *PulledState) Executing(block uint64) error {
 	// The root recorded is this node's own, read BEFORE it starts executing
 	// again so that it is the root of the block named. It is not a root

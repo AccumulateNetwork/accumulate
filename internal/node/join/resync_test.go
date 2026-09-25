@@ -41,8 +41,10 @@ type divergingState struct {
 	demotedBeforePull bool     // whether the node was demoted when it pulled after the handoff
 }
 
-func (s *divergingState) Promote(block uint64) { s.promoted = append(s.promoted, block) }
-func (s *divergingState) Demote(block uint64)  { s.demoted = append(s.demoted, block) }
+func (s *divergingState) Promote(block uint64)    { s.promoted = append(s.promoted, block) }
+func (s *divergingState) Demote(block uint64)     { s.demoted = append(s.demoted, block) }
+func (*divergingState) Resumable() (uint64, bool) { return 0, false }
+func (*divergingState) Executing(uint64) error    { return nil }
 
 func (s *divergingState) Pull(context.Context) error {
 	switch {

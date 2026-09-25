@@ -183,6 +183,10 @@ func (s *Service) StopCollecting() []*CollectedGroup {
 type handoffRequest struct {
 	q    uint64
 	done chan error
+
+	// resume: leave collecting mode where this node's own consensus stands,
+	// not at a pulled state (Resume).
+	resume bool
 }
 
 // Handoff leaves collecting mode at block q and produces, in order from
@@ -195,10 +199,28 @@ type handoffRequest struct {
 // which is exactly what its peers execute next. From there it is a validator
 // like any other (executor spec, "Sync", step 5).
 func (s *Service) Handoff(q uint64) error {
+	return s.requestHandoff(handoffRequest{q: q, done: make(chan error, 1)})
+}
+
+// Resume leaves collecting mode at the block this node's own consensus
+// produced last, at the round its checkpoint restored, and produces every
+// buffered group committed after that round (join.Buffer; #4447). It is the
+// handoff of a partition that restarted as a whole: the node's state is its
+// own, nothing was pulled, and it goes on exactly where it stopped.
+//
+// It never seeds. A node that restored no checkpoint does not know the round
+// its state was produced at; seeding at the round its ledger records (#4405)
+// would order from there without the rescue window's groups, and hand off
+// only above it. So it is refused, NotReady, and so is a buffer that
+// overran: the groups after the node's position are no longer all in hand.
+func (s *Service) Resume() error {
+	return s.requestHandoff(handoffRequest{resume: true, done: make(chan error, 1)})
+}
+
+func (s *Service) requestHandoff(req handoffRequest) error {
 	if !s.Collecting() {
 		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
 	}
-	req := handoffRequest{q: q, done: make(chan error, 1)}
 	select {
 	case s.handoff <- req:
 	case <-s.ctx.Done():
@@ -210,6 +232,23 @@ func (s *Service) Handoff(q uint64) error {
 	case <-s.ctx.Done():
 		return errors.UnknownError.Wrap(s.ctx.Err())
 	}
+}
+
+// performResume runs in the block production loop (Resume).
+func (s *Service) performResume() error {
+	s.mu.RLock()
+	collecting, overrun, awaiting := s.collecting, s.bufferOverrun, s.awaitingSeed
+	q, round := s.lastBlockIndex, s.lastLeaderRound
+	s.mu.RUnlock()
+	switch {
+	case !collecting:
+		return errors.NotAllowed.WithFormat("%s: not joining", s.config.Partition.ID)
+	case overrun:
+		return errors.NotReady.WithFormat("%s: the join buffer overran; the groups after block %d are not all in hand", s.config.Partition.ID, q)
+	case awaiting:
+		return errors.NotReady.WithFormat("%s: no consensus checkpoint matched block %d, so this node does not know the round its state was produced at", s.config.Partition.ID, q)
+	}
+	return s.performHandoffAt(q, round)
 }
 
 // performHandoff runs in the block production loop. It reads the system

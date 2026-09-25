@@ -243,8 +243,10 @@ func (s *validatorLedgerState) Matched(context.Context) (uint64, bool, error) {
 	return s.at, s.at > 0, nil
 }
 
-func (s *validatorLedgerState) Ready() (uint64, bool) { return 0, false }
-func (s *validatorLedgerState) Demote(uint64)         {}
+func (s *validatorLedgerState) Ready() (uint64, bool)   { return 0, false }
+func (s *validatorLedgerState) Demote(uint64)           {}
+func (*validatorLedgerState) Resumable() (uint64, bool) { return 0, false }
+func (*validatorLedgerState) Executing(uint64) error    { return nil }
 func (s *validatorLedgerState) Promote(q uint64) {
 	s.mu.Lock()
 	s.promote = q

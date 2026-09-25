@@ -819,13 +819,27 @@ block 1 and diverges. Found on the first Docker add-follower run
 (runs/20260925T003825Z): the follower reported ACTIVE at block 2 while the
 network was at 1,100.
 
-**What the wiring does when no peer can answer**: every validator of the
-partition is asked for its staging, and if none can serve any — which is what
-a network that restarted as a whole looks like, since a node that has executed
-no block since it started holds nothing anyone should start from — the node
-executes from its own last block, producing what it buffered while it asked.
-That is safe for exactly the reason the join exists: no peer holds an entry
-this node lacks, because no peer holds anything.
+**What the wiring does when no peer can answer (#4447)**: the #4438 rewrite
+of the join lost this exit, and a network restarted as a whole deadlocked —
+every validator joined and refused the others as joining (the 24h network,
+2026-09-25T15:41Z). It is restored as executor.md "Sync", "A partition that
+restarts as a whole" says: `PulledState.Resumable` holds when the last round
+found every answering peer refusing as joining and the store is the node's own
+(`SystemData.PullStarted` clear, `ExecutedBlock` equal to the ledger's index),
+and the buffer's `Resume` produces from the checkpointed consensus position.
+What differs from the spec:
+  - "Refusing as joining" is recognised by the refusal's text
+    (`nodestate.IsJoiningRefusal`), not by a code of its own: `NotReady` alone
+    is also an `ACTIVE` node out of query capacity.
+  - A node with no checkpoint matching its last block — which happens when the
+    blocks after its last recorded one were empty, since an empty block writes
+    no ledger and the checkpoint is kept for only the last two blocks — cannot
+    resume and collects for ever if every peer is in the same position (read
+    from the code, not observed). None of the 24h network's twelve validators
+    logged a checkpoint miss at its 16:04Z start; nothing yet handles the case
+    where they do.
+  - The simulator finds its resume point by block index, not by leader round
+    (as with its handoff, E11 above).
 
 **Serve last (#4295, partly done)**: a node that is joining refuses the
 sequencer (`Sequence`, `SequenceRange`, `MajorHeaderRange`, `MinorRootRange`,
@@ -942,10 +956,10 @@ misses strands a stream for good (healing.md, "Stranded streams"), while
     submission to any simulator node goes to the whole partition through the
     hub (above), so the simulator test cannot show a relay; the relay from a
     `BOOTING` node is shown only by the daemon's submitter.
-  - **`PulledState.Executing` still promotes on the node's own, unanchored
-    root** — the whole-network-restart path — and has no production caller
-    (#4385 note of 2026-09-24 05:51Z). It is the one promotion left that is
-    not a handoff.
+  - **`PulledState.Executing` promotes on the node's own, unanchored root**
+    — the whole-network-restart exit (#4447), its one caller. It is the one
+    promotion that is not a match; the root watch still checks every block
+    executed after it.
   - **A demotion is not advertised or persisted**, like every other state
     (#4300): a peer learns it only by being refused.
 - **The ModeFullSpine rationale was wrong and is retired** (#4301 (c)): the
