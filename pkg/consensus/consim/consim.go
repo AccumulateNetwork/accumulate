@@ -830,8 +830,12 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 					fmt.Errorf("%w: %s at height %d", ErrStalled, part, maxH)
 			}
 		}
-		if err := s.scheduledRestarts(logf); err != nil {
+		restarted, err := s.scheduledRestarts(logf)
+		if err != nil {
 			return s.finish(start, false, err.Error()), err
+		}
+		for _, p := range restarted {
+			lastProgress[p] = time.Now()
 		}
 		logf("%8s  %s | refused=%d/%d", time.Since(start).Truncate(time.Second), strings.Join(line, " | "), s.refused.Load(), s.submitted.Load())
 

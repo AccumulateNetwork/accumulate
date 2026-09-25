@@ -109,17 +109,38 @@ func (s *Sim) restart(part string, executorFirst time.Duration, vals ...int) err
 			return fmt.Errorf("restart %s/%d: no checkpoint for block %d", part, sn.val, height)
 		}
 		sn.nodeP.Store(node)
-		if err := node.Start(s.runCtx); err != nil {
-			return fmt.Errorf("restart %s/%d: %w", part, sn.val, err)
+	}
+	// Start them together, as a partition restarted as a whole comes back:
+	// each start waits seconds for its gossip mesh, and one at a time the
+	// first nodes back would run that long without the rest.
+	errs := make(chan error, len(vals))
+	for _, v := range vals {
+		sn := nodes[v]
+		go func() {
+			if err := sn.n().Start(s.runCtx); err != nil {
+				errs <- fmt.Errorf("restart %s/%d: %w", part, sn.val, err)
+				return
+			}
+			errs <- nil
+		}()
+	}
+	for range vals {
+		if err := <-errs; err != nil {
+			return err
 		}
-		s.startConsume(s.runCtx, sn)
+	}
+	for _, v := range vals {
+		s.startConsume(s.runCtx, nodes[v])
 	}
 	return nil
 }
 
 // scheduledRestarts performs each configured restart once its partition
 // has reached its height.
-func (s *Sim) scheduledRestarts(logf func(string, ...any)) error {
+// It returns the partitions it restarted: the time a restart takes is not a
+// stall, so the caller restarts their progress clocks.
+func (s *Sim) scheduledRestarts(logf func(string, ...any)) ([]string, error) {
+	var restarted []string
 	for i := range s.cfg.Restarts {
 		r := &s.cfg.Restarts[i]
 		if r.done {
@@ -137,10 +158,11 @@ func (s *Sim) scheduledRestarts(logf func(string, ...any)) error {
 		r.done = true
 		logf("RESTART %s nodes %v at height %d", r.Part, r.Vals, h)
 		if err := s.restart(r.Part, r.ExecutorFirst, r.Vals...); err != nil {
-			return err
+			return restarted, err
 		}
+		restarted = append(restarted, r.Part)
 	}
-	return nil
+	return restarted, nil
 }
 
 // Sequences reports, per node of a partition, the blocks it executed: the
