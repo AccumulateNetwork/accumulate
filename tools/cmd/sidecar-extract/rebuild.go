@@ -8,7 +8,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sort"
@@ -121,7 +120,6 @@ func rebuildChains(archiveArg, blockstore string) error {
 		return t
 	}
 	var noStart int
-	var debugDA int
 
 	// What an entry the blocks did not give is, from the archive's own copy
 	typeOf := func(h []byte) string {
@@ -316,22 +314,6 @@ func rebuildChains(archiveArg, blockstore string) error {
 						inPool = inPool || bytes.Equal(p, h)
 					}
 					reason := typeOf(h)
-					if reason == "transaction/directoryAnchor" && debugDA < 2 {
-						debugDA++
-						msg, _ := batch.Message([32]byte(h)).Main().Get()
-						tm := msg.(*messaging.TransactionMessage)
-						ab := tm.Transaction.Body.(protocol.AnchorBody).GetPartitionAnchor()
-						rec, _ := json.Marshal(tm.Transaction)
-						fmt.Printf("DEBUG recorded %x %.600s\n", h[:4], rec)
-						for _, d := range ring {
-							for _, m := range d.anchors {
-								if m.Body.(protocol.AnchorBody).GetPartitionAnchor().MinorBlockIndex == ab.MinorBlockIndex {
-									del, _ := json.Marshal(m)
-									fmt.Printf("DEBUG delivered in %d %x %.600s\n", d.height, m.GetHash()[:4], del)
-								}
-							}
-						}
-					}
 					if !inStore {
 						reason = "block not in the store"
 					} else if inPool {
@@ -453,7 +435,6 @@ func fit(state *merkle.State, pool [][]byte, count int, anchors map[[32]byte]boo
 // anchors (signature).
 type blockIndex struct {
 	height       uint64
-	anchors      []*protocol.Transaction
 	byPrincipal  map[string][][]byte
 	bySigner     map[string][][]byte
 	blockAnchors [][]byte
@@ -472,7 +453,6 @@ func indexBlock(height uint64, msgs []messaging.Message) *blockIndex {
 				bi.byPrincipal[p.String()] = append(bi.byPrincipal[p.String()], m.Transaction.GetHash())
 				// An anchor may be recorded as produced, without a header
 				if _, ok := m.Transaction.Body.(protocol.AnchorBody); ok {
-					bi.anchors = append(bi.anchors, m.Transaction)
 					bare := &protocol.Transaction{Body: m.Transaction.Body}
 					bi.byPrincipal[p.String()] = append(bi.byPrincipal[p.String()], bare.GetHash())
 				}
