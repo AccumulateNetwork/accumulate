@@ -1615,7 +1615,26 @@ counter and its own alarm.
 
 **Size**: small in code; a spec decision first.
 
-## Healing
+### C9. A restart keeps the DAG in page cache only, and older checkpoints keep none
+
+consensus.md, "Restart", says a restarted node reloads the DAG tail, its
+batches and its last authored header (#4448). What differs:
+
+- **Checkpoints written before #4448 carry no tail.** A partition every one
+  of whose validators restores such a checkpoint holds no certificate of the
+  restored round's previous round, and no node can author: it stays stalled
+  after upgrading, exactly as before. The 12-validator Docker network
+  stalled at block 40060 (round 80129, last commit 80128) is in this state.
+  Nothing on disk lets it resume under the protocol; it needs a one-time
+  operator decision, not a code path this change adds (#4448 notes).
+- **Nothing is fsynced**, as the checkpoint itself is not: the files survive
+  a process or container restart (the page cache survives), not a power loss.
+- **The authored-round sweep is four rounds deep.** A certificate that
+  reaches the DAG more than four rounds below the node's current round after
+  the node authored there is on disk only from the next block's checkpoint.
+- **The checkpoint's position being the produced block's, not Bullshark's
+  now**, is exercised only where consim's executor lags; no test isolates it.
+
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 

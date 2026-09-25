@@ -307,6 +307,49 @@ checkpoint whose block is the executor's last block
 (`Service.seedFromCheckpoint`, `Node.Restore`), so it participates in
 consensus from that round rather than from zero.
 
+The position is the one **of the block being produced**, not Bullshark's
+position now (`Node.CheckpointAt(leaderRound)`): groups Bullshark has ordered
+since are still in the executor's queue, so the checkpoint's last commit is
+that block's leader round and its committed-digest set leaves out the
+certificates of the groups ordered after it. A restart from Bullshark's
+position now would never be handed those groups.
+
+**A restart reloads the DAG it stopped with** (#4448). The DAG lives in
+memory, and a header needs a quorum of the previous round's certificates as
+parents: a partition restarted as a whole otherwise holds no parent anywhere
+and no node authors again (Docker, 12 validators restored at block 40060,
+round 80129, `certificates_created_total` 0). So beside the checkpoint, in
+`consensus-dag/` (`persist.DAGStore`, one file per certificate or batch,
+named by digest, written once):
+
+- **With each checkpoint**, every certificate in the DAG from `RescueWindow`
+  below the checkpoint's last commit up to the frontier, and the batches they
+  name that the node holds. The window is what ordering walks
+  (`orderDag`), so the restored node orders the certificates above the floor
+  exactly as its peers do; the batches are what those groups execute, and
+  after a whole restart no memory holds them. The checkpoint lists them
+  (`Checkpoint.Tail`); files neither this checkpoint nor the previous one
+  lists are removed, except those written after the checkpoint began. The
+  write cost per block is the certificates and batches the block adds.
+- **Before each header this node authors is broadcast**, the header itself
+  and the DAG from four rounds below it up, with the batches held. The
+  executor, and so the checkpoint, can be many rounds behind consensus when
+  the node stops; those rounds are on disk only because authoring wrote them.
+
+On restart, before the primary starts, `Node.Restore` loads every persisted
+certificate into the DAG without parent checks (`DAG.Restore`: each was
+quorum-verified when first taken in, and the ones below the window are
+committed history), every persisted batch into the batch store, and runs the
+certificates through Bullshark lowest round first. The last authored header
+goes back to the primary (`Primary.RestoreAuthored`): the primary never
+authors that round or a lower one again, its round is raised to that
+header's if it had got further than the checkpoint, and if the header's
+certificate is not in the DAG the header rejoins vote collection so the
+ordinary rebroadcast sends **the same header** again — a second header for a
+round is self-equivocation (#4159 stall 3). A checkpoint written before #4448
+has no tail and no authored header, and restores the position alone
+(DIFFERENCES, C9).
+
 **A joining node with no checkpoint orders nothing until the join names a
 round** (#4405). Round zero is not a position: a network past `DAGGCDepth`
 has collected those certificates, and every peer retired their batches as it
