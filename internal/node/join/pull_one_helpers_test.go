@@ -90,6 +90,9 @@ func (s servedAt) QueryAccount(ctx context.Context, u *url.URL, _ *api.DefaultQu
 	if err != nil {
 		return nil, err
 	}
+	if leaf == nil {
+		return nil, errors.InternalError.WithFormat("%v has no main state receipt under this observer", u)
+	}
 	r.Receipt.Receipt = *leaf
 	r.Receipt.Anchor = root[:]
 	return r, nil

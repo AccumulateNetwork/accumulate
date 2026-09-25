@@ -628,13 +628,13 @@ type Receipt struct {
 	MajorBlock     uint64    `json:"majorBlock,omitempty" form:"majorBlock" query:"majorBlock" validate:"required"`
 	// ForHeight is the minor block this receipt was produced against, which is the last state-changing block at or before the one that was asked for. Zero means the current state. When it is set the receipt terminates at that block's BPT root, which is the StateTreeAnchor its anchor carries, so a holder of that anchor can check the receipt with nothing else (#4361).
 	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
-	// StartsAtMainState reports that the receipt starts at a plain hash of the account's main state rather than at the account's whole BPT entry. It is only ever set on a historical receipt, and only when the node retained the account's state receipt for the block; without it a verifier holding the account state cannot recompute the receipt's starting point.
-	StartsAtMainState bool `json:"startsAtMainState,omitempty" form:"startsAtMainState" query:"startsAtMainState"`
 	// Complete reports that the receipt terminates at a directory root, so there is no second call to make. A BPT is a tree of current state, so an account proof is built against the current BPT and its root reaches the directory only after an anchor round trip, except on the directory itself where it is already local.
 	Complete bool `json:"complete,omitempty" form:"complete" query:"complete"`
 	// Partition names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against.
 	Partition string `json:"partition,omitempty" form:"partition" query:"partition"`
-	extraData []byte
+	// StartsAtMainState reports that the receipt starts at a plain hash of the account's main state rather than at the account's whole BPT entry. It is only ever set on a historical receipt, and only when the node retained the account's state receipt for the block; without it a verifier holding the account state cannot recompute the receipt's starting point.
+	StartsAtMainState bool `json:"startsAtMainState,omitempty" form:"startsAtMainState" query:"startsAtMainState"`
+	extraData         []byte
 }
 
 type ReceiptOptions struct {
@@ -2184,9 +2184,9 @@ func (v *Receipt) Copy() *Receipt {
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
 	u.ForHeight = v.ForHeight
-	u.StartsAtMainState = v.StartsAtMainState
 	u.Complete = v.Complete
 	u.Partition = v.Partition
+	u.StartsAtMainState = v.StartsAtMainState
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3908,13 +3908,13 @@ func (v *Receipt) Equal(u *Receipt) bool {
 	if !(v.ForHeight == u.ForHeight) {
 		return false
 	}
-	if !(v.StartsAtMainState == u.StartsAtMainState) {
-		return false
-	}
 	if !(v.Complete == u.Complete) {
 		return false
 	}
 	if !(v.Partition == u.Partition) {
+		return false
+	}
+	if !(v.StartsAtMainState == u.StartsAtMainState) {
 		return false
 	}
 
@@ -8359,9 +8359,9 @@ var fieldNames_Receipt = []string{
 	3: "LocalBlockTime",
 	4: "MajorBlock",
 	5: "ForHeight",
-	6: "StartsAtMainState",
-	7: "Complete",
-	8: "Partition",
+	6: "Complete",
+	7: "Partition",
+	8: "StartsAtMainState",
 }
 
 func (v *Receipt) MarshalBinary() ([]byte, error) {
@@ -8387,14 +8387,14 @@ func (v *Receipt) MarshalBinary() ([]byte, error) {
 	if !(v.ForHeight == 0) {
 		writer.WriteUint(5, v.ForHeight)
 	}
-	if !(!v.StartsAtMainState) {
-		writer.WriteBool(6, v.StartsAtMainState)
-	}
 	if !(!v.Complete) {
-		writer.WriteBool(7, v.Complete)
+		writer.WriteBool(6, v.Complete)
 	}
 	if !(len(v.Partition) == 0) {
-		writer.WriteString(8, v.Partition)
+		writer.WriteString(7, v.Partition)
+	}
+	if !(!v.StartsAtMainState) {
+		writer.WriteBool(8, v.StartsAtMainState)
 	}
 
 	_, _, err := writer.Reset(fieldNames_Receipt)
@@ -11456,13 +11456,13 @@ func (v *Receipt) UnmarshalBinaryFrom(rd io.Reader) error {
 		v.ForHeight = x
 	}
 	if x, ok := reader.ReadBool(6); ok {
-		v.StartsAtMainState = x
-	}
-	if x, ok := reader.ReadBool(7); ok {
 		v.Complete = x
 	}
-	if x, ok := reader.ReadString(8); ok {
+	if x, ok := reader.ReadString(7); ok {
 		v.Partition = x
+	}
+	if x, ok := reader.ReadBool(8); ok {
+		v.StartsAtMainState = x
 	}
 
 	seen, err := reader.Reset(fieldNames_Receipt)
@@ -12284,9 +12284,9 @@ func init() {
 		encoding.NewTypeField("localBlockTime", "string"),
 		encoding.NewTypeField("majorBlock", "uint64"),
 		encoding.NewTypeField("forHeight", "uint64"),
-		encoding.NewTypeField("startsAtMainState", "bool"),
 		encoding.NewTypeField("complete", "bool"),
 		encoding.NewTypeField("partition", "string"),
+		encoding.NewTypeField("startsAtMainState", "bool"),
 	}, "Receipt", "receipt")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -13585,9 +13585,9 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 		LocalBlockTime    time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock        uint64                                  `json:"majorBlock,omitempty"`
 		ForHeight         uint64                                  `json:"forHeight,omitempty"`
-		StartsAtMainState bool                                    `json:"startsAtMainState,omitempty"`
 		Complete          bool                                    `json:"complete,omitempty"`
 		Partition         string                                  `json:"partition,omitempty"`
+		StartsAtMainState bool                                    `json:"startsAtMainState,omitempty"`
 		ExtraData         *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	if !(len(v.Receipt.Start) == 0) {
@@ -13620,14 +13620,14 @@ func (v *Receipt) MarshalJSON() ([]byte, error) {
 	if !(v.ForHeight == 0) {
 		u.ForHeight = v.ForHeight
 	}
-	if !(!v.StartsAtMainState) {
-		u.StartsAtMainState = v.StartsAtMainState
-	}
 	if !(!v.Complete) {
 		u.Complete = v.Complete
 	}
 	if !(len(v.Partition) == 0) {
 		u.Partition = v.Partition
+	}
+	if !(!v.StartsAtMainState) {
+		u.StartsAtMainState = v.StartsAtMainState
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -15337,9 +15337,9 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 		LocalBlockTime    time.Time                               `json:"localBlockTime,omitempty"`
 		MajorBlock        uint64                                  `json:"majorBlock,omitempty"`
 		ForHeight         uint64                                  `json:"forHeight,omitempty"`
-		StartsAtMainState bool                                    `json:"startsAtMainState,omitempty"`
 		Complete          bool                                    `json:"complete,omitempty"`
 		Partition         string                                  `json:"partition,omitempty"`
+		StartsAtMainState bool                                    `json:"startsAtMainState,omitempty"`
 		ExtraData         *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Start = encoding.BytesToJSON(v.Receipt.Start)
@@ -15352,9 +15352,9 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	u.LocalBlockTime = v.LocalBlockTime
 	u.MajorBlock = v.MajorBlock
 	u.ForHeight = v.ForHeight
-	u.StartsAtMainState = v.StartsAtMainState
 	u.Complete = v.Complete
 	u.Partition = v.Partition
+	u.StartsAtMainState = v.StartsAtMainState
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -15381,9 +15381,9 @@ func (v *Receipt) UnmarshalJSON(data []byte) error {
 	v.LocalBlockTime = u.LocalBlockTime
 	v.MajorBlock = u.MajorBlock
 	v.ForHeight = u.ForHeight
-	v.StartsAtMainState = u.StartsAtMainState
 	v.Complete = u.Complete
 	v.Partition = u.Partition
+	v.StartsAtMainState = u.StartsAtMainState
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

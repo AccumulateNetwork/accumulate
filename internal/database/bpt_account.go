@@ -232,10 +232,18 @@ func (a *Account) BptReceipt() (*merkle.Receipt, error) {
 //
 // Unlike StateReceipt it does not read the BPT, so it works on an uncommitted
 // batch — the pull verifies before it commits.
+//
+// It returns nil when there is no such path: the debug observer collapses the
+// components into one hash, and a one-element "receipt" starts at that hash -
+// the whole leaf - not at a hash of the main state, so it would claim a
+// main-state start it is not.
 func (a *Account) StateTreeReceipt() (*merkle.Receipt, error) {
 	hasher, err := a.parent.observer.DidChangeAccount(a.parent, a)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+	if len(hasher) < 2 {
+		return nil, nil
 	}
 	return hasher.Receipt(0, len(hasher)-1), nil
 }

@@ -12,10 +12,6 @@ Receipt:
       description: is the minor block this receipt was produced against, which is the last state-changing block at or before the one that was asked for. Zero means the current state. When it is set the receipt terminates at that block's BPT root, which is the StateTreeAnchor its anchor carries, so a holder of that anchor can check the receipt with nothing else (#4361)
       type: uint
       optional: true
-    - name: StartsAtMainState
-      description: reports that the receipt starts at a plain hash of the account's main state rather than at the account's whole BPT entry. It is only ever set on a historical receipt, and only when the node retained the account's state receipt for the block; without it a verifier holding the account state cannot recompute the receipt's starting point
-      type: bool
-      optional: true
     - name: Complete
       description: reports that the receipt terminates at a directory root, so there is no second call to make. A BPT is a tree of current state, so an account proof is built against the current BPT and its root reaches the directory only after an anchor round trip, except on the directory itself where it is already local
       type: bool
@@ -23,6 +19,10 @@ Receipt:
     - name: Partition
       description: names whose BPT root the receipt terminates at when it is not complete, so a caller knows what to bind against
       type: string
+      optional: true
+    - name: StartsAtMainState
+      description: reports that the receipt starts at a plain hash of the account's main state rather than at the account's whole BPT entry. It is only ever set on a historical receipt, and only when the node retained the account's state receipt for the block; without it a verifier holding the account state cannot recompute the receipt's starting point
+      type: bool
       optional: true
 
 SightedStream:
