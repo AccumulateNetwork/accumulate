@@ -240,31 +240,57 @@ func blockSurvey(archiveArg, blockstore, accounts string, sample int) error {
 		return err
 	}
 	defer store.Close()
-	var dn *leveldb.DB
-	if *flagDN != "" {
-		dn, err = leveldb.OpenFile(*flagDN, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+	// Where this partition's outgoing anchors land
+	var dests []*leveldb.DB
+	for _, p := range flagDest {
+		d, err := leveldb.OpenFile(p, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
 		if err != nil {
 			return err
 		}
-		defer dn.Close()
+		defer d.Close()
+		dests = append(dests, d)
 	}
 
-	// Block ledgers, evenly spaced through the list
-	f, err := os.Open(accounts)
-	if err != nil {
-		return err
-	}
+	// Block ledgers, evenly spaced through the account list or, without one,
+	// through the block store's range: the first block with a ledger at or
+	// after each of sample evenly spaced heights
 	var ledgers []string
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if strings.Contains(sc.Text(), "/ledger/") {
-			ledgers = append(ledgers, sc.Text())
+	if accounts != "" {
+		f, err := os.Open(accounts)
+		if err != nil {
+			return err
 		}
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			if strings.Contains(sc.Text(), "/ledger/") {
+				ledgers = append(ledgers, sc.Text())
+			}
+		}
+		f.Close()
+		sort.Strings(ledgers)
 	}
-	f.Close()
-	sort.Strings(ledgers)
 	step := len(ledgers) / sample
 	if step == 0 {
+		step = 1
+	}
+	if accounts == "" {
+		lu, err := url.Parse(*flagLedgerURL)
+		if err != nil {
+			return fmt.Errorf("-ledger-url: %w", err)
+		}
+		base, height := storeRange(store)
+		b := coredb.New(&verifiedStore{a}, nil).Begin(false)
+		for i := 0; i < sample; i++ {
+			h := base + uint64(i)*(height-base)/uint64(sample)
+			for j := uint64(0); j < 200 && h+j <= height; j++ {
+				u := lu.JoinPath(fmt.Sprint(h + j))
+				if _, err := b.Account(u).Main().Get(); err == nil {
+					ledgers = append(ledgers, u.String())
+					break
+				}
+			}
+		}
+		b.Discard()
 		step = 1
 	}
 
@@ -355,21 +381,24 @@ func blockSurvey(archiveArg, blockstore, accounts string, sample int) error {
 			if len(t.misses) < 4 {
 				t.misses = append(t.misses, fmt.Sprintf("block %d %v %s[%d] %x", bl.Index, e.Account, e.Chain, e.Index, h[:8]))
 			}
-			if dn != nil && strings.HasPrefix(e.Chain, "anchor-sequence") && t.dnSearched < *flagSearch {
-				// An outgoing anchor is a message of the Directory's blocks
+			if len(dests) > 0 && strings.HasPrefix(e.Chain, "anchor-sequence") && t.dnSearched < *flagSearch {
+				// An outgoing anchor is a message of its destinations' blocks
 				t.dnSearched++
-				start := heightAt(dn, bl.Time.Unix())
-				for h2 := start; h2 < start+60; h2++ {
-					txs, ok, err := cometBlock(dn, h2)
-					if err != nil {
-						return err
-					}
-					if !ok {
-						break
-					}
-					if hs, _ := messageHashes(txs); hs[[32]byte(h)] {
-						t.dnFound++
-						break
+			dests:
+				for _, d := range dests {
+					start := heightAt(d, bl.Time.Unix())
+					for h2 := start; h2 < start+200; h2++ {
+						txs, ok, err := cometBlock(d, h2)
+						if err != nil {
+							return err
+						}
+						if !ok {
+							break
+						}
+						if hs, _ := messageHashes(txs); hs[[32]byte(h)] {
+							t.dnFound++
+							break dests
+						}
 					}
 				}
 			}
@@ -402,7 +431,7 @@ func blockSurvey(archiveArg, blockstore, accounts string, sample int) error {
 			fmt.Printf("    miss: %s\n", m)
 		}
 		if t.dnSearched > 0 {
-			fmt.Printf("    of %d misses searched in the Directory's blocks, %d found\n", t.dnSearched, t.dnFound)
+			fmt.Printf("    of %d misses searched in the destinations' blocks, %d found\n", t.dnSearched, t.dnFound)
 		}
 		if len(t.missTypes) > 0 {
 			fmt.Printf("    missing entries by type: %v\n", t.missTypes)

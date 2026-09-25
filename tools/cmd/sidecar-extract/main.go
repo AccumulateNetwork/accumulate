@@ -44,6 +44,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -68,16 +69,47 @@ var flagAccounts = flag.String("accounts", "", "an account list, one URL per lin
 var flagSample = flag.Int("sample", 2000, "block ledgers to sample (for -survey)")
 var flagWindow = flag.Int("window", 0, "blocks to search back for an entry missing from its block (for -survey)")
 var flagSearch = flag.Int("search", 50, "misses per chain kind to search back for (for -survey)")
-var flagDN = flag.String("dn-blockstore", "", "the Directory's CometBFT block store, to find outgoing anchors in (for -survey)")
+var flagLedgerURL = flag.String("ledger-url", "", "the partition's ledger URL, to sample block ledgers by height when there is no -accounts (for -survey)")
+var flagLost = flag.String("lostmap", "", "a lost.log: name the lost keys the block store (-survey) implies, write recovered bodies to -out, and exit")
+var flagTo = flag.Uint64("to", 0, "last block for -rebuild (default the block store's height)")
+var flagFrom = flag.Uint64("from", 0, "first block for -lostmap (default the block store's base)")
+var flagRebuild = flag.Bool("rebuild", false, "rebuild every main, signature and scratch chain the blocks from -from on touch, from the block store (-survey), proving each block against the anchors it wrote, and exit")
+var flagProfile = flag.String("cpuprofile", "", "write a CPU profile here")
+var flagDest listFlag
 var flagCurrent listFlag
 var flagWritable listFlag
 
 func main() {
 	flag.Var(&flagCurrent, "current", "a current LevelDB database (repeatable); a key any of them holds is not extracted")
+	flag.Var(&flagDest, "destination", "a CometBFT block store the partition's outgoing anchors land in (repeatable, for -survey)")
 	flag.Var(&flagWritable, "writable", "an archive name to open writable, for a copy that will not open read-only (repeatable)")
 	flag.Parse()
+	if *flagProfile != "" {
+		f, err := os.Create(*flagProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		_ = pprof.StartCPUProfile(f)
+		go func() {
+			time.Sleep(80 * time.Second)
+			pprof.StopCPUProfile()
+			f.Close()
+		}()
+	}
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagRebuild {
+		if err := rebuildChains(flag.Arg(0), *flagSurvey); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagLost != "" {
+		if err := lostMap(flag.Arg(0), *flagSurvey, *flagLost, *flagOut, 16); err != nil {
 			log.Fatal(err)
 		}
 		return
