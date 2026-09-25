@@ -183,6 +183,10 @@ type Pending struct {
 	receipt *api.Receipt
 	batch   *database.Batch
 	done    bool
+
+	// owned is a batch begun from Options.Store rather than a child of the
+	// caller's: Keep updates the BPT and commits it.
+	owned bool
 }
 
 // Root is the root the peer's receipt ends at: the peer's word, unverified.
@@ -229,6 +233,14 @@ func (p *Pending) Keep() error {
 	}
 	p.release()
 	defer p.batch.Discard()
+	if p.owned {
+		// Batch.Commit commits the BPT store and never calls
+		// Account.putBpt, so a pulled account left the local root where
+		// it was without this (#4305).
+		if err := p.batch.UpdateBPT(); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
 	return errors.UnknownError.Wrap(p.batch.Commit())
 }
 
@@ -245,12 +257,21 @@ func (p *Pending) Discard() {
 // caller keeps or discards it. withReceipt asks the peer for the proof that
 // binds the state to its root, for what the receipt-bearing answer carries
 // beside the body (#4399); Keep does not check it against a root.
+//
+// batch nil, with opts.Store set, is the pull that holds no view of the store
+// while the chains stream: the entries of a whole chain are written to the
+// store a page at a time, and a store that keeps isolation by pre-image (the
+// BlockchainDB backend) keeps every page's pre-images for as long as any view
+// begun before it is open -- one open batch across the stream held a follower's
+// whole anchor pool in memory again (#4446, the 37,000-block network). The
+// account's own batch is begun from the store once the chains are streamed,
+// and Keep updates the BPT and commits it.
 func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, opts Options, withReceipt bool) (*Pending, error) {
 	if src == nil {
 		return nil, errors.BadRequest.With("pull.Fetch: src required")
 	}
-	if batch == nil {
-		return nil, errors.BadRequest.With("pull.Fetch: batch required")
+	if batch == nil && opts.Store == nil {
+		return nil, errors.BadRequest.With("pull.Fetch: batch or store required")
 	}
 	if u == nil {
 		return nil, errors.BadRequest.With("pull.Fetch: url required")
@@ -271,17 +292,18 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 			"%v: %d accounts are already fetched and unkept, the limit is %d", u, n-1, MaxHeld)
 	}
 
-	sub := batch.Begin(true)
-	p := &Pending{Account: u, Partition: opts.Partition, batch: sub}
-
+	p := &Pending{Account: u, Partition: opts.Partition}
 	fail := func(err error) (*Pending, error) {
 		p.release()
-		sub.Discard()
+		if p.batch != nil {
+			p.batch.Discard()
+		}
 		return nil, err
 	}
 
-	// 1. Main account state, with the receipt that binds it to the peer's root.
-	receipt, err := pullMain(ctx, src, sub, u, withReceipt)
+	// 1. Main account state, with the receipt that binds it to the peer's
+	// root. Asked first: a peer that holds no leaf says so here.
+	rec, err := queryMain(ctx, src, u, withReceipt)
 	switch {
 	case err == nil:
 	case stderrors.Is(err, ErrNoLeaf):
@@ -293,9 +315,9 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	default:
 		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
 	}
-	p.receipt = receipt
-	if receipt != nil {
-		p.Block = receipt.LocalBlock
+	p.receipt = rec.Receipt
+	if rec.Receipt != nil {
+		p.Block = rec.Receipt.LocalBlock
 
 		// The block is the SERVING partition's, not the puller's. A receipt
 		// proves the state as of a block of the partition that built it
@@ -305,39 +327,25 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		// (#4308). Latent while
 		// every account a join pulls is its own partition's; wrong the moment
 		// one is not.
-		if receipt.Partition != "" {
-			p.Partition = protocol.PartitionUrl(receipt.Partition)
+		if rec.Receipt.Partition != "" {
+			p.Partition = protocol.PartitionUrl(rec.Receipt.Partition)
 		}
 	}
 
-	// 2. Directory entries (the secondary-state list of contained URLs).
-	if err := pullDirectory(ctx, src, sub, u, pageSize); err != nil {
-		return fail(errors.UnknownError.WithFormat("directory %s: %w", u, err))
-	}
-
-	// 3. Pending txids.
-	if err := pullPending(ctx, src, sub, u, pageSize); err != nil {
-		return fail(errors.UnknownError.WithFormat("pending %s: %w", u, err))
-	}
-
-	// 4. Chains. What is taken is the peer's; the node's own heights are not
-	// consulted.
+	// 2. A whole account's chains, streamed to the store a page at a time
+	// before the account's batch is begun (see above). The entries go to the
+	// store; without one, into the caller's batch -- not the account's own:
+	// a message is not the account's, and the same key written by two
+	// pending batches of one pass conflicts when the second is kept.
+	var chains *streamedChains
 	switch opts.Mode {
 	case ModeStateOnly:
-		err = pullChainHeads(ctx, src, sub, u, pageSize)
-		if err != nil {
-			return fail(errors.UnknownError.WithFormat("chain heads %s: %w", u, err))
-		}
 	case ModeFullSpine:
-		// The entries go to the store, a page at a time; without one, into the
-		// caller's batch -- not the account's own: a message is not the
-		// account's, and the same key written by two pending batches of one
-		// pass conflicts when the second is kept.
 		var pages Store = batch
 		if opts.Store != nil {
 			pages = opts.Store
 		}
-		err = pullChainsFull(ctx, src, sub, pages, u, pageSize, opts.CheckHeld, opts.RetakeLonger)
+		chains, err = streamChainsFull(ctx, src, pages, u, pageSize, opts.CheckHeld, opts.RetakeLonger)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
 		}
@@ -345,6 +353,31 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		return fail(errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode))
 	}
 
+	// 3. The account's own batch: body, directory, pending, chain heads.
+	if batch != nil {
+		p.batch = batch.Begin(true)
+	} else {
+		p.batch, p.owned = opts.Store.Begin(true), true
+	}
+	sub := p.batch
+	if err := storeMain(ctx, src, sub, u, rec, withReceipt); err != nil {
+		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
+	}
+	if err := pullDirectory(ctx, src, sub, u, pageSize); err != nil {
+		return fail(errors.UnknownError.WithFormat("directory %s: %w", u, err))
+	}
+	if err := pullPending(ctx, src, sub, u, pageSize); err != nil {
+		return fail(errors.UnknownError.WithFormat("pending %s: %w", u, err))
+	}
+	// What is taken is the peer's; the node's own heights are not consulted.
+	if chains == nil {
+		err = pullChainHeads(ctx, src, sub, u, pageSize)
+	} else {
+		err = chains.restore(sub, u)
+	}
+	if err != nil {
+		return fail(errors.UnknownError.WithFormat("chain heads %s: %w", u, err))
+	}
 	return p, nil
 }
 
@@ -437,10 +470,11 @@ func sourceName(i int, src Source) string {
 // answer makes it an ordinary refusal, to be asked again.
 var ErrNoLeaf = stderrors.New("the peer holds no leaf for the account")
 
-// pullMain stores the account body and returns the receipt the peer served
-// with it, which binds the body to the peer's BPT root. wantReceipt asks for
+// queryMain asks for the account body and the receipt the peer serves with
+// it, which binds the body to the peer's BPT root, and refuses an answer that
+// is not the account's. wantReceipt asks for
 // one; without it the peer does the work of building a proof nobody checks.
-func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, wantReceipt bool) (*api.Receipt, error) {
+func queryMain(ctx context.Context, src Source, u *url.URL, wantReceipt bool) (*api.AccountRecord, error) {
 	var query *api.DefaultQuery
 	if wantReceipt {
 		query = &api.DefaultQuery{IncludeReceipt: &api.ReceiptOptions{ForAny: true}}
@@ -489,18 +523,24 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 	if got := rec.Account.GetUrl(); got == nil || !got.Equal(u) {
 		return nil, errors.Conflict.WithFormat("%v: the peer served the body of %v", u, got)
 	}
+	return rec, nil
+}
+
+// storeMain writes the account body queryMain took, and the rest of the leaf
+// the receipt-bearing answer carries.
+func storeMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, rec *api.AccountRecord, wantReceipt bool) error {
 	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
-		return nil, errors.UnknownError.WithFormat("store main: %w", err)
+		return errors.UnknownError.WithFormat("store main: %w", err)
 	}
 	if wantReceipt {
 		// The answer that carries a receipt carries the rest of the leaf the
 		// receipt proves; one without a receipt does not, and must not clear
 		// what the node holds.
 		if err := pullLeafBesideBody(ctx, src, batch, u, rec.Leaf); err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return errors.UnknownError.Wrap(err)
 		}
 	}
-	return rec.Receipt, nil
+	return nil
 }
 
 // pullLeafBesideBody writes the part of a system account's leaf that only the
@@ -1129,7 +1169,7 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 	}
 }
 
-// pullChainsFull takes every entry of every chain the node does not already
+// streamChainsFull takes every entry of every chain the node does not already
 // hold. It starts from the local height, not from zero, so a second pull of an
 // account is a no-op rather than a chain of twice the height — a restarting
 // node re-pulls the spine, and a pull that is not idempotent doubles it.
@@ -1140,7 +1180,8 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 // the store and dropped before the next is asked for (#4446), and they are
 // held to the head once the last is written -- the running state they build,
 // from the node's own below the local height, must reach the head's count and
-// anchor. Only then is the head restored, into batch, the account's own.
+// anchor. Only then is the head restored, with the account (restore). Nothing
+// here holds a view of the store open while a page is written.
 // A chain the node holds more of than the peer served is refused; the pull
 // asks another peer, or this one again once it has moved on -- unless the
 // caller repairs what it executed (Options.RetakeLonger), when it is taken
@@ -1153,15 +1194,17 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 // an anchored height there is one correct chain, and it is the peer's, taken
 // on Fetch's word and proven only when the join's whole local root matches a
 // signed anchor (executor spec, "Sync", "The algorithm", step 3).
-func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, pages Store, u *url.URL, pageSize uint64, checkHeld, retakeLonger bool) error {
+func streamChainsFull(ctx context.Context, src Source, pages Store, u *url.URL, pageSize uint64, checkHeld, retakeLonger bool) (*streamedChains, error) {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
-		return fmt.Errorf("list chains: %w", err)
+		return nil, fmt.Errorf("list chains: %w", err)
 	}
+	out := &streamedChains{retakeLonger: retakeLonger}
 	if chains == nil {
-		return nil
+		return out, nil
 	}
+	out.listed = chains.Records
 	// The main chain first: an anchor signature's page writes what executing
 	// the anchor wrote only for an anchor on the main chain, and it looks
 	// there for it (messages.isExecuted).
@@ -1172,41 +1215,68 @@ func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, page
 		}
 	}
 	for _, c := range chains.Records {
-		if c != nil && c.Name != "main" {
+		if c != nil && c.Name != "main" && c.Name != "" {
 			ordered = append(ordered, c)
 		}
 	}
 	for _, c := range ordered {
-		if c.Name == "" {
-			continue
-		}
-		err := pullChain(ctx, src, batch, pages, u, c, pageSize, checkHeld, false)
+		t, err := streamChain(ctx, src, pages, u, c, pageSize, checkHeld, false)
 		if stderrors.Is(err, errNotThePeers) || retakeLonger && stderrors.Is(err, errLongerThanThePeers) {
-			err = pullChain(ctx, src, batch, pages, u, c, pageSize, false, true)
+			t, err = streamChain(ctx, src, pages, u, c, pageSize, false, true)
 		}
 		if err != nil {
-			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+			return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
+		out.taken = append(out.taken, t)
 	}
-	// Indexed once every chain is taken: a page lists its chain in the index
-	// where it is written (Account.Commit), and batch touching the index
-	// before the last page is written would hold a version of it the pages
-	// have moved past.
-	for _, c := range ordered {
-		if c.Name == "" {
-			continue
+	return out, nil
+}
+
+// streamedChains is what streaming an account's chains leaves to be written
+// with the account: each chain's head and open mark set, which is at most a
+// mark set of hashes a chain.
+type streamedChains struct {
+	listed       []*api.ChainRecord
+	taken        []*streamedChain
+	retakeLonger bool
+}
+
+// streamedChain is one chain whose entries are written, with the head they
+// reproduce.
+type streamedChain struct {
+	c    *api.ChainRecord
+	head *merkle.State
+	open [][]byte
+
+	// restore is false for a chain the node already held to the peer's
+	// height: its head is its own.
+	restore bool
+}
+
+// restore writes the heads of the streamed chains and the chain index into
+// batch, the account's own.
+func (s *streamedChains) restore(batch *database.Batch, u *url.URL) error {
+	for _, t := range s.taken {
+		if t.restore {
+			c, err := batch.Account(u).ChainByName(t.c.Name)
+			if err != nil {
+				return err
+			}
+			if err := c.Inner().RestoreHead(t.head, t.open); err != nil {
+				return fmt.Errorf("chain %s/%s: %w", u, t.c.Name, err)
+			}
 		}
-		if err := addChainToIndex(batch, u, c); err != nil {
+		if err := addChainToIndex(batch, u, t.c); err != nil {
 			return err
 		}
 	}
-	if retakeLonger {
+	if s.retakeLonger {
 		// The account is taken whole: a chain the node created that the
 		// peer's account does not have leaves the index, or the account's
 		// hash still counts it (executor spec, "Sync", "Two
 		// mismatches": "the repair takes accounts whole").
 		var list []*protocol.ChainMetadata
-		for _, c := range chains.Records {
+		for _, c := range s.listed {
 			if c == nil || c.Name == "" {
 				continue
 			}
@@ -1227,7 +1297,7 @@ var errNotThePeers = stderrors.New("the local chain is not a prefix of the peer'
 // peer served.
 var errLongerThanThePeers = stderrors.New("the local chain is longer than the peer's")
 
-// pullChain brings one chain up to the head the peer served, from whatever the
+// streamChain brings one chain up to the head the peer served, from whatever the
 // node already holds -- or, whole, from its first entry, over whatever the
 // node held. A transaction chain's entries come with the messages they name,
 // each checked against its entry (#4400) and written with its page. checkHeld
@@ -1238,28 +1308,24 @@ var errLongerThanThePeers = stderrors.New("the local chain is longer than the pe
 // an element above the node's head is overwritten by the next pull. What a
 // refused chain leaves behind is an index entry naming a position the next
 // pull writes something else at (docs/spec/DIFFERENCES.md, #4446).
-func pullChain(ctx context.Context, src Source, batch *database.Batch, pages Store, u *url.URL, c *api.ChainRecord, pageSize uint64, checkHeld, whole bool) error {
-	dstChain, err := batch.Account(u).ChainByName(c.Name)
-	if err != nil {
-		return err
-	}
-	dst := dstChain.Inner()
-
-	// What the node holds is read beside batch, not through it: batch
-	// touches none of the chain's records until the pages under it are
-	// written, or it would hold versions of them the pages have moved past.
-	local := pages.Begin(false)
-	defer local.Discard()
-	localChain, err := local.Account(u).ChainByName(c.Name)
-	if err != nil {
-		return err
-	}
-	held := localChain.Inner()
-
+func streamChain(ctx context.Context, src Source, pages Store, u *url.URL, c *api.ChainRecord, pageSize uint64, checkHeld, whole bool) (*streamedChain, error) {
 	// The running state the entries build, from the node's own head below
-	// the local height.
+	// the local height, and the held entries with no message behind them --
+	// read in a view closed before any page is written.
+	bodies := carriesMessages(c)
 	st := new(merkle.State)
-	if !whole {
+	var runs []*heldRun
+	err := func() error {
+		local := pages.Begin(false)
+		defer local.Discard()
+		lc, err := local.Account(u).ChainByName(c.Name)
+		if err != nil {
+			return err
+		}
+		held := lc.Inner()
+		if whole {
+			return nil
+		}
 		head, err := held.Head().Get()
 		if err != nil {
 			return fmt.Errorf("load the local head: %w", err)
@@ -1276,14 +1342,18 @@ func pullChain(ctx context.Context, src Source, batch *database.Batch, pages Sto
 			}
 			st.HashList = open
 		}
+		if checkHeld && bodies {
+			runs, err = heldWithoutMessages(local, held, st.Count)
+		}
+		return err
+	}()
+	if err != nil {
+		return nil, err
 	}
 	from := st.Count
 
-	bodies := carriesMessages(c)
-	if checkHeld && bodies {
-		if err := fetchHeldMessages(ctx, src, pages, local, held, u, c, from, pageSize); err != nil {
-			return err
-		}
+	if err := fetchHeldMessages(ctx, src, pages, u, c, runs, pageSize); err != nil {
+		return nil, err
 	}
 	err = streamEntries(ctx, src, pages, u, c.Name, uint64(from), c.Count, pageSize, bodies, func(page *database.Batch, _ *messages, index uint64, entry []byte) error {
 		pc, err := page.Account(u).ChainByName(c.Name)
@@ -1293,20 +1363,19 @@ func pullChain(ctx context.Context, src Source, batch *database.Batch, pages Sto
 		return pc.Inner().PutBelow(st, entry, false)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// The peer's head is what the account's leaf is hashed from, so entries
 	// that do not reproduce it are a different chain.
 	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
 	if st.Count != want.Count || !bytes.Equal(st.Anchor(), want.Anchor()) {
-		return fmt.Errorf("%w: the peer's entries [%d, %d) on the %d the node holds anchor to %x and the peer's head to %x",
+		return nil, fmt.Errorf("%w: the peer's entries [%d, %d) on the %d the node holds anchor to %x and the peer's head to %x",
 			errNotThePeers, from, c.Count, from, st.Anchor(), want.Anchor())
 	}
-	if !whole && from == want.Count {
-		return nil // Nothing taken; the head is the node's own
-	}
-	return dst.RestoreHead(want, st.HashList)
+	// Nothing taken: the head is the node's own.
+	restore := whole || from != want.Count
+	return &streamedChain{c: c, head: want, open: st.HashList, restore: restore}, nil
 }
 
 // streamEntries takes the entries [start, end) of one of the peer's chains a
@@ -1457,48 +1526,7 @@ func (m *messages) companion(chain string, index uint64, msg messaging.Message) 
 // kept without its message (executor.md, "Sync" §3). A peer whose entry at
 // that position is not the one held is not the chain the node holds, and the
 // chain is taken whole.
-func fetchHeldMessages(ctx context.Context, src Source, pages Store, local *database.Batch, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, height int64, pageSize uint64) error {
-	from := height - HeldCheckDepth
-	if from < 0 {
-		from = 0
-	}
-
-	// The runs of held entries with no message behind them.
-	type run struct {
-		start  int64
-		hashes [][]byte
-	}
-	var runs []*run
-	var last *run
-	for i := from; i < height; i++ {
-		h, err := dst.Entry(i)
-		switch {
-		case err == nil:
-		case errors.Is(err, errors.NotFound):
-			// A position the node does not hold is not data it already has:
-			// the lead's state-only re-pull restored a head and its open mark
-			// set, and a chain that crossed a mark point between passes kept
-			// the positions between not at all (#4421 review F1).
-			return fmt.Errorf("%w: the node does not hold entry %d: %v", errNotThePeers, i, err)
-		default:
-			return fmt.Errorf("load held entry %d: %w", i, err)
-		}
-		_, err = local.Message2(h).Main().Get()
-		switch {
-		case err == nil:
-			last = nil
-			continue
-		case errors.Is(err, errors.NotFound):
-		default:
-			return fmt.Errorf("load the message behind held entry %d: %w", i, err)
-		}
-		if last == nil {
-			last = &run{start: i}
-			runs = append(runs, last)
-		}
-		last.hashes = append(last.hashes, h)
-	}
-
+func fetchHeldMessages(ctx context.Context, src Source, pages Store, u *url.URL, c *api.ChainRecord, runs []*heldRun, pageSize uint64) error {
 	for _, r := range runs {
 		end := r.start + int64(len(r.hashes))
 		err := streamEntries(ctx, src, pages, u, c.Name, uint64(r.start), uint64(end), pageSize, true, func(_ *database.Batch, _ *messages, index uint64, e []byte) error {
@@ -1513,6 +1541,52 @@ func fetchHeldMessages(ctx context.Context, src Source, pages Store, local *data
 		}
 	}
 	return nil
+}
+
+// heldRun is a run of held entries with no message behind them.
+type heldRun struct {
+	start  int64
+	hashes [][]byte
+}
+
+// heldWithoutMessages is the runs of the newest HeldCheckDepth entries below
+// height that the node holds without their messages.
+func heldWithoutMessages(local *database.Batch, dst *database.MerkleManager, height int64) ([]*heldRun, error) {
+	from := height - HeldCheckDepth
+	if from < 0 {
+		from = 0
+	}
+	var runs []*heldRun
+	var last *heldRun
+	for i := from; i < height; i++ {
+		h, err := dst.Entry(i)
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			// A position the node does not hold is not data it already has:
+			// the lead's state-only re-pull restored a head and its open mark
+			// set, and a chain that crossed a mark point between passes kept
+			// the positions between not at all (#4421 review F1).
+			return nil, fmt.Errorf("%w: the node does not hold entry %d: %v", errNotThePeers, i, err)
+		default:
+			return nil, fmt.Errorf("load held entry %d: %w", i, err)
+		}
+		_, err = local.Message2(h).Main().Get()
+		switch {
+		case err == nil:
+			last = nil
+			continue
+		case errors.Is(err, errors.NotFound):
+		default:
+			return nil, fmt.Errorf("load the message behind held entry %d: %w", i, err)
+		}
+		if last == nil {
+			last = &heldRun{start: i}
+			runs = append(runs, last)
+		}
+		last.hashes = append(last.hashes, h)
+	}
+	return runs, nil
 }
 
 // SpineAccounts is what a join takes first, in ModeFullSpine: the accounts

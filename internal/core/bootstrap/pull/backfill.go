@@ -46,21 +46,18 @@ func Backfill(ctx context.Context, srcs []Source, store Store, u *url.URL, pageS
 	if pageSize == 0 {
 		pageSize = 256
 	}
-	batch := store.Begin(false)
-	defer batch.Discard()
-	chains, err := batch.Account(u).Chains().Get()
+	// The node's heads, read in a view closed before any page is written: a
+	// store that keeps isolation by pre-image keeps every page's for as long
+	// as a view begun before it is open (#4446).
+	chains, err := backfillHeads(store, u)
 	if err != nil {
-		return errors.UnknownError.WithFormat("%v: load the chain index: %w", u, err)
+		return err
 	}
-	for _, meta := range chains {
-		c, err := batch.Account(u).ChainByName(meta.Name)
-		if err != nil {
-			return errors.UnknownError.WithFormat("%v: chain %s: %w", u, meta.Name, err)
-		}
+	for _, h := range chains {
 		var refusals []error
 		done := false
 		for i, src := range srcs {
-			err := backfillChain(ctx, src, store, u, meta.Name, meta.Type, c.Inner(), pageSize)
+			err := backfillChain(ctx, src, store, u, h, pageSize)
 			if err == nil {
 				done = true
 				break
@@ -71,35 +68,70 @@ func Backfill(ctx context.Context, srcs []Source, store Store, u *url.URL, pageS
 			refusals = append(refusals, fmt.Errorf("%s: %w", sourceName(i, src), err))
 		}
 		if !done {
-			return errors.Conflict.WithFormat("%v: chain %s: no source served its entries: %w", u, meta.Name, stderrors.Join(refusals...))
+			return errors.Conflict.WithFormat("%v: chain %s: no source served its entries: %w", u, h.name, stderrors.Join(refusals...))
 		}
 	}
 	return nil
 }
 
+// backfillHead is a chain's head as the node holds it, with its open mark set.
+type backfillHead struct {
+	name     string
+	typ      merkle.ChainType
+	head     *merkle.State
+	open     [][]byte
+	boundary int64
+}
+
+// backfillHeads reads the head of every chain of u the node holds entries of.
+func backfillHeads(store Store, u *url.URL) ([]*backfillHead, error) {
+	batch := store.Begin(false)
+	defer batch.Discard()
+	metas, err := batch.Account(u).Chains().Get()
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("%v: load the chain index: %w", u, err)
+	}
+	var out []*backfillHead
+	for _, meta := range metas {
+		c, err := batch.Account(u).ChainByName(meta.Name)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("%v: chain %s: %w", u, meta.Name, err)
+		}
+		chain := c.Inner()
+		head, err := chain.Head().Get()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("%v: chain %s: load the head: %w", u, meta.Name, err)
+		}
+		if head.Count == 0 {
+			continue
+		}
+		open, err := chain.OpenSet(head)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("%v: chain %s: load the open set: %w", u, meta.Name, err)
+		}
+		out = append(out, &backfillHead{
+			name:     meta.Name,
+			typ:      meta.Type,
+			head:     head.Copy(),
+			open:     open,
+			boundary: int64(merkle.BoundaryFor(head.Count, chain.MarkFreq())),
+		})
+	}
+	return out, nil
+}
+
 // backfillChain writes the entries of one chain below its head, a page at a
 // time, and holds them to the head.
-func backfillChain(ctx context.Context, src Source, store Store, u *url.URL, name string, typ merkle.ChainType, chain *database.MerkleManager, pageSize uint64) error {
-	head, err := chain.Head().Get()
-	if err != nil {
-		return fmt.Errorf("load the head: %w", err)
-	}
-	if head.Count == 0 {
-		return nil
-	}
-	boundary := int64(merkle.BoundaryFor(head.Count, chain.MarkFreq()))
-	open, err := chain.OpenSet(head)
-	if err != nil {
-		return fmt.Errorf("load the open set: %w", err)
-	}
+func backfillChain(ctx context.Context, src Source, store Store, u *url.URL, h *backfillHead, pageSize uint64) error {
+	head, open, boundary, name := h.head, h.open, h.boundary, h.name
 
 	// Every entry the node's head counts, so the messages behind the open
 	// set come too; the entries of the open set must be the node's own.
 	// Replayed from the first, the entries must reproduce the node's head:
 	// they are then the chain the node holds, whoever served them.
 	st := new(merkle.State)
-	bodies := carriesMessages(&api.ChainRecord{Name: name, Type: typ})
-	err = streamEntries(ctx, src, store, u, name, 0, uint64(head.Count), pageSize, bodies, func(page *database.Batch, _ *messages, index uint64, h []byte) error {
+	bodies := carriesMessages(&api.ChainRecord{Name: name, Type: h.typ})
+	err := streamEntries(ctx, src, store, u, name, 0, uint64(head.Count), pageSize, bodies, func(page *database.Batch, _ *messages, index uint64, h []byte) error {
 		if i := int64(index) - boundary; i >= 0 && string(open[i]) != string(h) {
 			return errors.Conflict.WithFormat("the entry served at %d is not the node's", index)
 		}

@@ -919,9 +919,10 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 	if whole {
 		mode = pull.ModeFullSpine
 	}
-	batch := s.db.Begin(true)
-	defer batch.Discard()
-	pending, served, err := pull.FetchFrom(ctx, srcs, batch, u, pull.Options{
+	// No batch is begun here: the pull begins the account's once its chains
+	// have streamed, and a view open across the stream pins every page's
+	// pre-images on the BlockchainDB backend (#4446).
+	pending, served, err := pull.FetchFrom(ctx, srcs, nil, u, pull.Options{
 		Mode:      mode,
 		Partition: partition,
 		// The answer with a receipt is the one that carries the rest of the
@@ -976,16 +977,10 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		return owed
 	}
 
-	// The BPT, then the commit. Batch.Commit commits the BPT store and never
-	// calls Account.putBpt, so a perfectly pulled account leaves the local
-	// root exactly where it was and the match can never come (#4305).
+	// Keep updates the BPT, then commits: Batch.Commit commits the BPT store
+	// and never calls Account.putBpt, so a perfectly pulled account left the
+	// local root exactly where it was and the match could never come (#4305).
 	err = pending.Keep()
-	if err == nil {
-		err = batch.UpdateBPT()
-	}
-	if err == nil {
-		err = batch.Commit()
-	}
 	if err != nil {
 		s.log.Info("What was pulled could not be written; it is asked for again next round",
 			"account", u, "partition", s.partition, "error", err)

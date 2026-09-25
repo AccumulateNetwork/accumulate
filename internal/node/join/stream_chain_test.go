@@ -12,6 +12,7 @@ import (
 	"encoding/binary"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"sync"
@@ -24,6 +25,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -38,6 +40,18 @@ func openDisk(t *testing.T, dir string) *database.Database {
 	require.NoError(t, err)
 	db.SetObserver(database.NewDatabaseObserver())
 	return db
+}
+
+// openBcdb opens the BlockchainDB backend in dir, as a node on the soak runs
+// it. It keeps isolation by pre-image: while any view is open, every commit
+// after the view began keeps the values it overwrote.
+func openBcdb(t *testing.T, dir string) (*database.Database, *bcdb.Database) {
+	t.Helper()
+	store, err := bcdb.Open(filepath.Join(dir, "db"))
+	require.NoError(t, err)
+	db := database.New(store, nil)
+	db.SetObserver(database.NewDatabaseObserver())
+	return db, store
 }
 
 // largeAnchor is a directory anchor as the Directory's pool holds one on its
@@ -113,11 +127,12 @@ func diskState(db *database.Database, here *url.URL, src pull.Source) *PulledSta
 	}
 }
 
-// peakHeap samples HeapInuse until stop is closed and reports the most seen.
-func peakHeap(stop <-chan struct{}) <-chan uint64 {
-	out := make(chan uint64, 1)
+// peakHeap samples HeapInuse, and the store's overlays when it has them,
+// until stop is closed, and reports the most of each seen.
+func peakHeap(stop <-chan struct{}, store *bcdb.Database) <-chan [2]uint64 {
+	out := make(chan [2]uint64, 1)
 	go func() {
-		var peak uint64
+		var peak, overlays uint64
 		t := time.NewTicker(5 * time.Millisecond)
 		defer t.Stop()
 		for {
@@ -126,9 +141,14 @@ func peakHeap(stop <-chan struct{}) <-chan uint64 {
 			if ms.HeapInuse > peak {
 				peak = ms.HeapInuse
 			}
+			if store != nil {
+				if n := uint64(store.Overlays()); n > overlays {
+					overlays = n
+				}
+			}
 			select {
 			case <-stop:
-				out <- peak
+				out <- [2]uint64{peak, overlays}
 				return
 			case <-t.C:
 			}
@@ -143,7 +163,11 @@ func peakHeap(stop <-chan struct{}) <-chan uint64 {
 // every entry and every message into slices, replayed them into a batch that
 // held every record, and wrote nothing until the account was done, so its
 // peak grew with the history. Driven through the join's own pullOne, with its
-// own store: a pool of 20,000 directory anchors of about 16 KiB each (some
+// own store -- the BlockchainDB backend, as the soak runs it: the first fix
+// streamed the pages but kept pullOne's batch open across them, and on that
+// store every page's pre-images stayed pinned for the account (1.06 GiB in 10
+// minutes on a 37,000-block network, 4,400 overlays; a LevelDB store keeps no
+// such overlay and did not show it). A pool of 20,000 directory anchors of about 16 KiB each (some
 // 320 MiB of messages) must be taken with the heap staying under a fixed
 // ceiling above where it started. Measured on this change: about 150 MiB
 // above the baseline at 20,000 entries and 128 MiB at 5,000 -- most of it the
@@ -155,6 +179,7 @@ func TestJoin_AWholeChainPullHoldsAPageNotTheChain(t *testing.T) {
 	}
 	const entries = 20_000
 	const ceiling = 200 << 20
+	const maxOverlays = 4 // a page's own commit, not the chain's
 
 	here := protocol.DnUrl()
 	pool := here.JoinPath(protocol.AnchorPool)
@@ -162,7 +187,7 @@ func TestJoin_AWholeChainPullHoldsAPageNotTheChain(t *testing.T) {
 	t.Cleanup(func() { _ = peer.Close() })
 	writeLargePool(t, peer, pool, entries)
 
-	node := openDisk(t, t.TempDir())
+	node, store := openBcdb(t, t.TempDir())
 	t.Cleanup(func() { _ = node.Close() })
 	src := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}
 	s := diskState(node, here, servedAt{Source: src, db: peer})
@@ -178,14 +203,16 @@ func TestJoin_AWholeChainPullHoldsAPageNotTheChain(t *testing.T) {
 	base := ms.HeapInuse
 
 	stop := make(chan struct{})
-	peak := peakHeap(stop)
+	peak := peakHeap(stop, store)
 	got := s.pullOne(context.Background(), p, pool)
 	close(stop)
-	grew := int64(<-peak) - int64(base)
-	t.Logf("heap in use: baseline %d MiB, peak %d MiB above it", base>>20, grew>>20)
+	seen := <-peak
+	grew := int64(seen[0]) - int64(base)
+	t.Logf("heap in use: baseline %d MiB, peak %d MiB above it; most overlays held %d", base>>20, grew>>20, seen[1])
 
 	require.Equal(t, taken, got, "the pool was not taken: %v", p.retry)
 	requireSameChain(t, peer, node, pool, "anchor-sequence")
+	require.LessOrEqual(t, seen[1], uint64(maxOverlays), "a view held open across the stream pinned the pages' pre-images")
 	require.Less(t, grew, int64(ceiling), "the pull's heap grew with the chain it took")
 }
 
@@ -267,9 +294,11 @@ func TestJoin_APullKilledMidAccountResumes(t *testing.T) {
 // the message behind every entry.
 func requireSameChain(t *testing.T, peer, node *database.Database, u *url.URL, name string) {
 	t.Helper()
-	pb := peer.Begin(false)
+	// Deep: the whole history, past the window a BlockchainDB protocol read
+	// answers from.
+	pb := peer.Deep().Begin(false)
 	defer pb.Discard()
-	nb := node.Begin(false)
+	nb := node.Deep().Begin(false)
 	defer nb.Discard()
 	pc, err := pb.Account(u).ChainByName(name)
 	require.NoError(t, err)

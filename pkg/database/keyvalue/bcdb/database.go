@@ -1182,6 +1182,14 @@ func (d *Database) preImages(s *staged) map[[32]byte][]byte {
 // should be unisolated (#4237).
 func (d *Database) PreImageReads() uint64 { return d.preImageReads.Load() }
 
+// Overlays is how many commits' pre-images are held for the views open now:
+// the undo overlay a reader pins by staying open (#4446).
+func (d *Database) Overlays() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.undoVersions)
+}
+
 // preImageAt returns what key h held at version at, if a commit after at
 // rewrote it: the pre-image recorded by the EARLIEST such commit. The
 // caller must hold the lock (shared is enough).

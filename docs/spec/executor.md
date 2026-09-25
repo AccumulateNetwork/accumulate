@@ -739,8 +739,14 @@ behind them, and written in a batch of its own that is committed before the
 next page is asked for: the elements, their index entries, the intermediate
 hashes and mark points the entries imply (exactly what appending them wrote on
 the peer), the messages, and what executing a signature entry wrote beside it.
-The page is then dropped, so a pull's memory is bounded by the page and not by
-the history: a follower added at about 13,400 blocks was killed at its 2 GiB
+The page is then dropped, and **no view of the store is open while a page is
+written**: the account's own batch (body, directory, pending, chain heads) is
+begun only once its chains have streamed, and what the node holds is read in
+views closed before the first page. The BlockchainDB backend keeps every
+commit's pre-images for as long as a view begun before it is open, and one
+batch held across the stream pinned the whole pool there instead (4,400
+overlays, 1.06 GiB in ten minutes on a 37,000-block network). So a pull's
+memory is bounded by the page and not by the history: a follower added at about 13,400 blocks was killed at its 2 GiB
 limit holding the anchor pool whole (run `20260925T042703Z`), and a pool of
 20,000 directory anchors now peaks about 150 MiB above where it started
 against 3,328 MiB (`TestJoin_AWholeChainPullHoldsAPageNotTheChain`). The
