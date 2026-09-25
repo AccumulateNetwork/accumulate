@@ -125,27 +125,43 @@ class FollowerDisturbance(unittest.TestCase):
 
         validators = set(topology.validator_containers())
         followers = set(topology.follower_containers())
-        added = None
+        late = [f["container"] for f in topology.late_followers()]
+        self.assertGreater(len(late), 1, "one late follower per BVN (#4438)")
+        # Every late follower is added in one slot and removed together in a
+        # later one: the follower events come in runs of one kind, each run
+        # naming every late follower once, add and remove alternating.
+        groups = []
         for kind, name in events:
-            if kind == "add-follower":
-                self.assertIsNone(added, "a second follower added before the first was removed")
-                self.assertNotIn(name, validators, "add-follower named a validator")
-                added = name
-            elif kind == "remove-follower":
-                self.assertEqual(added, name, "remove-follower named a container never added")
-                added = None
+            if kind in FOLLOWER_KINDS:
+                self.assertNotIn(name, validators, "%s named a validator" % kind)
+                if groups and groups[-1][0] == kind:
+                    groups[-1][1].append(name)
+                else:
+                    groups.append((kind, [name]))
             else:
                 self.assertIn(name, validators,
                               "the validator walk disturbed a non-validator: %s %s" % (kind, name))
                 self.assertNotIn(name, followers)
+        for i, (kind, names) in enumerate(groups):
+            self.assertEqual("add-follower" if i % 2 == 0 else "remove-follower", kind, groups)
+            if i < len(groups) - 1 or kind == "remove-follower":
+                self.assertEqual(late, names, "a slot did not add or remove every late follower")
 
         # In turn: all three kinds land within the first two rounds of the walk.
         self.assertTrue({"add-follower", "remove-follower"} <= set(kinds[:6]),
                         "follower kinds are not interleaved with the validator walk: %s" % kinds)
 
-        # The docker calls: the follower is started, later stopped and removed,
-        # and is never paused or restarted.
-        name = next(n for k, n in events if k == "add-follower")
+        # The docker calls: each late follower is started, later stopped and
+        # removed, and is never paused or restarted.
+        for name in late:
+            self.started_then_removed(name, calls)
+        for c in calls:
+            if re.match(r"(pause|unpause|restart)\b", c):
+                target = c.split()[-1]
+                self.assertNotIn(target, followers,
+                                 "a follower was disturbed by the validator walk: %s" % c)
+
+    def started_then_removed(self, name, calls):
         mine = [c for c in calls if re.search(r"(^|[\s=/])%s(\s|$)" % re.escape(name), c)]
         start = [i for i, c in enumerate(mine)
                  if re.match(r"(run|create|start|compose\b.*\b(up|run|create)\b)", c)]
@@ -153,11 +169,6 @@ class FollowerDisturbance(unittest.TestCase):
         self.assertTrue(start, "no docker call started %s: %s" % (name, mine))
         self.assertTrue(remove, "no docker call removed %s: %s" % (name, mine))
         self.assertLess(start[0], remove[-1], "removed before it was started: %s" % mine)
-        for c in calls:
-            if re.match(r"(pause|unpause|restart)\b", c):
-                target = c.split()[-1]
-                self.assertNotIn(target, followers | {name},
-                                 "a follower was disturbed by the validator walk: %s" % c)
 
 
 def build_step():
@@ -366,12 +377,24 @@ class TheAddFollowerConf(FollowerDisturbance):
         self.assertGreaterEqual(log.count(" sleeping "), 8, "the walk ended early:\n" + log)
         events = [ln.split()[1:3] for ln in log.splitlines()
                   if len(ln.split()) >= 3 and ln.split()[1] in VALIDATOR_KINDS | FOLLOWER_KINDS]
-        (late,) = [ln.split()[1] for ln in subprocess.run(
+        late = [ln.split()[1] for ln in subprocess.run(
             [sys.executable, os.path.join(HERE, "followerchaos.py"), "late"],
             capture_output=True, text=True, check=True).stdout.splitlines()]
-        self.assertEqual([["add-follower", late], ["remove-follower", late]], events,
-                         "CHAOS_FOLLOWER_CYCLES=1 is one pair, and CHAOS_VALIDATORS=off "
-                         "is no validator event, over %d slots" % 8)
+        self.assertEqual([["add-follower", c] for c in late] +
+                         [["remove-follower", c] for c in late], events,
+                         "CHAOS_FOLLOWER_CYCLES=1 is one pair — every late follower "
+                         "added in one slot, removed in the next — and "
+                         "CHAOS_VALIDATORS=off is no validator event, over %d slots" % 8)
+        # Each removal line names the one removal it belongs to.
+        self.assertEqual(len(late), len(re.findall(r"remove-follower \S+ \(removal 1\)", log)))
+        # One join setting and one clearing for all of them, every directory named.
+        for f in topology.late_followers():
+            d = f["dir"]
+            self.assertTrue(any("/root/.accumulate/%s/bvnn/data/accumulate.db" % d in c
+                                for c in calls), "%s's databases were not cleared" % d)
+            self.assertTrue(any("/root/.accumulate/%s/accumulate.toml" % d in c
+                                and "join-running-network" in c for c in calls),
+                            "%s was not given join-running-network" % d)
         self.assertRegex(log, r"validators: not disturbed \(CHAOS_VALIDATORS=off\)")
         self.assertRegex(log, r"followers: done, 1 pair\(s\) \(CHAOS_FOLLOWER_CYCLES=1\)")
         disturbed = [c for c in calls if re.match(r"(pause|unpause|restart|kill)\b", c)]

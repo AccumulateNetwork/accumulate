@@ -117,7 +117,8 @@ class TheValidatorsProbeIsUnchanged(unittest.TestCase):
     def test_the_rotation_is_over_validators_only(self):
         import topology
         self.assertEqual(topology.validator_ports(), readprobe.PORTS)
-        self.assertNotIn(26692, readprobe.PORTS)
+        for p in topology.follower_ports():
+            self.assertNotIn(p, readprobe.PORTS)
 
 
 if __name__ == "__main__":

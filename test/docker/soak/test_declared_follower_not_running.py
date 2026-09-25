@@ -38,12 +38,12 @@ REMOVE = "2026-09-20T01:05:00Z remove-follower acc-bvn3-fol2\n"
 class TheTopologyNamesTheFollowersARunHas(unittest.TestCase):
     """Against the committed docker-network.yml and docker-compose.yml."""
 
-    def test_declared_is_two_started_is_one(self):
-        self.assertEqual(["acc-bvn3-fol1", "acc-bvn3-fol2"],
+    def test_declared_is_four_started_is_one(self):
+        self.assertEqual(["acc-bvn1-fol1", "acc-bvn2-fol1", "acc-bvn3-fol1", "acc-bvn3-fol2"],
                          [f["container"] for f in topology.followers()])
         self.assertEqual(["acc-bvn3-fol1"],
                          [f["container"] for f in topology.started_followers()])
-        self.assertEqual(["acc-bvn3-fol2"],
+        self.assertEqual(["acc-bvn1-fol1", "acc-bvn2-fol1", "acc-bvn3-fol2"],
                          [f["container"] for f in topology.late_followers()])
 
     def test_a_run_without_the_add_follower_walk_has_one_follower(self):
@@ -53,11 +53,12 @@ class TheTopologyNamesTheFollowersARunHas(unittest.TestCase):
         self.assertEqual(13, len(topology.validator_records()) + len(fols),
                          "run.json's `nodes` is the nodes the run has")
 
-    def test_a_run_with_the_walk_names_the_late_one_as_late(self):
+    def test_a_run_with_the_walk_names_the_late_ones_as_late(self):
         fols, late = topology.run_followers(chaos_followers=True)
-        self.assertEqual(["acc-bvn3-fol1", "acc-bvn3-fol2"],
+        self.assertEqual(["acc-bvn3-fol1", "acc-bvn1-fol1", "acc-bvn2-fol1", "acc-bvn3-fol2"],
                          [f["container"] for f in fols])
-        self.assertEqual(["acc-bvn3-fol2"], [f["container"] for f in late])
+        self.assertEqual(["acc-bvn1-fol1", "acc-bvn2-fol1", "acc-bvn3-fol2"],
+                         [f["container"] for f in late])
 
     def test_running_is_started_plus_a_late_one_between_add_and_remove(self):
         up = lambda lines: [f["container"] for f in topology.running_followers(lines)]

@@ -417,20 +417,26 @@ class DeployedTopologyTest(unittest.TestCase):
     #4364 the one more node that is declared and not started.
     """
 
-    def test_three_bvns_of_four_validators_and_two_followers(self):
+    def test_three_bvns_of_four_validators_and_four_followers(self):
+        """One started follower on BVN3 and a late follower on every BVN
+        (#4364, #4438). Each follower is last in its BVN, so the BVN2 and
+        BVN3 validators sit after BVN1's and BVN2's late followers."""
         self.assertEqual(["Directory", "BVN1", "BVN2", "BVN3"],
                          topology.partitions())
-        self.assertEqual({"BVN1": 4, "BVN2": 4, "BVN3": 6},
+        self.assertEqual({"BVN1": 5, "BVN2": 5, "BVN3": 6},
                          topology.nodes_per_bvn())
-        self.assertEqual(14, topology.node_count())
+        self.assertEqual(16, topology.node_count())
         self.assertEqual(12, len(topology.validator_ports()))
-        self.assertEqual(list(range(B, B + 12)), topology.node_ports())
-        self.assertEqual([B + 12, B + 13], topology.follower_ports())
+        self.assertEqual([26680, 26681, 26682, 26683, 26685, 26686, 26687, 26688,
+                          26690, 26691, 26692, 26693], topology.node_ports())
+        self.assertEqual([26684, 26689, 26694, 26695], topology.follower_ports())
+        self.assertEqual(list(range(B, B + 16)), topology.all_node_ports())
 
-    def test_up_starts_thirteen_nodes_and_not_the_late_follower(self):
+    def test_up_starts_thirteen_nodes_and_not_the_late_followers(self):
         """The network comes up as it did before #4364: `up.sh` waits for
         these and the bootstrap, and 14 healthy is all there can be."""
-        self.assertEqual({"acc-bvn3-fol2"}, topology.profiled_containers())
+        self.assertEqual({"acc-bvn1-fol1", "acc-bvn2-fol1", "acc-bvn3-fol2"},
+                         topology.profiled_containers())
         self.assertEqual(13, topology.started_count())
         started = [r["container"] for r in topology.started_records()]
         self.assertEqual(topology.validator_containers() + ["acc-bvn3-fol1"],
@@ -443,6 +449,16 @@ class DeployedTopologyTest(unittest.TestCase):
         self.assertEqual("acc-bvn3-fol1", fols[0]["container"])
         self.assertEqual("bvn3-5", fols[0]["dir"])
         self.assertEqual(["Directory", "BVN3"], fols[0]["partitions"])
+
+    def test_the_late_followers_are_each_bvns_last_node(self):
+        late = {f["container"]: f for f in topology.late_followers()}
+        self.assertEqual({"acc-bvn1-fol1": ("bvn1-5", 26684, ["Directory", "BVN1"]),
+                          "acc-bvn2-fol1": ("bvn2-5", 26689, ["Directory", "BVN2"]),
+                          "acc-bvn3-fol2": ("bvn3-6", 26695, ["Directory", "BVN3"])},
+                         {c: (f["dir"], f["port"], f["partitions"])
+                          for c, f in late.items()})
+        self.assertIsNone(topology.check_ports_against_compose())
+        self.assertEqual([], topology.problems())
 
     def test_the_late_follower_is_bvn3s_sixth_node_on_the_last_port(self):
         late = topology.followers()[-1]

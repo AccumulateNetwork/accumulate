@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What soak.sh's chaos walk needs to add and remove a follower (#4364).
 
-    followerchaos.py late                       # service container dir, one per line
+    followerchaos.py late                       # service container dir, one line per late follower
     followerchaos.py state CONTAINER            # exit 0 once every partition is ACTIVE
     followerchaos.py rootmatch CONTAINER SINCE  # exit 0 once a root matches a validator's
     followerchaos.py snapshot OUT.json          # heights and every stream's delivered
@@ -10,8 +10,8 @@
 The chaos loop is bash and stays bash; every reading it takes of the network
 is here, where it can be tested without one.
 
-**Which follower.** The one whose compose service carries the
-`late-follower` profile, so that `compose up` does not start it — read from
+**Which followers.** Every one whose compose service carries the
+`late-follower` profile — one per BVN since #4438, all added in one slot — so that `compose up` does not start it — read from
 docker-compose.yml and checked against docker-network.yml, where it must be
 declared a follower. A service in that profile that the network file calls a
 validator is not a follower and is not returned.
@@ -64,7 +64,8 @@ _GAUGE = re.compile(r'^' + NODE_STATE + r'\{([^}]*)\}\s+([-0-9.eE+]+)')
 
 def late_followers(compose_path=None, net_path=None):
     """Followers whose compose service is in the `late-follower` profile, as
-    {service, container, dir, bvn, port, partitions}, in compose order."""
+    {service, container, dir, bvn, port, partitions}, in docker-network.yml
+    order (one per BVN since #4438; the add-follower slot adds them all)."""
     with open(compose_path or topology.COMPOSE_YML) as f:
         text = f.read()
     services, cur = [], None
@@ -99,7 +100,7 @@ def late_followers(compose_path=None, net_path=None):
             out.append({"service": s["service"], "container": s["container"],
                         "dir": f["dir"], "bvn": f["bvn"], "port": f["port"],
                         "partitions": f["partitions"]})
-    return out
+    return sorted(out, key=lambda f: f["port"])
 
 
 def node_states(metrics_text):

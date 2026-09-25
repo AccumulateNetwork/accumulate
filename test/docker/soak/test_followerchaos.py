@@ -62,10 +62,12 @@ class LateFollower(unittest.TestCase):
         self.assertEqual("bvn1-fol2", got[0]["service"])
         self.assertEqual("bvn1-3", got[0]["dir"])
 
-    def test_the_committed_files_declare_one(self):
+    def test_the_committed_files_declare_one_per_bvn(self):
         got = followerchaos.late_followers()
-        self.assertEqual(["acc-bvn3-fol2"], [f["container"] for f in got])
-        self.assertEqual("bvn3-6", got[0]["dir"])
+        self.assertEqual([("bvn1-fol1", "acc-bvn1-fol1", "bvn1-5"),
+                          ("bvn2-fol1", "acc-bvn2-fol1", "bvn2-5"),
+                          ("bvn3-fol2", "acc-bvn3-fol2", "bvn3-6")],
+                         [(f["service"], f["container"], f["dir"]) for f in got])
 
 
 class NodeState(unittest.TestCase):
