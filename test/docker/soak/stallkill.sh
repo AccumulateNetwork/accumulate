@@ -102,6 +102,19 @@ except Exception: print("its distance from the decision not computed")
   done
 
   # 5. Down. Pinned project, so this can only ever reach the soak network.
+  #    Not when the run attached (ATTACH=1, passed by soak.sh from its config):
+  #    it did not start the network, and a `down -v` would destroy hours of
+  #    history it exists to build on. It removes only the late followers,
+  #    which the run did start (soak.sh has usually removed them already).
+  if [ "${ATTACH:-0}" = 1 ]; then
+    local c
+    for c in $(python3 "$here/followerchaos.py" late 2>/dev/null | awk '{print $2}'); do
+      docker inspect "$c" >/dev/null 2>&1 || continue
+      docker rm -f -v "$c" >/dev/null 2>&1 && log "removed late follower $c"
+    done
+    log "ATTACH=1: the network is left running (project $COMPOSE_PROJECT_NAME); stallkill: run stopped"
+    return 0
+  fi
   log "tearing down (project $COMPOSE_PROJECT_NAME)"
   docker compose -f "$here/../docker-compose.yml" down -v --remove-orphans >/dev/null 2>&1
   log "stallkill: run stopped"

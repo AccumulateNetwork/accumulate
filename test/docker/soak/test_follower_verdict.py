@@ -245,7 +245,7 @@ CHAOS_MANY = """\
 2026-09-20T01:00:01Z add-follower acc-bvn3-fol2 (bvn3-fol2, data bvn3-6; key in no committee; databases cleared; join-running-network)
 2026-09-20T01:01:10Z follower acc-bvn2-fol1 ACTIVE (bvn2=ACTIVE directory=ACTIVE), 70s after it was added
 2026-09-20T01:01:40Z follower acc-bvn1-fol1 ACTIVE (bvn1=ACTIVE directory=ACTIVE), 100s after it was added
-2026-09-20T01:02:00Z follower acc-bvn1-fol1 first root match (source=acc-bvn1-val2 block=640 root=aa), 120s after it was added
+2026-09-20T01:02:00Z follower acc-bvn1-fol1 first in agreement (acc://bvn-BVN1.acme block 640 at 2026-09-20T01:01:58Z; acc://dn.acme block 700 at 2026-09-20T01:01:40Z), 120s after it was added
 2026-09-20T01:05:00Z follower acc-bvn3-fol2 NEVER ACTIVE: removed 299s after it was added
 2026-09-20T01:05:00Z follower acc-bvn3-fol2 never matched a validator's root before its removal
 2026-09-20T01:05:00Z follower acc-bvn2-fol1 never matched a validator's root before its removal
@@ -285,7 +285,7 @@ class SeveralLateFollowers(FollowerVerdict):
         self.assertIn("block 640", b1)
         b2 = self.add_row(lines, "acc-bvn2-fol1")
         self.assertIn("ACTIVE 70s after the add", b2, "its ACTIVE line came while another life was open")
-        self.assertIn("first root match not measured", b2)
+        self.assertIn("first in agreement not measured", b2)
         self.assertNotIn("640", b2, "a number from another follower")
         b3 = self.add_row(lines, "acc-bvn3-fol2")
         self.assertIn("NEVER ACTIVE", b3)

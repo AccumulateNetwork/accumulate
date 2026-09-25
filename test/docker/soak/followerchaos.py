@@ -3,7 +3,8 @@
 
     followerchaos.py late                       # service container dir, one line per late follower
     followerchaos.py state CONTAINER            # exit 0 once every partition is ACTIVE
-    followerchaos.py rootmatch CONTAINER SINCE  # exit 0 once a root matches a validator's
+    followerchaos.py agreement CONTAINER SINCE  # exit 0 once it executes in agreement on every partition
+    followerchaos.py rootmatch CONTAINER SINCE  # exit 0 once a root matches a validator's (no longer used by soak.sh)
     followerchaos.py snapshot OUT.json          # heights and every stream's delivered
     followerchaos.py unaffected A B C           # A..B before a removal, B..C after
 
@@ -19,6 +20,15 @@ validator is not a follower and is not returned.
 **ACTIVE** is `accumulate_node_state` reading 2 on every partition the node
 exports it for (the node-state row of e11.4364a, soakmon.nodestate_from).
 No gauge is not ACTIVE.
+
+**In agreement** is the follower's own log, `docker logs --since` the add:
+the first `This node is executing in agreement; it is ACTIVE` line per
+partition (join/state.go), which the node logs when its executed root equals
+the partition's signed anchored root. Satisfied once every partition the
+follower runs has one. soak.sh uses this; rootmatch below compared against
+validators' anchor log lines, read every validator's whole log each pass,
+and reported "never matched" of followers whose join logs show the match
+(run 20260925T042703Z).
 
 **First root match** is followerlog.first_root_match over the follower's own
 log and its BVN's validators', each read with `docker logs --since` the add.
@@ -129,9 +139,12 @@ def describe_states(states):
                     for p, v in sorted(states.items()))
 
 
-def _run(args, timeout=30):
+def _run(args, timeout=30, stderr=False):
+    """stdout, and with stderr=True the container's stderr too: `docker logs`
+    replays a container's stderr on its own stderr, where the node logs."""
     try:
-        return subprocess.run(args, capture_output=True, text=True,
+        return subprocess.run(args, stdout=subprocess.PIPE, text=True,
+                              stderr=subprocess.STDOUT if stderr else subprocess.PIPE,
                               timeout=timeout).stdout
     except Exception:
         return ""
@@ -145,7 +158,7 @@ def scrape(container):
 def container_log(container, since):
     """`docker logs` in the `compose logs` shape followerlog reads:
     `<container> | <line>`."""
-    txt = _run(["docker", "logs", "--since", since, container], timeout=60)
+    txt = _run(["docker", "logs", "--since", since, container], timeout=60, stderr=True)
     return ["%s | %s" % (container, ln) for ln in txt.splitlines()]
 
 
@@ -155,6 +168,32 @@ def root_match_in(follower, lines):
     r = followerlog.read(lines)
     others = sorted(c for c in set(r.anchors) | set(r.identities) if c != follower)
     return followerlog.first_root_match(r, follower, others)
+
+
+AGREEMENT = "This node is executing in agreement; it is ACTIVE"
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def first_agreement(lines):
+    """{partition: (time, block)} — the first `executing in agreement` line
+    per partition in the follower's own log lines."""
+    out = {}
+    for ln in lines:
+        if AGREEMENT not in ln:
+            continue
+        ln = _ANSI.sub("", ln)
+        part = re.search(r"\bpartition=(\S+)", ln)
+        blk = re.search(r"\bblock=(\d+)", ln)
+        t = re.search(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", ln)
+        if not part or part.group(1) in out:
+            continue
+        out[part.group(1)] = (t.group(0) if t else "?", int(blk.group(1)) if blk else None)
+    return out
+
+
+def describe_agreement(found):
+    return "; ".join("%s block %s at %s" % (p, "?" if b is None else b, t)
+                     for p, (t, b) in sorted(found.items()))
 
 
 # --- the removal's verdict ---------------------------------------------------
@@ -269,6 +308,14 @@ def main(argv):
         states = node_states(scrape(args[0]))
         print(describe_states(states))
         return 0 if all_active(states) else 1
+    if cmd == "agreement":
+        follower, since = args[0], args[1]
+        rec = next((f for f in topology.followers() if f["container"] == follower), None)
+        want = len(rec["partitions"]) if rec and rec.get("partitions") else 1
+        found = first_agreement(_run(["docker", "logs", "--since", since, follower],
+                                     timeout=60, stderr=True).splitlines())
+        print(describe_agreement(found) or "no `executing in agreement` line yet")
+        return 0 if len(found) >= want else 1
     if cmd == "rootmatch":
         follower, since = args[0], args[1]
         rec = next((f for f in topology.followers() if f["container"] == follower), None)
