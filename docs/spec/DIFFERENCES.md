@@ -637,9 +637,21 @@ still different, or not known:
   account it pulls, so at its first block the pool's messages were hundreds
   of commits old and every handoff failed `load anchor pool main chain entry
   N: Message.….Main not found` while the store held them (run
-  `20260925T020517Z`; `TestAFreshBVNNodeJoinsByPullOnBlockchainDB`). Every
-  other executor read of a record the pull wrote is still shallow and was not
-  audited for the same age. A skipped block is a dispatch this node does not make, never a
+  `20260925T020517Z`; `TestAFreshBVNNodeJoinsByPullOnBlockchainDB`). The
+  same window hid a record the executor wrote itself one block earlier: after
+  the handoff the join's root watch backfills head-only accounts between
+  blocks, two commits an account and 64 accounts a check, so the local
+  delivery block N queued was absent to block N + 1's drain, which failed
+  before clearing the queue -- every later block with it, and the follower
+  stood at block 731 for ten minutes in the same run. **The drain falls back
+  to a deep read** on a miss (`drainDeliveryQueues`;
+  `TestAJoinedNodeKeepsPaceWhileItBackfills`). Not done: a store whose
+  window counts commits cannot promise any shallow reader of a record older
+  than the last block that it will see it while another writer commits
+  between blocks; every other executor read of a permanent record (a
+  message, a transaction, a chain element) is exposed the same way and was
+  not audited, and one that takes "absent" for an answer rather than an
+  error executes differently from its peers without saying so. A skipped block is a dispatch this node does not make, never a
   wrong one. Two earlier versions on this branch were wrong and are recorded here:
   skipping every block at or below the join block left a restart that fell
   nothing behind with an empty cache — the #4241/#4277 restart hole (review
