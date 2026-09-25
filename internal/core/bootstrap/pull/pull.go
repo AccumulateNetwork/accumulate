@@ -23,12 +23,10 @@
 //     every block touches: a node holding only their heads cannot show that
 //     its own history agrees with a peer's below the peer's height.
 //
-// Verification. An account is only as good as the root it hashes into, and a
-// node that is still pulling has no root of its own: it verifies against the
-// root the Directory anchored for the block the peer served the account at
-// (Verify, in verify.go). A peer whose state does not verify is refused and
-// another is asked — AccountFrom. Nothing is written into the caller's batch
-// until it verifies.
+// Verification. The join's one proof is the whole local root matching a
+// signed anchor's (executor spec, "Sync", "The algorithm", step 3): what Fetch
+// pulls is written with Keep, unverified account by account, and nothing
+// before that whole-root match is proven or needs to be.
 //
 // What is pulled replaces what the node held for that account rather than
 // joining with it, and a re-pull of an account is the same account: a restart
@@ -36,9 +34,9 @@
 // no peer holds, which never hashes into an anchored root again.
 //
 // Ported from bootstrap-v3 (issue #4293). Changed on this line: the pull
-// writes through a nested batch and verifies before committing it; the
-// bootstrap-v3 puller wrote straight through and verified nothing, because
-// that design trusted whole-BPT root match and the peer's ACTIVE claim.
+// writes through a nested batch, discarded on anything Fetch itself refuses
+// (a malformed body, a mismatched name, a missing message) rather than
+// straight through.
 package pull
 
 import (
@@ -97,17 +95,6 @@ type Options struct {
 	// PageSize for paginated list pulls. Default 256.
 	PageSize uint64
 
-	// Verify says what root the Directory anchored for the block a peer served
-	// an account at. When it is set, Account refuses state that does not hash
-	// into that root.
-	//
-	// Nil pulls without verifying, which is for tests only. The spine used
-	// to be pulled this way, on the rationale that it is what the verifier
-	// reads from; that rationale was false — a signature is verified against
-	// a key the node already holds, not against a root — and it is what
-	// #4301 closed.
-	Verify Verifier
-
 	// RetakeLonger, in ModeFullSpine, takes a chain the node holds more
 	// entries of than the peer served again whole, from its first entry,
 	// instead of refusing the peer, and replaces the account's chain index
@@ -119,18 +106,17 @@ type Options struct {
 	RetakeLonger bool
 
 	// WithReceipt asks each source for the receipt that binds the account to
-	// its BPT root, whether or not Verify is set. The answer that carries a
-	// receipt is the one that carries the rest of the leaf beside the body
-	// (#4399), and the one whose NotFound means the peer holds no leaf
-	// (ErrNoLeaf, #4397). The join asks for it and verifies nothing against
-	// a root: its one proof is the whole local root matching a signed
-	// anchor's (executor spec, "Sync", "The algorithm", step 3).
+	// its BPT root. The answer that carries a receipt is the one that carries
+	// the rest of the leaf beside the body (#4399), and the one whose
+	// NotFound means the peer holds no leaf (ErrNoLeaf, #4397). The join asks
+	// for it and verifies nothing against a root: its one proof is the whole
+	// local root matching a signed anchor's (executor spec, "Sync", "The
+	// algorithm", step 3).
 	WithReceipt bool
 
 	// Partition is the partition whose blocks the account's state belongs to.
-	// Required when Verify is set, and whenever a receipt is asked for: a
-	// receipt proves the state as of a block, and block numbers collide
-	// across partitions (#4205).
+	// Required whenever a receipt is asked for: a receipt proves the state as
+	// of a block, and block numbers collide across partitions (#4205).
 	Partition *url.URL
 
 	// CheckHeld, in ModeFullSpine, also checks the newest HeldCheckDepth
@@ -153,13 +139,13 @@ type Options struct {
 const HeldCheckDepth = 4096
 
 // Pending is state pulled from a peer and not yet kept. It sits in a batch of
-// its own; nothing reaches the caller's batch until Settle says the Directory
-// anchored the root it hashes into.
+// its own; nothing reaches the caller's batch until Keep writes it or Discard
+// throws it away.
 //
-// It exists because the pull runs ahead of the anchors. A peer serves its
-// current block, and the Directory anchors that block a few blocks later, so
-// an account fetched now is verified in a moment — not refused for arriving
-// before its proof (executor.md, "Sync": the pull follows the network).
+// It exists because the pull runs ahead of the join's own proof. The join
+// does not settle any one account: its one proof is the whole local root
+// matching a signed anchor's, checked once the spine is whole (executor
+// spec, "Sync", "The algorithm", step 3).
 type Pending struct {
 	// Account is the account that was pulled.
 	Account *url.URL
@@ -170,8 +156,7 @@ type Pending struct {
 	// its partition names nothing (#4205).
 	Partition *url.URL
 
-	// Block is the block the peer served the state at. It is the block of
-	// Partition whose anchored root settles it.
+	// Block is the block the peer claims to have served the state at.
 	Block uint64
 
 	receipt *api.Receipt
@@ -180,12 +165,12 @@ type Pending struct {
 	done    bool
 
 	// bodies are the messages behind the spine's transaction chain entries,
-	// written into the caller's batch when the account settles.
+	// written into the caller's batch when the account is kept.
 	bodies *messages
 }
 
-// Root is the root the peer's receipt ends at: the peer's word, until the
-// caller proves it and settles against it. Zero when there is no receipt.
+// Root is the root the peer's receipt ends at: the peer's word, unverified.
+// Zero when there is no receipt.
 func (p *Pending) Root() [32]byte {
 	var r [32]byte
 	if p.receipt != nil {
@@ -194,10 +179,10 @@ func (p *Pending) Root() [32]byte {
 	return r
 }
 
-// MaxHeld bounds how many fetched-but-unsettled accounts may be outstanding at
+// MaxHeld bounds how many fetched-but-unkept accounts may be outstanding at
 // once, across the process. Each one holds an open child batch, so the state it
-// pulled is held in memory until it settles or is discarded, and an unbounded
-// pull is an unbounded heap. A caller that needs more than this settles a round
+// pulled is held in memory until it is kept or discarded, and an unbounded
+// pull is an unbounded heap. A caller that needs more than this keeps a round
 // of accounts before fetching the next.
 const MaxHeld = 1024
 
@@ -211,33 +196,6 @@ func Held() int64 { return held.Load() }
 func (p *Pending) release() {
 	p.done = true
 	held.Add(-1)
-}
-
-// Settle verifies the state against the root the Directory anchored for
-// Pending.Block and, if it holds, writes it into the caller's batch. Either
-// way the pending state is released.
-//
-// It cannot succeed on anything it did not verify: a fetch that carries no
-// receipt, or a root nobody anchored, is a failure, not an empty success.
-func (p *Pending) Settle(anchoredRoot [32]byte) error {
-	if p.done {
-		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
-	}
-	p.release()
-	defer p.batch.Discard()
-
-	if p.receipt == nil {
-		return errors.BadRequest.WithFormat(
-			"%v: fetched without a receipt, so there is nothing to settle it against", p.Account)
-	}
-	if anchoredRoot == ([32]byte{}) {
-		return errors.BadRequest.WithFormat(
-			"%v: the directory anchored no root for %v block %d", p.Account, p.Partition, p.Block)
-	}
-	if err := Verify(p.batch, p.Account, p.receipt, anchoredRoot); err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	return errors.UnknownError.Wrap(p.commit())
 }
 
 // commit writes the account into the caller's batch and the messages behind
@@ -260,7 +218,7 @@ func (p *Pending) commit() error {
 // it -- never reaches it.
 func (p *Pending) Keep() error {
 	if p.done {
-		return errors.NotAllowed.WithFormat("%v: already settled", p.Account)
+		return errors.NotAllowed.WithFormat("%v: already kept or discarded", p.Account)
 	}
 	p.release()
 	defer p.batch.Discard()
@@ -276,10 +234,10 @@ func (p *Pending) Discard() {
 	p.batch.Discard()
 }
 
-// Fetch pulls u from src per opts.Mode and holds it, unverified and unwritten,
-// until the caller settles it. withReceipt asks the peer for the proof that
-// binds the state to its root; without one the state can only be kept, not
-// verified.
+// Fetch pulls u from src per opts.Mode and holds it, unwritten, until the
+// caller keeps or discards it. withReceipt asks the peer for the proof that
+// binds the state to its root, for what the receipt-bearing answer carries
+// beside the body (#4399); Keep does not check it against a root.
 func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, opts Options, withReceipt bool) (*Pending, error) {
 	if src == nil {
 		return nil, errors.BadRequest.With("pull.Fetch: src required")
@@ -303,7 +261,7 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	if n := held.Add(1); n > MaxHeld {
 		held.Add(-1)
 		return nil, errors.NotReady.WithFormat(
-			"%v: %d accounts are already fetched and unsettled, the limit is %d", u, n-1, MaxHeld)
+			"%v: %d accounts are already fetched and unkept, the limit is %d", u, n-1, MaxHeld)
 	}
 
 	sub := batch.Begin(true)
@@ -335,9 +293,9 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		// The block is the SERVING partition's, not the puller's. A receipt
 		// proves the state as of a block of the partition that built it
 		// (api.Receipt.Partition, internal/api/v3/querier.go), and block
-		// numbers collide across partitions -- so settling a foreign
-		// account's block against this node's partition asks the Directory
-		// for a root it never anchored for that block (#4308). Latent while
+		// numbers collide across partitions -- so a foreign account's block
+		// attributed to this node's partition names the wrong block entirely
+		// (#4308). Latent while
 		// every account a join pulls is its own partition's; wrong the moment
 		// one is not.
 		if receipt.Partition != "" {
@@ -355,9 +313,8 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		return fail(errors.UnknownError.WithFormat("pending %s: %w", u, err))
 	}
 
-	// 4. Chains. At an anchored height there is one correct leaf per account:
-	// what is taken is the peer's, and the root it hashes into decides
-	// whether it is kept (Settle). The node's own heights are not consulted.
+	// 4. Chains. What is taken is the peer's; the node's own heights are not
+	// consulted.
 	switch opts.Mode {
 	case ModeStateOnly:
 		err = pullChainHeads(ctx, src, sub, u, pageSize)
@@ -377,58 +334,26 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 	return p, nil
 }
 
-// Account pulls u from src into batch per opts.Mode and, when opts.Verify is
-// set, refuses it unless it hashes into the root the Directory anchored for
-// the block the peer served it at. It is Fetch and Settle in one call, for a
-// caller that can wait on the anchor; a caller that cannot uses the two.
-//
-// Nothing is written until it verifies, so a refused account leaves nothing
-// behind. Note that the peer's state moves while the pull runs: the four
-// queries can straddle a block, in which case the assembled state hashes to
-// nothing the Directory anchored and the account is refused. That is the pull
-// racing the network, and the answer to it is to ask again — see AccountFrom.
+// Account pulls u from src into batch per opts.Mode and keeps it. It is Fetch
+// and Keep in one call, for a caller that does not need to hold the fetch
+// before deciding what to do with it; a caller that does uses the two
+// (FetchFrom).
 func Account(ctx context.Context, src Source, batch *database.Batch, u *url.URL, opts Options) error {
-	if opts.Verify != nil && opts.Partition == nil {
-		return errors.BadRequest.With("pull.Account: partition required when verifying")
-	}
-
-	p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil)
+	p, err := Fetch(ctx, src, batch, u, opts, opts.WithReceipt)
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	if opts.Verify == nil {
-		// No production caller reaches this: the join passes Verify on every
-		// path, spine included (#4301). It is kept for the pull-library
-		// tests, which build a peer and a store and have no anchors to
-		// verify against.
-		return errors.UnknownError.Wrap(p.Keep())
-	}
-
-	root, err := opts.Verify.AnchoredRoot(ctx, p.Partition, p.Block)
-	if err != nil {
-		p.Discard()
-		return errors.UnknownError.Wrap(err)
-	}
-	return errors.UnknownError.Wrap(p.Settle(root))
+	return errors.UnknownError.Wrap(p.Keep())
 }
 
-// AccountFrom pulls u from the first source whose state verifies, and reports
-// which one answered. A source that serves state that does not hash into the
-// anchored root is refused and the next is asked; when none answer, every
-// refusal is reported.
-//
-// A source that serves the account at a block the Directory has not anchored
-// is one of those refusals, not the end of the pull. The block compared is the
-// one the peer put in its own receipt, so a peer claiming a block that will
-// never be anchored would otherwise stop the whole pull for everyone. Only
-// when no source could serve an anchored state is the failure reported as
-// ErrNotAnchored — which is the wait it names, and the caller asks again.
+// AccountFrom pulls u from the first source that can serve it, and reports
+// which one answered. A source that cannot serve the account is refused and
+// the next is asked; when none answer, every refusal is reported.
 func AccountFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url.URL, opts Options) (int, error) {
 	if len(srcs) == 0 {
 		return -1, errors.BadRequest.With("pull.AccountFrom: at least one source required")
 	}
 	var refusals []error
-	var early int
 	for i, src := range srcs {
 		err := Account(ctx, src, batch, u, opts)
 		if err == nil {
@@ -437,31 +362,20 @@ func AccountFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *u
 		if ctx.Err() != nil {
 			return -1, errors.UnknownError.Wrap(err)
 		}
-		if errors.Is(err, ErrNotAnchored) {
-			early++
-		}
 		refusals = append(refusals, errors.UnknownError.WithFormat("source %d: %w", i, err))
 	}
-	if early == len(srcs) {
-		return -1, errors.NotReady.WithFormat(
-			"%v: no source served a state at a block the directory has anchored: %w", u, ErrNotAnchored)
-	}
-	return -1, errors.Conflict.WithFormat("%v: no source served state that verifies: %w", u, stderrors.Join(refusals...))
+	return -1, errors.Conflict.WithFormat("%v: no source served it: %w", u, stderrors.Join(refusals...))
 }
 
 // FetchFrom fetches u from the first source that serves it and hands the state
-// back held, unverified and unwritten, with the index of the source that
-// answered. A source that cannot serve the account is refused and the next is
-// asked; when none answer, every refusal is reported.
+// back held, unwritten, with the index of the source that answered. A source
+// that cannot serve the account is refused and the next is asked; when none
+// answer, every refusal is reported.
 //
-// It is AccountFrom's first half, for a caller that settles later. That caller
-// is the join: Account discards on ErrNotAnchored, so a caller built on it
-// re-fetches next round, at a newer block the Directory has not anchored
-// either -- a treadmill that never settles anything. Holding the fetch and
-// retrying Settle against THE SAME BLOCK is what the Pending/Settle split
-// exists for.
+// It is what the join uses: hold the fetch, and Keep it once the state is
+// assembled, or Discard it.
 //
-// The returned Pending holds an open child of batch. It must be settled or
+// The returned Pending holds an open child of batch. It must be kept or
 // discarded before batch is committed or discarded, and it counts against
 // MaxHeld until it is.
 func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url.URL, opts Options) (*Pending, int, error) {
@@ -471,7 +385,7 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	var refusals []error
 	noLeaf := 0
 	for i, src := range srcs {
-		p, err := Fetch(ctx, src, batch, u, opts, opts.Verify != nil || opts.WithReceipt)
+		p, err := Fetch(ctx, src, batch, u, opts, opts.WithReceipt)
 		if ctx.Err() != nil {
 			if p != nil {
 				p.Discard()
@@ -532,10 +446,10 @@ func pullMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL
 
 	// A peer that answers with an empty record has served nothing, and serving
 	// nothing is a failure of that source, not an account with no state. It
-	// used to return success with no receipt, and a fetch with no receipt
-	// settles against any root at all, including one nobody anchored. It is
-	// not NotFound: that is the peer's own answer that it holds no leaf, and
-	// a name every source answers so is dropped (executor.md, "Sync", §2).
+	// used to return success with no receipt, and a fetch with no receipt was
+	// kept for any block at all, anchored or not. It is not NotFound: that is
+	// the peer's own answer that it holds no leaf, and a name every source
+	// answers so is dropped (executor.md, "Sync", §2).
 	if rec == nil {
 		return nil, errors.Conflict.WithFormat("%v: the peer served no account", u)
 	}
@@ -825,8 +739,7 @@ func pullPending(ctx context.Context, src Source, batch *database.Batch, u *url.
 //
 // The head restored is the peer's whatever the node held: the node's own
 // height is not compared with it. The account's leaf is hashed from these
-// heads, and whether the leaf is the one the anchored root proves is what
-// Settle decides.
+// heads.
 func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *url.URL, pageSize uint64) error {
 	// Empty ChainQuery requests "list all chains for this account".
 	// Setting Range here triggers the v3 validator's "name is required
@@ -958,7 +871,7 @@ type messages struct {
 	kept map[[32]byte]messaging.Message
 
 	// signatures are the anchor signatures on the signature chains taken,
-	// indexed under their transactions when the account settles (#4416).
+	// indexed under their transactions when the account is kept (#4416).
 	signatures []signature
 
 	// executed are the transactions this fetch took as main chain entries:
@@ -1185,12 +1098,12 @@ func wholeTransaction(txn *protocol.Transaction, h [32]byte) error {
 
 // store writes what the fetch kept into batch.
 //
-// It is written when the account settles, into the caller's batch, and not
+// It is written when the account is kept, into the caller's batch, and not
 // into the account's own pending batch: a message is not the account's. One
 // transaction is an entry on several spine accounts' chains -- a change to the
 // validator set is on the network definition's, the operators' and the
 // ledger's -- and the same key written by two pending batches of one pass
-// conflicts when the second settles.
+// conflicts when the second is kept.
 func (m *messages) store(batch *database.Batch) error {
 	if m == nil {
 		return nil
@@ -1211,10 +1124,9 @@ func carriesMessages(c *api.ChainRecord) bool {
 	return c.Type == merkle.ChainTypeTransaction && !strings.HasPrefix(c.Name, "synthetic-sequence(")
 }
 
-// addChainToIndex records the chain in the account's chain index. The account
-// hash is taken over the chains that index names, and a batch only builds it
-// when it commits — the pull verifies before it commits, so it writes the
-// index itself.
+// addChainToIndex records the chain in the account's chain index directly: a
+// batch only builds the index from the chains it holds when it commits, and
+// this writes it into the pull's own batch ahead of that.
 func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) error {
 	meta := &protocol.ChainMetadata{Name: c.Name, Type: c.Type}
 	_, err := batch.Account(u).Chains().Index(meta)
@@ -1242,10 +1154,11 @@ func addChainToIndex(batch *database.Batch, u *url.URL, c *api.ChainRecord) erro
 // appended to it — a node that
 // executed from a wrong state appended entries of its own — is taken again,
 // whole, from its first entry (#4421): it cannot be brought to the peer's by
-// appending, and refusing it left a node the root check had stopped unable
-// ever to sync again. The node's history is not compared with the peer's to
-// find where they part: at an anchored height there is one correct chain, and
-// it is the peer's, proven by the root the account settles against.
+// appending, and refusing it left such a node unable ever to sync again. The
+// node's history is not compared with the peer's to find where they part: at
+// an anchored height there is one correct chain, and it is the peer's, taken
+// on Fetch's word and proven only when the join's whole local root matches a
+// signed anchor (executor spec, "Sync", "The algorithm", step 3).
 func pullChainsFull(ctx context.Context, src Source, batch *database.Batch, bodies *messages, u *url.URL, pageSize uint64, checkHeld, retakeLonger bool) error {
 	// Empty ChainQuery: list-all-chains. See pullChainHeads.
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
@@ -1330,7 +1243,7 @@ func pullChain(ctx context.Context, src Source, batch *database.Batch, bodies *m
 // whatever the node already holds, and checks the result against the peer's
 // head. A transaction chain's entries come with the messages they name, each
 // checked against its entry and kept in bodies, which is written when the
-// account settles and dropped with it when it is refused (#4400). checkHeld
+// account is kept and dropped with it when it is refused (#4400). checkHeld
 // also fetches what the held entries lack (Options.CheckHeld).
 func pullChainEntries(ctx context.Context, src Source, bodies *messages, dst *database.MerkleManager, u *url.URL, c *api.ChainRecord, pageSize uint64, checkHeld bool) error {
 	head, err := dst.Head().Get()
@@ -1529,8 +1442,8 @@ func fetchHeldMessages(ctx context.Context, src Source, bodies *messages, dst *d
 // every block touches, with their chains, so the node can compare its own
 // history against a peer's and can append to them when it executes again.
 //
-// They are verified like every other account (#4301). The chains are not
-// taken in order to verify anything — an anchor is checked against the
+// They are pulled and kept like every other account (#4301). The chains are
+// not taken in order to verify anything — an anchor is checked against the
 // validator set the node already holds — they are taken because a head
 // without its entries cannot be reconciled with a peer's.
 func SpineAccounts(partitionURL *url.URL) []*url.URL {
@@ -1543,12 +1456,12 @@ func SpineAccounts(partitionURL *url.URL) []*url.URL {
 		// The network definition and the globals, because they are what says
 		// who may sign an anchor and how many of them are needed. A node
 		// holds its own from genesis or from its own execution, and the only
-		// way that copy ever moves is this one: pulled with a receipt that
-		// ends at a root a quorum signed and passes through the leaf the
-		// pulled body hashes to, then handed to anchorsrc.Authority. Past
-		// Vandenberg a change to them never travels in an anchor
-		// (block_end.go:791-793), so this is the whole of how a joining node
-		// crosses one (#4301).
+		// way that copy ever moves is this one: pulled and kept with the rest
+		// of the spine, trusted once the whole local root matches a signed
+		// anchor (executor spec, "Sync", "The algorithm", step 3), then
+		// handed to anchorsrc.Authority. Past Vandenberg a change to them
+		// never travels in an anchor (block_end.go:791-793), so this is the
+		// whole of how a joining node crosses one (#4301).
 		partitionURL.JoinPath(protocol.Network),
 		partitionURL.JoinPath(protocol.Globals),
 	}
@@ -1558,8 +1471,9 @@ func SpineAccounts(partitionURL *url.URL) []*url.URL {
 // every pass that names it: the spine, and the partition's synthetic ledger.
 //
 // The synthetic ledger is not a trust root and is not in the spine: it is
-// verified like any account, and failing to pull it fails nothing but its own
-// name. It is taken whole because the first block a new process opens reads
+// pulled and kept like any account, and failing to pull it fails nothing but
+// its own name. It is taken whole because the first block a new process opens
+// reads
 // its chains back from the store -- the producer cache is seeded from the
 // entries of the partition's own recent blocks, the messages behind them, and
 // the chain's state before each block's first entry (synth_cache_seed.go

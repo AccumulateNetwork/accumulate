@@ -7,6 +7,8 @@
 package join
 
 import (
+	"context"
+
 	"crypto/ed25519"
 	"crypto/rand"
 	"testing"
@@ -65,15 +67,12 @@ func putNetwork(t *testing.T, db *database.Database, partition *url.URL, values 
 	require.NoError(t, batch.Commit())
 }
 
-// noAnchorSource is a real anchor source over a peer that has executed no
-// anchors, so every block a peer serves at is one AnchoredRoot refuses.
-func noAnchorSource(t *testing.T, partition *url.URL, values *core.GlobalValues) *anchorsrc.Source {
-	t.Helper()
-	a, err := anchorsrc.FromValues(values)
-	require.NoError(t, err)
-	pool, err := anchorsrc.PoolFor(partition, a.BvnNames())
-	require.NoError(t, err)
-	s, err := anchorsrc.New(noAnchors{}, pool, partition, a)
-	require.NoError(t, err)
-	return s
-}
+// noAnchorSource is an anchor source that verifies no anchor: every block a
+// peer serves at is one the join has no root for.
+func noAnchorSource(*testing.T, *url.URL, *core.GlobalValues) anchorSource { return noAnchorsRead{} }
+
+type noAnchorsRead struct{}
+
+func (noAnchorsRead) Read(context.Context) error       { return nil }
+func (noAnchorsRead) Stalled() (anchorsrc.Stall, bool) { return anchorsrc.Stall{}, false }
+func (noAnchorsRead) Rewind()                          {}

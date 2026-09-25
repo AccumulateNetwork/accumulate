@@ -15,7 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// verify returns nil iff a quorum of the producing partition's validators
+// VerifyQuorum returns nil iff a quorum of the producing partition's validators
 // signed this anchor transaction.
 //
 // What is counted is DISTINCT members of ONE set — the set this node trusts
@@ -45,13 +45,10 @@ import (
 //     Those are a peer's word about who signed, and they carry no signature
 //     bytes, which is the only reason they do not reach the threshold on
 //     their own.
-func (s *Source) verify(producer string, rec *api.MessageRecord[*messaging.TransactionMessage]) error {
-	return verifyQuorum(s.Authority, producer, rec)
-}
-
-// verifyQuorum is verify for any reader of anchors: the pool reader and the
-// collector judge an anchor by one rule.
-func verifyQuorum(authority *Authority, producer string, rec *api.MessageRecord[*messaging.TransactionMessage]) error {
+//
+// The collector judges every anchor by it, and a test that reads a pool
+// judges the anchors it reads by the same rule.
+func VerifyQuorum(authority *Authority, producer string, rec *api.MessageRecord[*messaging.TransactionMessage]) error {
 	if rec.Sequence == nil {
 		return errors.BadRequest.With("the anchor record carries no sequenced message, so there is nothing a signature covers")
 	}
@@ -156,4 +153,10 @@ func verifiesAny(sig protocol.KeySignature, forms []*messaging.SequencedMessage)
 		}
 	}
 	return false
+}
+
+// unsigned is an anchor record that carries no signatures at all: what a
+// node that holds the anchor without its signatures would serve (#4413).
+func unsigned(rec *api.MessageRecord[*messaging.TransactionMessage]) bool {
+	return rec.Signatures == nil || len(rec.Signatures.Records) == 0
 }

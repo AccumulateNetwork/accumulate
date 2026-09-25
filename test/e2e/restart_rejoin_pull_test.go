@@ -56,7 +56,7 @@ import (
 // root its receipts end at is proven: it equals a verified anchor's
 // StateTreeAnchor, or the bpt chain's history from one such root to it,
 // read from the peers, hashes into the root chain anchor a later verified
-// anchor signs (anchorsrc.ProveRoot). So a pass served at block N is proven
+// anchor signs (the retired anchorsrc.ProveRoot, removed with #4438). So a pass served at block N is proven
 // once any anchor after N is verified, whether or not block N sent one, and
 // there is no settle bound: a pass is held only until the next verified
 // anchor, or dropped and fetched again when the history has passed it.

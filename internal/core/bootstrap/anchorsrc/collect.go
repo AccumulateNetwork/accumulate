@@ -50,7 +50,7 @@ type Validators interface {
 // The Directory's own anchors are collected the same way, from the
 // Directory's validators.
 //
-// Verification is the pool reader's (verify): distinct members of the set
+// Verification is VerifyQuorum: distinct members of the set
 // this node trusts, to that set's threshold, each signature checked against
 // the anchor it carries.
 type Collector struct {
@@ -259,7 +259,7 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 	for _, h := range order {
 		rec := groups[h]
 		pa := rec.Message.Transaction.Body.(protocol.AnchorBody).GetPartitionAnchor()
-		err := verifyQuorum(c.Authority, producer, rec)
+		err := VerifyQuorum(c.Authority, producer, rec)
 		if err != nil {
 			lastErr = err
 			if c.OnRefused != nil {

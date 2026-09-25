@@ -155,8 +155,8 @@ func joinTheDirectoryFrom(t *testing.T, sim *Sim, sources join.Sources, local *d
 // TestTheDirectorysOwnRootIsObtainedThroughTheJoin is (e) of #4301.
 //
 // **The Directory's own root lives in a BVN's anchor pool.** A produced
-// anchor is on the RECEIVING partition's pool, so `anchorsrc.PoolFor` points
-// the Directory's join at `bvn-X.acme/anchors`, and this is the test that it
+// anchor is on the RECEIVING partition's pool, so the Directory's join was
+// pointed at `bvn-X.acme/anchors`, and this is the test that it
 // can read it there and verify what it finds.
 //
 // Nothing about the source is built by hand. join.NewState chooses the pool,

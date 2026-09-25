@@ -133,10 +133,7 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, peerRoot, p.Root(), "the receipt must end at the peer's root")
 
-			// The peer's root is a true root and the peer served honestly, so
-			// the account must settle against it.
-			require.NoError(t, p.Settle(peerRoot),
-				"an honest peer's synthetic ledger does not verify against the peer's own root")
+			require.NoError(t, p.Keep(), "an honest peer's synthetic ledger could not be written")
 
 			// And the joined node can drain what it pulled at its next block:
 			// every queued delivery's message is held, and it is the message

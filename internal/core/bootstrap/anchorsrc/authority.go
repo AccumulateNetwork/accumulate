@@ -295,12 +295,11 @@ func (a *Authority) SetFor(partition string) (*Set, error) {
 // VERIFIED, and reports whether anything changed.
 //
 // **The caller must have verified it as state**, not taken it from a peer:
-// the definition is an account, and the join settles it like every other
-// account — a receipt that is valid, that ends at a root a quorum of this
-// partition's validators signed, and that passes through the leaf the pulled
-// body hashes to (pull.Verify). That is what makes this an induction step
-// and not a peer's assertion, and it is the only route by which the sets
-// this node trusts ever move.
+// the definition is an account, and the join reads it only from a store whose
+// whole root has matched a root a quorum of this partition's validators
+// signed (executor spec, "Sync", "The algorithm", step 3). That is what makes
+// this an induction step and not a peer's assertion, and it is the only route
+// by which the sets this node trusts ever move.
 //
 // A definition older than the trusted one is ignored. Anything else is
 // taken, including a change that moves only the globals — the accept

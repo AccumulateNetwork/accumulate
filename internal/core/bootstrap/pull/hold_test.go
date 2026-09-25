@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -35,73 +34,6 @@ func (c *counting) QueryAccount(ctx context.Context, u *url.URL, q *api.DefaultQ
 		rec.Receipt.Partition = c.partition
 	}
 	return rec, nil
-}
-
-// notYet answers ErrNotAnchored until it is released, then the real root. It is
-// the Directory a few blocks behind the block a peer served.
-type notYet struct {
-	root     [32]byte
-	released bool
-}
-
-func (n *notYet) AnchoredRoot(context.Context, *url.URL, uint64) ([32]byte, error) {
-	if !n.released {
-		return [32]byte{}, ErrNotAnchored
-	}
-	return n.root, nil
-}
-
-// TestFetchFrom_HoldsTheFetchRatherThanTakingItAgain is the second half of
-// #4303: 2,171 pull rounds ended pulled=0, and the reason a round never
-// settled anything is that it threw its work away.
-//
-// Account discards on ErrNotAnchored. A caller built on it re-fetches next
-// round, at a newer block the Directory has not anchored either, and so on for
-// as long as the network keeps producing blocks -- the pull runs ahead of the
-// anchors by design, so "not anchored yet" is the normal answer, not the
-// exception. Fetch/Settle exist for this: the state is held and settled
-// against THE SAME BLOCK once its anchor arrives.
-func TestFetchFrom_HoldsTheFetchRatherThanTakingItAgain(t *testing.T) {
-	src, u, root := alice(t)
-	local := newObservedDB(t)
-	anchors := &notYet{root: root}
-
-	// What the one-shot pull does: fetch, find the block unanchored, discard,
-	// and fetch again next round.
-	oneShot := &counting{peer: &peer{dbSource: &dbSource{db: src}}}
-	for round := 0; round < 3; round++ {
-		batch := local.Begin(true)
-		err := Account(context.Background(), oneShot, batch, u, Options{
-			Mode:      ModeStateOnly,
-			Verify:    anchors,
-			Partition: protocol.DnUrl(),
-		})
-		require.Error(t, err)
-		require.True(t, apierrors.Is(err, ErrNotAnchored), "got %v", err)
-		batch.Discard()
-	}
-	require.Equal(t, 3, oneShot.fetches, "the one-shot pull re-fetched every round")
-
-	// What the held pull does: fetch once, and settle against the block it was
-	// served at when the Directory catches up.
-	held := &counting{peer: &peer{dbSource: &dbSource{db: src}}}
-	batch := local.Begin(true)
-	defer batch.Discard()
-
-	p, i, err := FetchFrom(context.Background(), []Source{held}, batch, u, Options{
-		Mode:      ModeStateOnly,
-		Verify:    anchors,
-		Partition: protocol.DnUrl(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, 0, i)
-
-	// Rounds pass; the fetch is not taken again.
-	require.Equal(t, 1, held.fetches)
-
-	anchors.released = true
-	require.NoError(t, p.Settle(root), "the held state did not settle against the block it was served at")
-	require.Equal(t, 1, held.fetches, "the held pull fetched more than once")
 }
 
 // TestFetch_TakesThePartitionFromTheReceipt — #4308.
@@ -156,7 +88,7 @@ func TestFetch_KeepsThePullersPartitionWhenTheReceiptNamesNone(t *testing.T) {
 // is that peer's condition, not an answer about the account. The join addresses
 // named peers precisely so it has a next one to ask (#4303).
 func TestFetchFrom_AsksTheNextSourceWhenOneCannotServe(t *testing.T) {
-	src, u, root := alice(t)
+	src, u, _ := alice(t)
 	local := newObservedDB(t)
 	batch := local.Begin(true)
 	defer batch.Discard()
@@ -166,12 +98,11 @@ func TestFetchFrom_AsksTheNextSourceWhenOneCannotServe(t *testing.T) {
 
 	p, i, err := FetchFrom(context.Background(), []Source{empty, good}, batch, u, Options{
 		Mode:      ModeStateOnly,
-		Verify:    anchored{root: root},
 		Partition: protocol.DnUrl(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, 1, i, "the second source answered")
-	require.NoError(t, p.Settle(root))
+	require.NoError(t, p.Keep())
 
 	_, _, err = FetchFrom(context.Background(), nil, batch, u, Options{Mode: ModeStateOnly})
 	require.Error(t, err, "a fetch with no source is a caller error, not an empty answer")

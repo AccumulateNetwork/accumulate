@@ -66,7 +66,7 @@ func TestQuerierServiceCarriesTheJoinGate(t *testing.T) {
 		svc, err := querierProvides.Get(inst.services, q)
 		require.NoError(t, err)
 
-		// The BPT page diff: what a joining peer's enumerate.Stale reads.
+		// The BPT page diff: what a joining peer's walk reads (enumerate.ReadPage).
 		_, err = svc.Query(context.Background(), partUrl, &apiv3.BptPageQuery{Count: 4})
 		require.Error(t, err, "a joining node paged its BPT for another node's pull")
 		require.True(t, errors.Is(err, errors.NotReady), "got %v", err)

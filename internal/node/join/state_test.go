@@ -34,7 +34,7 @@ func (p *peerSources) For(context.Context, *url.URL) ([]pull.Source, *url.URL, e
 func (p *peerSources) Querier(*url.URL) api.Querier { return p.querier }
 
 // noAnchors is a Directory that has executed no anchor, so every block a peer
-// serves at is one AnchoredRoot answers ErrNotAnchored for.
+// serves at is one the join has no root for.
 type noAnchors struct{}
 
 func (noAnchors) Query(context.Context, *url.URL, api.Query) (api.Record, error) {

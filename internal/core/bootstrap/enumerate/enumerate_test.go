@@ -8,7 +8,6 @@ package enumerate
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -111,12 +110,12 @@ func rootOf(t *testing.T, db *database.Database) [32]byte {
 	return r
 }
 
-// TestRun_LearnsWithoutWriting is the rule: enumeration learns the peer's key
+// TestReadPage_LearnsWithoutWriting is the rule: enumeration learns the peer's key
 // set and its claimed value hashes and writes nothing. After it, the local
 // root is not the peer's root and the tracker must not promote — the local
 // root is only allowed to mean something once it is derived from state this
 // node holds.
-func TestRun_LearnsWithoutWriting(t *testing.T) {
+func TestReadPage_LearnsWithoutWriting(t *testing.T) {
 	const total = 40
 	src := observedDB(t)
 	srcRoot := fill(t, src, total, 0x42)
@@ -126,9 +125,9 @@ func TestRun_LearnsWithoutWriting(t *testing.T) {
 
 	dstBatch := dst.Begin(true)
 	scope := protocol.DnUrl()
-	res, err := Run(context.Background(), &dbSource{db: src}, scope, dstBatch, Options{PageSize: 7})
+	res, err := walkAll(context.Background(), &dbSource{db: src}, scope, dstBatch, 7)
 	if err != nil {
-		t.Fatalf("Run: %v", err)
+		t.Fatalf("walk: %v", err)
 	}
 	if err := dstBatch.Commit(); err != nil {
 		t.Fatal(err)
@@ -171,9 +170,9 @@ func TestRun_LearnsWithoutWriting(t *testing.T) {
 	}
 }
 
-// TestRun_NamesOnlyWhatMoved — a node holding the peer's state as of its last
+// TestReadPage_NamesOnlyWhatMoved — a node holding the peer's state as of its last
 // block finds only the leaves that moved since. That is what a restart asks.
-func TestRun_NamesOnlyWhatMoved(t *testing.T) {
+func TestReadPage_NamesOnlyWhatMoved(t *testing.T) {
 	const total = 12
 	src := observedDB(t)
 	fill(t, src, total, 0x42)
@@ -184,7 +183,7 @@ func TestRun_NamesOnlyWhatMoved(t *testing.T) {
 
 	scope := protocol.DnUrl()
 	batch := dst.Begin(true)
-	res, err := Run(context.Background(), &dbSource{db: src}, scope, batch, Options{PageSize: 5})
+	res, err := walkAll(context.Background(), &dbSource{db: src}, scope, batch, 5)
 	batch.Discard()
 	if err != nil {
 		t.Fatal(err)
@@ -210,80 +209,41 @@ func TestRun_NamesOnlyWhatMoved(t *testing.T) {
 
 	batch = dst.Begin(true)
 	defer batch.Discard()
-	stale, err := Stale(context.Background(), &dbSource{db: src}, scope, batch, Options{PageSize: 5})
+	res, err = walkAll(context.Background(), &dbSource{db: src}, scope, batch, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
+	stale := res.Stale
 	if len(stale) != 1 || !stale[0].Equal(moved) {
 		t.Fatalf("stale = %v, want just %v", stale, moved)
 	}
 }
 
-// TestRun_OnPageCallback fires on every page.
-func TestRun_OnPageCallback(t *testing.T) {
-	src := observedDB(t)
-	fill(t, src, 25, 0x42)
-	dst := observedDB(t)
-	dstBatch := dst.Begin(true)
-	defer dstBatch.Discard()
-
-	calls := 0
-	_, err := Run(context.Background(), &dbSource{db: src}, protocol.DnUrl(), dstBatch, Options{
-		PageSize: 5,
-		OnPage: func(pageNum int, page *api.BptPageRecord) {
-			calls++
-			if page == nil {
-				t.Error("OnPage called with nil page")
-			}
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if calls < 5 {
-		t.Errorf("OnPage called %d times, want >= 5", calls)
-	}
+// walked is a whole walk's pages taken together.
+type walked struct {
+	PagesPulled int
+	LastBptRoot [32]byte
+	Accounts    []*url.URL
+	Stale       []*url.URL
 }
 
-// TestRun_ContextCancel returns ctx.Err on cancellation.
-func TestRun_ContextCancel(t *testing.T) {
-	src := observedDB(t)
-	fill(t, src, 100, 0x42)
-	dst := observedDB(t)
-	dstBatch := dst.Begin(true)
-	defer dstBatch.Discard()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // already canceled
-
-	_, err := Run(ctx, &dbSource{db: src}, protocol.DnUrl(), dstBatch, Options{PageSize: 1})
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("err = %v, want context.Canceled chain", err)
-	}
-}
-
-// TestRun_RejectsMissingInputs — guards.
-func TestRun_RejectsMissingInputs(t *testing.T) {
-	dst := observedDB(t)
-	batch := dst.Begin(true)
-	defer batch.Discard()
-
-	cases := []struct {
-		name string
-		src  Source
-		sc   *url.URL
-		bt   *database.Batch
-	}{
-		{"no source", nil, protocol.DnUrl(), batch},
-		{"no scope", &dbSource{db: dst}, nil, batch},
-		{"no batch", &dbSource{db: dst}, protocol.DnUrl(), nil},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			_, err := Run(context.Background(), c.src, c.sc, c.bt, Options{})
-			if err == nil {
-				t.Fatal("expected validation error")
-			}
-		})
+// walkAll reads every page of the peer's BPT, as the join does a few pages a
+// round.
+func walkAll(ctx context.Context, src Source, scope *url.URL, batch *database.Batch, size uint64) (*walked, error) {
+	res := new(walked)
+	var start [32]byte
+	for {
+		page, err := ReadPage(ctx, src, scope, batch, start, size)
+		if err != nil {
+			return res, err
+		}
+		res.PagesPulled++
+		res.Accounts = append(res.Accounts, page.Accounts...)
+		res.Stale = append(res.Stale, page.Stale...)
+		res.LastBptRoot = page.Record.BptRoot
+		if page.Record.Done {
+			return res, nil
+		}
+		start = page.Record.NextStart
 	}
 }

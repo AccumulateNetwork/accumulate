@@ -269,8 +269,6 @@ type peerQuerier struct {
 	asked []peer.ID // the peers the last call asked, in order
 }
 
-var _ anchorsrc.Peers = (*peerQuerier)(nil)
-
 // PeerCount is how many peers the calls rotate among, so the anchor source
 // asks each of them once for an entry it is held at (#4419).
 func (p *peerQuerier) PeerCount(ctx context.Context) int {

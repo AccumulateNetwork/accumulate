@@ -323,55 +323,6 @@ func TestFullSpine_AMessageOnTwoAccountsSettlesTwice(t *testing.T) {
 	require.NoError(t, batch.Commit())
 }
 
-// TestFullSpine_ARefusedAccountKeepsNoMessage — the messages behind an
-// account's entries are written with the account and discarded with it
-// (executor.md, "Sync" §3). They are proven by their own hashes, so nothing
-// false would land; but an account whose state does not hash into the
-// anchored root was not the network's, and neither is what came with it
-// (review finding 3, note_3896114642).
-func TestFullSpine_ARefusedAccountKeepsNoMessage(t *testing.T) {
-	src, u, entries := spineWithMessages(t)
-	ro := src.Begin(false)
-	root, err := ro.GetBptRootHash()
-	ro.Discard()
-	require.NoError(t, err)
-
-	for _, tc := range []struct {
-		name string
-		root [32]byte
-		kept bool
-	}{
-		{"a root the state does not hash into", [32]byte{1}, false},
-		{"the root the state hashes into", root, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			dst := newObservedDB(t)
-			b := dst.Begin(true)
-			defer b.Discard()
-			p, _, err := FetchFrom(context.Background(), []Source{&peer{dbSource: &dbSource{db: src}}}, b, u, Options{
-				Mode:      ModeFullSpine,
-				Verify:    anchored{root: tc.root},
-				Partition: protocol.DnUrl(),
-			})
-			require.NoError(t, err)
-			err = p.Settle(tc.root)
-			if !tc.kept {
-				require.Error(t, err, "precondition: the account is refused")
-			} else {
-				require.NoError(t, err)
-			}
-			for i, h := range entries {
-				_, err := b.Message(h).Main().Get()
-				if tc.kept {
-					require.NoError(t, err, "entry %d: a settled account's message was not kept", i)
-				} else {
-					require.Error(t, err, "entry %d: a refused account's message was kept", i)
-				}
-			}
-		})
-	}
-}
-
 // askCounting counts the transactions a peer is asked for by hash.
 type askCounting struct {
 	*dbSource

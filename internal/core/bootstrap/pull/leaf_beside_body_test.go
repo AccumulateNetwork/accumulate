@@ -74,13 +74,9 @@ func TestAQueuedDeliveryIsPulledWithItsOwnMessage(t *testing.T) {
 	require.NoError(t, idx.AddEntry(entry, false))
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())
-	b = src.Begin(false)
-	root, err := b.GetBptRootHash()
-	require.NoError(t, err)
-	b.Discard()
 
 	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
-	opts := Options{Mode: ModeStateOnly, Verify: anchored{root: root, block: ledger.Index}, Partition: part}
+	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 	ctx := context.Background()
 
 	t.Run("honest", func(t *testing.T) {
