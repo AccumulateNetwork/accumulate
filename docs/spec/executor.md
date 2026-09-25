@@ -513,7 +513,9 @@ executes (`pull.Backfill`): the entries below each chain's open mark set, the
 mark points that close their sets, and the message behind every entry. It
 writes nothing at or above a chain's head, so it does not race the blocks the
 node executes; the entries are held to the node's own head, replayed from the
-first, so a peer serving another chain is refused and the next is asked. The
+first, so a peer serving another chain is refused and the next is asked. It
+streams as the pull does, a page at a time, and holds the entries to the head
+once the last page is written (#4446). The
 node ends holding every account's chains and entries
 (`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`). The accounts
 left to backfill are recorded under `SystemData(partition).HeadOnly` as they
@@ -729,6 +731,28 @@ the first entry (Paul, "Two mismatches": a chain the node grew wrongly is
 replaced by the peers', not appended to; this settles #4403's
 provisional rule). The retake tracks no orphaned entries.
 
+**A chain's entries are streamed to the store a page at a time, under a head
+that does not move** (#4446). The head is the peer's — the count and pending
+hashes the account's leaf is hashed from — and nothing the pull writes
+replays through it. Each page of entries (256) is asked for with the messages
+behind them, and written in a batch of its own that is committed before the
+next page is asked for: the elements, their index entries, the intermediate
+hashes and mark points the entries imply (exactly what appending them wrote on
+the peer), the messages, and what executing a signature entry wrote beside it.
+The page is then dropped, so a pull's memory is bounded by the page and not by
+the history: a follower added at about 13,400 blocks was killed at its 2 GiB
+limit holding the anchor pool whole (run `20260925T042703Z`), and a pool of
+20,000 directory anchors now peaks about 150 MiB above where it started
+against 3,328 MiB (`TestJoin_AWholeChainPullHoldsAPageNotTheChain`). The
+running state the entries build — from the node's own head, below the height
+it holds — is held to the peer's head once the last page is written; only then
+is the head written, with the account, when the pull is kept. So a pull killed
+part way leaves entries on disk under the old head, and the next pull takes
+the chain again from the height the node holds, overwriting them position by
+position (`TestJoin_APullKilledMidAccountResumes`). Entries and messages are
+permanent data: a message is proven by its hash, and what a chain the node
+then refuses leaves behind is only index entries — see DIFFERENCES E11.
+
 **A pulled transaction chain carries the messages behind its entries.** The
 entries are hashes, and the executor reads what they name: the first block a
 new process opens seeds its producer cache by walking the anchor pool's main
@@ -740,7 +764,7 @@ alone left every restarted validator that fell one anchored block behind
 unable to open its first block (#4400, run `20260924T052134Z`). So each entry
 of a spine transaction chain the pull replays comes with its message (asked
 for expanded), **each message is checked against its entry hash**, and it is
-written with the entries and discarded with them. What a peer
+written with its page of entries. What a peer
 stores under an entry is the message as it arrived, or — for a wrapper whose
 transaction is stored under its own hash (an anchor, a sequenced or synthetic
 message; the executor's stored form, #4236) — the wrapper referring to that

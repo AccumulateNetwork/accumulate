@@ -243,12 +243,8 @@ func (s *PulledState) backfillOne(ctx context.Context, u *url.URL) bool {
 	if err != nil {
 		return false
 	}
-	batch := s.db.Begin(true)
-	defer batch.Discard()
-	err = pull.Backfill(ctx, srcs, batch, u, 0)
-	if err == nil {
-		err = batch.Commit()
-	}
+	// Written to the database a page at a time (#4446).
+	err = pull.Backfill(ctx, srcs, s.db, u, 0)
 	if err != nil {
 		s.log.Info("An account's entries could not be brought in yet", "account", u, "error", err)
 		return false

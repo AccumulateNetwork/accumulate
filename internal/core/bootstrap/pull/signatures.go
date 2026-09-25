@@ -152,7 +152,7 @@ func checkAnchorSignature(ba *messaging.BlockAnchor) error {
 //     them -- only for an anchor that executed, whose transaction is an entry
 //     of the account's main chain: below its quorum the sequence has not
 //     executed, and a peer holds neither.
-func storeSignatures(batch *database.Batch, sigs []signature, executed map[[32]byte]bool) error {
+func storeSignatures(batch *database.Batch, sigs []signature, executed func([32]byte) bool) error {
 	type key struct {
 		account string
 		txn     [32]byte
@@ -167,7 +167,7 @@ func storeSignatures(batch *database.Batch, sigs []signature, executed map[[32]b
 		if err := batch.Message(s.txn).Signers().Add(s.account); err != nil {
 			return fmt.Errorf("store the signers of %x: %w", s.txn[:4], err)
 		}
-		if executed[s.txn] {
+		if executed(s.txn) {
 			if err := batch.Message(s.sequenceID.Hash()).Main().Put(s.sequence); err != nil {
 				return fmt.Errorf("store the sequence of %x: %w", s.txn[:4], err)
 			}

@@ -295,6 +295,52 @@ func (m *Chain) RestoreHead(head *State, open [][]byte) error {
 	return m.Head().Put(head)
 }
 
+// PutBelow writes hash as the entry at st.Count the way AddEntry writes it --
+// its element, its index, the intermediates the cascade computes, and the mark
+// point the entry closes -- without reading or writing the head, and advances
+// st past it. st is the chain's state before the entry, with the entries since
+// its last mark point in HashList.
+//
+// It is for a node that holds a head it took from a peer and brings in the
+// entries under it a page at a time (executor.md, "Sync" §3; #4446): the head
+// is not the running state, so nothing here reads it, and the caller checks
+// st against the head once the last entry is written. indexIfAbsent leaves a
+// hash the chain already indexes to the position it names: a chain the node
+// has appended to since holds a later write of it (pull.Backfill).
+func (m *Chain) PutBelow(st *State, hash []byte, indexIfAbsent bool) error {
+	hash = copyHash(hash)
+	index := uint64(st.Count)
+	put := true
+	if indexIfAbsent {
+		_, err := m.ElementIndex(hash).Get()
+		switch {
+		case err == nil:
+			put = false
+		case !errors.Is(err, storage.ErrNotFound):
+			return errors.UnknownError.WithFormat("%v: load element index: %w", m.key, err)
+		}
+	}
+	if put {
+		if err := m.ElementIndex(hash).Put(index); err != nil {
+			return errors.UnknownError.WithFormat("%v: put element index %d: %w", m.key, index, err)
+		}
+	}
+	if err := m.Element(index).Put(hash); err != nil {
+		return errors.UnknownError.WithFormat("%v: put element %d: %w", m.key, index, err)
+	}
+	if err := m.putIntermediates(st, hash); err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	st.AddEntry(hash)
+	if st.Count&m.markMask == 0 {
+		if err := m.States(index).Put(st.Copy()); err != nil {
+			return errors.UnknownError.WithFormat("%v: put mark point %d: %w", m.key, index, err)
+		}
+		st.HashList = nil
+	}
+	return nil
+}
+
 // AddEntry adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
 func (m *Chain) AddEntry(hash []byte, unique bool) error {

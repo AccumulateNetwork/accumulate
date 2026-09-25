@@ -935,6 +935,9 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		// A node that has executed since its last match repairs what it
 		// executed: a chain of its own longer than the peer's is taken again.
 		RetakeLonger: p.repair,
+		// The entries under a chain's head go to the database a page at a
+		// time, so a pull's memory does not grow with the history (#4446).
+		Store: s.db,
 	})
 	if err == nil && served >= 0 && served < len(srcs) {
 		p.servedBy[sourceKey(srcs[served])] = true
