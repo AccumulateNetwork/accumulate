@@ -1,10 +1,41 @@
 # Changelog
 
+## 1.4.6.6
+
+The release Kermit runs. A historical account answer now carries the account
+as it was, not as it is.
+No executor version change — `v2-kourou` remains the latest and is unchanged —
+and the one encoding addition is an appended optional field, so 1.4.6.5 and
+this release interoperate.
+
+- The body a historical receipt proves is served with it — AIP-58 (#4180, !1233)
+  - 1.4.6.5 made a historical receipt start at the main state hash as of the
+    resolved block, but the response still carried the account as it is now.
+    For an account that has changed since — a key page that has moved on, the
+    case AIP-58 exists for — the body did not hash to the receipt's start, and
+    a verifier had nothing to check.
+  - With retention on, a node keeps each account's marshalled main state beside
+    its retained state receipt, on the same window and pruned by the same
+    rule. A body is served only when it hashes to where its receipt starts;
+    an account unchanged since the block serves its current body, which the
+    hashes show is the same one.
+  - Where the node cannot produce that body, the entry-rooted proof is still
+    served — the entry hash is always given — but with **no account**. On
+    every historical answer `Directory` and `Pending` are omitted, since they
+    are not retained per block. A client that assumes a historical answer
+    always carries an account must check for it.
+  - `Receipt.StartsAtMainState` (field 8) reports that the receipt starts at
+    the main state hash and that the account served is that state as of
+    `ForHeight`.
+  - Receipts retained by 1.4.6.5 have no body beside them; for those blocks the
+    answer carries no account unless the account is unchanged since. No
+    migration.
+  - Nothing changes on a node with `bpt-history-depth` at its default of zero.
+
 ## 1.4.6.5
 
-The release Kermit runs. Two defects reported against Kermit are fixed here:
-an ECDSA lite identity whose transactions validated and then did nothing
-(#4218), and v3 receipt queries that hung past a client timeout on entries
+Two defects reported against Kermit are fixed here: an ECDSA lite identity
+whose transactions validated and then did nothing (#4218), and v3 receipt queries that hung past a client timeout on entries
 with old anchors (#4263). No executor version change — `v2-kourou` remains
 the latest and is unchanged — and every encoding addition is an appended
 optional field, so 1.4.6.4 and this release interoperate.
