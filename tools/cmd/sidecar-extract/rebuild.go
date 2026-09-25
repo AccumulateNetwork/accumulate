@@ -458,10 +458,9 @@ func indexBlock(height uint64, msgs []messaging.Message) *blockIndex {
 				}
 			}
 		case *messaging.SignatureMessage:
-			if m.Signature != nil {
+			if signer := signerOf(m.Signature); signer != nil {
 				h := m.Hash()
-				s := m.Signature.GetSigner().String()
-				bi.bySigner[s] = append(bi.bySigner[s], h[:])
+				bi.bySigner[signer.String()] = append(bi.bySigner[signer.String()], h[:])
 			}
 		case *messaging.SyntheticMessage:
 			visit(m.Message)
@@ -479,4 +478,18 @@ func indexBlock(height uint64, msgs []messaging.Message) *blockIndex {
 		visit(m)
 	}
 	return bi
+}
+
+// signerOf returns a signature's signer; a partition (synthetic) signature has
+// none, and says so by panicking.
+func signerOf(sig protocol.Signature) (signer *url.URL) {
+	if sig == nil {
+		return nil
+	}
+	defer func() {
+		if recover() != nil {
+			signer = nil
+		}
+	}()
+	return sig.GetSigner()
 }
