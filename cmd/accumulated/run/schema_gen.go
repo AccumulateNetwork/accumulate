@@ -461,6 +461,15 @@ func init() {
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
 			},
+			{
+				Name:        "BPTHistoryDepth",
+				Description: "is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
+			},
 		},
 	}).SetGoType()
 
@@ -521,6 +530,15 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
+			},
+			{
+				Name:        "BPTHistoryDepth",
+				Description: "is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
 			},
 		},
 	}).SetGoType()
@@ -642,6 +660,15 @@ func init() {
 					TypeBase: schema.TypeBase{},
 				}).
 					ResolveElemTo(&deferredTypes, "StorageType"),
+			},
+			{
+				Name:        "BPTHistoryDepth",
+				Description: "is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none",
+				Optional:    true,
+				Type: &schema.PointerType{
+					TypeBase: schema.TypeBase{},
+					Elem:     &schema.SimpleType{Type: schema.SimpleTypeUint},
+				},
 			},
 		},
 	}).SetGoType()

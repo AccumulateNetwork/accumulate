@@ -404,9 +404,10 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 	// Create partition services
 	opts := partOpts{
 		CoreValidatorConfiguration: &CoreValidatorConfiguration{
-			Listen:       listen(n.DevNet.Listen, devNetDefaultHost, n.IP),
-			ValidatorKey: rawPrivKeyFrom(n.PrivVal),
-			StorageType:  n.DevNet.StorageType,
+			Listen:          listen(n.DevNet.Listen, devNetDefaultHost, n.IP),
+			ValidatorKey:    rawPrivKeyFrom(n.PrivVal),
+			StorageType:     n.DevNet.StorageType,
+			BPTHistoryDepth: n.DevNet.BPTHistoryDepth,
 		},
 		ID:             protocol.Directory,
 		Type:           protocol.PartitionTypeDirectory,
