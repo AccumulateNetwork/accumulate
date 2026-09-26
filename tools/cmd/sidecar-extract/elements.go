@@ -12,6 +12,8 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"os"
 	"strconv"
 	"strings"
@@ -37,7 +39,15 @@ func recoverElements(archiveArgs []string, identified, out string) error {
 		}
 		copies = append(copies, &archive{name: n, db: db, log: &vlog{dir: path}})
 	}
-	store := &verifiedStore{copies}
+	store := &verifiedStore{archives: copies}
+	if *flagSidecar != "" {
+		side, err := leveldb.OpenFile(*flagSidecar, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+		if err != nil {
+			return err
+		}
+		defer side.Close()
+		store.extra = append(store.extra, side)
+	}
 	batch := coredb.New(store, nil).Begin(false)
 	defer batch.Discard()
 
@@ -56,6 +66,11 @@ func recoverElements(archiveArgs []string, identified, out string) error {
 			}
 			moves.Close()
 			txn.Discard()
+		}
+		for _, x := range store.extra {
+			if v, err := x.Get(key[:], nil); err == nil {
+				return v, true
+			}
 		}
 		return nil, false
 	}

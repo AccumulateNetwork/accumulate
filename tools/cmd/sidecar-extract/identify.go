@@ -88,7 +88,7 @@ func identify(archiveArgs []string, lostPath, sidecarPath, out, partition string
 		fmt.Fprintf(w, "%s\t%s\t%s\n", hex.EncodeToString(h[:]), kind, detail)
 	}
 
-	newBatch := func() *coredb.Batch { return coredb.New(&verifiedStore{copies}, nil).Begin(false) }
+	newBatch := func() *coredb.Batch { return coredb.New(&verifiedStore{archives: copies}, nil).Begin(false) }
 	batch := newBatch()
 	defer func() { batch.Discard() }()
 

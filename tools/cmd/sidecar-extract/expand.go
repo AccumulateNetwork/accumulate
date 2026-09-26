@@ -125,13 +125,13 @@ func expand(archiveArgs []string, blockstore, lostPath, out string, depth int) e
 	}
 	log.Printf("%d messages in blocks %d..%d", len(queue), *flagFrom, *flagTo)
 
-	batch := coredb.New(&verifiedStore{copies}, nil).Begin(false)
+	batch := coredb.New(&verifiedStore{archives: copies}, nil).Begin(false)
 	defer func() { batch.Discard() }()
 	perDepth := map[int]int{}
 	for i := 0; i < len(queue); i++ {
 		if i%100000 == 99999 {
 			batch.Discard()
-			batch = coredb.New(&verifiedStore{copies}, nil).Begin(false)
+			batch = coredb.New(&verifiedStore{archives: copies}, nil).Begin(false)
 			log.Printf("%d of %d messages; %d keys named", i, len(queue), len(found))
 		}
 		nd := queue[i]

@@ -9,6 +9,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/syndtr/goleveldb/leveldb"
 	"strings"
 
 	badger "github.com/dgraph-io/badger"
@@ -38,7 +39,7 @@ func ledgers(archiveArgs []string) error {
 		}
 		a := &archive{name: name, db: db, log: &vlog{dir: path}}
 
-		batch := coredb.New(&verifiedStore{[]*archive{a}}, nil).Begin(false)
+		batch := coredb.New(&verifiedStore{archives: []*archive{a}}, nil).Begin(false)
 		for _, p := range partitions {
 			var ledger *protocol.SystemLedger
 			err := batch.Account(protocol.PartitionUrl(p).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
@@ -59,7 +60,10 @@ func ledgers(archiveArgs []string) error {
 // verifiedStore reads one or more copies of a partition through the verified
 // value path, newest first: a record comes from the first copy that holds a
 // value it can verify. It cannot write.
-type verifiedStore struct{ archives []*archive }
+type verifiedStore struct {
+	archives []*archive
+	extra    []*leveldb.DB // stores read after the archives, such as the sidecar
+}
 
 func (s *verifiedStore) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	txns := make([]*badger.Txn, len(s.archives))
@@ -86,6 +90,11 @@ func (s *verifiedStore) Begin(prefix *record.Key, writable bool) keyvalue.Change
 				}
 				if failed == nil {
 					failed = err
+				}
+			}
+			for _, x := range s.extra {
+				if v, err := x.Get(h[:], nil); err == nil {
+					return v, nil
 				}
 			}
 			if failed != nil {

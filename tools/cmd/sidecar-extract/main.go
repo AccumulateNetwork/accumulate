@@ -89,6 +89,10 @@ var flagExpand = flag.String("expand", "", "a lost list: follow the Produced and
 var flagDepth = flag.Int("depth", 3, "steps to follow Produced and Cause (for -expand)")
 var flagRawFind = flag.String("rawfind", "", "a key list: search the log files (arguments) byte by byte for them, and exit")
 var flagHas = flag.String("has", "", "a key list: print each key and whether the store at -out holds it, and exit")
+var flagFill = flag.String("fill-sets", "", "mark sets to rebuild from the block store (-survey), ';'-separated '<account> <chain> <set>'; proven ones are written to -out")
+var flagDebug = flag.Bool("debug", false, "print investigation output")
+var flagRootFrom = flag.Uint64("root-from", 0, "first root chain index to load (for -fill-sets of the ledger's bpt)")
+var flagRootTo = flag.Uint64("root-to", 0, "last root chain index to load (for -fill-sets of the ledger's bpt)")
 var flagDest listFlag
 var flagCurrent listFlag
 var flagWritable listFlag
@@ -112,6 +116,12 @@ func main() {
 	}
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagFill != "" {
+		if err := fillSets(flag.Args(), *flagSurvey, *flagSidecar, *flagOut, strings.Split(*flagFill, ";")); err != nil {
 			log.Fatal(err)
 		}
 		return

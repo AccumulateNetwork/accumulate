@@ -76,7 +76,7 @@ func rebuildChains(archiveArgs []string, blockstore string) error {
 
 	// A batch caches what it reads, so it is replaced every so often; chains
 	// are looked up in the current one
-	batch := coredb.New(&verifiedStore{copies}, nil).Begin(false)
+	batch := coredb.New(&verifiedStore{archives: copies}, nil).Begin(false)
 	defer func() { batch.Discard() }()
 	root := batch.Account(lu).RootChain()
 
@@ -179,7 +179,7 @@ func rebuildChains(archiveArgs []string, blockstore string) error {
 	for n := first; n <= height; n++ {
 		if (n-first)%2000 == 1999 {
 			batch.Discard()
-			batch = coredb.New(&verifiedStore{copies}, nil).Begin(false)
+			batch = coredb.New(&verifiedStore{archives: copies}, nil).Begin(false)
 			root = batch.Account(lu).RootChain()
 		}
 		if (n-from)%100000 == 0 {
