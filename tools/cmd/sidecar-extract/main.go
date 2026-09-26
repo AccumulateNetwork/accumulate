@@ -35,6 +35,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
@@ -84,6 +85,10 @@ var flagInspect = flag.String("inspect", "", "a key list: report the archive's i
 var flagHeightAt = flag.String("height-at", "", "a CometBFT block store: print the heights there at the times of -of's heights -from and -to, and exit")
 var flagOf = flag.String("of", "", "the block store -from and -to are heights of (for -height-at)")
 var flagElements = flag.String("recover-elements", "", "an -identify output: rebuild its lost chain elements from mark points into -out, and exit")
+var flagExpand = flag.String("expand", "", "a lost list: follow the Produced and Cause sets of every message in -from..-to of the block store (-survey), name lost keys, write -out, and exit")
+var flagDepth = flag.Int("depth", 3, "steps to follow Produced and Cause (for -expand)")
+var flagRawFind = flag.String("rawfind", "", "a key list: search the log files (arguments) byte by byte for them, and exit")
+var flagHas = flag.String("has", "", "a key list: print each key and whether the store at -out holds it, and exit")
 var flagDest listFlag
 var flagCurrent listFlag
 var flagWritable listFlag
@@ -107,6 +112,38 @@ func main() {
 	}
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagHas != "" {
+		db, err := leveldb.OpenFile(*flagOut, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+		if err != nil {
+			log.Fatal(err)
+		}
+		f, err := os.Open(*flagHas)
+		if err != nil {
+			log.Fatal(err)
+		}
+		sc := bufio.NewScanner(f)
+		for sc.Scan() {
+			k, err := hex.DecodeString(strings.Fields(sc.Text())[0])
+			if err != nil {
+				continue
+			}
+			ok, _ := db.Has(k, nil)
+			fmt.Printf("%x\t%v\n", k, ok)
+		}
+		return
+	}
+	if *flagRawFind != "" {
+		if err := rawFind(*flagRawFind, flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagExpand != "" {
+		if err := expand(flag.Args(), *flagSurvey, *flagExpand, *flagOut, *flagDepth); err != nil {
 			log.Fatal(err)
 		}
 		return

@@ -191,6 +191,28 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 						}
 						switch m := m.(type) {
 						case *messaging.TransactionMessage:
+							// An anchor is recorded by its sender as produced,
+							// without a header: that message's records too
+							if _, ok := m.Transaction.Body.(protocol.AnchorBody); ok {
+								bare := &messaging.TransactionMessage{Transaction: &protocol.Transaction{Body: m.Transaction.Body}}
+								bh := bare.Hash()
+								brec := batch.Message(bh)
+								what := fmt.Sprintf("anchor %x as produced (no header), %s", bh, m.Transaction.Body.Type())
+								if hitAt(n, "message.main", brec.Main().Key(), what) {
+									if b, err := bare.MarshalBinary(); err == nil {
+										kh := brec.Main().Key().Hash()
+										if err := recovered.Put(kh[:], b, nil); err != nil {
+											errs <- err
+										}
+										atomic.AddInt64(&bodies, 1)
+									}
+								}
+								hitAt(n, "message.cause", brec.Cause().Key(), what)
+								hitAt(n, "message.produced", brec.Produced().Key(), what)
+								for _, f := range []string{"Main", "Status", "Produced", "Chains"} {
+									hitAt(n, "transaction."+strings.ToLower(f), txKey(bh, f), what)
+								}
+							}
 							th := *(*[32]byte)(m.Transaction.GetHash())
 							// The control: keys the archive should hold
 							if atomic.AddInt64(&ctlTxns, 1) <= 2000 {
