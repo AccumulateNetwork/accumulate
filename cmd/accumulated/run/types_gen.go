@@ -337,6 +337,8 @@ type CoreValidatorConfiguration struct {
 	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	// BPTHistoryDepth is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none.
+	BPTHistoryDepth *uint64
 }
 
 func (CoreValidatorConfiguration) Type() ConfigurationType { return ConfigurationTypeCoreValidator }
@@ -403,6 +405,8 @@ type DevnetConfiguration struct {
 	Followers   uint64
 	Globals     *network.GlobalValues
 	StorageType *StorageType
+	// BPTHistoryDepth is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none.
+	BPTHistoryDepth *uint64
 }
 
 func (DevnetConfiguration) Type() ConfigurationType { return ConfigurationTypeDevnet }
@@ -519,6 +523,8 @@ type FollowerConfiguration struct {
 	EnableSnapshots      *bool
 	MaxEnvelopesPerBlock *uint64
 	StorageType          *StorageType
+	// BPTHistoryDepth is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none.
+	BPTHistoryDepth *uint64
 }
 
 func (FollowerConfiguration) Type() ConfigurationType { return ConfigurationTypeFollower }

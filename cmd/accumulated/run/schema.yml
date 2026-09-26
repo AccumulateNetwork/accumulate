@@ -237,6 +237,10 @@ Configuration:
         - name: StorageType
           type: '*StorageType'
           optional: true
+        - name: BPTHistoryDepth
+          description: is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none
+          type: '*uint'
+          optional: true
 
     - name: GatewayConfiguration
       class: composite
@@ -262,6 +266,10 @@ Configuration:
           type: '*network.GlobalValues'
         - name: StorageType
           type: '*StorageType'
+          optional: true
+        - name: BPTHistoryDepth
+          description: is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none
+          type: '*uint'
           optional: true
 
     - name: FollowerConfiguration
@@ -293,6 +301,10 @@ Configuration:
           optional: true
         - name: StorageType
           type: '*StorageType'
+          optional: true
+        - name: BPTHistoryDepth
+          description: is the number of minor blocks of BPT history, and of historical account state, the node retains to answer ForHeight queries (AIP-58). Zero, the default, retains none
+          type: '*uint'
           optional: true
 
 Service:

@@ -83,7 +83,11 @@ every `ForHeight` query until an operator sets a depth:
 | config | setting |
 |---|---|
 | `accumulate.toml` | `bpt-history-depth` on the `[accumulate]` section |
-| run config | `BPTHistoryDepth` on the consensus app |
+| run config | `bpt-history-depth` on the consensus app (`[services.app]`) |
+| run config, generated | `bpt-history-depth` on a `devnet`, `coreValidator` or `follower` configuration, which passes it to every consensus app it generates |
+
+A devnet regenerates its nodes' files on every start, so for a devnet the
+configuration is the only place a depth survives a restart.
 
 The depth is a number of minor blocks. Cost is roughly one BPT block-write per
 state-changing block — measured at 34 KB for a small tree and 71 KB at a million

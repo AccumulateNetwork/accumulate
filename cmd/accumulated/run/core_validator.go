@@ -148,6 +148,7 @@ func (p partOpts) apply(cfg *Config) error {
 			App: &CoreConsensusApp{
 				EnableDirectDispatch: p.EnableDirectDispatch,
 				MaxEnvelopesPerBlock: p.MaxEnvelopesPerBlock,
+				BPTHistoryDepth:      p.BPTHistoryDepth,
 				Partition: &protocol.PartitionInfo{
 					ID:   p.ID,
 					Type: p.Type,
