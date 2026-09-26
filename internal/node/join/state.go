@@ -7,6 +7,7 @@
 package join
 
 import (
+	"bytes"
 	"context"
 	stderrors "errors"
 	"fmt"
@@ -933,6 +934,14 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 	srcs = s.order(srcs)
 
 	whole := s.takenWhole(u) || p.repair
+	// A repair names the accounts a block changed; the ones whose leaf the
+	// repair actually moves are the ones this node executed differently
+	// from its peers. Said per account, so a root miss can be traced to
+	// what differed rather than inferred.
+	var leafBefore []byte
+	if p.repair {
+		leafBefore = s.leafOf(u)
+	}
 	mode := pull.ModeStateOnly
 	if whole {
 		mode = pull.ModeFullSpine
@@ -1005,7 +1014,25 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		p.retry[accountKey(u)] = u
 		return owed
 	}
+	if p.repair {
+		if after := s.leafOf(u); !bytes.Equal(leafBefore, after) {
+			s.log.Warn("A repair changed an account this node had executed differently",
+				"account", u, "partition", s.partition,
+				"before", fmt.Sprintf("%x", leafBefore), "after", fmt.Sprintf("%x", after))
+		}
+	}
 	return taken
+}
+
+// leafOf is the account's BPT leaf as this node holds it, nil when it has none.
+func (s *PulledState) leafOf(u *url.URL) []byte {
+	batch := s.db.Begin(false)
+	defer batch.Discard()
+	v, err := batch.BPT().Get(batch.Account(u).Key())
+	if err != nil {
+		return nil
+	}
+	return v
 }
 
 // readExecutedBlock is what the daemon reads to decide whether a node must
