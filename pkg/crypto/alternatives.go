@@ -33,7 +33,13 @@ func FromECDSA(priv *ecdsa.PrivateKey) []byte {
 	if priv == nil {
 		return nil
 	}
-	return priv.D.Bytes()
+	// Padded to the curve's size. D.Bytes() drops leading zero bytes, so about one key in 256
+	// exported as 31 bytes, which ToECDSA refuses - and a key stored that way could not sign.
+	curve := priv.Curve
+	if curve == nil {
+		curve = S256()
+	}
+	return priv.D.FillBytes(make([]byte, (curve.Params().BitSize+7)/8))
 }
 
 // ToECDSA creates a private key with the given D value.

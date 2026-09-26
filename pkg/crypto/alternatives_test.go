@@ -206,3 +206,53 @@ func TestDecompressPubkey(t *testing.T) {
 	// The important thing is that the function doesn't crash
 	t.Log("DecompressPubkey function works and handles invalid input gracefully")
 }
+
+// keyWithLeadingZeroByte is a valid secp256k1 private key whose top byte is zero - the one key in 256
+// that D.Bytes() exports as 31 bytes.
+func keyWithLeadingZeroByte(t *testing.T) *ecdsa.PrivateKey {
+	t.Helper()
+	d := make([]byte, 32)
+	for i := 1; i < 32; i++ {
+		d[i] = byte(i)
+	}
+	priv, err := ToECDSA(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if priv.D.Bytes()[0] == 0 || len(priv.D.Bytes()) != 31 {
+		t.Fatal("precondition: D.Bytes() must drop the leading zero byte")
+	}
+	return priv
+}
+
+// A key whose top byte is zero exports at the curve's full size and imports back. Unpadded, it
+// exported as 31 bytes and ToECDSA refused it.
+func TestFromECDSA_LeadingZeroByteRoundTrips(t *testing.T) {
+	priv := keyWithLeadingZeroByte(t)
+	b := FromECDSA(priv)
+	if len(b) != 32 {
+		t.Fatalf("exported %d bytes, want 32", len(b))
+	}
+	back, err := ToECDSA(b)
+	if err != nil {
+		t.Fatalf("the exported key does not import: %v", err)
+	}
+	if back.D.Cmp(priv.D) != 0 {
+		t.Fatal("round trip changed the key")
+	}
+}
+
+// Padding changes nothing for a key without a leading zero byte.
+func TestFromECDSA_FullWidthKeyUnchanged(t *testing.T) {
+	d := make([]byte, 32)
+	for i := range d {
+		d[i] = byte(0x80 + i)
+	}
+	priv, err := ToECDSA(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := FromECDSA(priv); string(got) != string(priv.D.Bytes()) {
+		t.Fatalf("a full-width key exported differently: %x vs %x", got, priv.D.Bytes())
+	}
+}

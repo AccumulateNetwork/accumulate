@@ -593,3 +593,21 @@ func TestEIP712MessageForWallet(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, sig.Verify(nil, txn))
 }
+
+// An Ethereum key whose top byte is zero signs. FromECDSA exported it as 31 bytes, which SignETH's
+// strict ToECDSA refused, so about one key in 256 could not sign at all.
+func TestSignETH_KeyWithLeadingZeroByte(t *testing.T) {
+	d := make([]byte, 32)
+	for i := 1; i < 32; i++ {
+		d[i] = byte(i)
+	}
+	privKey, err := altcrypto.ToECDSA(d)
+	require.NoError(t, err)
+	require.Len(t, privKey.D.Bytes(), 31, "precondition: the key's top byte is zero")
+
+	hash := sha256.Sum256([]byte("leading zero"))
+	sig := new(ETHSignature)
+	sig.PublicKey = altcrypto.FromECDSAPub(&privKey.PublicKey)
+	require.NoError(t, SignETH(sig, altcrypto.FromECDSA(privKey), nil, hash[:]))
+	require.True(t, VerifyUserSignature(sig, SignableHash(hash)))
+}
