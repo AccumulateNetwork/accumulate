@@ -78,7 +78,7 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 	hits := map[string]int{}       // record kind -> lost keys hit
 	found := map[[32]byte]string{} // lost key -> kind
 	var bodies, badBodies, blocks, ledgers int64
-	var ctlTxns, ctlMessage, ctlTxMain, ctlTxStatus, ctlSame, ctlDiffer int64
+	var ctlTxns, ctlMessage, ctlTxMain, ctlTxStatus, ctlSame, ctlDiffer, ctlEmpty, ctlUnreadable int64
 	exists := func(k *record.Key) bool {
 		h := k.Hash()
 		txn := a.db.NewTransaction(false)
@@ -91,7 +91,12 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 	// hand, so the derivation is proved on a control before it is trusted
 	txKey := func(h [32]byte, field string) *record.Key { return record.NewKey("Transaction", h, field) }
 
-	hit := func(kind string, k *record.Key) bool {
+	detail, err := os.Create(out + ".tsv")
+	if err != nil {
+		return err
+	}
+	defer detail.Close()
+	hitAt := func(n uint64, kind string, k *record.Key, what string) bool {
 		h := k.Hash()
 		if !lost[h] {
 			return false
@@ -100,6 +105,7 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 		if _, ok := found[h]; !ok {
 			found[h] = kind
 			hits[kind]++
+			fmt.Fprintf(detail, "%x\t%s\tblock %d: %s\n", h, kind, n, what)
 		}
 		mu.Unlock()
 		return true
@@ -108,6 +114,9 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 	base, height := storeRange(store)
 	if *flagFrom > base {
 		base = *flagFrom
+	}
+	if *flagTo > 0 && *flagTo < height {
+		height = *flagTo
 	}
 	var next atomic.Uint64
 	next.Store(base)
@@ -161,7 +170,7 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 						}
 						h := m.Hash()
 						rec := batch.Message(h)
-						if hit("message.main", rec.Main().Key()) {
+						if hitAt(n, "message.main", rec.Main().Key(), fmt.Sprintf("message %x %s", h, m.Type())) {
 							// The block carries the lost body
 							b, err := m.MarshalBinary()
 							if err == nil {
@@ -174,11 +183,11 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 								atomic.AddInt64(&badBodies, 1)
 							}
 						}
-						hit("message.cause", rec.Cause().Key())
-						hit("message.produced", rec.Produced().Key())
-						hit("message.signers", rec.Signers().Key())
+						hitAt(n, "message.cause", rec.Cause().Key(), fmt.Sprintf("message %x %s", h, m.Type()))
+						hitAt(n, "message.produced", rec.Produced().Key(), fmt.Sprintf("message %x %s", h, m.Type()))
+						hitAt(n, "message.signers", rec.Signers().Key(), fmt.Sprintf("message %x %s", h, m.Type()))
 						for _, f := range []string{"Main", "Status", "Produced", "Chains"} {
-							hit("transaction."+strings.ToLower(f), txKey(h, f))
+							hitAt(n, "transaction."+strings.ToLower(f), txKey(h, f), fmt.Sprintf("message %x %s", h, m.Type()))
 						}
 						switch m := m.(type) {
 						case *messaging.TransactionMessage:
@@ -192,15 +201,22 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 									// node stored
 									kh := batch.Message(th).Main().Key().Hash()
 									txn := a.db.NewTransaction(false)
+									moves := a.newMoves(txn)
 									if item, err := txn.Get(kh[:]); err == nil {
-										stored, err1 := a.value(item)
+										stored, err1 := a.resolve(item, moves)
 										mine, err2 := m.MarshalBinary()
-										if err1 == nil && err2 == nil && bytes.Equal(stored, mine) {
+										if err1 != nil {
+											atomic.AddInt64(&ctlUnreadable, 1)
+										} else if len(stored) == 0 {
+											// Emptied: the store reads it as absent
+											atomic.AddInt64(&ctlEmpty, 1)
+										} else if err1 == nil && err2 == nil && bytes.Equal(stored, mine) {
 											atomic.AddInt64(&ctlSame, 1)
 										} else {
 											atomic.AddInt64(&ctlDiffer, 1)
 										}
 									}
+									moves.Close()
 									txn.Discard()
 								}
 								if exists(txKey(th, "Main")) {
@@ -211,23 +227,24 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 								}
 							}
 							for _, f := range []string{"Main", "Status", "Produced", "Chains"} {
-								hit("transaction."+strings.ToLower(f), txKey(th, f))
+								hitAt(n, "transaction."+strings.ToLower(f), txKey(th, f), fmt.Sprintf("transaction %x %s principal %v", th, m.Transaction.Body.Type(), m.Transaction.Header.Principal))
 							}
 							if p := m.Transaction.Header.Principal; p != nil {
 								at := batch.Account(p).Transaction(th)
-								hit("account.transaction.payments", at.Payments().Key())
-								hit("account.transaction.votes", at.Votes().Key())
-								hit("account.transaction.signatures", at.Signatures().Key())
-								hit("account.transaction.validatorSignatures", at.ValidatorSignatures().Key())
-								hit("account.transaction.history", at.History().Key())
-								hit("account.pending", batch.Account(p).Pending().Key())
+								hitAt(n, "account.transaction.payments", at.Payments().Key(), fmt.Sprintf("transaction %x on %v", th, p))
+								hitAt(n, "account.transaction.votes", at.Votes().Key(), fmt.Sprintf("transaction %x on %v", th, p))
+								hitAt(n, "account.transaction.signatures", at.Signatures().Key(), fmt.Sprintf("transaction %x on %v", th, p))
+								hitAt(n, "account.transaction.validatorSignatures", at.ValidatorSignatures().Key(), fmt.Sprintf("transaction %x on %v", th, p))
+								hitAt(n, "account.transaction.history", at.History().Key(), fmt.Sprintf("transaction %x on %v", th, p))
+								hitAt(n, "account.pending", batch.Account(p).Pending().Key(), fmt.Sprintf("transaction %x on %v", th, p))
 							}
 						case *messaging.SignatureMessage:
-							if m.Signature != nil && m.TxID != nil {
-								at := batch.Account(m.Signature.GetSigner()).Transaction(m.TxID.Hash())
-								hit("account.transaction.signatures", at.Signatures().Key())
-								hit("account.transaction.history", at.History().Key())
-								hit("account.transaction.votes", at.Votes().Key())
+							if signer := signerOf(m.Signature); signer != nil && m.TxID != nil {
+								at := batch.Account(signer).Transaction(m.TxID.Hash())
+								what := fmt.Sprintf("signature by %v on %v", signer, m.TxID)
+								hitAt(n, "account.transaction.signatures", at.Signatures().Key(), what)
+								hitAt(n, "account.transaction.history", at.History().Key(), what)
+								hitAt(n, "account.transaction.votes", at.Votes().Key(), what)
 							}
 						case *messaging.SyntheticMessage:
 							visit(m.Message)
@@ -246,8 +263,8 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 
 				// The block ledger and the chain entries it lists
 				acct := batch.Account(lu.JoinPath(fmt.Sprint(n)))
-				hit("ledger.main", acct.Main().Key())
-				hit("ledger.chains", acct.Chains().Key())
+				hitAt(n, "ledger.main", acct.Main().Key(), "block ledger")
+				hitAt(n, "ledger.chains", acct.Chains().Key(), "block ledger")
 				var bl *protocol.BlockLedger
 				if acct.Main().GetAs(&bl) != nil {
 					continue
@@ -255,22 +272,21 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 				atomic.AddInt64(&ledgers, 1)
 				for _, e := range bl.Entries {
 					ea := batch.Account(e.Account)
-					hit("account.main", ea.Main().Key())
-					hit("account.chains", ea.Chains().Key())
-					hit("account.pending", ea.Pending().Key())
+					hitAt(n, "account.main", ea.Main().Key(), e.Account.String())
+					hitAt(n, "account.chains", ea.Chains().Key(), e.Account.String())
+					hitAt(n, "account.pending", ea.Pending().Key(), e.Account.String())
 					chain, err := ea.ChainByName(e.Chain)
 					if err != nil {
 						continue
 					}
 					c := chain.Inner()
-					kind := chainKind.ReplaceAllString(e.Chain, "()")
-					hit("chain.element:"+kind, c.Element(e.Index).Key())
-					hit("chain.head:"+kind, c.Head().Key())
+					hitAt(n, "chain.element", c.Element(e.Index).Key(), fmt.Sprintf("%v %s element %d", e.Account, e.Chain, e.Index))
+					hitAt(n, "chain.head", c.Head().Key(), fmt.Sprintf("%v %s head", e.Account, e.Chain))
 					if (int64(e.Index)+1)%c.MarkFreq() == 0 {
-						hit("chain.markpoint:"+kind, c.States(e.Index).Key())
+						hitAt(n, "chain.markpoint", c.States(e.Index).Key(), fmt.Sprintf("%v %s mark point %d", e.Account, e.Chain, e.Index))
 					}
 					if v, err := c.Element(e.Index).Get(); err == nil {
-						hit("chain.elementIndex:"+kind, c.ElementIndex(v).Key())
+						hitAt(n, "chain.elementIndex", c.ElementIndex(v).Key(), fmt.Sprintf("%v %s element index %d", e.Account, e.Chain, e.Index))
 					}
 				}
 			}
@@ -286,8 +302,8 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 
 	fmt.Printf("%s: blocks %d..%d, %d blocks read, %d block ledgers; %d of %d lost keys named; %d bodies recovered (%d would not marshal)\n",
 		name, base, height, blocks, ledgers, len(found), len(lost), bodies, badBodies)
-	fmt.Printf("control, first 2000 transactions: Message.Main held %d (stored bytes = remarshaled %d, differ %d), hand-built Transaction.Main held %d, Transaction.Status held %d\n",
-		ctlMessage, ctlSame, ctlDiffer, ctlTxMain, ctlTxStatus)
+	fmt.Printf("control, first 2000 transactions: Message.Main held %d (stored bytes = remarshaled %d, differ %d, emptied %d, unreadable %d), hand-built Transaction.Main held %d, Transaction.Status held %d\n",
+		ctlMessage, ctlSame, ctlDiffer, ctlEmpty, ctlUnreadable, ctlTxMain, ctlTxStatus)
 	var kinds []string
 	for k := range hits {
 		kinds = append(kinds, k)

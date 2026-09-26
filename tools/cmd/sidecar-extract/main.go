@@ -76,6 +76,10 @@ var flagFrom = flag.Uint64("from", 0, "first block for -lostmap (default the blo
 var flagRebuild = flag.Bool("rebuild", false, "rebuild every main, signature and scratch chain the blocks from -from on touch, from the block store (-survey), proving each block against the anchors it wrote, and exit")
 var flagProfile = flag.String("cpuprofile", "", "write a CPU profile here")
 var flagMerge = flag.String("merge", "", "a store to copy into -out (a sidecar), and exit")
+var flagIdentify = flag.String("identify", "", "a lost list: name every lost key the partition's model can name (-partition, -height), writing to -out, and exit")
+var flagPartition = flag.String("partition", "", "the partition (for -identify)")
+var flagHeight = flag.Uint64("height", 0, "the partition's last block (for -identify)")
+var flagSidecar = flag.String("sidecar", "", "the sidecar; a lost key it now holds is not lost (for -identify)")
 var flagDest listFlag
 var flagCurrent listFlag
 var flagWritable listFlag
@@ -99,6 +103,12 @@ func main() {
 	}
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagIdentify != "" {
+		if err := identify(flag.Args(), *flagIdentify, *flagSidecar, *flagOut, *flagPartition, *flagHeight); err != nil {
 			log.Fatal(err)
 		}
 		return
