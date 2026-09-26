@@ -105,7 +105,7 @@ func lostMap(archiveArg, blockstore, lostPath, out string, workers int) error {
 		if _, ok := found[h]; !ok {
 			found[h] = kind
 			hits[kind]++
-			fmt.Fprintf(detail, "%x\t%s\tblock %d: %s\n", h, kind, n, what)
+			fmt.Fprintf(detail, "%s\t%s\tblock %d: %s\n", hex.EncodeToString(h[:]), kind, n, what)
 		}
 		mu.Unlock()
 		return true

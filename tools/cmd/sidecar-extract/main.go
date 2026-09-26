@@ -80,6 +80,10 @@ var flagIdentify = flag.String("identify", "", "a lost list: name every lost key
 var flagPartition = flag.String("partition", "", "the partition (for -identify)")
 var flagHeight = flag.Uint64("height", 0, "the partition's last block (for -identify)")
 var flagSidecar = flag.String("sidecar", "", "the sidecar; a lost key it now holds is not lost (for -identify)")
+var flagInspect = flag.String("inspect", "", "a key list: report the archive's index entry for each (version, log position, length), and exit")
+var flagHeightAt = flag.String("height-at", "", "a CometBFT block store: print the heights there at the times of -of's heights -from and -to, and exit")
+var flagOf = flag.String("of", "", "the block store -from and -to are heights of (for -height-at)")
+var flagElements = flag.String("recover-elements", "", "an -identify output: rebuild its lost chain elements from mark points into -out, and exit")
 var flagDest listFlag
 var flagCurrent listFlag
 var flagWritable listFlag
@@ -103,6 +107,32 @@ func main() {
 	}
 	if *flagLedger {
 		if err := ledgers(flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagElements != "" {
+		if err := recoverElements(flag.Args(), *flagElements, *flagOut); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+	if *flagHeightAt != "" {
+		of, err := leveldb.OpenFile(*flagOf, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+		if err != nil {
+			log.Fatal(err)
+		}
+		at, err := leveldb.OpenFile(*flagHeightAt, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+		if err != nil {
+			log.Fatal(err)
+		}
+		t1, _ := blockTime(of, *flagFrom)
+		t2, _ := blockTime(of, *flagTo)
+		fmt.Printf("%d %d %d %d\n", t1, t2, heightAt(at, t1), heightAt(at, t2))
+		return
+	}
+	if *flagInspect != "" {
+		if err := inspect(flag.Arg(0), *flagInspect); err != nil {
 			log.Fatal(err)
 		}
 		return
