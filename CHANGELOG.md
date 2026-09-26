@@ -1,9 +1,21 @@
 # Changelog
 
+## 1.4.6.7
+
+The release Kermit runs. A devnet can now turn on the BPT history retention
+that AIP-58 historical answers need. No executor version change, no encoding
+change; 1.4.6.6 and this release interoperate.
+
+- `bpt-history-depth` on a generated configuration (#4449, !1236)
+  - A `devnet`, `coreValidator` or `follower` configuration takes
+    `bpt-history-depth` and passes it to every consensus app it generates.
+  - A devnet regenerates its nodes' files on every start, so a depth set in a
+    node's own file was overwritten, and no generated configuration had one to
+    pass through: a devnet could not retain history at all.
+
 ## 1.4.6.6
 
-The release Kermit runs. A historical account answer now carries the account
-as it was, not as it is.
+A historical account answer now carries the account as it was, not as it is.
 No executor version change — `v2-kourou` remains the latest and is unchanged —
 and the one encoding addition is an appended optional field, so 1.4.6.5 and
 this release interoperate.
