@@ -7,6 +7,7 @@
 package block
 
 import (
+	stderrors "errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
@@ -147,7 +148,18 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 	bound := oldest
 	for i := head.Count - 1; i >= 0; i-- {
 		entry, err := c.Entry(i)
-		if err != nil {
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			// The start of what the node holds: a join takes the pool's
+			// recent window and backfills the rest (#4452). A receipt older
+			// than the window is for a block before the join, which this
+			// node did not execute and does not dispatch; a block it did
+			// execute and finds no receipt for is sent again, and the
+			// destination tosses what it has.
+			x.logger.Info("The seed's walk of the anchor pool reached what the node does not hold", "module", "synthetic", "entry", i, "receipts", len(receipts))
+			return receipts, nil
+		default:
 			return nil, errors.UnknownError.WithFormat("load anchor pool main chain entry %d: %w", i, err)
 		}
 		var msg *messaging.TransactionMessage
@@ -240,6 +252,12 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		indexIndex, indexEntry, err := indexing.SearchIndexChain(index, uint64(index.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(b))
 		switch {
 		case err == nil:
+		case stderrors.Is(err, indexing.ErrNotHeld):
+			// The index entries the block's lie among are not held: a join
+			// took the chain's recent window and this block is below it.
+			// A block this node executed wrote its index entry, and the
+			// join holds the last entry before its match (#4452).
+			return nil, &notExecutedError{dst, "the synthetic index chain entries around the block are not held"}
 		case errors.Is(err, errors.NotFound):
 			continue // nothing for this destination in block b
 		default:
@@ -250,6 +268,12 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		if indexIndex > 0 {
 			prev := new(protocol.IndexEntry)
 			err = index.EntryAs(int64(indexIndex-1), prev)
+			if errors.Is(err, errors.NotFound) {
+				// Held only from the block's own entry up: the block is the
+				// oldest of a window a join took, and not this node's
+				// (#4452).
+				return nil, &notExecutedError{dst, fmt.Sprintf("synthetic index chain entry %d is not held", indexIndex-1)}
+			}
 			if err != nil {
 				return nil, errors.UnknownError.WithFormat("load synthetic index chain entry %d for %v: %w", indexIndex-1, dst, err)
 			}
@@ -376,6 +400,9 @@ func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) err
 	var anchors []synthcache.SeededAnchor
 	for i := head.Count - 1; i >= 0; i-- {
 		hash, err := chain.Entry(i)
+		if errors.Is(err, errors.NotFound) {
+			break // Below the window a join took (#4452): not held yet
+		}
 		if err != nil {
 			return errors.UnknownError.WithFormat("load anchor sequence chain entry %d: %w", i, err)
 		}

@@ -7,6 +7,7 @@
 package indexing
 
 import (
+	stderrors "errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -17,6 +18,11 @@ import (
 var ErrReachedChainEnd = errors.NotFound.With("reached the end of the chain")
 var ErrReachedChainStart = errors.NotFound.With("reached the start of the chain")
 var ErrTargetDoesNotExist = errors.NotFound.With("target does not exist")
+
+// ErrNotHeld is a search whose answer lies among entries the node does not
+// hold: a chain a join took by its recent window, below it, until backfill
+// brings the rest (#4452). It is not NotFound: the target may well exist.
+var ErrNotHeld = stderrors.New("the index chain entries the search needs are not held")
 
 // SearchDirection represents a direction to search along a linear index.
 type SearchDirection int
@@ -105,17 +111,67 @@ func SearchIndexChain(chain *database.Chain, start uint64, mode MatchMode, find 
 
 	// Binary search for the boundary: the lowest index whose entry does not
 	// sort before the target (i.e. find does not return SearchForward).
+	//
+	// The bracket is found by galloping from start toward the target, so a
+	// search whose target is near start reads only entries near it: a node
+	// that joined holds a chain's recent entries and not its history until
+	// backfill brings it (executor spec, "Sync"; #4452). An entry the node
+	// does not hold is below every entry it does hold that the search can
+	// land on, so it sorts before the target; the boundary found is then
+	// held to the entry before it, which must be held and sort before.
 	lo, hi := uint64(0), height
+	holed := false
+	held := func(i uint64) (*protocol.IndexEntry, bool, error) {
+		e, err := read(i)
+		switch {
+		case err == nil:
+			return e, true, nil
+		case errors.Is(err, errors.NotFound):
+			holed = true
+			return nil, false, nil
+		default:
+			return nil, false, err
+		}
+	}
+	if find(startEntry) == SearchForward {
+		lo = start + 1
+	} else {
+		hi = start
+		for d := uint64(1); hi > lo; d *= 2 {
+			p := lo
+			if start-lo > d {
+				p = start - d
+			}
+			e, ok, err := held(p)
+			if err != nil {
+				return 0, nil, err
+			}
+			if !ok || find(e) == SearchForward {
+				lo = p + 1
+				break
+			}
+			hi = p
+		}
+	}
 	for lo < hi {
 		mid := lo + (hi-lo)/2
-		e, err := read(mid)
+		e, ok, err := held(mid)
 		if err != nil {
 			return 0, nil, err
 		}
-		if find(e) == SearchForward {
+		if !ok || find(e) == SearchForward {
 			lo = mid + 1
 		} else {
 			hi = mid
+		}
+	}
+	if holed && lo > 0 && lo < height {
+		e, ok, err := held(lo - 1)
+		if err != nil {
+			return 0, nil, err
+		}
+		if !ok || find(e) != SearchForward {
+			return 0, nil, fmt.Errorf("the entries of the index chain below %d are not held: %w", lo, ErrNotHeld)
 		}
 	}
 

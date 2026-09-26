@@ -72,6 +72,9 @@ type servedAt struct {
 	pull.Source
 	db    *database.Database
 	roots map[string][32]byte
+
+	// block is the block the peer serves at; 7 when zero.
+	block uint64
 }
 
 func (s servedAt) QueryAccount(ctx context.Context, u *url.URL, _ *api.DefaultQuery) (*api.AccountRecord, error) {
@@ -80,6 +83,9 @@ func (s servedAt) QueryAccount(ctx context.Context, u *url.URL, _ *api.DefaultQu
 		return nil, err
 	}
 	r.Receipt = &api.Receipt{Partition: "BVN0", LocalBlock: 7}
+	if s.block != 0 {
+		r.Receipt.LocalBlock = s.block
+	}
 	root, ok := s.roots[strings.ToLower(u.String())]
 	if !ok {
 		return r, nil // Served at no root

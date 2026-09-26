@@ -271,7 +271,10 @@ func rootAfter(bpt *database.Chain2, n uint64) ([32]byte, bool, error) {
 	if head.Count == 0 {
 		return [32]byte{}, false, nil
 	}
-	_, entry, err := indexing.SearchIndexChain2(index, 0, indexing.MatchAfter, indexing.SearchIndexChainByBlock(n+1))
+	// From the newest entry: the blocks compared are the ones executed since
+	// the handoff, and a node that joined holds the chain's recent window,
+	// not its first entry (#4452).
+	_, entry, err := indexing.SearchIndexChain2(index, uint64(head.Count-1), indexing.MatchAfter, indexing.SearchIndexChainByBlock(n+1))
 	switch {
 	case errors.Is(err, indexing.ErrReachedChainEnd):
 		return [32]byte{}, false, nil

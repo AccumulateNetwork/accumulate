@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -903,9 +904,11 @@ const (
 // the BPT, in a batch of its own. What it cannot take is owed to the next
 // round, whoever named it.
 //
-// The spine and the partition's synthetic ledger are taken whole, with every
-// chain entry and the message behind each (pull.WholeAccounts, #4421, #4434);
-// every other account state-only. Nothing is verified against a root here:
+// The trust chain is taken whole, with every chain entry and the message
+// behind each (pull.WholeAccounts); the anchor pool, the ledger and the
+// synthetic ledger by the recent window the executor reads of them
+// (pull.WindowAccounts, #4452); every other account state-only. What is not
+// taken whole is backfilled after the match. Nothing is verified against a root here:
 // the match is the proof (step 3). What the pull refuses as malformed it still
 // refuses -- a body served under another name (#4408), an answer with no body
 // (#4437), an entry with no message behind it (#4400) -- and the next peer is
@@ -933,7 +936,8 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 	// spec, "Sync", "Two mismatches").
 	srcs = s.order(srcs)
 
-	whole := s.takenWhole(u) || p.repair
+	window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
+	whole := s.takenWhole(u) || p.repair && !windowed
 	// A repair names the accounts a block changed; the ones whose leaf the
 	// repair actually moves are the ones this node executed differently
 	// from its peers. Said per account, so a root miss can be traced to
@@ -943,14 +947,21 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		leafBefore = s.leafOf(u)
 	}
 	mode := pull.ModeStateOnly
-	if whole {
+	switch {
+	case whole:
 		mode = pull.ModeFullSpine
+	case windowed:
+		// A repair takes these by their window too: what the node
+		// executed wrongly is recent, and the history below is the
+		// peers', brought in by the backfill.
+		mode = pull.ModeWindow
 	}
 	// No batch is begun here: the pull begins the account's once its chains
 	// have streamed, and a view open across the stream pins every page's
 	// pre-images on the BlockchainDB backend (#4446).
 	pending, served, err := pull.FetchFrom(ctx, srcs, nil, u, pull.Options{
 		Mode:      mode,
+		Window:    window,
 		Partition: partition,
 		// The answer with a receipt is the one that carries the rest of the
 		// leaf beside the body (#4399), and the one whose NotFound says the
@@ -976,6 +987,15 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		// node holds, so an account taken by its heads before stays to be
 		// backfilled below them.
 		if err != nil || whole && !p.repair {
+			return
+		}
+		if windowed {
+			// Backfilled after the match, never while the node waits on
+			// it; and only when the window left something below it that
+			// the node does not hold.
+			if pending.Windowed {
+				s.markHeadOnly(u)
+			}
 			return
 		}
 		if p.repair {

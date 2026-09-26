@@ -50,6 +50,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -69,8 +70,15 @@ const (
 	ModeStateOnly Mode = iota
 
 	// ModeFullSpine: head + secondary + every chain entry replayed
-	// locally. Used for the four DN-side spine accounts.
+	// locally. Used for the trust chain (WholeAccounts).
 	ModeFullSpine
+
+	// ModeWindow: head + secondary + each chain's entries of the last
+	// Options.Window blocks, with the messages behind them, and at least the
+	// mark set holding its last entry. Used for the accounts whose recent
+	// entries the executor reads (WindowAccounts); the rest is backfilled
+	// after the match (#4452).
+	ModeWindow
 )
 
 // Source is the read-only surface Pull needs from the network.
@@ -132,6 +140,11 @@ type Options struct {
 	// join asks for it once per process, in the pass that carries the spine.
 	CheckHeld bool
 
+	// Window, in ModeWindow, is how many of the peer's blocks before the
+	// block it serves the account at each chain's window reaches back. Zero
+	// takes each chain's last mark set only.
+	Window uint64
+
 	// Store is where the entries of the chains taken in ModeFullSpine are
 	// written, a page at a time, each page committed before the next is asked
 	// for (#4446): the node's database, for a pull whose memory must not grow
@@ -179,6 +192,11 @@ type Pending struct {
 
 	// Block is the block the peer claims to have served the state at.
 	Block uint64
+
+	// Windowed is an account taken by its window (ModeWindow) with a chain
+	// whose entries below the window the node does not hold: it is to be
+	// backfilled (#4452).
+	Windowed bool
 
 	receipt *api.Receipt
 	batch   *database.Batch
@@ -348,6 +366,25 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		chains, err = streamChainsFull(ctx, src, pages, u, pageSize, opts.CheckHeld, opts.RetakeLonger)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains full %s: %w", u, err))
+		}
+	case ModeWindow:
+		var pages Store = batch
+		if opts.Store != nil {
+			pages = opts.Store
+		}
+		// The window is counted back from the block the peer serves the
+		// account at; with no receipt to say which, each chain's last mark
+		// set is all that is taken.
+		window := opts.Window
+		if rec.Receipt == nil {
+			window = 0
+		}
+		chains, err = streamChainsWindow(ctx, src, pages, u, pageSize, p.Block, window, opts.RetakeLonger)
+		if err != nil {
+			return fail(errors.UnknownError.WithFormat("chains window %s: %w", u, err))
+		}
+		for _, t := range chains.taken {
+			p.Windowed = p.Windowed || t.from > 0
 		}
 	default:
 		return fail(errors.BadRequest.WithFormat("unknown pull mode %d", opts.Mode))
@@ -1205,21 +1242,7 @@ func streamChainsFull(ctx context.Context, src Source, pages Store, u *url.URL, 
 		return out, nil
 	}
 	out.listed = chains.Records
-	// The main chain first: an anchor signature's page writes what executing
-	// the anchor wrote only for an anchor on the main chain, and it looks
-	// there for it (messages.isExecuted).
-	ordered := make([]*api.ChainRecord, 0, len(chains.Records))
-	for _, c := range chains.Records {
-		if c != nil && c.Name == "main" {
-			ordered = append(ordered, c)
-		}
-	}
-	for _, c := range chains.Records {
-		if c != nil && c.Name != "main" && c.Name != "" {
-			ordered = append(ordered, c)
-		}
-	}
-	for _, c := range ordered {
+	for _, c := range mainFirst(chains.Records) {
 		t, err := streamChain(ctx, src, pages, u, c, pageSize, checkHeld, false)
 		if stderrors.Is(err, errNotThePeers) || retakeLonger && stderrors.Is(err, errLongerThanThePeers) {
 			t, err = streamChain(ctx, src, pages, u, c, pageSize, false, true)
@@ -1251,6 +1274,10 @@ type streamedChain struct {
 	// restore is false for a chain the node already held to the peer's
 	// height: its head is its own.
 	restore bool
+
+	// from is where a chain taken by its window was taken from, over a node
+	// that held less: nothing below it is held.
+	from uint64
 }
 
 // restore writes the heads of the streamed chains and the chain index into
@@ -1589,14 +1616,12 @@ func heldWithoutMessages(local *database.Batch, dst *database.MerkleManager, hei
 	return runs, nil
 }
 
-// SpineAccounts is what a join takes first, in ModeFullSpine: the accounts
-// every block touches, with their chains, so the node can compare its own
-// history against a peer's and can append to them when it executes again.
+// SpineAccounts is what a join takes first: the accounts every block touches,
+// and the trust chain. The trust chain is taken whole (WholeAccounts); the
+// others by their recent window (WindowAccounts), and their history is
+// backfilled after the match (#4452).
 //
-// They are pulled and kept like every other account (#4301). The chains are
-// not taken in order to verify anything — an anchor is checked against the
-// validator set the node already holds — they are taken because a head
-// without its entries cannot be reconciled with a peer's.
+// They are pulled and kept like every other account (#4301).
 func SpineAccounts(partitionURL *url.URL) []*url.URL {
 	return []*url.URL{
 		partitionURL.JoinPath(protocol.AnchorPool),
@@ -1619,20 +1644,56 @@ func SpineAccounts(partitionURL *url.URL) []*url.URL {
 }
 
 // WholeAccounts is every account a join takes whole, in ModeFullSpine, in
-// every pass that names it: the spine, and the partition's synthetic ledger.
+// every pass that names it: the trust chain -- the operators' key book and its
+// page, with every key change since genesis, and the network definition and
+// globals that say who may sign an anchor and how many must. They are what
+// verifies a signature across a change of the validator set, and they are
+// small: an entry per change (#4452).
 //
-// The synthetic ledger is not a trust root and is not in the spine: it is
-// pulled and kept like any account, and failing to pull it fails nothing but
-// its own name. It is taken whole because the first block a new process opens
-// reads
-// its chains back from the store -- the producer cache is seeded from the
-// entries of the partition's own recent blocks, the messages behind them, and
-// the chain's state before each block's first entry (synth_cache_seed.go
-// rebuildCacheBlock). Taken state-only, it held the peer's head and open mark
-// set and no mark point below the set, and the seed failed on the first block
-// whose entries were in that set, at every handoff (#4434).
+// Every other account, the rest of the spine included, is synced by its head
+// and open mark set, plus the recent window the executor reads of the ones in
+// WindowAccounts; its history is backfilled after the match (executor spec,
+// "Sync").
 func WholeAccounts(partitionURL *url.URL) []*url.URL {
-	return append(SpineAccounts(partitionURL), partitionURL.JoinPath(protocol.Synthetic))
+	return []*url.URL{
+		partitionURL.JoinPath(protocol.Operators),
+		partitionURL.JoinPath(protocol.Operators, "1"),
+		partitionURL.JoinPath(protocol.Network),
+		partitionURL.JoinPath(protocol.Globals),
+	}
+}
+
+// AnchorPoolWindow is how many blocks back a join takes the anchor pool's
+// chains (ModeWindow), sized from what the executor reads of them after a
+// handoff (#4452):
+//
+//   - the cache seed walks the anchor-sequence chain down to the horizon,
+//     synthcache.DefaultHorizon of the partition's blocks, and the main chain
+//     down to the in-flight tail of the newest receipt, which is above it
+//     (synth_cache_seed.go seedProducedAnchors, ownReceipts);
+//   - a synthetic message's proof ends at a Directory anchor the destination
+//     looks up by hash on the pool's anchor(directory)-root chain
+//     (admissible.go provingAnchorIndex). The source builds the proof from
+//     its cache, which holds DefaultHorizon of the SOURCE's blocks; twice
+//     the horizon of the node's own is the margin for partitions whose
+//     blocks come at different rates;
+//   - the newest Directory anchor (transaction.go getDnHeight), and the last
+//     entry of the major block and anchor-sequence chains.
+const AnchorPoolWindow = 2 * synthcache.DefaultHorizon
+
+// WindowAccounts is every account a join takes by its recent window, in
+// ModeWindow, with the window each is taken by (#4452). The ledger and the
+// synthetic ledger are read after a handoff only from the last entry before
+// the match up -- the root and bpt index chains' last entries, the root
+// chain's state at the open set, the synthetic index chains' last entry
+// before the first block executed -- so their window is the mark set holding
+// each chain's last entry (Window zero).
+func WindowAccounts(partitionURL *url.URL) map[string]uint64 {
+	return map[string]uint64{
+		strings.ToLower(partitionURL.JoinPath(protocol.AnchorPool).String()): AnchorPoolWindow,
+		strings.ToLower(partitionURL.JoinPath(protocol.Ledger).String()):     0,
+		strings.ToLower(partitionURL.JoinPath(protocol.Synthetic).String()):  0,
+	}
 }
 
 // DnSpineAccounts is a backward-compatible helper returning
