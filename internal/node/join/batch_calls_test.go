@@ -84,7 +84,7 @@ func TestARoundCostsCallsPerPageNotPerBlockOrAccount(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
-	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &peerSources{partition: here, querier: counting}, ExecutedBlock: 1})
+	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: counting, block: 10}, ExecutedBlock: 1})
 	require.NoError(t, err)
 	ctx := context.Background()
 
@@ -109,6 +109,7 @@ func TestARoundCostsCallsPerPageNotPerBlockOrAccount(t *testing.T) {
 	}
 	require.NoError(t, batch.Commit())
 	putLedger(t, peerDB, here, 10+K)
+	s.sources.(*onePeer).block = 10 + K
 
 	// Round two, counted.
 	counting.calls = map[string]int{}
@@ -123,6 +124,21 @@ func TestARoundCostsCallsPerPageNotPerBlockOrAccount(t *testing.T) {
 		"a round over %d blocks naming %d accounts made %d calls (K + 8U would be %d): the calls grow with blocks or accounts, not pages",
 		K, U, counting.total(), K+8*U)
 }
+
+// onePeer is one peer: the production querier over its store, reached as a
+// named source whose account answers carry a receipt at the peer's block.
+type onePeer struct {
+	noValidators
+	partition *url.URL
+	querier   api.Querier
+	block     uint64
+}
+
+func (p *onePeer) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
+	return []pull.Source{servedAt{Source: api.Querier2{Querier: p.querier}, block: p.block}}, p.partition, nil
+}
+
+func (p *onePeer) Querier(*url.URL) api.Querier { return p.querier }
 
 // tearingQuerier changes an account on the peer, once, right after the first
 // call that reads it: between two calls, where a peer's store moves.
@@ -183,13 +199,12 @@ func TestAnAccountIsNotTakenTorn(t *testing.T) {
 			require.NoError(t, b.Commit())
 		},
 	}
-	src := servedAt{Source: api.Querier2{Querier: tearing}, db: peerDB, block: 10}
 	db := database.OpenInMemory(nil)
 	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
-	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &fixedSources{partition: here, srcs: []pull.Source{src}}, ExecutedBlock: 1})
+	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: tearing, block: 10}, ExecutedBlock: 1})
 	require.NoError(t, err)
 
 	require.NoError(t, s.Pull(context.Background()))
