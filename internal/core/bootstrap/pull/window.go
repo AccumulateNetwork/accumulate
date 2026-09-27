@@ -45,8 +45,9 @@ func streamChainsWindow(ctx context.Context, src Source, pages Store, u *url.URL
 			byName[c.Name] = c
 		}
 	}
+	found := map[string]indexFound{}
 	for _, c := range mainFirst(chains.Records) {
-		t, err := streamChainWindow(ctx, src, pages, u, c, byName, pageSize, block, window, retakeLonger)
+		t, err := streamChainWindow(ctx, src, pages, u, c, byName, found, pageSize, block, window, retakeLonger)
 		if err != nil {
 			return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
@@ -73,7 +74,15 @@ func mainFirst(records []*api.ChainRecord) []*api.ChainRecord {
 	return ordered
 }
 
-func streamChainWindow(ctx context.Context, src Source, pages Store, u *url.URL, c *api.ChainRecord, byName map[string]*api.ChainRecord, pageSize, block, window uint64, retakeLonger bool) (*streamedChain, error) {
+// indexFound is where a search of an index chain found the window: the first
+// entry in it and the entry before, nil when there is none. A chain and its
+// index chain share one search.
+type indexFound struct {
+	k      uint64
+	before *protocol.IndexEntry
+}
+
+func streamChainWindow(ctx context.Context, src Source, pages Store, u *url.URL, c *api.ChainRecord, byName map[string]*api.ChainRecord, found map[string]indexFound, pageSize, block, window uint64, retakeLonger bool) (*streamedChain, error) {
 	var markFreq, held int64
 	err := func() error {
 		local := pages.Begin(false)
@@ -94,7 +103,7 @@ func streamChainWindow(ctx context.Context, src Source, pages Store, u *url.URL,
 		return nil, err
 	}
 
-	start, err := windowStart(ctx, src, u, c, byName, pageSize, block, window, markFreq)
+	start, err := windowStart(ctx, src, u, c, byName, found, pageSize, block, window, markFreq)
 	if err != nil {
 		return nil, fmt.Errorf("find the window: %w", err)
 	}
@@ -118,7 +127,7 @@ func streamChainWindow(ctx context.Context, src Source, pages Store, u *url.URL,
 // the chain's index chain, and never above the mark set holding the chain's
 // last entry. A chain with no index chain, or a window reaching past the
 // partition's first block, is taken from the lower of the two.
-func windowStart(ctx context.Context, src Source, u *url.URL, c *api.ChainRecord, byName map[string]*api.ChainRecord, pageSize, block, window uint64, markFreq int64) (uint64, error) {
+func windowStart(ctx context.Context, src Source, u *url.URL, c *api.ChainRecord, byName map[string]*api.ChainRecord, found map[string]indexFound, pageSize, block, window uint64, markFreq int64) (uint64, error) {
 	if c.Count == 0 {
 		return 0, nil
 	}
@@ -135,10 +144,16 @@ func windowStart(ctx context.Context, src Source, u *url.URL, c *api.ChainRecord
 		if index == nil || index.Count == 0 {
 			break
 		}
-		k, before, err := firstIndexFrom(ctx, src, u, index, block-window, pageSize)
-		if err != nil {
-			return 0, err
+		f, ok := found[index.Name]
+		if !ok {
+			k, before, err := firstIndexFrom(ctx, src, u, index, block-window, pageSize)
+			if err != nil {
+				return 0, err
+			}
+			f = indexFound{k, before}
+			found[index.Name] = f
 		}
+		k, before := f.k, f.before
 		var s uint64
 		switch {
 		case index == c && k > 0:

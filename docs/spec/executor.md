@@ -438,9 +438,9 @@ and skips the block (§6, #4400), and its walks of the pool stop there; an index
 chain search reads near its start and answers `ErrNotHeld` rather than
 NotFound below the window. Nothing reads deep from a peer during execution: a
 read that needs more waits for the backfill (DIFFERENCES E20). What a join
-fetches before its handoff no longer grows with the network's age: 3,834 and
-3,626 chain entries for pools of 5,000 and 20,000 blocks, against 10,000 at
-5,000 taken whole (`TestJoin_ThePoolIsTakenByItsWindowNotItsHistory`).
+fetches before its handoff no longer grows with the network's age: 4,114 and
+3,906 chain entries for pools of 5,000 and 20,000 blocks, against 10,000 and
+40,000 taken whole (`TestJoin_ThePoolIsTakenByItsWindowNotItsHistory`).
 
 An anchor is accepted when valid signatures from **distinct members of the
 producing partition's validator set** — the network definition's, not a key
