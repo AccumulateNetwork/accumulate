@@ -301,6 +301,36 @@ BptPageRecord:
     - name: Done
       description: reports that this page exhausts the BPT
       type: bool
+    - name: Block
+      description: is the block of the view the page was read from -- the resolved block, for a page asked for as of one (#4453)
+      type: uint
+      keep-empty: true
+
+AccountStatesRecord:
+  union: { type: record }
+  description: is one page of account sync states, every one read from one view of the peer's store (executor.md, "Sync", §3; #4453)
+  fields:
+    - name: States
+      type: AccountState
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+    - name: Part
+      description: is part of an account whose state is larger than a page -- the next bytes of its marshalled AccountState, read from this page's view. The parts of one account are read from different views, and the whole is checked against its leaf like any other
+      type: AccountStatePart
+      marshal-as: reference
+      pointer: true
+    - name: Through
+      description: is T, the block the records the answer covers run through, fixed for the cursor. Zero on an AccountStates answer
+      type: uint
+      keep-empty: true
+    - name: Block
+      description: is B, the block of the view this page was read from; B is at or after T
+      type: uint
+      keep-empty: true
+    - name: Cursor
+      description: continues the answer; empty when this page completes it
+      type: bytes
 
 BptBlockRecord:
   union: { type: record }

@@ -7,18 +7,12 @@
 package join
 
 import (
-	"context"
 	"sort"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
-
-// maxBlockEntries is how many entries of one block's ledger are read per call.
-const maxBlockEntries = 512
 
 // ChangedAccounts is the set of accounts a block changed, from the block
 // ledger's record of that block (executor.md, "Sync", step 3, and "The block
@@ -91,41 +85,4 @@ func Routable(u *url.URL) bool {
 	}
 	unknown := protocol.UnknownUrl()
 	return !u.Equal(unknown) && !u.Identity().Equal(unknown)
-}
-
-// blockLedgerOf reads the accounts one block changed, from a peer, through the
-// block query -- which answers from the block ledger
-// (internal/api/v3/querier.go, queryMinorBlock) and, with EntryRange.Expand
-// false, answers with the (account, chain, index) triples alone. NotFound is a
-// block with no record: an empty block writes nothing, not even its index.
-func blockLedgerOf(ctx context.Context, q api.Querier2, partition *url.URL, block uint64) ([]*protocol.BlockEntry, error) {
-	var out []*protocol.BlockEntry
-	var start uint64
-	for {
-		count, expand := uint64(maxBlockEntries), false
-		rec, err := q.QueryMinorBlock(ctx, partition, &api.BlockQuery{
-			Minor: &block,
-			EntryRange: &api.RangeOptions{
-				Start:  start,
-				Count:  &count,
-				Expand: &expand,
-			},
-		})
-		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
-		}
-		if rec == nil || rec.Entries == nil || len(rec.Entries.Records) == 0 {
-			return out, nil
-		}
-		for _, e := range rec.Entries.Records {
-			if e == nil || e.Account == nil {
-				continue
-			}
-			out = append(out, &protocol.BlockEntry{Account: e.Account, Chain: e.Name, Index: e.Index})
-		}
-		start += uint64(len(rec.Entries.Records))
-		if start >= rec.Entries.Total {
-			return out, nil
-		}
-	}
 }

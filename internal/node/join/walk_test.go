@@ -45,7 +45,11 @@ type scriptedPeer struct {
 	// further back a moment ago.
 	ledger []uint64
 
-	// blockReads counts the block-ledger records asked of the peer.
+	// pageBlocks, when not empty, is the block each page of the walk is
+	// read at, in turn, before it is read at block.
+	pageBlocks []uint64
+
+	// blockReads counts the ChangedAccountStates pages asked of the peer.
 	blockReads int
 }
 
@@ -81,6 +85,53 @@ func (s scriptedSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api
 	return api.Querier2{Querier: s.peer}.QueryBptPage(ctx, scope, q)
 }
 
+// QueryChangedAccountStates answers the scripted records: the accounts they
+// name after After, through the peer's block, each served by the production
+// querier from the peer's store as it is now.
+func (s scriptedSource) QueryChangedAccountStates(ctx context.Context, scope *url.URL, q *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
+	p := s.peer
+	p.blockReads++
+	if p.block < q.After {
+		return nil, errors.NotReady.WithFormat("the peer stands at %d, before %d", p.block, q.After)
+	}
+	through := min(p.block, q.After+1024)
+	seen := map[string]bool{}
+	var named []*url.URL
+	for n := q.After + 1; n <= through; n++ {
+		for _, u := range p.records[n] {
+			if !seen[u.String()] {
+				seen[u.String()] = true
+				named = append(named, u)
+			}
+		}
+	}
+	r := &api.AccountStatesRecord{Through: through, Block: p.block}
+	if len(named) > 0 {
+		served, err := p.served().QueryAccountStates(ctx, scope, &api.AccountStatesQuery{Accounts: named})
+		if err != nil {
+			return nil, err
+		}
+		r.States = served.States
+	}
+	return r, nil
+}
+
+// QueryAccountStates is the production querier's answer from the peer's
+// store as it is now, at the peer's block.
+func (s scriptedSource) QueryAccountStates(ctx context.Context, scope *url.URL, q *api.AccountStatesQuery) (*api.AccountStatesRecord, error) {
+	r, err := s.peer.served().QueryAccountStates(ctx, scope, q)
+	if err != nil {
+		return nil, err
+	}
+	r.Block = s.peer.block
+	return r, nil
+}
+
+// served is the production querier over the peer's store as it is now.
+func (p *scriptedPeer) served() api.Querier2 {
+	return api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: p.state, Partition: "BVN0"})}
+}
+
 func (p *scriptedPeer) Querier(*url.URL) api.Querier { return p }
 
 func (p *scriptedPeer) Query(_ context.Context, scope *url.URL, query api.Query) (api.Record, error) {
@@ -105,7 +156,11 @@ func (p *scriptedPeer) Query(_ context.Context, scope *url.URL, query api.Query)
 		if p.onPage != nil {
 			p.onPage()
 		}
-		return &api.BptPageRecord{Entries: p.page, Done: true}, nil
+		block := p.block
+		if len(p.pageBlocks) > 0 {
+			block, p.pageBlocks = p.pageBlocks[0], p.pageBlocks[1:]
+		}
+		return &api.BptPageRecord{Entries: p.page, Done: true, Block: block}, nil
 	}
 	// Everything else -- the anchor pool among it -- this peer has nothing
 	// of. The walk does not depend on anchors.

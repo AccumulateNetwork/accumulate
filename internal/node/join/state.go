@@ -214,13 +214,15 @@ type syncing struct {
 	// (startRepair).
 	repair bool
 
-	// low is the oldest block the records have been read from: S, or the
-	// block of a walk page served before it (walk). want is the oldest block
-	// they must be read from: a walk page served before low moves want, and
-	// the records are read back to it at most maxRecordsPerRound blocks a
-	// round (readBack).
-	low  uint64
-	want uint64
+	// highest is the highest block any reply this pull took was read at: a
+	// page of the records, a walk page, an AccountStates answer. The state
+	// is complete only once L has reached it, for until then an account read
+	// at it may have changed at a block whose record is not yet processed
+	// (executor spec, "Sync", §3).
+	highest uint64
+
+	// part is an account being answered in parts, over pages of one answer.
+	part *statePart
 
 	// named are the leaves the walk's pages have named, by key hash; a leaf
 	// the node holds that none named is dropped when the walk completes.
@@ -496,7 +498,6 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			"partition", s.partition, "error", err)
 	}
 
-	q := api.Querier2{Querier: s.sources.Querier(s.partition)}
 	peer, err := s.peersBlock(ctx)
 	if err != nil {
 		// No peer could say where the partition is. Nothing is lost by
@@ -520,9 +521,9 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	}
 	if s.sync == nil {
 		s.sync = newSyncing()
-		s.sync.start, s.sync.last, s.sync.low, s.sync.want = peer, peer, peer, peer
+		s.sync.start, s.sync.last = peer.block, peer.block
 		s.log.Info("Pulling the state: the whole BPT, and every block-ledger record from here on",
-			"partition", s.partition, "start", peer, "executed", s.executed)
+			"partition", s.partition, "start", peer.block, "executed", s.executed)
 	}
 	p := s.sync
 	p.ready = false
@@ -547,35 +548,37 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		}
 	}
 
-	// Step 1, the records: every block after L through the peer's block, in
-	// block order, and every account each names pulled and written. Every
-	// account is marked current as its record names it, whether or not the
-	// pull takes it this round, so the walk never writes over it.
-	s.processRecords(ctx, q, p, peer)
+	// 1. The records: ChangedAccountStates after L, every page of it. Every
+	// account it answers is written and marked current, and L moves to the
+	// records' end T. Every account is marked current as the records name
+	// it, whether or not it is taken this round, so the walk never writes
+	// over it.
+	s.processRecords(ctx, p, peer)
 
-	// What an earlier round could not take, once each this round.
+	// 2. What an earlier round could not take, once each this round,
+	// whoever named it.
 	owed := p.retry
 	p.retry = map[[32]byte]*url.URL{}
-	for _, u := range owed {
-		if ctx.Err() != nil {
-			p.retry[accountKey(u)] = u
-			continue
+	if len(owed) > 0 {
+		list := make([]*url.URL, 0, len(owed))
+		for _, u := range owed {
+			list = append(list, u)
 		}
-		s.pullOne(ctx, p, u)
+		sort.Slice(list, func(i, j int) bool { return list[i].String() < list[j].String() })
+		s.takeAccounts(ctx, p, s.partitionSources(ctx), list)
 	}
 
-	// Step 1, the walk: the next pages of the peer's BPT.
+	// 3. The walk: the next pages of the peer's BPT.
 	if !p.walked {
-		s.walk(ctx, q, p)
+		s.walk(ctx, p)
 	}
-	s.readBack(ctx, q, p)
 
-	// With the walk done, nothing owed and the records read back to the
-	// oldest page's block, the state is the partition's at L if the pull is
-	// right. The node may execute from here, comparing at every block that
-	// anchors (Ready; DIFFERENCES.md E11: the spec's "Two mismatches"
-	// executes only once the root has matched).
-	p.ready = p.walked && len(p.retry) == 0 && p.low <= p.want
+	// With the walk done, nothing owed and L at or above the highest block
+	// any reply was read at, every account is as of L if the pull is right.
+	// The node may execute from here, comparing at every block that anchors
+	// (Ready; DIFFERENCES.md E11: the spec's "Two mismatches" executes only
+	// once the root has matched).
+	p.ready = p.walked && len(p.retry) == 0 && p.last >= p.highest
 	return nil
 }
 
@@ -618,7 +621,7 @@ func (s *PulledState) startRepair(ctx context.Context) {
 	from := s.repairFrom
 	s.repairFrom = 0
 	p := newSyncing()
-	p.start, p.last, p.low, p.want = from, from, from, from
+	p.start, p.last = from, from
 	p.walked, p.spine, p.repair = true, true, true
 	s.sync = p
 
@@ -674,191 +677,353 @@ func (s *PulledState) startRepair(ctx context.Context) {
 	}
 }
 
-// maxRecordsPerRound bounds how many blocks of records one round reads, so a
-// target set by a peer cannot make one round a query per block without end
-// (#4438 threat F3). The next round goes on from where this one stopped.
-const maxRecordsPerRound = 1024
+// maxRecordCallsPerRound bounds how many ChangedAccountStates pages one round
+// asks for, so a partition far ahead cannot make one round endless. The next
+// round goes on from L.
+const maxRecordCallsPerRound = 64
 
-// processRecords processes the block-ledger records of the blocks after L
-// through through, in block order, and moves L to the last one read. A record
-// that cannot be read stops it there, and the next round goes on from it.
-func (s *PulledState) processRecords(ctx context.Context, q api.Querier2, p *syncing, through uint64) {
-	if through > p.last+maxRecordsPerRound {
-		through = p.last + maxRecordsPerRound
-	}
-	last := s.processRange(ctx, q, p, p.last, through)
-	if last > p.last {
-		p.last = last
-	}
-}
-
-// recordWindow is how many blocks back from the newest verified anchor the
-// records are read: the peers' retention (BPTHistoryDepth, 1024 blocks by
-// default; executor spec, "Sync").
-const recordWindow = 1024
-
-// recordFloor is the oldest block the records are ever read back to: the
-// newest block a quorum of the partition's validators signed an anchor for,
-// less the peers' retention window.
-func (s *PulledState) recordFloor() uint64 {
-	n := s.tracker.LatestObservedBlock()
-	if n <= recordWindow {
-		return 0
-	}
-	return n - recordWindow
-}
-
-// readBack reads the records from low back towards want, at most
-// maxRecordsPerRound blocks a round, as the forward direction is bounded
-// (processRecords). A record that cannot be read leaves low where it was, and
-// the next round reads the same span again.
-func (s *PulledState) readBack(ctx context.Context, q api.Querier2, p *syncing) {
-	if p.want >= p.low || ctx.Err() != nil {
-		return
-	}
-	from := p.want
-	if p.low-from > maxRecordsPerRound {
-		from = p.low - maxRecordsPerRound
-	}
-	if s.processRange(ctx, q, p, from, p.low) == p.low {
-		p.low = from
-	}
-}
-
-// processRange reads the records of the blocks after after through through,
-// in block order, marks every account they name current and pulls it, and
-// returns the last block read. Every pull is of the peer's state now, which is
-// at or after every block read, so an account two blocks named is current
-// after one pull.
-func (s *PulledState) processRange(ctx context.Context, q api.Querier2, p *syncing, after, through uint64) uint64 {
-	var named []*url.URL
-	last := after
-	for n := after + 1; n <= through; n++ {
-		entries, err := blockLedgerOf(ctx, q, s.partition, n)
+// processRecords processes the block-ledger records after L (executor spec,
+// "Sync", §3, step 1): ChangedAccountStates with After = L, every page of it,
+// asked of the peer whose ledger named the lowest block -- the round's target
+// -- and then of the others in the order of the blocks they named, so one
+// peer naming a block far ahead does not carry L there (#4438 threat F3). An
+// answer covers the records through its T, which the peer caps at its own
+// block and at a span of records; L moves to T, and a peer with records past
+// T is asked again from there, within the round's calls. A page that cannot
+// be read stops the round's records there, and the next round asks again from
+// L.
+func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peersAt) {
+	calls := 0
+	for i := 0; i < len(peer.sources) && ctx.Err() == nil && calls < maxRecordCallsPerRound; {
+		src := peer.sources[i]
+		through, block, n, err := s.recordsOnce(ctx, p, src)
+		calls += n
 		switch {
 		case err == nil:
-		case errors.Is(err, errors.NotFound):
-			// An empty block writes nothing, not even its index: it changed
-			// nothing.
-		default:
-			s.log.Info("The block ledger could not be read; the records go on from here next round",
-				"partition", s.partition, "block", n, "error", err)
-			through = n - 1
-		}
-		if n > through {
-			break
-		}
-		for _, u := range ChangedAccounts(s.partition, entries) {
-			p.current[accountKey(u)] = true
-			named = append(named, u)
-		}
-		last = n
-	}
-
-	seen := map[[32]byte]bool{}
-	for _, u := range named {
-		k := accountKey(u)
-		if seen[k] || ctx.Err() != nil {
+		case n <= 1:
+			// The first page was not served: another peer is asked.
+			s.log.Info("A peer did not answer the block-ledger records; the next is asked",
+				"partition", s.partition, "peer", sourceKey(src), "after", p.last, "error", err)
+			i++
 			continue
+		default:
+			s.log.Info("A page of the block-ledger records could not be read; the records go on from here next round",
+				"partition", s.partition, "peer", sourceKey(src), "after", p.last, "error", err)
+			return
 		}
-		seen[k] = true
-		s.pullOne(ctx, p, u)
+		p.last = through
+		if through >= block {
+			return
+		}
 	}
-	return last
 }
 
-// walk takes the next pages of the peer's BPT and pulls every account whose
-// leaf this node does not hold, or holds and does not agree with, unless a
-// record has already brought it current: the page may be older than that
-// record, and the walk never overwrites what a record wrote (step 1). A page
-// newer than the records needs no rule: the account it wrote was changed by a
-// block the records have not reached, and that block's record pulls it again.
+// recordsOnce asks one peer for one answer of ChangedAccountStates after L,
+// every page of it, and takes every account it answers. It returns the
+// records' end T, the block the last page was read at, and how many pages it
+// asked for.
+func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Source) (through, block uint64, calls int, err error) {
+	after := p.last
+	var cursor []byte
+	p.part = nil
+	for {
+		calls++
+		rec, err := src.QueryChangedAccountStates(ctx, s.partition, &api.ChangedAccountStatesQuery{After: after, Cursor: cursor})
+		if err != nil {
+			return 0, 0, calls, errors.UnknownError.Wrap(err)
+		}
+		if rec == nil {
+			return 0, 0, calls, errors.Conflict.With("the peer answered nothing")
+		}
+		if rec.Through < after || rec.Block < rec.Through || cursor != nil && rec.Through != through {
+			return 0, 0, calls, errors.Conflict.WithFormat("the peer answered the records after %d through %d at block %d", after, rec.Through, rec.Block)
+		}
+		through, block = rec.Through, rec.Block
+		p.highest = max(p.highest, block)
+		for _, st := range s.statesOf(p, rec) {
+			if st.Url != nil {
+				p.current[accountKey(st.Url)] = true
+			}
+			if !s.takeState(ctx, p, src, st) && st.Url != nil {
+				p.retry[accountKey(st.Url)] = st.Url
+			}
+		}
+		if len(rec.Cursor) == 0 {
+			return through, block, calls, nil
+		}
+		cursor = rec.Cursor
+	}
+}
+
+// statePart is an account answered in parts: the bytes of its marshalled
+// state so far.
+type statePart struct {
+	url  *url.URL
+	data []byte
+}
+
+// statesOf is the accounts one page answers whole, with an account answered
+// in parts once its last part has arrived. The parts come from different
+// views; the whole is checked against its leaf like any other.
+func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.AccountState {
+	out := rec.States
+	pt := rec.Part
+	if pt == nil {
+		p.part = nil
+		return out
+	}
+	if pt.Offset == 0 || p.part == nil || !p.part.url.Equal(pt.Url) || uint64(len(p.part.data)) != pt.Offset {
+		p.part = &statePart{url: pt.Url}
+		if pt.Offset != 0 {
+			// A part that does not continue what was held: the account
+			// is owed.
+			p.retry[accountKey(pt.Url)] = pt.Url
+			p.part = nil
+			return out
+		}
+	}
+	p.part.data = append(p.part.data, pt.Data...)
+	if uint64(len(p.part.data)) < pt.Total {
+		return out
+	}
+	st := new(api.AccountState)
+	err := st.UnmarshalBinary(p.part.data)
+	p.part = nil
+	if err != nil || st.Url == nil || !st.Url.Equal(pt.Url) {
+		s.log.Info("An account served in parts did not reassemble; it is asked for again", "account", pt.Url, "error", err)
+		p.retry[accountKey(pt.Url)] = pt.Url
+		return out
+	}
+	return append(append([]*api.AccountState(nil), out...), st)
+}
+
+// takeState writes one served account, or hands it to the pull that takes it
+// another way, and says whether the peer's answer for it was taken. An answer
+// refused is that peer's: the account is asked of the next peer, or owed.
 //
-// A page OLDER than the records' start is the other hazard: an account
-// changed at a block after the page's and at or before S shows its old leaf,
-// which the node may hold too, so the walk skips it, and no record after S
-// names it. Each page is read from one named peer whose block is read first,
-// and the records are processed from the oldest block a page was served at,
-// not from S (Paul, 2026-09-25; #4438 review F1).
+// The trust chain (pull.WholeAccounts) and the windowed accounts
+// (pull.WindowAccounts) are taken with their chains' entries and the
+// messages behind them, by pullOne, and so is every account of a repair
+// (taken whole). An account the peer holds no leaf for is asked of every peer
+// by pullOne, and deleted when none holds one. Every other account is checked
+// against its leaf and written as served (pull.KeepState).
+func (s *PulledState) takeState(ctx context.Context, p *syncing, src pull.Source, st *api.AccountState) bool {
+	u := st.Url
+	if u == nil {
+		return false
+	}
+	if !Routable(u) {
+		return true
+	}
+	if !s.ours(ctx, u) {
+		s.log.Info("A named account is not this partition's and was dropped",
+			"account", u, "partition", s.partition)
+		return true
+	}
+	if p.repair || st.NoLeaf || s.takenWhole(u) || s.windowed(u) {
+		s.pullOne(ctx, p, u)
+		return true
+	}
+	if err := pull.KeepState(s.db, st); err != nil {
+		s.log.Info("A peer's answer for an account was refused; it is asked of another",
+			"account", u, "peer", sourceKey(src), "error", err)
+		return false
+	}
+	delete(p.retry, accountKey(u))
+	p.servedBy[sourceKey(src)] = true
+	s.markHeadOnly(u)
+	return true
+}
+
+// windowed is whether u is one of the accounts taken by its recent window.
+func (s *PulledState) windowed(u *url.URL) bool {
+	_, ok := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
+	return ok
+}
+
+// accountRouter is how the join tells an account's partition without asking
+// for its peers (QueryPeers.PartitionOf).
+type accountRouter interface {
+	PartitionOf(*url.URL) (*url.URL, error)
+}
+
+// ours is whether u is this partition's account. A peer's answer names
+// accounts, and a partition's store holds no account of another's (see
+// sourcesFor).
+func (s *PulledState) ours(ctx context.Context, u *url.URL) bool {
+	if r, ok := s.sources.(accountRouter); ok {
+		partition, err := r.PartitionOf(u)
+		return err == nil && partition.Equal(s.partition)
+	}
+	_, _, err := s.sourcesFor(ctx, u)
+	return !errors.Is(err, errNotThisPartition)
+}
+
+// takeAccounts takes the named accounts: those taken another way by pullOne
+// (takeState), the rest by AccountStates, asked of the peers in order until
+// each is taken. What no peer served is owed.
+func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.Source, accounts []*url.URL) {
+	var batchable []*url.URL
+	for _, u := range accounts {
+		switch {
+		case ctx.Err() != nil:
+			p.retry[accountKey(u)] = u
+		case !Routable(u):
+		case p.repair || s.takenWhole(u) || s.windowed(u):
+			s.pullOne(ctx, p, u)
+		default:
+			batchable = append(batchable, u)
+		}
+	}
+	remaining := batchable
+	for _, src := range srcs {
+		if len(remaining) == 0 || ctx.Err() != nil {
+			break
+		}
+		remaining = s.askStates(ctx, p, src, remaining)
+	}
+	for _, u := range remaining {
+		p.retry[accountKey(u)] = u
+	}
+}
+
+// maxAccountsAsked is how many accounts one AccountStates call names.
+const maxAccountsAsked = 1024
+
+// askStates asks one peer for the named accounts' states, every page of the
+// answer, and returns the accounts it did not serve or whose answer was
+// refused. An answer read at a block before S is refused whole: an account
+// changed at or before S may show its old state there, and no record after S
+// names it.
+func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source, accounts []*url.URL) []*url.URL {
+	var left []*url.URL
+	for len(accounts) > 0 {
+		n := min(len(accounts), maxAccountsAsked)
+		chunk := accounts[:n]
+		accounts = accounts[n:]
+
+		served := map[[32]byte]bool{}
+		var cursor []byte
+		p.part = nil
+		for ctx.Err() == nil {
+			rec, err := src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk, Cursor: cursor})
+			if err != nil {
+				s.log.Info("A peer did not answer for accounts; they are asked of another",
+					"partition", s.partition, "peer", sourceKey(src), "accounts", len(chunk), "error", err)
+				break
+			}
+			if rec.Block < p.start {
+				s.log.Info("A peer answered for accounts at a block before the pull's start; they are asked of another",
+					"partition", s.partition, "peer", sourceKey(src), "block", rec.Block, "start", p.start)
+				break
+			}
+			p.highest = max(p.highest, rec.Block)
+			for _, st := range s.statesOf(p, rec) {
+				if st.Url == nil || !asked(chunk, st.Url) {
+					continue
+				}
+				if s.takeState(ctx, p, src, st) {
+					served[accountKey(st.Url)] = true
+				}
+			}
+			if len(rec.Cursor) == 0 {
+				break
+			}
+			cursor = rec.Cursor
+		}
+		for _, u := range chunk {
+			if !served[accountKey(u)] {
+				left = append(left, u)
+			}
+		}
+	}
+	return left
+}
+
+func asked(list []*url.URL, u *url.URL) bool {
+	for _, v := range list {
+		if v.Equal(u) {
+			return true
+		}
+	}
+	return false
+}
+
+// partitionSources is the partition's peers, each reached by name, in the
+// order an account is asked of them (order).
+func (s *PulledState) partitionSources(ctx context.Context) []pull.Source {
+	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
+	if err != nil {
+		s.log.Info("The partition's peers could not be found this round", "partition", s.partition, "error", err)
+		return nil
+	}
+	return s.order(srcs)
+}
+
+// walk takes the next pages of the peer's BPT, and every account a page shows
+// this node does not hold, or holds and does not agree with, in one
+// AccountStates call per page -- unless a record has already brought it
+// current: the page may be older than that record, and the walk never
+// overwrites what a record wrote (step 3). A page newer than the records needs
+// no rule: the account it wrote was changed by a block the records have not
+// reached, and that block's record takes it again.
+//
+// A page carries the block of the view it was read from. A page of a block
+// before S shows leaves that a change at or before S may have moved and that
+// no record after S names, so it is not taken: it is asked again, of the next
+// peer. The records are never read back before S (executor spec, "Sync", §3).
 //
 // Once the walk has covered the tree, every leaf the node holds that no page
 // named, and that no record brought current, is an account no peer holds: it
 // is deleted (Paul: "It must also drop leaves it holds that no peer holds").
-func (s *PulledState) walk(ctx context.Context, q api.Querier2, p *syncing) {
+func (s *PulledState) walk(ctx context.Context, p *syncing) {
+	srcs := s.partitionSources(ctx)
+	if len(srcs) == 0 {
+		return
+	}
 	for i := 0; i < walkPagesPerRound && !p.walked && ctx.Err() == nil; i++ {
-		pager, served, ok := s.pageSource(ctx)
-		if !ok {
-			pager, served = q, p.low
-		}
+		turn := s.pageTurn % len(srcs)
+		s.pageTurn++
+		src := srcs[turn]
 		batch := s.db.Begin(false)
-		page, err := enumerate.ReadPage(ctx, pager, s.partition, batch, p.cursor, walkPageSize)
+		page, err := enumerate.ReadPage(ctx, src, s.partition, batch, p.cursor, walkPageSize)
 		batch.Discard()
 		if err != nil {
 			s.log.Info("The peer's BPT could not be paged this round; the walk goes on from here next round",
-				"partition", s.partition, "pages", p.pages, "error", err)
+				"partition", s.partition, "peer", sourceKey(src), "pages", p.pages, "error", err)
 			return
 		}
+		if page.Record.Block < p.start {
+			s.log.Info("A walk page was of a block before the pull's start; it is asked again",
+				"partition", s.partition, "peer", sourceKey(src), "page-block", page.Record.Block, "start", p.start)
+			continue
+		}
 		p.pages++
-		if served < p.want {
-			// A peer's word for where it stands is not a floor the node
-			// must read back to: one that answers 0 would make the records
-			// a query per block since genesis. Nothing older than the
-			// newest verified anchor's block less the peers' retention
-			// can be served as of its block anyway (#4438 re-review F-1).
-			if floor := s.recordFloor(); served < floor {
-				s.log.Info("A walk page's peer stands further back than the peers retain; the records are read back only to the retention floor",
-					"partition", s.partition, "page-block", served, "floor", floor)
-				served = floor
-			}
-		}
-		if served < p.want {
-			s.log.Info("A walk page was served at a block before the records' start; the records are read from there",
-				"partition", s.partition, "page-block", served, "records-from", p.low)
-			p.want = served
-		}
+		p.highest = max(p.highest, page.Record.Block)
 
 		for _, e := range page.Record.Entries {
 			if e != nil {
 				p.named[e.KeyHash] = true
 			}
 		}
+		var stale []*url.URL
 		for _, u := range page.Stale {
-			if p.current[accountKey(u)] {
-				continue
+			if !p.current[accountKey(u)] {
+				stale = append(stale, u)
 			}
-			s.pullOne(ctx, p, u)
 		}
+		// The page's own peer first.
+		s.takeAccounts(ctx, p, append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...), stale)
 
 		if page.Record.Done {
 			p.walked = true
 			s.log.Info("The walk has covered the peer's whole BPT", "partition", s.partition,
-				"pages", p.pages, "records-through", p.last, "start", p.start, "records-from", p.low)
+				"pages", p.pages, "records-through", p.last, "start", p.start)
 			s.dropUnnamed(ctx, p)
 			return
 		}
 		p.cursor = page.Record.NextStart
 	}
-}
-
-// pageSource is the peer the next walk page is read from, named, and the block
-// its ledger says it stands at: the page is of that block or a later one. The
-// peers are taken in rotation. False when the peers cannot be read that way.
-func (s *PulledState) pageSource(ctx context.Context) (enumerate.Source, uint64, bool) {
-	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
-	if err != nil || len(srcs) == 0 {
-		return nil, 0, false
-	}
-	src := srcs[s.pageTurn%len(srcs)]
-	s.pageTurn++
-	pager, ok := src.(enumerate.Source)
-	if !ok {
-		return nil, 0, false
-	}
-	n, err := ledgerIndexOf(ctx, src, s.partition)
-	if err != nil {
-		return nil, 0, false
-	}
-	return pager, n, true
 }
 
 // dropUnnamed asks the peers for every account the node holds a leaf for that
@@ -1073,10 +1238,19 @@ func readExecutedBlock(db *database.Database, partition *url.URL) (uint64, error
 	}
 }
 
+// peersAt is where the partition's peers stand: the round's target, and the
+// peers that named a block at or after it, the one that named the lowest
+// first.
+type peersAt struct {
+	block   uint64
+	sources []pull.Source
+}
+
 // peersBlock is the block the partition's peers stand at: the LOWEST block any
 // of them names. One peer's word is not a target the node must reach -- a
 // peer that named a block far ahead would set S there and hold the records
-// off, or make a round a query per block without end (#4438 threat F3).
+// off, or carry L there (#4438 threat F3) -- so the records are asked of the
+// peer that named the lowest first (processRecords).
 //
 // The lowest is floored at the newest block a quorum of the partition's
 // validators signed an anchor for, as this node has verified it: the
@@ -1084,15 +1258,18 @@ func readExecutedBlock(db *database.Database, partition *url.URL) (uint64, error
 // before it is behind -- a laggard, or one answering 0 -- and is not counted
 // (#4438 re-review F-2). Otherwise one such peer would pin the target, and
 // with it L, where it stands.
-func (s *PulledState) peersBlock(ctx context.Context) (uint64, error) {
+func (s *PulledState) peersBlock(ctx context.Context) (peersAt, error) {
 	s.peersJoining = false
 	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
 	if err != nil {
-		return 0, errors.UnknownError.WithFormat("find the partition's peers: %w", err)
+		return peersAt{}, errors.UnknownError.WithFormat("find the partition's peers: %w", err)
 	}
 	floor := s.tracker.LatestObservedBlock()
-	var low uint64
-	var found bool
+	type named struct {
+		src   pull.Source
+		block uint64
+	}
+	var at []named
 	var last error
 	var joining, other int
 	defer func() { s.peersJoining = joining > 0 && other == 0 }()
@@ -1114,14 +1291,17 @@ func (s *PulledState) peersBlock(ctx context.Context) (uint64, error) {
 			last = errors.NotReady.WithFormat("%v stands at block %d, before the newest signed anchor's block %d", src, n, floor)
 			continue
 		}
-		if !found || n < low {
-			low, found = n, true
-		}
+		at = append(at, named{src, n})
 	}
-	if !found {
-		return 0, errors.UnknownError.WithFormat("no peer served its ledger: %w", last)
+	if len(at) == 0 {
+		return peersAt{}, errors.UnknownError.WithFormat("no peer served its ledger: %w", last)
 	}
-	return low, nil
+	sort.SliceStable(at, func(i, j int) bool { return at[i].block < at[j].block })
+	out := peersAt{block: at[0].block}
+	for _, a := range at {
+		out.sources = append(out.sources, a.src)
+	}
+	return out, nil
 }
 
 // ledgerIndexOf is the block one peer's ledger names.

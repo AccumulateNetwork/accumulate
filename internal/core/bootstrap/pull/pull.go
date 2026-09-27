@@ -100,6 +100,14 @@ type Source interface {
 	// signatures). Without this the per-account hash diverges for
 	// any account with non-empty Pending — see #3999.
 	QueryMessage(ctx context.Context, txid *url.TxID, query *api.DefaultQuery) (*api.MessageRecord[messaging.Message], error)
+
+	// The state pull's batch reads (executor.md, "Sync", §3; #4453): a page
+	// of the peer's BPT, the sync state of every account its block-ledger
+	// records after a block name, and the sync state of named accounts. Each
+	// answer is one view of the peer's store, stamped with its block.
+	QueryBptPage(ctx context.Context, scope *url.URL, query *api.BptPageQuery) (*api.BptPageRecord, error)
+	QueryChangedAccountStates(ctx context.Context, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error)
+	QueryAccountStates(ctx context.Context, scope *url.URL, query *api.AccountStatesQuery) (*api.AccountStatesRecord, error)
 }
 
 // The v3 client is a Source as it stands.

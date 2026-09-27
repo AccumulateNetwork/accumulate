@@ -66,6 +66,55 @@ type AccountRecord struct {
 	extraData []byte
 }
 
+// AccountState is one account's sync state -- its main state, directory, pending list and the rest of its leaf, the entries of each chain's open mark set, and its leaf hash -- read from one view of a peer's store (executor.md, "Sync", §3;.
+type AccountState struct {
+	fieldsSet []bool
+	Url       *url.URL         `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Main      protocol.Account `json:"main,omitempty" form:"main" query:"main" validate:"required"`
+	Directory []*url.URL       `json:"directory,omitempty" form:"directory" query:"directory" validate:"required"`
+	Leaf      *AccountLeaf     `json:"leaf,omitempty" form:"leaf" query:"leaf" validate:"required"`
+	// OpenEntries is the entries of each chain's open mark set, what an append rebuilds the chain's tail from.
+	OpenEntries []*ChainOpenEntries `json:"openEntries,omitempty" form:"openEntries" query:"openEntries" validate:"required"`
+	// LeafHash is the account's BPT leaf in the same view.
+	LeafHash [32]byte `json:"leafHash,omitempty" form:"leafHash" query:"leafHash" validate:"required"`
+	// NoLeaf says the peer's tree holds no leaf for the account.
+	NoLeaf    bool `json:"noLeaf,omitempty" form:"noLeaf" query:"noLeaf" validate:"required"`
+	extraData []byte
+}
+
+type AccountStatePart struct {
+	fieldsSet []bool
+	Url       *url.URL `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Offset    uint64   `json:"offset" form:"offset" query:"offset" validate:"required"`
+	Total     uint64   `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+	Data      []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	extraData []byte
+}
+
+// AccountStatesQuery asks the addressed partition for the sync state of the named accounts, from one view of its store, for a node pulling the state (executor.md, "Sync", §3;.
+type AccountStatesQuery struct {
+	fieldsSet []bool
+	Accounts  []*url.URL `json:"accounts,omitempty" form:"accounts" query:"accounts" validate:"required"`
+	// Cursor continues the answer where the previous page stopped; omitted starts it.
+	Cursor    []byte `json:"cursor,omitempty" form:"cursor" query:"cursor"`
+	extraData []byte
+}
+
+// AccountStatesRecord is one page of account sync states, every one read from one view of the peer's store (executor.md, "Sync", §3;.
+type AccountStatesRecord struct {
+	fieldsSet []bool
+	States    []*AccountState `json:"states,omitempty" form:"states" query:"states" validate:"required"`
+	// Part is part of an account whose state is larger than a page -- the next bytes of its marshalled AccountState, read from this page's view. The parts of one account are read from different views, and the whole is checked against its leaf like any other.
+	Part *AccountStatePart `json:"part,omitempty" form:"part" query:"part" validate:"required"`
+	// Through is T, the block the records the answer covers run through, fixed for the cursor. Zero on an AccountStates answer.
+	Through uint64 `json:"through" form:"through" query:"through" validate:"required"`
+	// Block is B, the block of the view this page was read from; B is at or after T.
+	Block uint64 `json:"block" form:"block" query:"block" validate:"required"`
+	// Cursor continues the answer; empty when this page completes it.
+	Cursor    []byte `json:"cursor,omitempty" form:"cursor" query:"cursor" validate:"required"`
+	extraData []byte
+}
+
 type AnchorReceiptOptions struct {
 	fieldsSet []bool
 	// Partition is the partition whose BPT root is being bound, from the first call's Receipt.Partition.
@@ -196,7 +245,9 @@ type BptPageRecord struct {
 	NextStart [32]byte `json:"nextStart,omitempty" form:"nextStart" query:"nextStart" validate:"required"`
 	BptRoot   [32]byte `json:"bptRoot,omitempty" form:"bptRoot" query:"bptRoot" validate:"required"`
 	// Done reports that this page exhausts the BPT.
-	Done      bool `json:"done,omitempty" form:"done" query:"done" validate:"required"`
+	Done bool `json:"done,omitempty" form:"done" query:"done" validate:"required"`
+	// Block is the block of the view the page was read from -- the resolved block, for a page asked for as of one (#4453).
+	Block     uint64 `json:"block" form:"block" query:"block" validate:"required"`
 	extraData []byte
 }
 
@@ -213,6 +264,13 @@ type ChainEntryRecord[T Record] struct {
 	State         [][]byte         `json:"state,omitempty" form:"state" query:"state" validate:"required"`
 	LastBlockTime *time.Time       `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 	extraData     []byte
+}
+
+type ChainOpenEntries struct {
+	fieldsSet []bool
+	Name      string   `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Entries   [][]byte `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
 }
 
 type ChainQuery struct {
@@ -234,6 +292,16 @@ type ChainRecord struct {
 	LastBlockTime *time.Time       `json:"lastBlockTime,omitempty" form:"lastBlockTime" query:"lastBlockTime" validate:"required"`
 	IndexOf       *ChainRecord     `json:"indexOf,omitempty" form:"indexOf" query:"indexOf" validate:"required"`
 	extraData     []byte
+}
+
+// ChangedAccountStatesQuery asks the addressed partition for the sync state of every account its block-ledger records after a block name, for a node pulling the state (executor.md, "Sync", §3;.
+type ChangedAccountStatesQuery struct {
+	fieldsSet []bool
+	// After is L, the last block whose records the asking node has processed; the answer covers the records of the blocks after it.
+	After uint64 `json:"after" form:"after" query:"after" validate:"required"`
+	// Cursor continues the answer where the previous page stopped; omitted starts it.
+	Cursor    []byte `json:"cursor,omitempty" form:"cursor" query:"cursor"`
+	extraData []byte
 }
 
 type ConsensusPeerInfo struct {
@@ -731,6 +799,10 @@ type ValidateOptions struct {
 
 func (*AccountRecord) RecordType() RecordType { return RecordTypeAccount }
 
+func (*AccountStatesQuery) QueryType() QueryType { return QueryTypeAccountStates }
+
+func (*AccountStatesRecord) RecordType() RecordType { return RecordTypeAccountStates }
+
 func (*AnchorSearchQuery) QueryType() QueryType { return QueryTypeAnchorSearch }
 
 func (*BlockEvent) EventType() EventType { return EventTypeBlock }
@@ -750,6 +822,8 @@ func (*ChainEntryRecord[T]) RecordType() RecordType { return RecordTypeChainEntr
 func (*ChainQuery) QueryType() QueryType { return QueryTypeChain }
 
 func (*ChainRecord) RecordType() RecordType { return RecordTypeChain }
+
+func (*ChangedAccountStatesQuery) QueryType() QueryType { return QueryTypeChangedAccountStates }
 
 func (*DataQuery) QueryType() QueryType { return QueryTypeData }
 
@@ -881,6 +955,110 @@ func (v *AccountRecord) Copy() *AccountRecord {
 }
 
 func (v *AccountRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AccountState) Copy() *AccountState {
+	u := new(AccountState)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	if v.Main != nil {
+		u.Main = protocol.CopyAccount(v.Main)
+	}
+	u.Directory = make([]*url.URL, len(v.Directory))
+	for i, v := range v.Directory {
+		v := v
+		if v != nil {
+			u.Directory[i] = v
+		}
+	}
+	if v.Leaf != nil {
+		u.Leaf = (v.Leaf).Copy()
+	}
+	u.OpenEntries = make([]*ChainOpenEntries, len(v.OpenEntries))
+	for i, v := range v.OpenEntries {
+		v := v
+		if v != nil {
+			u.OpenEntries[i] = (v).Copy()
+		}
+	}
+	u.LeafHash = v.LeafHash
+	u.NoLeaf = v.NoLeaf
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AccountState) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AccountStatePart) Copy() *AccountStatePart {
+	u := new(AccountStatePart)
+
+	if v.Url != nil {
+		u.Url = v.Url
+	}
+	u.Offset = v.Offset
+	u.Total = v.Total
+	u.Data = encoding.BytesCopy(v.Data)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AccountStatePart) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AccountStatesQuery) Copy() *AccountStatesQuery {
+	u := new(AccountStatesQuery)
+
+	u.Accounts = make([]*url.URL, len(v.Accounts))
+	for i, v := range v.Accounts {
+		v := v
+		if v != nil {
+			u.Accounts[i] = v
+		}
+	}
+	u.Cursor = encoding.BytesCopy(v.Cursor)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AccountStatesQuery) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *AccountStatesRecord) Copy() *AccountStatesRecord {
+	u := new(AccountStatesRecord)
+
+	u.States = make([]*AccountState, len(v.States))
+	for i, v := range v.States {
+		v := v
+		if v != nil {
+			u.States[i] = (v).Copy()
+		}
+	}
+	if v.Part != nil {
+		u.Part = (v.Part).Copy()
+	}
+	u.Through = v.Through
+	u.Block = v.Block
+	u.Cursor = encoding.BytesCopy(v.Cursor)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *AccountStatesRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *AnchorReceiptOptions) Copy() *AnchorReceiptOptions {
 	u := new(AnchorReceiptOptions)
@@ -1133,6 +1311,7 @@ func (v *BptPageRecord) Copy() *BptPageRecord {
 	u.NextStart = v.NextStart
 	u.BptRoot = v.BptRoot
 	u.Done = v.Done
+	u.Block = v.Block
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1201,6 +1380,25 @@ func ChainEntryRecordAs[T2 Record, T1 Record](v *ChainEntryRecord[T1]) (*ChainEn
 	return u, nil
 }
 
+func (v *ChainOpenEntries) Copy() *ChainOpenEntries {
+	u := new(ChainOpenEntries)
+
+	u.Name = v.Name
+	u.Entries = make([][]byte, len(v.Entries))
+	for i, v := range v.Entries {
+		v := v
+		u.Entries[i] = encoding.BytesCopy(v)
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ChainOpenEntries) CopyAsInterface() interface{} { return v.Copy() }
+
 func (v *ChainQuery) Copy() *ChainQuery {
 	u := new(ChainQuery)
 
@@ -1253,6 +1451,21 @@ func (v *ChainRecord) Copy() *ChainRecord {
 }
 
 func (v *ChainRecord) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ChangedAccountStatesQuery) Copy() *ChangedAccountStatesQuery {
+	u := new(ChangedAccountStatesQuery)
+
+	u.After = v.After
+	u.Cursor = encoding.BytesCopy(v.Cursor)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ChangedAccountStatesQuery) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ConsensusPeerInfo) Copy() *ConsensusPeerInfo {
 	u := new(ConsensusPeerInfo)
@@ -2532,6 +2745,120 @@ func (v *AccountRecord) Equal(u *AccountRecord) bool {
 	return true
 }
 
+func (v *AccountState) Equal(u *AccountState) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(protocol.EqualAccount(v.Main, u.Main)) {
+		return false
+	}
+	if len(v.Directory) != len(u.Directory) {
+		return false
+	}
+	for i := range v.Directory {
+		if !((v.Directory[i]).Equal(u.Directory[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.Leaf == u.Leaf:
+		// equal
+	case v.Leaf == nil || u.Leaf == nil:
+		return false
+	case !((v.Leaf).Equal(u.Leaf)):
+		return false
+	}
+	if len(v.OpenEntries) != len(u.OpenEntries) {
+		return false
+	}
+	for i := range v.OpenEntries {
+		if !((v.OpenEntries[i]).Equal(u.OpenEntries[i])) {
+			return false
+		}
+	}
+	if !(v.LeafHash == u.LeafHash) {
+		return false
+	}
+	if !(v.NoLeaf == u.NoLeaf) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AccountStatePart) Equal(u *AccountStatePart) bool {
+	switch {
+	case v.Url == u.Url:
+		// equal
+	case v.Url == nil || u.Url == nil:
+		return false
+	case !((v.Url).Equal(u.Url)):
+		return false
+	}
+	if !(v.Offset == u.Offset) {
+		return false
+	}
+	if !(v.Total == u.Total) {
+		return false
+	}
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AccountStatesQuery) Equal(u *AccountStatesQuery) bool {
+	if len(v.Accounts) != len(u.Accounts) {
+		return false
+	}
+	for i := range v.Accounts {
+		if !((v.Accounts[i]).Equal(u.Accounts[i])) {
+			return false
+		}
+	}
+	if !(bytes.Equal(v.Cursor, u.Cursor)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AccountStatesRecord) Equal(u *AccountStatesRecord) bool {
+	if len(v.States) != len(u.States) {
+		return false
+	}
+	for i := range v.States {
+		if !((v.States[i]).Equal(u.States[i])) {
+			return false
+		}
+	}
+	switch {
+	case v.Part == u.Part:
+		// equal
+	case v.Part == nil || u.Part == nil:
+		return false
+	case !((v.Part).Equal(u.Part)):
+		return false
+	}
+	if !(v.Through == u.Through) {
+		return false
+	}
+	if !(v.Block == u.Block) {
+		return false
+	}
+	if !(bytes.Equal(v.Cursor, u.Cursor)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *AnchorReceiptOptions) Equal(u *AnchorReceiptOptions) bool {
 	if !(v.Partition == u.Partition) {
 		return false
@@ -2790,6 +3117,9 @@ func (v *BptPageRecord) Equal(u *BptPageRecord) bool {
 	if !(v.Done == u.Done) {
 		return false
 	}
+	if !(v.Block == u.Block) {
+		return false
+	}
 
 	return true
 }
@@ -2841,6 +3171,22 @@ func (v *ChainEntryRecord[T]) Equal(u *ChainEntryRecord[T]) bool {
 		return false
 	case !((*v.LastBlockTime).Equal(*u.LastBlockTime)):
 		return false
+	}
+
+	return true
+}
+
+func (v *ChainOpenEntries) Equal(u *ChainOpenEntries) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !(bytes.Equal(v.Entries[i], u.Entries[i])) {
+			return false
+		}
 	}
 
 	return true
@@ -2913,6 +3259,17 @@ func (v *ChainRecord) Equal(u *ChainRecord) bool {
 	case v.IndexOf == nil || u.IndexOf == nil:
 		return false
 	case !((v.IndexOf).Equal(u.IndexOf)):
+		return false
+	}
+
+	return true
+}
+
+func (v *ChangedAccountStatesQuery) Equal(u *ChangedAccountStatesQuery) bool {
+	if !(v.After == u.After) {
+		return false
+	}
+	if !(bytes.Equal(v.Cursor, u.Cursor)) {
 		return false
 	}
 
@@ -4330,6 +4687,329 @@ func (v *AccountRecord) IsValid() error {
 	}
 }
 
+var fieldNames_AccountState = []string{
+	1: "Url",
+	2: "Main",
+	3: "Directory",
+	4: "Leaf",
+	5: "OpenEntries",
+	6: "LeafHash",
+	7: "NoLeaf",
+}
+
+func (v *AccountState) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	if !(protocol.EqualAccount(v.Main, nil)) {
+		writer.WriteValue(2, v.Main.MarshalBinary)
+	}
+	if !(len(v.Directory) == 0) {
+		for _, v := range v.Directory {
+			writer.WriteUrl(3, v)
+		}
+	}
+	if !(v.Leaf == nil) {
+		writer.WriteValue(4, v.Leaf.MarshalBinary)
+	}
+	if !(len(v.OpenEntries) == 0) {
+		for _, v := range v.OpenEntries {
+			writer.WriteValue(5, v.MarshalBinary)
+		}
+	}
+	if !(v.LeafHash == ([32]byte{})) {
+		writer.WriteHash(6, &v.LeafHash)
+	}
+	if !(!v.NoLeaf) {
+		writer.WriteBool(7, v.NoLeaf)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AccountState)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AccountState) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Main is missing")
+	} else if protocol.EqualAccount(v.Main, nil) {
+		errs = append(errs, "field Main is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Directory is missing")
+	} else if len(v.Directory) == 0 {
+		errs = append(errs, "field Directory is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Leaf is missing")
+	} else if v.Leaf == nil {
+		errs = append(errs, "field Leaf is not set")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field OpenEntries is missing")
+	} else if len(v.OpenEntries) == 0 {
+		errs = append(errs, "field OpenEntries is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field LeafHash is missing")
+	} else if v.LeafHash == ([32]byte{}) {
+		errs = append(errs, "field LeafHash is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field NoLeaf is missing")
+	} else if !v.NoLeaf {
+		errs = append(errs, "field NoLeaf is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AccountStatePart = []string{
+	1: "Url",
+	2: "Offset",
+	3: "Total",
+	4: "Data",
+}
+
+func (v *AccountStatePart) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Url == nil) {
+		writer.WriteUrl(1, v.Url)
+	}
+	writer.WriteUint(2, v.Offset)
+	if !(v.Total == 0) {
+		writer.WriteUint(3, v.Total)
+	}
+	if !(len(v.Data) == 0) {
+		writer.WriteBytes(4, v.Data)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AccountStatePart)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AccountStatePart) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Url is missing")
+	} else if v.Url == nil {
+		errs = append(errs, "field Url is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Offset is missing")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Total is missing")
+	} else if v.Total == 0 {
+		errs = append(errs, "field Total is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Data is missing")
+	} else if len(v.Data) == 0 {
+		errs = append(errs, "field Data is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AccountStatesQuery = []string{
+	1: "QueryType",
+	2: "Accounts",
+	3: "Cursor",
+}
+
+func (v *AccountStatesQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.QueryType())
+	if !(len(v.Accounts) == 0) {
+		for _, v := range v.Accounts {
+			writer.WriteUrl(2, v)
+		}
+	}
+	if !(len(v.Cursor) == 0) {
+		writer.WriteBytes(3, v.Cursor)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AccountStatesQuery)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AccountStatesQuery) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field QueryType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Accounts is missing")
+	} else if len(v.Accounts) == 0 {
+		errs = append(errs, "field Accounts is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_AccountStatesRecord = []string{
+	1: "RecordType",
+	2: "States",
+	3: "Part",
+	4: "Through",
+	5: "Block",
+	6: "Cursor",
+}
+
+func (v *AccountStatesRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.RecordType())
+	if !(len(v.States) == 0) {
+		for _, v := range v.States {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+	if !(v.Part == nil) {
+		writer.WriteValue(3, v.Part.MarshalBinary)
+	}
+	writer.WriteUint(4, v.Through)
+	writer.WriteUint(5, v.Block)
+	if !(len(v.Cursor) == 0) {
+		writer.WriteBytes(6, v.Cursor)
+	}
+
+	_, _, err := writer.Reset(fieldNames_AccountStatesRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *AccountStatesRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field RecordType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field States is missing")
+	} else if len(v.States) == 0 {
+		errs = append(errs, "field States is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Part is missing")
+	} else if v.Part == nil {
+		errs = append(errs, "field Part is not set")
+	}
+	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
+		errs = append(errs, "field Through is missing")
+	}
+	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
+		errs = append(errs, "field Block is missing")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Cursor is missing")
+	} else if len(v.Cursor) == 0 {
+		errs = append(errs, "field Cursor is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
 var fieldNames_AnchorReceiptOptions = []string{
 	1: "Partition",
 	2: "BptRoot",
@@ -5139,6 +5819,7 @@ var fieldNames_BptPageRecord = []string{
 	3: "NextStart",
 	4: "BptRoot",
 	5: "Done",
+	6: "Block",
 }
 
 func (v *BptPageRecord) MarshalBinary() ([]byte, error) {
@@ -5166,6 +5847,7 @@ func (v *BptPageRecord) MarshalBinary() ([]byte, error) {
 	if !(!v.Done) {
 		writer.WriteBool(5, v.Done)
 	}
+	writer.WriteUint(6, v.Block)
 
 	_, _, err := writer.Reset(fieldNames_BptPageRecord)
 	if err != nil {
@@ -5204,6 +5886,9 @@ func (v *BptPageRecord) IsValid() error {
 		errs = append(errs, "field Done is missing")
 	} else if !v.Done {
 		errs = append(errs, "field Done is not set")
+	}
+	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Block is missing")
 	}
 
 	switch len(errs) {
@@ -5328,6 +6013,66 @@ func (v *ChainEntryRecord[T]) IsValid() error {
 		errs = append(errs, "field LastBlockTime is missing")
 	} else if v.LastBlockTime == nil {
 		errs = append(errs, "field LastBlockTime is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ChainOpenEntries = []string{
+	1: "Name",
+	2: "Entries",
+}
+
+func (v *ChainOpenEntries) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.Name) == 0) {
+		writer.WriteString(1, v.Name)
+	}
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteBytes(2, v)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_ChainOpenEntries)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *ChainOpenEntries) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Name is missing")
+	} else if len(v.Name) == 0 {
+		errs = append(errs, "field Name is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
 	}
 
 	switch len(errs) {
@@ -5494,6 +6239,60 @@ func (v *ChainRecord) IsValid() error {
 		errs = append(errs, "field IndexOf is missing")
 	} else if v.IndexOf == nil {
 		errs = append(errs, "field IndexOf is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ChangedAccountStatesQuery = []string{
+	1: "QueryType",
+	2: "After",
+	3: "Cursor",
+}
+
+func (v *ChangedAccountStatesQuery) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.QueryType())
+	writer.WriteUint(2, v.After)
+	if !(len(v.Cursor) == 0) {
+		writer.WriteBytes(3, v.Cursor)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ChangedAccountStatesQuery)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *ChangedAccountStatesQuery) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field QueryType is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field After is missing")
 	}
 
 	switch len(errs) {
@@ -9236,6 +10035,184 @@ func (v *AccountRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *AccountState) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AccountState) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	reader.ReadValue(2, func(r io.Reader) error {
+		x, err := protocol.UnmarshalAccountFrom(r)
+		if err == nil {
+			v.Main = x
+		}
+		return err
+	})
+	for {
+		if x, ok := reader.ReadUrl(3); ok {
+			v.Directory = append(v.Directory, x)
+		} else {
+			break
+		}
+	}
+	if x := new(AccountLeaf); reader.ReadValue(4, x.UnmarshalBinaryFrom) {
+		v.Leaf = x
+	}
+	for {
+		if x := new(ChainOpenEntries); reader.ReadValue(5, x.UnmarshalBinaryFrom) {
+			v.OpenEntries = append(v.OpenEntries, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadHash(6); ok {
+		v.LeafHash = *x
+	}
+	if x, ok := reader.ReadBool(7); ok {
+		v.NoLeaf = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AccountState)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AccountStatePart) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AccountStatePart) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUrl(1); ok {
+		v.Url = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Offset = x
+	}
+	if x, ok := reader.ReadUint(3); ok {
+		v.Total = x
+	}
+	if x, ok := reader.ReadBytes(4); ok {
+		v.Data = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AccountStatePart)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AccountStatesQuery) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AccountStatesQuery) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vQueryType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vQueryType = *x
+	}
+	if !(v.QueryType() == vQueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), vQueryType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AccountStatesQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x, ok := reader.ReadUrl(2); ok {
+			v.Accounts = append(v.Accounts, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Cursor = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AccountStatesQuery)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *AccountStatesRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *AccountStatesRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vRecordType RecordType
+	if x := new(RecordType); reader.ReadEnum(1, x) {
+		vRecordType = *x
+	}
+	if !(v.RecordType() == vRecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), vRecordType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *AccountStatesRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	for {
+		if x := new(AccountState); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.States = append(v.States, x)
+		} else {
+			break
+		}
+	}
+	if x := new(AccountStatePart); reader.ReadValue(3, x.UnmarshalBinaryFrom) {
+		v.Part = x
+	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.Through = x
+	}
+	if x, ok := reader.ReadUint(5); ok {
+		v.Block = x
+	}
+	if x, ok := reader.ReadBytes(6); ok {
+		v.Cursor = x
+	}
+
+	seen, err := reader.Reset(fieldNames_AccountStatesRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *AnchorReceiptOptions) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -9719,6 +10696,9 @@ func (v *BptPageRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadBool(5); ok {
 		v.Done = x
 	}
+	if x, ok := reader.ReadUint(6); ok {
+		v.Block = x
+	}
 
 	seen, err := reader.Reset(fieldNames_BptPageRecord)
 	if err != nil {
@@ -9788,6 +10768,36 @@ func (v *ChainEntryRecord[T]) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainEntryRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ChainOpenEntries) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ChainOpenEntries) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.Name = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(2); ok {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_ChainOpenEntries)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -9889,6 +10899,44 @@ func (v *ChainRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_ChainRecord)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *ChangedAccountStatesQuery) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ChangedAccountStatesQuery) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vQueryType QueryType
+	if x := new(QueryType); reader.ReadEnum(1, x) {
+		vQueryType = *x
+	}
+	if !(v.QueryType() == vQueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), vQueryType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ChangedAccountStatesQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadUint(2); ok {
+		v.After = x
+	}
+	if x, ok := reader.ReadBytes(3); ok {
+		v.Cursor = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ChangedAccountStatesQuery)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -11874,6 +12922,38 @@ func init() {
 	}, "AccountRecord", "accountRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("main", "protocol.Account"),
+		encoding.NewTypeField("directory", "string[]"),
+		encoding.NewTypeField("leaf", "AccountLeaf"),
+		encoding.NewTypeField("openEntries", "ChainOpenEntries[]"),
+		encoding.NewTypeField("leafHash", "bytes32"),
+		encoding.NewTypeField("noLeaf", "bool"),
+	}, "AccountState", "accountState")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("url", "string"),
+		encoding.NewTypeField("offset", "uint64"),
+		encoding.NewTypeField("total", "uint64"),
+		encoding.NewTypeField("data", "bytes"),
+	}, "AccountStatePart", "accountStatePart")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("accounts", "string[]"),
+		encoding.NewTypeField("cursor", "bytes"),
+	}, "AccountStatesQuery", "accountStatesQuery")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("recordType", "string"),
+		encoding.NewTypeField("states", "AccountState[]"),
+		encoding.NewTypeField("part", "AccountStatePart"),
+		encoding.NewTypeField("through", "uint64"),
+		encoding.NewTypeField("block", "uint64"),
+		encoding.NewTypeField("cursor", "bytes"),
+	}, "AccountStatesRecord", "accountStatesRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("bptRoot", "bytes32"),
 		encoding.NewTypeField("atOrAfter", "uint64"),
@@ -11961,6 +13041,7 @@ func init() {
 		encoding.NewTypeField("nextStart", "bytes32"),
 		encoding.NewTypeField("bptRoot", "bytes32"),
 		encoding.NewTypeField("done", "bool"),
+		encoding.NewTypeField("block", "uint64"),
 	}, "BptPageRecord", "bptPageRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -11975,6 +13056,11 @@ func init() {
 		encoding.NewTypeField("state", "bytes[]"),
 		encoding.NewTypeField("lastBlockTime", "string"),
 	}, "ChainEntryRecord", "chainEntryRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("name", "string"),
+		encoding.NewTypeField("entries", "bytes[]"),
+	}, "ChainOpenEntries", "chainOpenEntries")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
@@ -11994,6 +13080,12 @@ func init() {
 		encoding.NewTypeField("lastBlockTime", "string"),
 		encoding.NewTypeField("indexOf", "ChainRecord"),
 	}, "ChainRecord", "chainRecord")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("queryType", "string"),
+		encoding.NewTypeField("after", "uint64"),
+		encoding.NewTypeField("cursor", "bytes"),
+	}, "ChangedAccountStatesQuery", "changedAccountStatesQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("nodeID", "string"),
@@ -12429,6 +13521,108 @@ func (v *AccountRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *AccountState) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url         *url.URL                                      `json:"url,omitempty"`
+		Main        *encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		Directory   encoding.JsonList[*url.URL]                   `json:"directory,omitempty"`
+		Leaf        *AccountLeaf                                  `json:"leaf,omitempty"`
+		OpenEntries encoding.JsonList[*ChainOpenEntries]          `json:"openEntries,omitempty"`
+		LeafHash    *string                                       `json:"leafHash,omitempty"`
+		NoLeaf      bool                                          `json:"noLeaf,omitempty"`
+		ExtraData   *string                                       `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Url == nil) {
+		u.Url = v.Url
+	}
+	if !(protocol.EqualAccount(v.Main, nil)) {
+		u.Main = &encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
+	}
+	if !(len(v.Directory) == 0) {
+		u.Directory = v.Directory
+	}
+	if !(v.Leaf == nil) {
+		u.Leaf = v.Leaf
+	}
+	if !(len(v.OpenEntries) == 0) {
+		u.OpenEntries = v.OpenEntries
+	}
+	if !(v.LeafHash == ([32]byte{})) {
+		u.LeafHash = encoding.ChainToJSON(&v.LeafHash)
+	}
+	if !(!v.NoLeaf) {
+		u.NoLeaf = v.NoLeaf
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AccountStatePart) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url       *url.URL `json:"url,omitempty"`
+		Offset    uint64   `json:"offset"`
+		Total     uint64   `json:"total,omitempty"`
+		Data      *string  `json:"data,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Url == nil) {
+		u.Url = v.Url
+	}
+	u.Offset = v.Offset
+	if !(v.Total == 0) {
+		u.Total = v.Total
+	}
+	if !(len(v.Data) == 0) {
+		u.Data = encoding.BytesToJSON(v.Data)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AccountStatesQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		QueryType QueryType                   `json:"queryType"`
+		Accounts  encoding.JsonList[*url.URL] `json:"accounts,omitempty"`
+		Cursor    *string                     `json:"cursor,omitempty"`
+		ExtraData *string                     `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	if !(len(v.Accounts) == 0) {
+		u.Accounts = v.Accounts
+	}
+	if !(len(v.Cursor) == 0) {
+		u.Cursor = encoding.BytesToJSON(v.Cursor)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *AccountStatesRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		RecordType RecordType                       `json:"recordType"`
+		States     encoding.JsonList[*AccountState] `json:"states,omitempty"`
+		Part       *AccountStatePart                `json:"part,omitempty"`
+		Through    uint64                           `json:"through"`
+		Block      uint64                           `json:"block"`
+		Cursor     *string                          `json:"cursor,omitempty"`
+		ExtraData  *string                          `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	if !(len(v.States) == 0) {
+		u.States = v.States
+	}
+	if !(v.Part == nil) {
+		u.Part = v.Part
+	}
+	u.Through = v.Through
+	u.Block = v.Block
+	if !(len(v.Cursor) == 0) {
+		u.Cursor = encoding.BytesToJSON(v.Cursor)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
 func (v *AnchorReceiptOptions) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Partition string  `json:"partition,omitempty"`
@@ -12684,6 +13878,7 @@ func (v *BptPageRecord) MarshalJSON() ([]byte, error) {
 		NextStart  *string                            `json:"nextStart,omitempty"`
 		BptRoot    *string                            `json:"bptRoot,omitempty"`
 		Done       bool                               `json:"done,omitempty"`
+		Block      uint64                             `json:"block"`
 		ExtraData  *string                            `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -12699,6 +13894,7 @@ func (v *BptPageRecord) MarshalJSON() ([]byte, error) {
 	if !(!v.Done) {
 		u.Done = v.Done
 	}
+	u.Block = v.Block
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
@@ -12745,6 +13941,25 @@ func (v *ChainEntryRecord[T]) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LastBlockTime == nil) {
 		u.LastBlockTime = v.LastBlockTime
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ChainOpenEntries) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Name      string                     `json:"name,omitempty"`
+		Entries   encoding.JsonList[*string] `json:"entries,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
+	}{}
+	if !(len(v.Name) == 0) {
+		u.Name = v.Name
+	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = make(encoding.JsonList[*string], len(v.Entries))
+		for i, x := range v.Entries {
+			u.Entries[i] = encoding.BytesToJSON(x)
+		}
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -12812,6 +14027,22 @@ func (v *ChainRecord) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.IndexOf == nil) {
 		u.IndexOf = v.IndexOf
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ChangedAccountStatesQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		After     uint64    `json:"after"`
+		Cursor    *string   `json:"cursor,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.After = v.After
+	if !(len(v.Cursor) == 0) {
+		u.Cursor = encoding.BytesToJSON(v.Cursor)
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -13785,6 +15016,149 @@ func (v *AccountRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *AccountState) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url         *url.URL                                      `json:"url,omitempty"`
+		Main        *encoding.JsonUnmarshalWith[protocol.Account] `json:"main,omitempty"`
+		Directory   encoding.JsonList[*url.URL]                   `json:"directory,omitempty"`
+		Leaf        *AccountLeaf                                  `json:"leaf,omitempty"`
+		OpenEntries encoding.JsonList[*ChainOpenEntries]          `json:"openEntries,omitempty"`
+		LeafHash    *string                                       `json:"leafHash,omitempty"`
+		NoLeaf      bool                                          `json:"noLeaf,omitempty"`
+		ExtraData   *string                                       `json:"$epilogue,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Main = &encoding.JsonUnmarshalWith[protocol.Account]{Value: v.Main, Func: protocol.UnmarshalAccountJSON}
+	u.Directory = v.Directory
+	u.Leaf = v.Leaf
+	u.OpenEntries = v.OpenEntries
+	u.LeafHash = encoding.ChainToJSON(&v.LeafHash)
+	u.NoLeaf = v.NoLeaf
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Url = u.Url
+	if u.Main != nil {
+		v.Main = u.Main.Value
+	}
+
+	v.Directory = u.Directory
+	v.Leaf = u.Leaf
+	v.OpenEntries = u.OpenEntries
+	if x, err := encoding.ChainFromJSON(u.LeafHash); err != nil {
+		return fmt.Errorf("error decoding LeafHash: %w", err)
+	} else {
+		v.LeafHash = *x
+	}
+	v.NoLeaf = u.NoLeaf
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AccountStatePart) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url       *url.URL `json:"url,omitempty"`
+		Offset    uint64   `json:"offset"`
+		Total     uint64   `json:"total,omitempty"`
+		Data      *string  `json:"data,omitempty"`
+		ExtraData *string  `json:"$epilogue,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Offset = v.Offset
+	u.Total = v.Total
+	u.Data = encoding.BytesToJSON(v.Data)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Url = u.Url
+	v.Offset = u.Offset
+	v.Total = u.Total
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AccountStatesQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		QueryType QueryType                   `json:"queryType"`
+		Accounts  encoding.JsonList[*url.URL] `json:"accounts,omitempty"`
+		Cursor    *string                     `json:"cursor,omitempty"`
+		ExtraData *string                     `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.Accounts = v.Accounts
+	u.Cursor = encoding.BytesToJSON(v.Cursor)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.QueryType() == u.QueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
+	}
+	v.Accounts = u.Accounts
+	if x, err := encoding.BytesFromJSON(u.Cursor); err != nil {
+		return fmt.Errorf("error decoding Cursor: %w", err)
+	} else {
+		v.Cursor = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *AccountStatesRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		RecordType RecordType                       `json:"recordType"`
+		States     encoding.JsonList[*AccountState] `json:"states,omitempty"`
+		Part       *AccountStatePart                `json:"part,omitempty"`
+		Through    uint64                           `json:"through"`
+		Block      uint64                           `json:"block"`
+		Cursor     *string                          `json:"cursor,omitempty"`
+		ExtraData  *string                          `json:"$epilogue,omitempty"`
+	}{}
+	u.RecordType = v.RecordType()
+	u.States = v.States
+	u.Part = v.Part
+	u.Through = v.Through
+	u.Block = v.Block
+	u.Cursor = encoding.BytesToJSON(v.Cursor)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.RecordType() == u.RecordType) {
+		return fmt.Errorf("field RecordType: not equal: want %v, got %v", v.RecordType(), u.RecordType)
+	}
+	v.States = u.States
+	v.Part = u.Part
+	v.Through = u.Through
+	v.Block = u.Block
+	if x, err := encoding.BytesFromJSON(u.Cursor); err != nil {
+		return fmt.Errorf("error decoding Cursor: %w", err)
+	} else {
+		v.Cursor = x
+	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (v *AnchorReceiptOptions) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Partition string  `json:"partition,omitempty"`
@@ -14142,6 +15516,7 @@ func (v *BptPageRecord) UnmarshalJSON(data []byte) error {
 		NextStart  *string                            `json:"nextStart,omitempty"`
 		BptRoot    *string                            `json:"bptRoot,omitempty"`
 		Done       bool                               `json:"done,omitempty"`
+		Block      uint64                             `json:"block"`
 		ExtraData  *string                            `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
@@ -14149,6 +15524,7 @@ func (v *BptPageRecord) UnmarshalJSON(data []byte) error {
 	u.NextStart = encoding.ChainToJSON(&v.NextStart)
 	u.BptRoot = encoding.ChainToJSON(&v.BptRoot)
 	u.Done = v.Done
+	u.Block = v.Block
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -14168,6 +15544,7 @@ func (v *BptPageRecord) UnmarshalJSON(data []byte) error {
 		v.BptRoot = *x
 	}
 	v.Done = u.Done
+	v.Block = u.Block
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -14232,6 +15609,37 @@ func (v *ChainEntryRecord[T]) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.LastBlockTime = u.LastBlockTime
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ChainOpenEntries) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Name      string                     `json:"name,omitempty"`
+		Entries   encoding.JsonList[*string] `json:"entries,omitempty"`
+		ExtraData *string                    `json:"$epilogue,omitempty"`
+	}{}
+	u.Name = v.Name
+	u.Entries = make(encoding.JsonList[*string], len(v.Entries))
+	for i, x := range v.Entries {
+		u.Entries[i] = encoding.BytesToJSON(x)
+	}
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Name = u.Name
+	v.Entries = make([][]byte, len(u.Entries))
+	for i, x := range u.Entries {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Entries: %w", err)
+		} else {
+			v.Entries[i] = x
+		}
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -14319,6 +15727,36 @@ func (v *ChainRecord) UnmarshalJSON(data []byte) error {
 	}
 	v.LastBlockTime = u.LastBlockTime
 	v.IndexOf = u.IndexOf
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ChangedAccountStatesQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		QueryType QueryType `json:"queryType"`
+		After     uint64    `json:"after"`
+		Cursor    *string   `json:"cursor,omitempty"`
+		ExtraData *string   `json:"$epilogue,omitempty"`
+	}{}
+	u.QueryType = v.QueryType()
+	u.After = v.After
+	u.Cursor = encoding.BytesToJSON(v.Cursor)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.QueryType() == u.QueryType) {
+		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
+	}
+	v.After = u.After
+	if x, err := encoding.BytesFromJSON(u.Cursor); err != nil {
+		return fmt.Errorf("error decoding Cursor: %w", err)
+	} else {
+		v.Cursor = x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

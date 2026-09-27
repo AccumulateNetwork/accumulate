@@ -127,6 +127,32 @@ BptBlockQuery:
       type: uint
       optional: true
 
+ChangedAccountStatesQuery:
+  union: { type: query }
+  description: asks the addressed partition for the sync state of every account its block-ledger records after a block name, for a node pulling the state (executor.md, "Sync", §3; #4453). Each page of the answer is read from one view of the peer's store
+  fields:
+    - name: After
+      description: is L, the last block whose records the asking node has processed; the answer covers the records of the blocks after it
+      type: uint
+      keep-empty: true
+    - name: Cursor
+      description: continues the answer where the previous page stopped; omitted starts it
+      type: bytes
+      optional: true
+
+AccountStatesQuery:
+  union: { type: query }
+  description: asks the addressed partition for the sync state of the named accounts, from one view of its store, for a node pulling the state (executor.md, "Sync", §3; #4453)
+  fields:
+    - name: Accounts
+      type: url
+      pointer: true
+      repeatable: true
+    - name: Cursor
+      description: continues the answer where the previous page stopped; omitted starts it
+      type: bytes
+      optional: true
+
 AnchorSearchQuery:
   union: { type: query }
   description: queries {account}#anchor/{hash}

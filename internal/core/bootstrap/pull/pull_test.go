@@ -624,3 +624,18 @@ func TestDnSpineAccounts(t *testing.T) {
 		}
 	}
 }
+
+// The batch reads of the state pull are not what these tests drive: the join
+// asks them (internal/node/join), and the querier answers them
+// (internal/api/v3). dbSource does not serve them.
+func (s *dbSource) QueryBptPage(context.Context, *url.URL, *api.BptPageQuery) (*api.BptPageRecord, error) {
+	return nil, apierrors.NotAllowed.With("dbSource does not page the BPT")
+}
+
+func (s *dbSource) QueryChangedAccountStates(context.Context, *url.URL, *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
+	return nil, apierrors.NotAllowed.With("dbSource does not serve account states")
+}
+
+func (s *dbSource) QueryAccountStates(context.Context, *url.URL, *api.AccountStatesQuery) (*api.AccountStatesRecord, error) {
+	return nil, apierrors.NotAllowed.With("dbSource does not serve account states")
+}

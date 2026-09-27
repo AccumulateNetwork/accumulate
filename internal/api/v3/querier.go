@@ -379,6 +379,12 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 	case *api.BptBlockQuery:
 		return s.queryBptBlock(batch, scope, query)
 
+	case *api.ChangedAccountStatesQuery:
+		return s.queryChangedAccountStates(batch, scope, query)
+
+	case *api.AccountStatesQuery:
+		return s.queryAccountStates(batch, scope, query)
+
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
 	}
@@ -427,7 +433,18 @@ func (s *Querier) queryBptPage(batch *database.Batch, scope *url.URL, query *api
 		return s.queryBptPageAt(batch, startKey, count, query.ForHeight)
 	}
 
-	return bptPageRecord(bptproof.GetPage(bptproof.Current(batch), startKey, count))
+	// The page carries the block of the view it was read from, so a node
+	// walking the tree knows what the page is of without asking the ledger
+	// separately (executor.md, "Sync", §3; #4453).
+	block, err := s.viewBlock(batch)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	r, err := bptPageRecord(bptproof.GetPage(bptproof.Current(batch), startKey, count))
+	if r != nil {
+		r.Block = block
+	}
+	return r, err
 }
 
 // bptPageRecord is the one place a bptproof page becomes an API record. Both
@@ -488,7 +505,11 @@ func (s *Querier) queryBptPageAt(batch *database.Batch, startKey [32]byte, count
 			"resolution and root lookup disagree: block %d against %d", entry.BlockIndex, block)
 	}
 
-	return bptPageRecord(bptproof.GetPage(bptproof.AsOf(batch, block, root), startKey, count))
+	r, err := bptPageRecord(bptproof.GetPage(bptproof.AsOf(batch, block, root), startKey, count))
+	if r != nil {
+		r.Block = block
+	}
+	return r, err
 }
 
 // queryBptBlock serves one stored block of this partition's BPT -- the

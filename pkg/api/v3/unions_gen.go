@@ -23,6 +23,8 @@ func NewRecord(typ RecordType) (Record, error) {
 	switch typ {
 	case RecordTypeAccount:
 		return new(AccountRecord), nil
+	case RecordTypeAccountStates:
+		return new(AccountStatesRecord), nil
 	case RecordTypeBptBlock:
 		return new(BptBlockRecord), nil
 	case RecordTypeBptPage:
@@ -66,6 +68,12 @@ func EqualRecord(a, b Record) bool {
 			return b == nil
 		}
 		b, ok := b.(*AccountRecord)
+		return ok && a.Equal(b)
+	case *AccountStatesRecord:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AccountStatesRecord)
 		return ok && a.Equal(b)
 	case *BptBlockRecord:
 		if a == nil {
@@ -160,6 +168,8 @@ func CopyRecord(v Record) Record {
 	switch v := v.(type) {
 	case *AccountRecord:
 		return v.Copy()
+	case *AccountStatesRecord:
+		return v.Copy()
 	case *BptBlockRecord:
 		return v.Copy()
 	case *BptPageRecord:
@@ -248,6 +258,8 @@ func UnmarshalRecordJSON(data []byte) (Record, error) {
 // NewQuery creates a new Query for the specified QueryType.
 func NewQuery(typ QueryType) (Query, error) {
 	switch typ {
+	case QueryTypeAccountStates:
+		return new(AccountStatesQuery), nil
 	case QueryTypeAnchorSearch:
 		return new(AnchorSearchQuery), nil
 	case QueryTypeBlock:
@@ -258,6 +270,8 @@ func NewQuery(typ QueryType) (Query, error) {
 		return new(BptPageQuery), nil
 	case QueryTypeChain:
 		return new(ChainQuery), nil
+	case QueryTypeChangedAccountStates:
+		return new(ChangedAccountStatesQuery), nil
 	case QueryTypeData:
 		return new(DataQuery), nil
 	case QueryTypeDefault:
@@ -284,6 +298,12 @@ func EqualQuery(a, b Query) bool {
 		return true
 	}
 	switch a := a.(type) {
+	case *AccountStatesQuery:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*AccountStatesQuery)
+		return ok && a.Equal(b)
 	case *AnchorSearchQuery:
 		if a == nil {
 			return b == nil
@@ -313,6 +333,12 @@ func EqualQuery(a, b Query) bool {
 			return b == nil
 		}
 		b, ok := b.(*ChainQuery)
+		return ok && a.Equal(b)
+	case *ChangedAccountStatesQuery:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ChangedAccountStatesQuery)
 		return ok && a.Equal(b)
 	case *DataQuery:
 		if a == nil {
@@ -369,6 +395,8 @@ func EqualQuery(a, b Query) bool {
 // CopyQuery copies a Query.
 func CopyQuery(v Query) Query {
 	switch v := v.(type) {
+	case *AccountStatesQuery:
+		return v.Copy()
 	case *AnchorSearchQuery:
 		return v.Copy()
 	case *BlockQuery:
@@ -378,6 +406,8 @@ func CopyQuery(v Query) Query {
 	case *BptPageQuery:
 		return v.Copy()
 	case *ChainQuery:
+		return v.Copy()
+	case *ChangedAccountStatesQuery:
 		return v.Copy()
 	case *DataQuery:
 		return v.Copy()
