@@ -93,6 +93,7 @@ var flagFill = flag.String("fill-sets", "", "mark sets to rebuild from the block
 var flagDebug = flag.Bool("debug", false, "print investigation output")
 var flagRootFrom = flag.Uint64("root-from", 0, "first root chain index to load (for -fill-sets of the ledger's bpt)")
 var flagRootTo = flag.Uint64("root-to", 0, "last root chain index to load (for -fill-sets of the ledger's bpt)")
+var flagTypeOf = flag.String("type-of", "", "a hash list (16+ hex chars each): print each one's message type, and exit")
 var flagDest listFlag
 var flagCurrent listFlag
 var flagWritable listFlag
@@ -143,6 +144,12 @@ func main() {
 			}
 			ok, _ := db.Has(k, nil)
 			fmt.Printf("%x\t%v\n", k, ok)
+		}
+		return
+	}
+	if *flagTypeOf != "" {
+		if err := typeOf(flag.Args(), *flagSidecar, *flagTypeOf); err != nil {
+			log.Fatal(err)
 		}
 		return
 	}
