@@ -181,10 +181,7 @@ func (s *Querier) statesPage(batch *database.Batch, accounts []*url.URL, cur sta
 	budget := accountStatesBudget
 	used := 0
 	for i := cur.index; i < uint64(len(accounts)); i++ {
-		st, err := s.accountState(batch, accounts[i])
-		if err != nil {
-			return nil, errors.UnknownError.WithFormat("%v: %w", accounts[i], err)
-		}
+		st := s.accountState(batch, accounts[i])
 		data, err := st.MarshalBinary()
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("marshal the state of %v: %w", accounts[i], err)
@@ -221,7 +218,29 @@ func (s *Querier) statesPage(batch *database.Batch, accounts []*url.URL, cur sta
 // account's leaf hashes (database.Account.LeafState, which reads the store as
 // hashState does), the entries of each chain's open mark set, and the leaf
 // itself (executor.md, "Sync", §3).
-func (s *Querier) accountState(batch *database.Batch, u *url.URL) (*api.AccountState, error) {
+//
+// What cannot be read of one account is that account's answer, not the
+// page's: it is served with no body beside the leaf it has (or none), which
+// the asker refuses as it refuses any account whose parts do not rebuild its
+// leaf, and asks again. Failing the page for it would fail it on every peer,
+// which all hold the same state, and pin the asker's records where they stand
+// -- an account with a leaf and no main state (#4437) is such a case.
+func (s *Querier) accountState(batch *database.Batch, u *url.URL) *api.AccountState {
+	st, err := s.readAccountState(batch, u)
+	if err == nil {
+		return st
+	}
+	s.logger.Info("An account's sync state could not be read; it is served without its body", "account", u, "error", err)
+	out := &api.AccountState{Url: u}
+	if st != nil {
+		out.LeafHash = st.LeafHash
+	}
+	return out
+}
+
+// readAccountState reads one account's sync state. On an error it returns
+// what it read so far.
+func (s *Querier) readAccountState(batch *database.Batch, u *url.URL) (*api.AccountState, error) {
 	st := &api.AccountState{Url: u}
 	record := batch.Account(u)
 	leafHash, err := batch.BPT().Get(record.Key())
@@ -231,20 +250,20 @@ func (s *Querier) accountState(batch *database.Batch, u *url.URL) (*api.AccountS
 		st.NoLeaf = true
 		return st, nil
 	default:
-		return nil, errors.UnknownError.WithFormat("load the leaf: %w", err)
+		return st, errors.UnknownError.WithFormat("load the leaf: %w", err)
 	}
 	if len(leafHash) != 32 {
-		return nil, errors.InternalError.WithFormat("the leaf is %d bytes", len(leafHash))
+		return st, errors.InternalError.WithFormat("the leaf is %d bytes", len(leafHash))
 	}
 	st.LeafHash = [32]byte(leafHash)
 
 	st.Main, err = record.Main().Get()
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("load the main state: %w", err)
+		return st, errors.UnknownError.WithFormat("load the main state: %w", err)
 	}
 	leaf, err := record.LeafState()
 	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
+		return st, errors.UnknownError.Wrap(err)
 	}
 	st.Directory = leaf.Directory
 
@@ -255,38 +274,38 @@ func (s *Querier) accountState(batch *database.Batch, u *url.URL) (*api.AccountS
 	if u.Equal(s.partition.Ledger()) {
 		l.Events, err = ledgerEvents(record.Events())
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load scheduled events: %w", err)
+			return st, errors.UnknownError.WithFormat("load scheduled events: %w", err)
 		}
 	}
 	for _, c := range leaf.Chains {
 		chain, err := record.ChainByName(c.Name)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("get chain %s: %w", c.Name, err)
+			return st, errors.UnknownError.WithFormat("get chain %s: %w", c.Name, err)
 		}
 		l.Chains = append(l.Chains, &api.ChainRecord{Name: c.Name, Type: chain.Type(), Count: c.Count, State: c.Pending})
 
 		inner := chain.Inner()
 		head, err := inner.Head().Get()
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load the head of chain %s: %w", c.Name, err)
+			return st, errors.UnknownError.WithFormat("load the head of chain %s: %w", c.Name, err)
 		}
 		open, err := inner.OpenSet(head)
 		if err != nil {
-			return nil, errors.UnknownError.WithFormat("load the open mark set of chain %s: %w", c.Name, err)
+			return st, errors.UnknownError.WithFormat("load the open mark set of chain %s: %w", c.Name, err)
 		}
 		st.OpenEntries = append(st.OpenEntries, &api.ChainOpenEntries{Name: c.Name, Entries: open})
 	}
 	for _, p := range leaf.Pending {
 		v, err := pendingSets(p)
 		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return st, errors.UnknownError.Wrap(err)
 		}
 		l.Pending = append(l.Pending, v)
 	}
 	for _, p := range leaf.BookPending {
 		v, err := pendingSets(p)
 		if err != nil {
-			return nil, errors.UnknownError.Wrap(err)
+			return st, errors.UnknownError.Wrap(err)
 		}
 		l.BookPending = append(l.BookPending, v)
 	}
