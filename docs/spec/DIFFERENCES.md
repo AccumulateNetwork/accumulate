@@ -447,7 +447,7 @@ read at, and every account is then as of `L`.
 - **A reply's `B` is unbounded above.** The records are asked first of the peer
   whose ledger named the lowest block, but a walk page or an `AccountStates`
   answer stamped with a block far ahead raises the highest `B` beyond what `L`
-  can reach, and holds completion off. A follow-up issue is being filed.
+  can reach, and holds completion off. The follow-up is [#4454](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4454).
 
 ### E11. A node cannot sync from the running protocol
 
