@@ -29,7 +29,7 @@ import (
 // A chain the node already holds from the window up is brought to the peer's
 // head from its own, as a whole chain is; any other is taken from the
 // window's first mark point, over whatever the node held.
-func streamChainsWindow(ctx context.Context, src Source, pages Store, u *url.URL, pageSize, block, window uint64, retakeLonger bool) (*streamedChains, error) {
+func streamChainsWindow(ctx context.Context, src Source, pages Store, u *url.URL, pageSize, block, window uint64, checkHeld, retakeLonger bool) (*streamedChains, error) {
 	chains, err := src.QueryAccountChains(ctx, u, &api.ChainQuery{})
 	if err != nil {
 		return nil, fmt.Errorf("list chains: %w", err)
@@ -47,7 +47,7 @@ func streamChainsWindow(ctx context.Context, src Source, pages Store, u *url.URL
 	}
 	found := map[string]indexFound{}
 	for _, c := range mainFirst(chains.Records) {
-		t, err := streamChainWindow(ctx, src, pages, u, c, byName, found, pageSize, block, window, retakeLonger)
+		t, err := streamChainWindow(ctx, src, pages, u, c, byName, found, pageSize, block, window, checkHeld, retakeLonger)
 		if err != nil {
 			return nil, fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
@@ -82,7 +82,7 @@ type indexFound struct {
 	before *protocol.IndexEntry
 }
 
-func streamChainWindow(ctx context.Context, src Source, pages Store, u *url.URL, c *api.ChainRecord, byName map[string]*api.ChainRecord, found map[string]indexFound, pageSize, block, window uint64, retakeLonger bool) (*streamedChain, error) {
+func streamChainWindow(ctx context.Context, src Source, pages Store, u *url.URL, c *api.ChainRecord, byName map[string]*api.ChainRecord, found map[string]indexFound, pageSize, block, window uint64, checkHeld, retakeLonger bool) (*streamedChain, error) {
 	var markFreq, held int64
 	err := func() error {
 		local := pages.Begin(false)
@@ -108,9 +108,11 @@ func streamChainWindow(ctx context.Context, src Source, pages Store, u *url.URL,
 		return nil, fmt.Errorf("find the window: %w", err)
 	}
 
-	// Held from the window up: brought to the peer's head from the node's own.
+	// Held from the window up: brought to the peer's head from the node's
+	// own, with the messages behind the newest held entries an earlier join
+	// left without them (Options.CheckHeld).
 	if held >= int64(start) {
-		t, err := streamChain(ctx, src, pages, u, c, pageSize, false, false)
+		t, err := streamChain(ctx, src, pages, u, c, pageSize, checkHeld, false)
 		switch {
 		case err == nil:
 			return t, nil

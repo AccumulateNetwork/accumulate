@@ -58,6 +58,11 @@ func (m *Chain) Entries(begin, end int64) ([][]byte, error) {
 		default:
 			return nil, errors.UnknownError.WithFormat("load markpoint %d: %w", i, err)
 		}
+		if len(s.HashList) == 0 {
+			// The state a window starts on (#4452): the set it closes is
+			// not held, as a missing mark point's is not
+			continue
+		}
 		if len(s.HashList) != int(m.markFreq) {
 			return nil, errors.IncompleteChain.WithFormat("markpoint %d: expected %d entries, got %d", i, m.markFreq, len(s.HashList))
 		}

@@ -136,7 +136,7 @@ type Options struct {
 	// of a block, and block numbers collide across partitions (#4205).
 	Partition *url.URL
 
-	// CheckHeld, in ModeFullSpine, also checks the newest HeldCheckDepth
+	// CheckHeld, in ModeFullSpine and ModeWindow, also checks the newest HeldCheckDepth
 	// entries the node already holds on each transaction chain, and fetches
 	// the message behind every one that has none. A full pull resumes from
 	// the local head, so without it an entry a node took without its message
@@ -385,7 +385,7 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		if rec.Receipt == nil {
 			window = 0
 		}
-		chains, err = streamChainsWindow(ctx, src, pages, u, pageSize, p.Block, window, opts.RetakeLonger)
+		chains, err = streamChainsWindow(ctx, src, pages, u, pageSize, p.Block, window, opts.CheckHeld, opts.RetakeLonger)
 		if err != nil {
 			return fail(errors.UnknownError.WithFormat("chains window %s: %w", u, err))
 		}

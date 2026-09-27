@@ -66,6 +66,14 @@ func TestAChainHeldFromAWindowSaysWhatItDoesNotHold(t *testing.T) {
 		require.True(t, errors.Is(err, errors.NotFound), "entry %d: %v", i, err)
 	}
 
+	// A range that starts below the window, as the seed reads a block's
+	// synthetic entries.
+	_, err = held.Entries(300, 600)
+	require.True(t, errors.Is(err, errors.NotFound), "a range below the window: %v", err)
+	got, err := held.Entries(window, window+10)
+	require.NoError(t, err)
+	require.Equal(t, hashes[window:window+10], got)
+
 	// A backfill part way: the mark point below the window's is held, the
 	// set between is not. The state inside that set is not computed from
 	// the hashless mark point above it.

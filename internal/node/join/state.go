@@ -970,7 +970,7 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		// Once a process, every account taken whole is checked for what an
 		// earlier join left without its message -- the synthetic ledger
 		// included, which every join before #4434 took state-only.
-		CheckHeld: whole && !s.checkedHeld,
+		CheckHeld: (whole || windowed) && !s.checkedHeld,
 		// A node that has executed since its last match repairs what it
 		// executed: a chain of its own longer than the peer's is taken again.
 		RetakeLonger: p.repair,
