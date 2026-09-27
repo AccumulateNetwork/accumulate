@@ -672,44 +672,72 @@ and is not counted, and cannot pin `L` where it stands
 (`TestOnePeersBlockIsNotTheTarget`,
 `TestAPeerBehindTheNewestSignedAnchorDoesNotSetTheTarget`).
 
-**The records are read from the oldest page's block, within the peers'
-retention.** Each walk page is read from one named peer whose ledger is read
-first; a page served at a block before `S` shows the leaves of that block, so
-the records are read back to it as well — an account changed after the page's
-block and at or before `S` is named by no record after `S`
-(`TestRecordsAreReadFromTheOldestPageBlock`). A page's block is a peer's word,
-so it is floored at the newest verified anchor's block less the peers'
-retention (1024 blocks): a peer answering 0 does not make the records a query
-per block since genesis. Reading back is bounded as reading forward is, at
-most 1,024 blocks a round, and the state is not ready until the records have
-been read back to the floor
-(`TestAWalkPagesPeerAtZeroDoesNotSetTheRecordFloor`,
-`TestReadingTheRecordsBackIsBoundedPerRound`).
+**Accounts are collected in batches, each read from one view of the peer's
+store and stamped with the block that view is at** (Paul, 2026-09-27; #4453).
+A pull costs calls, not accounts: one call per block record and eight or so per
+account (body, directory, pending, chain list, one per chain) made the walk
+about fourteen accounts a second, and each of those calls read the peer's store
+separately, so one account's parts could come from different blocks. Two calls
+replace them, beside `BptPage`:
+
+- **`ChangedAccountStates{Partition, After, Cursor}`** — the peer reads its own
+  block-ledger records for the blocks after `After` through its current block
+  `T`, takes the union of the accounts they name (invariant 14: a record names
+  every account its block changed), and answers each account's sync state. The
+  reply says `T`, the block the records run through, and `B`, the block the
+  view it was read from is at (`B ≥ T`). It is paged by a byte budget; the
+  cursor continues the same union, and each page is a view of its own with its
+  own `B` — a view held open across pages pins BlockchainDB's overlays (#4446).
+  An account a record names many times is in the union once, so how often an
+  account changes costs nothing in calls.
+- **`AccountStates{Partition, Accounts}`** — the same sync state for the
+  accounts a walk page shows stale, from one view, stamped with its `B`.
+
+**An account's sync state** is its main state, its directory, its pending
+list, its `AccountLeaf` — the chain heads in the account's chain order, the
+partition ledger's events, the synthetic ledger's delivery queues, and the
+material behind each pending transaction (`PendingTransactionSets`) — and, for
+every chain, the entries of its open mark set: everything the leaf hashes, and
+what an append needs. An account larger than the budget is answered in parts,
+each from one view. Messages are not included; an account taken by its state
+carries none (below), and the windowed accounts' recent chains are taken by
+the window pull.
+
+**Each account is checked against its own leaf as it arrives.** The node
+hashes the state it was served, as `hashState` does, and compares it with the
+leaf hash served beside it; a mismatch is that peer's reply refused, and the
+account is asked of the next peer. It is not a proof — the peer states both —
+but it refuses a torn or inconsistent reply on arrival instead of leaving it
+for the match to find.
+
+**A walk page is of a block at or after `S`, or it is asked again.** The page
+is read in the same view as the block it names, so the block is the page's, not
+a separate answer. A page of a block before `S` shows leaves that a change at
+or before `S` may have moved and that no record after `S` names, so it is not
+taken; another peer is asked. The records are never read back before `S`.
 
 Each round, in this order:
 
-1. **The records.** The block-ledger record of every block after `L` through
-   the peer's block, in block order (`QueryMinorBlock` with the entries not
-   expanded; a block with no record is an empty block and changed nothing).
-   Every account a record names is marked current and pulled; `L` moves to
-   the last block read. An account several records name is pulled once for
-   them all: every pull of the round is of the peer's state now, which is at
-   or after every block read. A record that cannot be read stops the round's
-   records there, and the next round goes on from it.
-2. **What is owed.** An account a pull could not take — no peer answered it
-   whole — is asked for again, once a round, whoever named it.
-3. **The walk.** The next pages of the peer's BPT (`enumerate.ReadPage`,
-   eight pages of 256 leaves a round). An account a record has named is
-   skipped: the page may be older than that record, and **the walk never
-   overwrites a value the records wrote**. Every other leaf this node does not
-   hold, or holds and does not agree with, is pulled and written, with no block
-   compared: a page newer than the records wrote an account a later block
-   changed, and that block's record names it and pulls it again, so every
-   account ends at the state of the last record processed
-   (`TestTheWalkNeverOverwritesWhatARecordWrote`,
+1. **The records.** `ChangedAccountStates` with `After = L`, every page of
+   it. Every account it answers is written and marked current; `L` moves to
+   `T`. A page that cannot be read stops the round's records there, and the
+   next round asks again from `L`.
+2. **What is owed.** An account a batch did not answer whole, or whose reply
+   was refused, is asked for again, once a round, whoever named it.
+3. **The walk.** The next pages of the peer's BPT, eight pages of 256 leaves
+   a round. An account a record has named is skipped: the page may be older
+   than that record, and **the walk never overwrites a value the records
+   wrote**. Every other leaf this node does not hold, or holds and does not
+   agree with, is asked for in one `AccountStates` call per page and written.
+   A page newer than the records wrote an account a later block changed, and
+   that block's record names it, so every account ends at the state of the
+   last record processed (`TestTheWalkNeverOverwritesWhatARecordWrote`,
    `TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord`).
 
-Once the walk has covered the tree and nothing is owed, the node compares its
+**The state is complete** when the walk has covered the tree, nothing is
+owed, and `L` is at or above the highest `B` any reply was read at: every
+account is then as of `L` — the node holds every account's state and the state
+of every block-ledger update through `L`. Only then does the node compare its
 root with the partition's signed anchor at every block that sent one, and it
 executes only from a root that matched (§2, "Two mismatches", 1). The set of
 accounts is the block

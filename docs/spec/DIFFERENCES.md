@@ -415,6 +415,30 @@ answer nothing proves until the next match.
 **Size**: an index of the pool's Directory anchors taken with the window
 (the hashes only, not the entries), if the first case is ever seen.
 
+### E21. The state pull is a call per record and eight per account, each from its own view
+
+*[#4453](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4453)*
+
+**Spec** (executor.md, "Sync", §3): accounts are collected by
+`ChangedAccountStates` (every account the block-ledger records after `L` name)
+and `AccountStates` (a walk page's stale accounts). Each reply is one view of
+the peer's store, stamped with its block, and each account is checked against
+its leaf on arrival. A walk page below `S` is asked again. The state is
+complete when `L` reaches the highest block any reply was read at.
+
+**Code** (`internal/node/join/state.go`, `internal/core/bootstrap/pull`):
+- `processRange` reads one record per block (`blockLedgerOf`).
+- `pull.Fetch` takes each account in about eight serial calls, each a separate
+  read of the peer's store: body, directory, pending, chain list, and the
+  entries of each chain.
+- The walk learns a page's block from a separate call (`pageSource`), and
+  reads the records back to a page's block below `S` (`readBack`, `want`/`low`,
+  `recordFloor`).
+- Nothing checks an account against its leaf before the match.
+
+**Size**: two v3 methods and the node's round rewritten around them. The
+per-account `Fetch` stays for the trust chain and the windowed accounts' chains.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
