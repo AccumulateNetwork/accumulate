@@ -74,6 +74,19 @@ func (q Querier2) QueryBptBlock(ctx context.Context, scope *url.URL, query *BptB
 	return recordIs[*BptBlockRecord](doQuery(q, ctx, scope, query))
 }
 
+// QueryChangedAccountStates asks the partition at scope for the sync state of
+// every account its block-ledger records after query.After name, a page at a
+// time, each page read from one view of its store (executor.md, "Sync", §3).
+func (q Querier2) QueryChangedAccountStates(ctx context.Context, scope *url.URL, query *ChangedAccountStatesQuery) (*AccountStatesRecord, error) {
+	return recordIs[*AccountStatesRecord](doQuery(q, ctx, scope, query))
+}
+
+// QueryAccountStates asks the partition at scope for the sync state of the
+// named accounts, from one view of its store (executor.md, "Sync", §3).
+func (q Querier2) QueryAccountStates(ctx context.Context, scope *url.URL, query *AccountStatesQuery) (*AccountStatesRecord, error) {
+	return recordIs[*AccountStatesRecord](doQuery(q, ctx, scope, query))
+}
+
 func (q Querier2) QueryChainEntry(ctx context.Context, scope *url.URL, query *ChainQuery) (*ChainEntryRecord[Record], error) {
 	return chainEntryOf[Record](doQuery(q, ctx, scope, query))
 }

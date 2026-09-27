@@ -95,31 +95,35 @@ func TestTheSourcesAreAskedInRotation(t *testing.T) {
 	require.Equal(t, int64(5), balanceIn(t, db, alice), "the same peer was asked first both times")
 }
 
-// TestRecordsAreReadFromTheOldestPageBlock — #4438 (Paul, 2026-09-25; review
-// F1's benign cause). The pull starts at the peers' block S = 10. alice
-// changed at block 10, 5 to 7, and never again. The walk's page is read from a
-// peer that stood at 9: it shows alice at 5, which the restarted node holds
-// too, so the walk skips her, and no record after S names her. The records
-// are read from the block the page was served at, and block 10's names her.
-func TestRecordsAreReadFromTheOldestPageBlock(t *testing.T) {
+// TestAWalkPageBelowTheStartIsAskedAgain — executor spec, "Sync", §3: "A walk
+// page is of a block at or after S, or it is asked again." (#4453). The pull
+// starts at the peers' block S = 10. alice changed at block 10, 5 to 7, and
+// never again. The walk's first page is read at block 9: it shows alice at 5,
+// which the restarted node holds too, so taking it would skip her, and no
+// record after S names her. The page is refused and asked again, served at
+// block 10, and she is taken at 7 -- with no record read before S.
+func TestAWalkPageBelowTheStartIsAskedAgain(t *testing.T) {
 	here := protocol.PartitionUrl("BVN0")
 	alice := protocol.AccountUrl("alice", "tokens")
 	before, after := peerStore(t), peerStore(t)
 	putTokens(t, before, alice, 5)
 	putTokens(t, after, alice, 7)
-	leaf := leafIn(t, before, alice)
+	old, current := leafIn(t, before, alice), leafIn(t, after, alice)
 
 	peer := &scriptedPeer{partition: here, block: 10, records: map[uint64][]*url.URL{10: {alice}}, state: after,
-		page: []*api.BptLeafSummary{&leaf}}
-	peer.ledger = []uint64{10, 9} // S, then the page's peer
+		page:  []*api.BptLeafSummary{&current},
+		pages: map[uint64][]*api.BptLeafSummary{9: {&old}}}
+	peer.pageBlocks = []uint64{9} // then 10
 	s, db := joiningAt(t, peer)
 	putTokens(t, db, alice, 5) // the restarted node's own
 
 	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
-	require.Equal(t, uint64(9), s.sync.low, "the records were not read from the page's block")
+	require.True(t, s.sync.walked, "the walk did not go on past the page it refused")
 	require.Equal(t, int64(7), balanceIn(t, db, alice),
-		"alice changed at block 10 and the page was of block 9: the walk skipped her and no record read named her")
+		"alice changed at block 10 and the page taken was of block 9: the walk skipped her and no record names her")
+	require.Equal(t, uint64(10), peer.minAfter, "the records were read back before S")
+	require.Equal(t, uint64(10), s.sync.highest, "the refused page's block counted as a block a reply was read at")
+	require.GreaterOrEqual(t, s.sync.last, s.sync.highest, "the records are not through the highest block a reply was read at")
 }
 
 // TestARepairThatDoesNotMatchWalksAgain — #4438 review F1, Paul: "If the pull
@@ -257,56 +261,6 @@ func TestALeafAPageOmitsIsNotDeletedOnThePagesWord(t *testing.T) {
 	require.NoError(t, s.Pull(context.Background()))
 	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
 	require.Equal(t, int64(9), balanceIn(t, db, carol), "a page's omission deleted an account the peers hold")
-}
-
-// TestAWalkPagesPeerAtZeroDoesNotSetTheRecordFloor — #4438 re-review F-1. The
-// records are read back to the block a walk page's peer says it stands at.
-// A peer that says 0 would make that a query per block since genesis. The
-// floor is the newest verified anchor's block less the peers' retention.
-func TestAWalkPagesPeerAtZeroDoesNotSetTheRecordFloor(t *testing.T) {
-	here := protocol.PartitionUrl("BVN0")
-	alice := protocol.AccountUrl("alice", "tokens")
-	store := peerStore(t)
-	putTokens(t, store, alice, 5)
-	leaf := leafIn(t, store, alice)
-
-	peer := &scriptedPeer{partition: here, block: 3000, records: map[uint64][]*url.URL{}, state: store,
-		page: []*api.BptLeafSummary{&leaf}}
-	peer.ledger = []uint64{3000, 0} // S, then the page's peer
-	s, _ := joiningAt(t, peer)
-	s.tracker.Observe(here, 3000, [32]byte{1})
-
-	for i := 0; i < 5; i++ {
-		require.NoError(t, s.Pull(context.Background()))
-	}
-	require.Equal(t, uint64(3000-recordWindow), s.sync.low, "the records were not read back to the retention floor")
-	require.LessOrEqual(t, peer.blockReads, recordWindow,
-		"a walk page's peer at 0 made the records read back past the newest anchor's retention window")
-}
-
-// TestReadingTheRecordsBackIsBoundedPerRound — #4438 re-review F-1. With no
-// anchor verified yet there is no floor, and the records are read back to the
-// page's block over several rounds, at most maxRecordsPerRound blocks each, as
-// the forward direction is.
-func TestReadingTheRecordsBackIsBoundedPerRound(t *testing.T) {
-	here := protocol.PartitionUrl("BVN0")
-	alice := protocol.AccountUrl("alice", "tokens")
-	store := peerStore(t)
-	putTokens(t, store, alice, 5)
-	leaf := leafIn(t, store, alice)
-
-	peer := &scriptedPeer{partition: here, block: 3000, records: map[uint64][]*url.URL{}, state: store,
-		page: []*api.BptLeafSummary{&leaf}}
-	peer.ledger = []uint64{3000, 0}
-	s, _ := joiningAt(t, peer)
-
-	require.NoError(t, s.Pull(context.Background()))
-	require.LessOrEqual(t, peer.blockReads, maxRecordsPerRound, "one round read back more than maxRecordsPerRound records")
-	require.Equal(t, uint64(3000-maxRecordsPerRound), s.sync.low, "one round's reading back went further than maxRecordsPerRound")
-	for i := 0; i < 5; i++ {
-		require.NoError(t, s.Pull(context.Background()))
-	}
-	require.Equal(t, uint64(0), s.sync.low, "the records were not read back to the page's block")
 }
 
 // TestAPeerBehindTheNewestSignedAnchorDoesNotSetTheTarget — #4438 re-review

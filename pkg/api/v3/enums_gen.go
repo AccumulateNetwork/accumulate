@@ -56,6 +56,12 @@ const QueryTypeBptPage QueryType = 6
 // QueryTypeBptBlock one stored block of the BPT as of a block, for a node locating a root mismatch (executor.md, "Sync", "Two mismatches").
 const QueryTypeBptBlock QueryType = 7
 
+// QueryTypeChangedAccountStates the sync state of every account the block-ledger records after a block name, for a node pulling the state (executor.md, "Sync", §3).
+const QueryTypeChangedAccountStates QueryType = 8
+
+// QueryTypeAccountStates the sync state of named accounts, for a node pulling the state (executor.md, "Sync", §3).
+const QueryTypeAccountStates QueryType = 9
+
 // QueryTypeAnchorSearch .
 const QueryTypeAnchorSearch QueryType = 16
 
@@ -88,6 +94,9 @@ const RecordTypeBptPage RecordType = 5
 
 // RecordTypeBptBlock one stored block of the BPT, the positions eight levels below a prefix.
 const RecordTypeBptBlock RecordType = 6
+
+// RecordTypeAccountStates one page of account sync states, read from one view of a store.
+const RecordTypeAccountStates RecordType = 7
 
 // RecordTypeMessage .
 const RecordTypeMessage RecordType = 16
@@ -281,7 +290,7 @@ func (v QueryType) GetEnumValue() uint64 { return uint64(v) }
 func (v *QueryType) SetEnumValue(id uint64) bool {
 	u := QueryType(id)
 	switch u {
-	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeBptPage, QueryTypeBptBlock, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
+	case QueryTypeDefault, QueryTypeChain, QueryTypeData, QueryTypeDirectory, QueryTypePending, QueryTypeBlock, QueryTypeBptPage, QueryTypeBptBlock, QueryTypeChangedAccountStates, QueryTypeAccountStates, QueryTypeAnchorSearch, QueryTypePublicKeySearch, QueryTypePublicKeyHashSearch, QueryTypeDelegateSearch, QueryTypeMessageHashSearch:
 		*v = u
 		return true
 	}
@@ -307,6 +316,10 @@ func (v QueryType) String() string {
 		return "bptPage"
 	case QueryTypeBptBlock:
 		return "bptBlock"
+	case QueryTypeChangedAccountStates:
+		return "changedAccountStates"
+	case QueryTypeAccountStates:
+		return "accountStates"
 	case QueryTypeAnchorSearch:
 		return "anchorSearch"
 	case QueryTypePublicKeySearch:
@@ -340,6 +353,10 @@ func QueryTypeByName(name string) (QueryType, bool) {
 		return QueryTypeBptPage, true
 	case "bptblock":
 		return QueryTypeBptBlock, true
+	case "changedaccountstates":
+		return QueryTypeChangedAccountStates, true
+	case "accountstates":
+		return QueryTypeAccountStates, true
 	case "anchorsearch":
 		return QueryTypeAnchorSearch, true
 	case "publickeysearch":
@@ -382,7 +399,7 @@ func (v RecordType) GetEnumValue() uint64 { return uint64(v) }
 func (v *RecordType) SetEnumValue(id uint64) bool {
 	u := RecordType(id)
 	switch u {
-	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeBptPage, RecordTypeBptBlock, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry, RecordTypeError:
+	case RecordTypeAccount, RecordTypeChain, RecordTypeChainEntry, RecordTypeKey, RecordTypeBptPage, RecordTypeBptBlock, RecordTypeAccountStates, RecordTypeMessage, RecordTypeSignatureSet, RecordTypeMinorBlock, RecordTypeMajorBlock, RecordTypeRange, RecordTypeUrl, RecordTypeTxID, RecordTypeIndexEntry, RecordTypeError:
 		*v = u
 		return true
 	}
@@ -404,6 +421,8 @@ func (v RecordType) String() string {
 		return "bptPage"
 	case RecordTypeBptBlock:
 		return "bptBlock"
+	case RecordTypeAccountStates:
+		return "accountStates"
 	case RecordTypeMessage:
 		return "message"
 	case RecordTypeSignatureSet:
@@ -441,6 +460,8 @@ func RecordTypeByName(name string) (RecordType, bool) {
 		return RecordTypeBptPage, true
 	case "bptblock":
 		return RecordTypeBptBlock, true
+	case "accountstates":
+		return RecordTypeAccountStates, true
 	case "message":
 		return RecordTypeMessage, true
 	case "signatureset":

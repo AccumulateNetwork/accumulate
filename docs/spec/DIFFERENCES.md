@@ -415,6 +415,40 @@ answer nothing proves until the next match.
 **Size**: an index of the pool's Directory anchors taken with the window
 (the hashes only, not the entries), if the first case is ever seen.
 
+### E21. Some accounts of the state pull are not as of L, and a reply's block is the peer's word
+
+*[#4453](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4453)*
+
+**Spec** (executor.md, "Sync", §3): accounts are collected by
+`ChangedAccountStates` and `AccountStates`, each reply one view of the peer's
+store stamped with its block `B`; each account is checked against its leaf on
+arrival; the state is complete when `L` reaches the highest `B` any reply was
+read at, and every account is then as of `L`.
+
+**Code** (`internal/node/join/state.go`, `internal/core/bootstrap/pull`,
+`internal/api/v3/account_states.go`) does this, except:
+- **Accounts taken by `pull.Fetch` are not as of `L`.** The trust chain
+  (`WholeAccounts`), the windowed accounts (`WindowAccounts`), every account of
+  a repair (taken whole), and an account a peer answers with no leaf are still
+  taken by `pullOne`, a call per part at the peer's current block. Those blocks
+  are not counted toward the highest `B`, and `Ready()` returns the pulled
+  ledger's index. Counting them would chase a live network, since these
+  accounts change every block; the fix is to take them as of a block, which is
+  #4442 (the as-of-block windowed pull).
+- **A large account's parts come from different views.** An account larger
+  than a page is answered in parts, one per page, each read from its own view.
+  When the account changed between parts, the reassembled whole does not
+  rebuild its leaf; it is refused and asked again, and an account that changes
+  on every block may be refused repeatedly.
+- **V1 pending hashes are hashed but not written.** A pending transaction of
+  executor v1 is served as its `V1Hashes`, which the check on arrival hashes,
+  but the v1 transaction record the local leaf hashes is not written, so such
+  an account's local leaf differs until the match finds it.
+- **A reply's `B` is unbounded above.** The records are asked first of the peer
+  whose ledger named the lowest block, but a walk page or an `AccountStates`
+  answer stamped with a block far ahead raises the highest `B` beyond what `L`
+  can reach, and holds completion off. The follow-up is [#4454](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4454).
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

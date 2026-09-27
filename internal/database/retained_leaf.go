@@ -176,3 +176,24 @@ func (p *RetainedPendingTransaction) addSets(err *error, hasher *hash.Hasher) {
 func (c *RetainedChainHead) State() *merkle.State {
 	return &merkle.State{Count: int64(c.Count), Pending: c.Pending}
 }
+
+// MainStateHash is the hash an account's leaf takes of its main state, by
+// hashState's rule for a value (observer_prod.go, hashValue): a node checking
+// a leaf served beside a body rebuilds it from this and [RetainedLeaf.EntryHash].
+func MainStateHash(v protocol.Account) ([]byte, error) {
+	switch v := v.(type) {
+	case nil:
+		return new([32]byte)[:], nil
+	case interface{ MerkleHash() []byte }:
+		return v.MerkleHash(), nil
+	case interface{ GetHash() []byte }:
+		return v.GetHash(), nil
+	default:
+		data, err := v.MarshalBinary()
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		h := sha256.Sum256(data)
+		return h[:], nil
+	}
+}

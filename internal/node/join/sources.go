@@ -122,6 +122,18 @@ func (q *QueryPeers) For(ctx context.Context, account *url.URL) ([]pull.Source, 
 	return srcs, partition, nil
 }
 
+// PartitionOf is the partition an account routes to, asking no peer.
+func (q *QueryPeers) PartitionOf(account *url.URL) (*url.URL, error) {
+	if q.Router == nil {
+		return nil, errors.BadRequest.With("no router: the join cannot tell which partition holds an account")
+	}
+	id, err := q.Router.RouteAccount(account)
+	if err != nil {
+		return nil, errors.BadRequest.WithFormat("route %v: %w", account, err)
+	}
+	return protocol.PartitionUrl(id), nil
+}
+
 // ForPartition returns one source per peer serving the partition's querier.
 func (q *QueryPeers) ForPartition(ctx context.Context, partition *url.URL) ([]pull.Source, error) {
 	peers, err := q.peersOf(ctx, partition)
