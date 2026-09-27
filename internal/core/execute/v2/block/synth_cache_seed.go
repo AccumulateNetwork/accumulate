@@ -221,6 +221,9 @@ type notExecutedError struct {
 }
 
 func (e *notExecutedError) Error() string {
+	if e.dst == nil {
+		return "this node did not execute the block: " + e.evidence
+	}
 	return fmt.Sprintf("this node did not execute the block: %s (stream to %v)", e.evidence, e.dst)
 }
 
@@ -354,6 +357,11 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 		return nil, errors.NotFound.With("root index chain is empty")
 	}
 	_, rootEntry, err := indexing.SearchIndexChain(rootIndex, uint64(rootIndex.Height()-1), indexing.MatchExact, indexing.SearchIndexChainByBlock(b))
+	if stderrors.Is(err, indexing.ErrNotHeld) {
+		// The root chain as a join took it, from its recent window: a block
+		// this node executed wrote its root chain entries (#4452).
+		return nil, &notExecutedError{evidence: fmt.Sprintf("the root index chain entries around block %d are not held", b)}
+	}
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("locate block %d root index chain entry: %w", b, err)
 	}
@@ -363,6 +371,11 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 	}
 	for _, st := range blk.Streams {
 		st.RootReceipt, err = root.Receipt(st.RootPos, int64(rootEntry.Source))
+		if errors.Is(err, errors.NotFound) {
+			// The same: the root chain below its window is not held, and a
+			// node that executed the block holds what it appended (#4452).
+			return nil, &notExecutedError{st.Destination, fmt.Sprintf("the root chain entries %d..%d are not held", st.RootPos, rootEntry.Source)}
+		}
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("get root chain receipt from %d to %d: %w", st.RootPos, rootEntry.Source, err)
 		}

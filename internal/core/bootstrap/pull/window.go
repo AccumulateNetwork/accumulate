@@ -165,25 +165,36 @@ func firstIndexFrom(ctx context.Context, src Source, u *url.URL, index *api.Chai
 		if end > pageSize {
 			begin = end - pageSize
 		}
-		count := end - begin
-		resp, err := src.QueryChainEntries(ctx, u, &api.ChainQuery{
-			Name:  index.Name,
-			Range: &api.RangeOptions{Start: begin, Count: &count, Expand: &expand},
-		})
-		if err != nil {
-			return 0, nil, fmt.Errorf("query %s entries from %d: %w", index.Name, begin, err)
-		}
-		if resp == nil || uint64(len(resp.Records)) != count {
-			return 0, nil, fmt.Errorf("the peer served %s entries [%d, %d) short", index.Name, begin, end)
-		}
-		for i := len(resp.Records) - 1; i >= 0; i-- {
-			r := resp.Records[i]
-			v, ok := r.Value.(*api.IndexEntryRecord)
-			if !ok || v.Value == nil || r.Index != begin+uint64(i) {
-				return 0, nil, fmt.Errorf("the peer served entry %d of %s as no index entry", begin+uint64(i), index.Name)
+		// The page, in as many answers as the peer takes to serve it: a
+		// peer may serve fewer entries than asked for.
+		var page []*protocol.IndexEntry
+		for at := begin; at < end; {
+			count := end - at
+			resp, err := src.QueryChainEntries(ctx, u, &api.ChainQuery{
+				Name:  index.Name,
+				Range: &api.RangeOptions{Start: at, Count: &count, Expand: &expand},
+			})
+			if err != nil {
+				return 0, nil, fmt.Errorf("query %s entries from %d: %w", index.Name, at, err)
 			}
-			if v.Value.BlockIndex < from {
-				return r.Index + 1, v.Value, nil
+			if resp == nil || len(resp.Records) == 0 {
+				return 0, nil, fmt.Errorf("the peer served no %s entry at %d", index.Name, at)
+			}
+			for _, r := range resp.Records {
+				if at >= end {
+					break
+				}
+				v, ok := r.Value.(*api.IndexEntryRecord)
+				if r == nil || !ok || v.Value == nil || r.Index != at {
+					return 0, nil, fmt.Errorf("the peer served entry %d of %s as no index entry", at, index.Name)
+				}
+				page = append(page, v.Value)
+				at++
+			}
+		}
+		for i := len(page) - 1; i >= 0; i-- {
+			if page[i].BlockIndex < from {
+				return begin + uint64(i) + 1, page[i], nil
 			}
 		}
 		end = begin

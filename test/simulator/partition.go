@@ -135,6 +135,13 @@ func (p *Partition) NodeJoinState(i int) *join.PulledState { return p.nodes[i].j
 // hook runs on the goroutine that runs the join, between two reads.
 func (p *Partition) SetPullHook(i int, hook func()) { p.nodes[i].pullHook = hook }
 
+// SetSourceWrap hands the peers node i's join names for each account through
+// wrap, which may replace them: how a test makes the peers refuse what the
+// join asks of them for a while. Nil restores them.
+func (p *Partition) SetSourceWrap(i int, wrap func([]pull.Source) []pull.Source) {
+	p.nodes[i].sourceWrap = wrap
+}
+
 // movingSources is the join's QueryPeers with the node's pull hook called
 // before each account's peers are named. Everything else is QueryPeers's.
 type movingSources struct {
@@ -146,7 +153,11 @@ func (m *movingSources) For(ctx context.Context, account *url.URL) ([]pull.Sourc
 	if h := m.node.pullHook; h != nil {
 		h()
 	}
-	return m.QueryPeers.For(ctx, account)
+	srcs, partition, err := m.QueryPeers.For(ctx, account)
+	if w := m.node.sourceWrap; w != nil && err == nil {
+		srcs = w(srcs)
+	}
+	return srcs, partition, err
 }
 
 // StopNode stops node i as stopping its process would: from here it is handed

@@ -375,6 +375,46 @@ call it).
 **Size**: the spec's sentence could name the window and the newest block's
 `NotReady`; no code change is implied.
 
+### E20. A read below a join's window waits for the backfill
+
+*[#4452](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4452)*
+
+**Spec** (executor.md, "Sync", §1, "The window"): a join takes the anchor pool
+by its last `AnchorPoolWindow` blocks and the ledger and the synthetic ledger
+by each chain's last mark set, and nothing the executor reads after the
+handoff reaches below them.
+
+**Code**: the window covers every read the executor makes in the ordinary
+course. Two reads can reach below it, and neither reads deep from a peer:
+
+- **A synthetic proven by an old Directory anchor.** Admissibility looks the
+  proof's terminal anchor up by hash on the pool's `anchor(directory)-root`
+  chain (`provingAnchorIndex`). An anchor older than the window is not
+  indexed until the backfill brings it, so the message is held as not yet
+  admissible where a peer that holds the history admits it. The source builds
+  proofs from a cache of `DefaultHorizon` of its own blocks, and the window is
+  twice that of the node's, so only a source whose blocks run more than twice
+  as fast as this partition's can produce one. If it does, the node executes
+  that block unlike its peers, the root watch finds the mismatch, and the
+  repair takes the accounts again ("Two mismatches"): it diverges for a block
+  and is brought back; it does not fail.
+- **The newest Directory anchor, with none in the window**
+  (`getDnHeight`, a transaction held until a Directory height): a Directory
+  that anchored nothing into this partition for 1,200 of its blocks. The walk
+  errs on the first entry it does not hold, as it did before on any unheld
+  entry.
+
+The cache seed and the root watch do not reach below: the seed's walks of the
+pool stop at the first entry not held, and the synthetic, synthetic index and
+root chain entries it cannot find are the store's evidence of a block the node
+did not execute (#4400), which it skips.
+
+**Why it stands**: the alternative is a peer read inside execution, whose
+answer nothing proves until the next match.
+
+**Size**: an index of the pool's Directory anchors taken with the window
+(the hashes only, not the entries), if the first case is ever seen.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
@@ -1391,7 +1431,9 @@ seventh nobody had named.
   signature set from the entries it takes, so a joined node serves and counts
   its pulled range as its peers do — the capacity gap is closed for the spine
   pass, and since #4421 for every pass: a spine account is taken whole
-  whichever pass names it, and the pass that carries the spine fetches the
+  whichever pass names it (since #4452, the trust chain whole and the anchor
+  pool and ledger by their recent window, with the rest backfilled after the
+  match), and the pass that carries the spine fetches the
   message and those records behind any of the newest held entries that lacks
   its message, or takes the chain whole when a position is not held at all.
   What is still different: a store written between #4400 and #4416 holds

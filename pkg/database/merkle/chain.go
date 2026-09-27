@@ -289,26 +289,6 @@ func (m *Chain) RestoreHead(head *State, open [][]byte) error {
 		}
 	}
 
-	// The state at the boundary the open set starts on, as the mark point
-	// that closed the set before it, unless the node holds that mark point
-	// already: without it no state or receipt inside the open set can be
-	// computed (StateAt starts from the mark point below the element), and
-	// the first block a new process opens builds receipts from the entries
-	// executed since (#4452). It carries no hashes: the set it closes is not
-	// held (Entry).
-	if lastMark > 0 && before != nil {
-		_, err := m.States(uint64(lastMark - 1)).Get()
-		switch {
-		case err == nil:
-		case errors.Is(err, errors.NotFound):
-			if err := m.States(uint64(lastMark - 1)).Put(before.Copy()); err != nil {
-				return errors.UnknownError.WithFormat("%v: put mark point %d: %w", m.key, lastMark-1, err)
-			}
-		default:
-			return errors.UnknownError.WithFormat("%v: load mark point %d: %w", m.key, lastMark-1, err)
-		}
-	}
-
 	// The open set is in the Tail records now, so the head does not carry it.
 	head = head.Copy()
 	head.HashList = nil

@@ -16,8 +16,14 @@
 //     mark set is what makes the chain appendable, so the node can execute
 //     the next block.
 //
+//   - ModeWindow: the same, plus each chain's entries of the peer's last
+//     Options.Window blocks with the messages behind them, and at least the
+//     mark set holding its last entry. Used for the accounts whose recent
+//     entries the executor reads after a handoff (WindowAccounts, #4452); the
+//     rest is backfilled after the match (Backfill).
+//
 //   - ModeFullSpine: the same, plus every chain entry replayed. Used for the
-//     spine, and NOT for verification — verifying an anchor needs only the
+//     trust chain (WholeAccounts), and NOT for verification — verifying an anchor needs only the
 //     validator set the node already holds (anchorsrc.Authority), never a key
 //     page of the time. The chains are taken because these are the accounts
 //     every block touches: a node holding only their heads cannot show that

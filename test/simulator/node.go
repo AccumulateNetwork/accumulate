@@ -9,6 +9,7 @@ package simulator
 import (
 	"context"
 	"crypto/sha256"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
@@ -47,6 +48,7 @@ type Node struct {
 	nodeState  *nodeState
 	joinState  *join.PulledState
 	pullHook   func()
+	sourceWrap func([]pull.Source) []pull.Source
 	stopped    bool
 	conductor  *crosschain.Conductor
 	synthCache *synthcache.Cache

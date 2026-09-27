@@ -396,12 +396,51 @@ quorum of the trusted set signed and its version is greater. The stated
 limit, the executor's own: a change that turns over more of the set than the
 old threshold can bridge cannot be crossed from the old set, and a node that
 trusts only the old set must be re-seeded from a definition it can verify.
-The spine is pulled in `ModeFullSpine` — head, secondary state and **every
-chain entry replayed**, with the message behind each entry of a transaction
-chain (§3) — not for verification, which the definition and its
-signatures give, but so that the spine's every-block chains are comparable
-entry for entry with what the node executes from there, and so that the
-node can read what they record when it executes again.
+**Only the trust chain is taken whole** (#4452): the operators' key book and
+its page, the network definition and the globals (`pull.WholeAccounts`), in
+`ModeFullSpine` — head, secondary state and every chain entry replayed, with
+the message behind each entry of a transaction chain (§3). They carry every
+key and validator-set change since genesis, which is what verifies a signature
+across a change of the set, and they are small: an entry per change. **Every
+other account, the rest of the spine included, is synced by its head and open
+mark set** — a follower syncs by the BPT, the accounts and the transactions
+arriving from consensus, and none of that needs history; history is collected
+after the match (Paul, 2026-09-26). The anchor pool, the ledger and the
+synthetic ledger add the **bounded recent window** the executor reads of them
+after the handoff (`pull.WindowAccounts`, `ModeWindow`; "The window" below).
+
+**The window** is sized from the reads, not guessed. Each chain of a windowed
+account is taken from the mark point at or below the first entry its peer
+wrote in the last W of the partition's blocks — found on the chain's index
+chain, a page at a time from its newest entry — and never from above the mark
+set holding its last entry; the state before the window is the one the peer
+serves with the entry before it, written as a mark point with none of the
+hashes of the set it closes, and the entries from there must replay to the
+peer's head. What the executor reads after a handoff, and so W:
+
+| Read | Account, chain | Reaches back |
+|---|---|---|
+| Cache seed, `seedProducedAnchors` | pool `anchor-sequence` | `synthcache.DefaultHorizon` (600) own blocks |
+| Cache seed, `ownReceipts` | pool `main` | to the newest receipt's in-flight tail, at most the horizon |
+| Admissibility of a proof (`provingAnchorIndex`) | pool `anchor(directory)-root`, by hash | the source's cache horizon, in the source's blocks |
+| `getDnHeight`, `getMajorHeight`, last produced anchor | pool `main`, `major-block`, `anchor-sequence` | the newest entry of each |
+| Cache seed, `rebuildCacheBlock` | synthetic `synthetic-sequence(*)` and index; ledger `root` and index | the blocks since the newest receipt; the node's own blocks from the handoff up |
+| Block open (`executor.go`), root watch (`rootAfter`) | ledger `root-index`, `bpt-index` | the newest entry; the blocks since the handoff |
+
+So the anchor pool is taken by `AnchorPoolWindow`, twice the horizon (1,200
+blocks: the margin is for a source whose blocks come faster than this
+partition's), and the ledger and the synthetic ledger by the mark set holding
+each chain's last entry (W = 0): after the handoff they are read only from the
+node's own blocks up and the entry before them. **A read that reaches below
+what a window holds finds a block the node did not execute, and says so**: the
+seed takes a synthetic or root chain entry it does not hold as that evidence
+and skips the block (§6, #4400), and its walks of the pool stop there; an index
+chain search reads near its start and answers `ErrNotHeld` rather than
+NotFound below the window. Nothing reads deep from a peer during execution: a
+read that needs more waits for the backfill (DIFFERENCES E20). What a join
+fetches before its handoff no longer grows with the network's age: 3,834 and
+3,626 chain entries for pools of 5,000 and 20,000 blocks, against 10,000 at
+5,000 taken whole (`TestJoin_ThePoolIsTakenByItsWindowNotItsHistory`).
 
 An anchor is accepted when valid signatures from **distinct members of the
 producing partition's validator set** — the network definition's, not a key
@@ -706,14 +745,15 @@ the entries since its last mark point — because an append rebuilds the chain's
 tail from them, and a node that cannot append to its chains cannot execute
 block `Q + 1`.
 
-**Syncing and bootstrapping are one walk at two depths.** The spine's chains
-are taken entry by entry, and the node fills them back from the account's head
+**Syncing and bootstrapping are one walk at two depths.** The trust chain's
+chains are taken entry by entry, and a windowed account's from its window
+(above), and the node fills them back from the account's head
 until it **meets data it already has**. A bootstrapping node never meets any
 and collects the whole chain; a restarted node meets its own at once and
 collects nothing. Same walk, different stopping point — which is why a defect
 at the meeting point is invisible to every bootstrap test and fatal to every
-restart. A spine account is taken this way **whenever** it is pulled, not
-only when the join takes the spine first: every block's record names
+restart. A spine account is taken this way — whole, or by its window —
+**whenever** it is pulled, not only when the join takes the spine first: every block's record names
 `<partition>/anchors`, since every block writes the pool, and a pull that took
 it as a head and an open mark set left its new entries with no message behind
 them (#4421). What the node already has is an entry
@@ -1124,18 +1164,20 @@ the block that produced it. The third skips **only the blocks the node did not
 execute**: it produced none of their synthetics, holds none of their messages,
 and answers for none of them (below). **The store says which they are**, not a
 memory of the join: a block whose synthetic entries the store holds with no
-message behind them — or whose entries it does not hold at all — is a block a
-join carried the node past, because the join pulls `<partition>/synthetic` as a
-head and an open mark set, and a node that executes a block writes its entries
-and their messages in the one batch. Every other block in the window is the
+message behind them — or whose synthetic, synthetic index or root chain
+entries it does not hold at all — is a block a join carried the node past,
+because the join pulls `<partition>/synthetic` and the ledger by their head,
+open mark set and last mark set (#4452), and a node that executes a block
+writes its entries and their messages in the one batch. Every other block in the window is the
 node's own and is rebuilt, so a restart that fell nothing behind skips nothing,
 and a restart after an earlier join skips that join's blocks however many
 processes ago it was (#4400). A seed that fails is not a seed: the
-next block tries again, and no block opens on a cache nothing filled. The
-spine is the one place a join takes chain entries and the messages behind
-them; nothing under this section fetches the history of any other account a
-node did not execute — that is phase 3's conversion of history, or phase 2's
-database node, not a syncing node's work. So the node states are two, and
+next block tries again, and no block opens on a cache nothing filled. Before
+its match a join takes chain entries and the messages behind them only for
+the trust chain, whole, and for the anchor pool, the ledger and the synthetic
+ledger, by their recent window (#4452); every other account's history, and
+those accounts' below their windows, is backfilled once the node is `ACTIVE`,
+while it executes ("Two mismatches"). So the node states are two, and
 one rule divides them: **`ACTIVE` serves while the node is executing in
 agreement; `BOOTING` refuses and relays at every other time** (#4385).
 **`BOOTING`** is from the start of a join until its handoff succeeds (§5)
