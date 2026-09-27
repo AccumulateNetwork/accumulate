@@ -45,12 +45,18 @@ type scriptedPeer struct {
 	// further back a moment ago.
 	ledger []uint64
 
+	// pages, where set, is the page the walk is served at a block other
+	// than the one page is of.
+	pages map[uint64][]*api.BptLeafSummary
+
 	// pageBlocks, when not empty, is the block each page of the walk is
 	// read at, in turn, before it is read at block.
 	pageBlocks []uint64
 
-	// blockReads counts the ChangedAccountStates pages asked of the peer.
+	// blockReads counts the ChangedAccountStates pages asked of the peer,
+	// and minAfter is the lowest After any asked for (zero when none was).
 	blockReads int
+	minAfter   uint64
 }
 
 func (p *scriptedPeer) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
@@ -91,6 +97,9 @@ func (s scriptedSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api
 func (s scriptedSource) QueryChangedAccountStates(ctx context.Context, scope *url.URL, q *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
 	p := s.peer
 	p.blockReads++
+	if p.blockReads == 1 || q.After < p.minAfter {
+		p.minAfter = q.After
+	}
 	if p.block < q.After {
 		return nil, errors.NotReady.WithFormat("the peer stands at %d, before %d", p.block, q.After)
 	}
@@ -160,7 +169,11 @@ func (p *scriptedPeer) Query(_ context.Context, scope *url.URL, query api.Query)
 		if len(p.pageBlocks) > 0 {
 			block, p.pageBlocks = p.pageBlocks[0], p.pageBlocks[1:]
 		}
-		return &api.BptPageRecord{Entries: p.page, Done: true, Block: block}, nil
+		entries := p.page
+		if e, ok := p.pages[block]; ok {
+			entries = e
+		}
+		return &api.BptPageRecord{Entries: entries, Done: true, Block: block}, nil
 	}
 	// Everything else -- the anchor pool among it -- this peer has nothing
 	// of. The walk does not depend on anchors.

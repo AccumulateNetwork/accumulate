@@ -52,7 +52,15 @@ func (s *countingSources) For(ctx context.Context, account *url.URL) ([]pull.Sou
 	}
 	s.asked[k][s.round]++
 	s.mu.Unlock()
-	return s.inner.For(ctx, account)
+	srcs, partition, err := s.inner.For(ctx, account)
+	if err != nil || s.inject == nil {
+		return srcs, partition, err
+	}
+	out := make([]pull.Source, len(srcs))
+	for i, src := range srcs {
+		out[i] = namingSource{Source: src, s: s}
+	}
+	return out, partition, nil
 }
 
 func (s *countingSources) ValidatorsOf(ctx context.Context, partition *url.URL) ([]anchorsrc.Validator, error) {
@@ -60,40 +68,37 @@ func (s *countingSources) ValidatorsOf(ctx context.Context, partition *url.URL) 
 }
 
 func (s *countingSources) Querier(partition *url.URL) api.Querier {
-	q := s.inner.Querier(partition)
-	if s.inject == nil {
-		return q
-	}
-	return &namingQuerier{Querier: q, s: s}
+	return s.inner.Querier(partition)
 }
 
-// namingQuerier is a peer whose block ledger names one account more than the
-// block holds -- one no peer has a leaf for -- while s.injecting is set. It
-// is the peer's word the join takes a block ledger on (#4310), and it is how
-// a name every source answers NotFound for reaches the join through the
-// production walk.
-type namingQuerier struct {
-	api.Querier
+// namingSource is a peer whose block-ledger records name one account more
+// than the blocks hold -- one no peer has a leaf for -- while s.injecting is
+// set. It is the peer's word the join takes the records on (#4310), and it is
+// how a name every source answers NotFound for reaches the join through the
+// production pull: the first page of each ChangedAccountStates answer carries
+// the peer's own answer for that account, which is that it holds no leaf.
+type namingSource struct {
+	pull.Source
 	s *countingSources
 }
 
-func (q *namingQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
-	r, err := q.Querier.Query(ctx, scope, query)
-	bq, ok := query.(*api.BlockQuery)
-	if err != nil || !ok || bq.Minor == nil || bq.EntryRange == nil || bq.EntryRange.Start != 0 {
+func (q namingSource) QueryChangedAccountStates(ctx context.Context, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
+	r, err := q.Source.QueryChangedAccountStates(ctx, scope, query)
+	if err != nil || len(query.Cursor) != 0 {
 		return r, err
 	}
 	q.s.mu.Lock()
-	injecting := q.s.injecting
+	injecting, inject := q.s.injecting, q.s.inject
 	q.s.mu.Unlock()
-	mb, ok := r.(*api.MinorBlockRecord)
-	if !injecting || !ok || mb.Entries == nil {
+	if !injecting {
 		return r, err
 	}
-	mb.Entries.Records = append(mb.Entries.Records, &api.ChainEntryRecord[api.Record]{
-		Account: q.s.inject, Name: "main"})
-	mb.Entries.Total++
-	return mb, nil
+	extra, err := q.Source.QueryAccountStates(ctx, scope, &api.AccountStatesQuery{Accounts: []*url.URL{inject}})
+	if err != nil {
+		return nil, err
+	}
+	r.States = append(r.States, extra.States...)
+	return r, nil
 }
 
 func (s *countingSources) roundsAsked(u *url.URL) int {

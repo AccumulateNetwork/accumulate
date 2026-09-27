@@ -45,17 +45,9 @@ func CheckState(st *api.AccountState) error {
 	if got := st.Main.GetUrl(); got == nil || !got.Equal(st.Url) {
 		return errors.Conflict.WithFormat("%v: the peer served the body of %v", st.Url, got)
 	}
-	leaf, err := retainedLeaf(st)
+	rebuilt, err := LeafHashOf(st)
 	if err != nil {
-		return errors.Conflict.WithFormat("%v: %w", st.Url, err)
-	}
-	main, err := database.MainStateHash(st.Main)
-	if err != nil {
-		return errors.UnknownError.WithFormat("%v: hash the main state: %w", st.Url, err)
-	}
-	rebuilt, err := leaf.EntryHash(main)
-	if err != nil {
-		return errors.UnknownError.WithFormat("%v: rebuild the leaf: %w", st.Url, err)
+		return err
 	}
 	if !bytes.Equal(rebuilt, st.LeafHash[:]) {
 		return errors.Conflict.WithFormat("%v: the parts served hash to leaf %x, not to the leaf %x served beside them",
@@ -72,6 +64,25 @@ func CheckState(st *api.AccountState) error {
 		}
 	}
 	return nil
+}
+
+// LeafHashOf is the leaf a served account's parts hash to, by hashState's
+// rules: its main state's hash, then [database.RetainedLeaf.EntryHash] over
+// the rest.
+func LeafHashOf(st *api.AccountState) ([]byte, error) {
+	leaf, err := retainedLeaf(st)
+	if err != nil {
+		return nil, errors.Conflict.WithFormat("%v: %w", st.Url, err)
+	}
+	main, err := database.MainStateHash(st.Main)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("%v: hash the main state: %w", st.Url, err)
+	}
+	rebuilt, err := leaf.EntryHash(main)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("%v: rebuild the leaf: %w", st.Url, err)
+	}
+	return rebuilt, nil
 }
 
 // retainedLeaf is the served leaf in the store's form, from which

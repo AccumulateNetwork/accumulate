@@ -56,8 +56,10 @@ func (b *bendingSources) ValidatorsOf(ctx context.Context, partition *url.URL) (
 func (b *bendingSources) Querier(partition *url.URL) api.Querier { return b.inner.Querier(partition) }
 
 func (b *bendingSources) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
+	// Every source: the state pull asks for the target in batches, of the
+	// partition's peers, not by its own name (#4453).
 	srcs, partition, err := b.inner.For(ctx, account)
-	if err != nil || !b.bend || !account.Equal(b.target) {
+	if err != nil || !b.bend {
 		return srcs, partition, err
 	}
 	bent := make([]pull.Source, len(srcs))
@@ -100,6 +102,42 @@ func (s *bendingSource) QueryAccount(ctx context.Context, scope *url.URL, query 
 	bent.Balance = *new(big.Int).Add(&acct.Balance, big.NewInt(bentBy))
 	rec.Account = bent
 	s.owner.count()
+	return rec, nil
+}
+
+// QueryChangedAccountStates and QueryAccountStates serve the account the peer
+// really holds with a balance that is not the one that was proven, and a leaf
+// hash rebuilt from the bent body: a lie told consistently, which the check on
+// arrival cannot catch (#4453) and only the match can.
+func (s *bendingSource) QueryChangedAccountStates(ctx context.Context, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
+	rec, err := s.Source.QueryChangedAccountStates(ctx, scope, query)
+	return s.bendStates(rec, err)
+}
+
+func (s *bendingSource) QueryAccountStates(ctx context.Context, scope *url.URL, query *api.AccountStatesQuery) (*api.AccountStatesRecord, error) {
+	rec, err := s.Source.QueryAccountStates(ctx, scope, query)
+	return s.bendStates(rec, err)
+}
+
+func (s *bendingSource) bendStates(rec *api.AccountStatesRecord, err error) (*api.AccountStatesRecord, error) {
+	if err != nil || rec == nil {
+		return rec, err
+	}
+	for _, st := range rec.States {
+		acct, ok := st.Main.(*TokenAccount)
+		if !ok || !st.Url.Equal(s.owner.target) {
+			continue
+		}
+		bent := acct.Copy()
+		bent.Balance = *new(big.Int).Add(&acct.Balance, big.NewInt(bentBy))
+		st.Main = bent
+		leaf, err := pull.LeafHashOf(st)
+		if err != nil {
+			return nil, err
+		}
+		st.LeafHash = [32]byte(leaf)
+		s.owner.count()
+	}
 	return rec, nil
 }
 
