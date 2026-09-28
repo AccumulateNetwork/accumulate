@@ -20,8 +20,8 @@ import (
 // The checkpoint files, as internal/node/dagbft keeps them: the position of
 // the block being produced and of the one before.
 const (
-	checkpointFile     = "consensus-checkpoint.json"
-	prevCheckpointFile = "consensus-checkpoint.prev.json"
+	checkpointFile     = persist.CheckpointFile
+	prevCheckpointFile = persist.PrevCheckpointFile
 )
 
 func (s *Sim) nodeDir(sn *simNode) string {
@@ -65,72 +65,86 @@ func (s *Sim) startConsume(ctx context.Context, sn *simNode) {
 // same host, restored from the checkpoint whose block is the node's last
 // executed block, as internal/node/dagbft's seedFromCheckpoint restores it.
 func (s *Sim) Restart(part string, vals ...int) error {
-	return s.restart(part, 0, vals...)
+	return s.restart(s.targets(part, vals), 0)
 }
 
-func (s *Sim) restart(part string, executorFirst time.Duration, vals ...int) error {
+// RestartNetwork stops every node of every partition and, once all are
+// stopped, starts each again from its persisted state, as a network whose
+// containers are recreated together comes back.
+func (s *Sim) RestartNetwork() error {
+	return s.restart(s.allNodes(), 0)
+}
+
+func (s *Sim) allNodes() []*simNode {
+	var all []*simNode
+	for _, part := range s.parts {
+		all = append(all, s.byPart[part]...)
+	}
+	return all
+}
+
+func (s *Sim) targets(part string, vals []int) []*simNode {
+	var out []*simNode
+	for _, v := range vals {
+		out = append(out, s.byPart[part][v])
+	}
+	return out
+}
+
+func (s *Sim) restart(nodes []*simNode, executorFirst time.Duration) error {
 	if s.cfg.StateDir == "" {
 		return fmt.Errorf("restart needs Config.StateDir")
 	}
-	nodes := s.byPart[part]
-	for _, v := range vals {
-		sn := nodes[v]
+	for _, sn := range nodes {
 		sn.stopConsume()
 		<-sn.consumeDone
 	}
 	time.Sleep(executorFirst)
-	for _, v := range vals {
-		sn := nodes[v]
+	for _, sn := range nodes {
 		old := sn.n()
 		old.Stop()
 		sn.stoppedEquiv += old.DAG().Equivocations()
 	}
-	for _, v := range vals {
-		sn := nodes[v]
+	for _, sn := range nodes {
 		node, err := consensus.NewNode(sn.cfg, sn.committee, s.hosts[sn.val], sn.ps)
 		if err != nil {
-			return fmt.Errorf("restart %s/%d: %w", part, sn.val, err)
+			return fmt.Errorf("restart %s/%d: %w", sn.part, sn.val, err)
 		}
-		height := sn.height.Load()
-		restored := false
-		for _, file := range []string{checkpointFile, prevCheckpointFile} {
-			store := persist.NewStore(s.nodeDir(sn))
-			store.SetFilename(file)
-			cp, err := store.Load()
-			if err != nil || cp.BlockIndex != height {
-				continue
-			}
-			node.Restore(cp)
-			sn.lastSaved = cp
-			restored = true
-			break
+		// The executor's last block: with DiscardEmptyBlocks, the last one
+		// that carried anything, as the real executor keeps no empty block.
+		last := sn.height.Load()
+		if s.cfg.DiscardEmptyBlocks {
+			last = sn.kept.Load()
 		}
-		if !restored {
-			return fmt.Errorf("restart %s/%d: no checkpoint for block %d", part, sn.val, height)
+		cp := persist.LoadResume(s.nodeDir(sn), sn.part, last)
+		if cp == nil {
+			return fmt.Errorf("restart %s/%d: no checkpoint to resume executor block %d from", sn.part, sn.val, last)
 		}
+		node.Restore(cp)
+		sn.lastSaved = cp
+		sn.height.Store(cp.BlockIndex)
 		sn.nodeP.Store(node)
 	}
 	// Start them together, as a partition restarted as a whole comes back:
 	// each start waits seconds for its gossip mesh, and one at a time the
 	// first nodes back would run that long without the rest.
-	errs := make(chan error, len(vals))
-	for _, v := range vals {
-		sn := nodes[v]
+	errs := make(chan error, len(nodes))
+	for _, sn := range nodes {
 		go func() {
 			if err := sn.n().Start(s.runCtx); err != nil {
-				errs <- fmt.Errorf("restart %s/%d: %w", part, sn.val, err)
+				errs <- fmt.Errorf("restart %s/%d: %w", sn.part, sn.val, err)
 				return
 			}
 			errs <- nil
 		}()
 	}
-	for range vals {
+	for range nodes {
 		if err := <-errs; err != nil {
 			return err
 		}
 	}
-	for _, v := range vals {
-		s.startConsume(s.runCtx, nodes[v])
+	for _, sn := range nodes {
+		s.startConsume(s.runCtx, sn)
 	}
 	return nil
 }
@@ -156,8 +170,16 @@ func (s *Sim) scheduledRestarts(logf func(string, ...any)) ([]string, error) {
 			continue
 		}
 		r.done = true
+		if r.Network {
+			logf("RESTART every node of every partition at %s height %d", r.Part, h)
+			if err := s.restart(s.allNodes(), r.ExecutorFirst); err != nil {
+				return restarted, err
+			}
+			restarted = append(restarted, s.parts...)
+			continue
+		}
 		logf("RESTART %s nodes %v at height %d", r.Part, r.Vals, h)
-		if err := s.restart(r.Part, r.ExecutorFirst, r.Vals...); err != nil {
+		if err := s.restart(s.targets(r.Part, r.Vals), r.ExecutorFirst); err != nil {
 			return restarted, err
 		}
 		restarted = append(restarted, r.Part)

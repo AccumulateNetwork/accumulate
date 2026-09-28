@@ -135,6 +135,16 @@ type Config struct {
 	// state (Sim.Restart), each once, when its partition first reaches
 	// AtHeight.
 	Restarts []Restart
+
+	// DiscardEmptyBlocks makes the executor stand-in keep, as the real
+	// executor does, no block that carried no transaction: the last block a
+	// restarted node's executor reports is the last one that carried any
+	// (#4448).
+	DiscardEmptyBlocks bool
+
+	// LoadUntilHeight stops the load to a partition once it has executed
+	// this height, so its blocks from there on are empty.
+	LoadUntilHeight map[string]uint64
 }
 
 // Restart names nodes of one partition to restart, by their index in the
@@ -143,8 +153,12 @@ type Config struct {
 // ExecutorFirst stops the nodes' executors this long before the nodes
 // themselves, so consensus runs on past the last checkpoint, as it does when
 // a node stops with its executor behind.
+//
+// Network restarts every node of every partition, all stopped before any
+// comes back, when Part reaches AtHeight; Vals is then ignored.
 type Restart struct {
 	Part          string
+	Network       bool
 	Vals          []int
 	AtHeight      uint64
 	ExecutorFirst time.Duration
@@ -209,6 +223,7 @@ type simNode struct {
 	val    int
 	nodeP  atomic.Pointer[consensus.Node]
 	height atomic.Uint64
+	kept   atomic.Uint64 // the last block that carried a transaction
 	txs    atomic.Uint64
 	fatal  atomic.Value // error that stopped this node's consumer, if any
 
@@ -232,6 +247,17 @@ type simNode struct {
 
 	maxBlockTxs atomic.Uint64 // the most transactions one executed block carried
 	maxLag      atomic.Int64  // the deepest execution lag observed after a block
+}
+
+// maxHeight is the highest height any node of the partition has executed.
+func (s *Sim) maxHeight(part string) uint64 {
+	var h uint64
+	for _, sn := range s.byPart[part] {
+		if x := sn.height.Load(); x > h {
+			h = x
+		}
+	}
+	return h
 }
 
 // n is the node currently running for this validator and partition.
@@ -475,6 +501,7 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 			// of the block before producing it (#4238, #4448).
 			s.checkpoint(sn, node, group)
 			executedAny := false
+			blockTxs := 0
 			var executed []string
 			for _, cert := range group {
 				batches, err := node.CollectBatches(ctx, cert)
@@ -498,6 +525,7 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 					n += len(b.Transactions)
 				}
 				sn.txs.Add(uint64(n))
+				blockTxs += n
 				for {
 					cur := sn.maxBlockTxs.Load()
 					if uint64(n) <= cur || sn.maxBlockTxs.CompareAndSwap(cur, uint64(n)) {
@@ -525,7 +553,10 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				sn.seqMu.Lock()
 				sn.seq = append(sn.seq, fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ",")))
 				sn.seqMu.Unlock()
-				sn.height.Add(1)
+				h := sn.height.Add(1)
+				if blockTxs > 0 {
+					sn.kept.Store(h)
+				}
 			}
 			// The node counts every committed group it hands over; the
 			// executor reports each one back when its block is done, and the
@@ -592,6 +623,9 @@ func (s *Sim) load(ctx context.Context, part string) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
+			if until, ok := s.cfg.LoadUntilHeight[part]; ok && s.maxHeight(part) >= until {
+				return
+			}
 			n++
 			tx := []byte(fmt.Sprintf("consim-%s-%d", part, n))
 

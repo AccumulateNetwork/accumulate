@@ -68,3 +68,41 @@ func TestRestart_NoMatchingCheckpointStartsAtZero(t *testing.T) {
 	require.Equal(t, types.Round(0), svc.node.CurrentRound())
 	require.Equal(t, types.Round(0), svc.node.LastCommitRound())
 }
+
+// A validator whose last blocks carried nothing restarts with both
+// checkpoints above its executor's last block: the executor keeps no empty
+// block. It resumes after the older checkpoint's block — every block through
+// it was produced — and numbers the next block as its peers do (#4448). The
+// Docker BVNs of 2026-09-28 restarted with the executor at 12214 and
+// checkpoints for 12216 and 12217, and every one of them started at round
+// zero.
+func TestRestart_ResumesPastEmptyBlocks(t *testing.T) {
+	dir := t.TempDir()
+	svc, ca, author := newCommitService(t, 1)
+	svc.config.DataDir = dir
+
+	// Four blocks, leaders at rounds 4, 6, 8, 10. Blocks 3 and 4 are empty,
+	// so the executor's last block stays at 2.
+	for _, r := range []types.Round{4, 6, 8, 10} {
+		svc.node.Bullshark().SetLastCommitRound(r)
+		svc.node.Primary().SetRound(r + 1)
+		_, err := svc.processCommittedGroup(group(commitCert(author, r, time.Unix(int64(100+r), 0), nil)))
+		require.NoError(t, err)
+	}
+	require.Len(t, ca.blocks, 4)
+
+	restarted, ca2, author2 := newCommitService(t, 1)
+	restarted.config.DataDir = dir
+	ca2.last = 2
+	require.NoError(t, restarted.initializeGenesis())
+	require.True(t, restarted.seedFromCheckpoint(), "a checkpoint above the executor's last empty-tailed block is a position to resume")
+	require.Equal(t, types.Round(8), restarted.node.LastCommitRound(), "resumes after block 3, the older checkpoint's")
+	require.Equal(t, types.Round(9), restarted.node.CurrentRound())
+
+	// The group of block 4 is ordered again, and is block 4 again.
+	restarted.node.Bullshark().SetLastCommitRound(10)
+	_, err := restarted.processCommittedGroup(group(commitCert(author2, 10, time.Unix(110, 0), nil)))
+	require.NoError(t, err)
+	require.Len(t, ca2.blocks, 1)
+	require.Equal(t, uint64(4), ca2.blocks[0].Index, "the next block is numbered after the checkpoint's, as the peers number it")
+}

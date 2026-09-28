@@ -459,10 +459,10 @@ func (s *Service) initializeCommittee() (*types.Committee, error) {
 	return committee, nil
 }
 
-// The checkpoint files under DataDir.
+// The checkpoint files under DataDir, and the directory beside them.
 const (
-	checkpointFile     = "consensus-checkpoint.json"
-	prevCheckpointFile = "consensus-checkpoint.prev.json"
+	checkpointFile     = persist.CheckpointFile
+	prevCheckpointFile = persist.PrevCheckpointFile
 	consensusStateDir  = "consensus-dag"
 )
 
@@ -496,34 +496,36 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 // seedFromCheckpoint restores the consensus position that produced the
 // executor's last block, so a restarted validator rejoins at the live round
 // instead of round zero (#4238). Of the two checkpoints kept, the one whose
-// block is the executor's last block is the position to resume; a node with
-// state but no matching checkpoint starts at round zero and cannot catch a
-// live network (DIFFERENCES E11).
+// block is the executor's last block is the position to resume; when both are
+// above it, because the executor keeps no empty block and the node's last
+// blocks carried nothing, the older one is, and the node resumes after its
+// block (persist.ResumeFrom, #4448). A node with state but no such checkpoint
+// starts at round zero and cannot catch a live network (DIFFERENCES E11).
 func (s *Service) seedFromCheckpoint() bool {
 	if s.config.DataDir == "" || s.lastBlockIndex == 0 {
 		return false
 	}
-	for _, file := range []string{checkpointFile, prevCheckpointFile} {
-		store := persist.NewStore(s.config.DataDir)
-		store.SetFilename(file)
-		cp, err := store.Load()
-		if err != nil {
-			continue
-		}
-		if cp.BlockIndex != s.lastBlockIndex || cp.Partition != s.config.Partition.ID {
-			continue
-		}
-		s.node.Restore(cp)
-		s.lastSaved = cp
-		// Consensus resumes after this round, so the groups it commits from
-		// here are the ones after it; a join's handoff at a state below it
-		// would need groups this node will not be delivered (#4362).
-		s.lastLeaderRound = cp.LastCommitRound
-		return true
+	cp := persist.LoadResume(s.config.DataDir, s.config.Partition.ID, s.lastBlockIndex)
+	if cp == nil {
+		slog.Warn("No consensus checkpoint matches the executor's last block; starting at round zero",
+			"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex)
+		return false
 	}
-	slog.Warn("No consensus checkpoint matches the executor's last block; starting at round zero",
-		"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex)
-	return false
+	if cp.BlockIndex != s.lastBlockIndex {
+		slog.Info("The executor's last blocks were empty; resuming after the checkpointed block",
+			"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex, "resumeAfter", cp.BlockIndex)
+	}
+	s.node.Restore(cp)
+	s.lastSaved = cp
+	// The blocks the executor discarded as empty were produced: the next
+	// block is numbered after the checkpoint's, as every peer that did not
+	// restart numbers it.
+	s.lastBlockIndex = cp.BlockIndex
+	// Consensus resumes after this round, so the groups it commits from
+	// here are the ones after it; a join's handoff at a state below it
+	// would need groups this node will not be delivered (#4362).
+	s.lastLeaderRound = cp.LastCommitRound
+	return true
 }
 
 // initializeGenesis initializes the DAG with genesis certificates.

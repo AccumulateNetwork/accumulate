@@ -307,6 +307,22 @@ checkpoint whose block is the executor's last block
 (`Service.seedFromCheckpoint`, `Node.Restore`), so it participates in
 consensus from that round rather than from zero.
 
+**The executor keeps no empty block**, so its last block is the last one that
+carried anything, and a partition whose last blocks were empty restarts with
+both checkpoints above it (Docker, 2026-09-28: every BVN validator with its
+executor at 12214 and checkpoints for 12216 and 12217, while the busy
+Directory matched; #4448). The older checkpoint is then the position to
+resume: the newer one was written only after the older one's block was
+produced, so every block through the older one's was produced and those above
+the executor's last block carried nothing. The node restores it and numbers
+its next block after that checkpoint's block, as every peer that did not
+restart numbers it (`persist.ResumeFrom`). The newer checkpoint is never
+resumed from while its block is above the executor's: that block may not have
+been produced, and resuming there would skip its group. This rests on a
+produced block being durable once production returns, which the exact match
+already assumes; a store that loses a non-empty block that was produced is
+resumed past it (DIFFERENCES, C10).
+
 The position is the one **of the block being produced**, not Bullshark's
 position now (`Node.CheckpointAt(leaderRound)`): groups Bullshark has ordered
 since are still in the executor's queue, so the checkpoint's last commit is

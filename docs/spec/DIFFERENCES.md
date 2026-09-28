@@ -1733,6 +1733,20 @@ batches and its last authored header (#4448). What differs:
 - **The checkpoint's position being the produced block's, not Bullshark's
   now**, is exercised only where consim's executor lags; no test isolates it.
 
+### C10. Resuming past empty blocks trusts that a produced block is durable
+
+*[#4448](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4448)*
+
+consensus.md, "Restart": when both checkpoints are above the executor's last
+block, the node resumes from the older one, taking the blocks between as
+empty ones the executor discarded. Nothing checks that they were empty: a
+store that returned from producing a non-empty block and then lost it (no
+fsync, a power loss) is resumed past that block, and the node's state
+diverges from its peers' where before it would have refused to resume. The
+exact match rests on the same durability, but fails safe. A check needs the
+executor to record the last block it produced, empty or not, or the
+checkpoint to record whether its block carried anything.
+
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
