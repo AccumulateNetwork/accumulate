@@ -475,17 +475,26 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 	}
 	reportGaps(opts.Partition, gaps)
 	if len(gaps) > 0 {
-		// An entry from before the node was listening: the peers hold it and
-		// this node does not. The node executes anyway, with whatever
-		// staging holds: a block executed without an entry it needed is
-		// wrong only in the accounts its record names, and the root check
-		// repairs them from the block ledger (executor spec, "Sync", "Two
-		// mismatches", and step 6). The gap is said and put on the gauge.
+		// What the proven state says the partition received and staging
+		// does not hold: entries the peers hold, from before this node was
+		// listening. Executing q + 1 without them is executing it
+		// differently (executor spec, "Sync", "The algorithm", step 6; run
+		// 20260928T051402Z). The node does not hand off: it pulls on and
+		// is proven at a later block, until the peers have executed what
+		// they held and Delivered has passed it.
+		//
+		// It does not ask the sources for them. An answer submitted through
+		// consensus arrives with the collection proof that validates it,
+		// and the peers, who hold the entry already, do not take that
+		// proof from the duplicate: the follower then executed the entries
+		// blocks before its peers did (simulator, #4442: bob's account and
+		// the synthetic ledger differed at the first block).
 		streams := make([]string, len(gaps))
 		for i, g := range gaps {
 			streams[i] = g.String()
 		}
-		log.Info("The next block has a gap; executing anyway, and repairing on a mismatch", "synced", q, "block", q+1, "gaps", streams)
+		log.Info("The next block has a gap; not executing until the peers have delivered what they held", "synced", q, "block", q+1, "gaps", streams)
+		return false, nil
 	}
 
 	err = opts.Stage.SettleStagingAt(q)

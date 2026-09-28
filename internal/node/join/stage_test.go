@@ -100,6 +100,35 @@ func TestExecutorStage_AGapNamesItsStreamAndNumbers(t *testing.T) {
 		MissingTo: 106,
 		Held:      109,
 	}}, gaps, "one stream has a gap: 104-106 missing above Delivered 103, 109 held; BVN2's 41 follows its 40")
-	require.Equal(t, "bvn-BVN0.acme->bvn-BVN1.acme/synthetic delivered=103 missing=104-106 held=109 validated=0",
+	require.Equal(t, "bvn-BVN0.acme->bvn-BVN1.acme/synthetic delivered=103 missing=104-106 held=109 validated=0 received=0",
 		gaps[0].String())
+}
+
+// #4442 step 6, and the Directory followers of run 20260928T051402Z: the
+// proven state says the partition received through 106 on a stream it has
+// delivered through 103, and staging holds nothing on it -- every one of
+// 104-106 arrived before this node was listening, and its peers hold them.
+// That is a gap: executing the next block without them is executing it
+// differently. The stream is found from the pulled ledger, since staging has
+// nothing on it.
+func TestExecutorStage_AGapReachesToWhatTheStateReceived(t *testing.T) {
+	bvn1 := protocol.PartitionUrl("BVN1")
+	pool := bvn1.JoinPath(protocol.AnchorPool)
+	stream := execute.StreamID{Ledger: pool, Source: protocol.DnUrl()}
+
+	db := database.OpenInMemory(nil)
+	batch := db.Begin(true)
+	ledger := new(protocol.AnchorLedger)
+	ledger.Url = pool
+	ledger.Partition(stream.Source).Delivered = 103
+	ledger.Partition(stream.Source).Received = 106
+	require.NoError(t, batch.Account(pool).Main().Put(ledger))
+	require.NoError(t, batch.Commit())
+
+	stage := &ExecutorStage{Staging: execute.NewStaging(), Database: db, Partition: bvn1}
+	gaps, err := stage.HasGap(158)
+	require.NoError(t, err)
+	require.Len(t, gaps, 1, "no gap was found up to what the state received")
+	require.Equal(t, execute.StreamName(stream), gaps[0].StreamName())
+	require.Equal(t, "dn.acme->bvn-BVN1.acme/anchors delivered=103 missing=104-106 held=0 validated=0 received=106", gaps[0].String())
 }

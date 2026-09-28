@@ -261,3 +261,70 @@ func TestTheCollectorIsNotPlacedByOnePeersLedger(t *testing.T) {
 	require.True(t, held, "a read placed where no validator answers is held in silence")
 	require.Equal(t, uint64(lie), st.Entry)
 }
+
+// movingLedger is the producer's peers, answering their anchor ledger at
+// whatever number the test has set.
+type movingLedger struct{ n *uint64 }
+
+func (m movingLedger) QueryAccount(_ context.Context, scope *url.URL, _ *api.DefaultQuery) (*api.AccountRecord, error) {
+	return &api.AccountRecord{Account: &protocol.AnchorLedger{Url: scope, MinorBlockSequenceNumber: *m.n}}, nil
+}
+
+// TestTheCollectorCatchesUpPastAnchorsNoLongerHeld — #4442, Docker run
+// 20260928T051402Z: the BVN collector of every follower sat at one anchor for
+// nine hours. It was read less often than the partition anchored, the numbers
+// after it fell out of the validators' caches, and with the newest number it
+// had positioned at long behind it, an unanswered number was "not produced
+// yet" for ever. The ledgers now say the producer has moved on, and the
+// collector takes the anchors the validators still hold.
+func TestTheCollectorCatchesUpPastAnchorsNoLongerHeld(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	last := uint64(7)
+	answers := map[uint64]*api.MessageRecord[messaging.Message]{}
+	var vals validatorList
+	for i := 0; i < 3; i++ {
+		vals = append(vals, Validator{Name: "v", Sequencer: answeringFrom{answers: answers, signer: i, f: f, t: t}})
+	}
+	c, err := NewCollector(bvn0(), f.authority(t), vals, func(context.Context) ([]AccountReader, error) {
+		return []AccountReader{movingLedger{&last}}, nil
+	})
+	require.NoError(t, err)
+	got := observed{}
+	c.OnAnchor = got.record
+
+	held := func(from, to uint64) {
+		for k := range answers {
+			delete(answers, k)
+		}
+		for n := from; n <= to; n++ {
+			answers[n] = nil // marks n as held; answeringFrom signs it
+		}
+	}
+	held(1, 7)
+	require.NoError(t, c.Read(ctx))
+	require.Contains(t, got, uint64(7))
+
+	// The producer anchors on; the validators hold only the newest 50.
+	last = 1000
+	held(951, 1000)
+	for i := 0; i < 5; i++ {
+		require.NoError(t, c.Read(ctx))
+	}
+	require.Contains(t, got, uint64(1000), "the collector never reached the anchors its validators still hold")
+}
+
+// answeringFrom answers anchor n, signed by one validator, when n is held.
+type answeringFrom struct {
+	answers map[uint64]*api.MessageRecord[messaging.Message]
+	signer  int
+	f       *netFixture
+	t       *testing.T
+}
+
+func (a answeringFrom) Sequence(_ context.Context, _, _ *url.URL, n uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	if _, ok := a.answers[n]; !ok {
+		return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", n)
+	}
+	return a.f.signedBy(a.t, n, root(byte(n)), a.signer), nil
+}

@@ -61,10 +61,12 @@ func (l *locator) peerSlots(prefix []byte) (map[byte]bpt.BlockSlot, error) {
 	if l.calls > maxLocateCalls {
 		return nil, errors.NotAllowed.WithFormat("more than %d stored blocks differ", maxLocateCalls)
 	}
+	// The locator asks only for the root's block and for positions the peer
+	// named as branches, so NotFound is a tree the peer cannot serve as of v,
+	// not an empty one: taken as empty it named every account under it as
+	// differing (run 20260928T051402Z, block 12297).
 	rec, err := l.peer.QueryBptBlock(l.ctx, l.partition, &api.BptBlockQuery{Prefix: prefix, ForHeight: l.v})
 	switch {
-	case errors.Is(err, errors.NotFound):
-		return map[byte]bpt.BlockSlot{}, nil
 	case err != nil:
 		return nil, errors.UnknownError.WithFormat("the peer's stored block under %x as of %d: %w", prefix, l.v, err)
 	}

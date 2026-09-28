@@ -350,13 +350,12 @@ func contains(s []uint64, v uint64) bool {
 
 // A peer holds an entry from before this node was listening: B+1 carries a
 // stream's sequence 105 while the state synced at B says Delivered is 103,
-// and 104 is not in B+1. The gap does not hold the handoff: the node executes
-// B+1 with whatever staging holds, and a block executed without an entry it
-// needed is wrong only in the accounts its record names, which the root check
-// repairs from the block ledger (executor spec, "Sync", "Two
-// mismatches"). Before, the join held B+1 back and advanced the sync to a block with
-// no gap (#4362).
-func TestJoin_AGapDoesNotHoldTheHandoff(t *testing.T) {
+// and 104 is not in B+1. The gap holds the handoff (executor spec, "Sync",
+// "The algorithm", step 6; #4442): the state for B and the staging it implies
+// are not complete, and executing B+1 without 104 executes it differently
+// from the peers, as the Directory followers of run 20260928T051402Z did. The
+// join pulls on and hands off at the first block whose successor has no gap.
+func TestJoin_AGapHoldsTheHandoff(t *testing.T) {
 	const b = 20
 	buf := new(fakeBuffer)
 	stage := &fakeStage{gaps: map[uint64][]StreamGap{b + 1: {{Delivered: 103, Missing: 104, MissingTo: 104, Held: 105}}}}
@@ -369,9 +368,9 @@ func TestJoin_AGapDoesNotHoldTheHandoff(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, Joined, outcome)
 
-	assert.Equal(t, []uint64{b}, buf.handoffs, "the join hands off at B although B+1 has a gap")
-	assert.Equal(t, uint64(b), stage.settled, "staging settles at the block the state is")
-	assert.Equal(t, []uint64{b + 1}, stage.gapAsked, "the join asked about B+1")
+	assert.Equal(t, []uint64{b + 1}, buf.handoffs, "the join handed off at B, whose successor has a gap")
+	assert.Equal(t, uint64(b+1), stage.settled, "staging settles at the block the join hands off at")
+	assert.Equal(t, []uint64{b + 1, b + 2}, stage.gapAsked, "the join asked about B+1, then about B+2")
 }
 
 // Staging at the handoff holds everything collected through Q + 1 and nothing

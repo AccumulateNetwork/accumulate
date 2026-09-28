@@ -292,7 +292,17 @@ where they disagree with it, this wins.
    (Paul, 2026-09-28: "You can't execute any txs at height n until we have
    processed all blockledger accounts and have the complete BPT for n-1.").
    The node hands off at V only on the match, and V + 1 executes from the
-   consensus buffer. There is no unproven handoff.
+   consensus buffer. There is no unproven handoff. **The staging the state
+   implies is part of it** (Paul, 2026-09-28, step 6): before executing
+   block n, the state for n - 1 and the staging it implies are complete —
+   for every inbound stream, staging holds every number from the proven
+   `Delivered` + 1 to the proven `Received`. A number missing there is an
+   entry the peers received before this node was listening, and they will
+   execute it; a node without it executes that block differently (run
+   20260928T051402Z: every Directory follower missed on the first blocks
+   after its proof, in `dn.acme/anchors`, `dn.acme/ledger` and `ACME`).
+   Such a node does not hand off: it pulls on and is proven at a later
+   block, by which the peers have delivered what they held.
 4. **The synthetic ledgers give the staging floor.** In the state at B, each
    stream's `Delivered` says every synthetic transaction at or below it has
    been received and processed. Staging never needs any of them.
@@ -310,7 +320,10 @@ where they disagree with it, this wins.
    node does not wait for them: it executes from B + 1, user transactions
    included, with whatever staging holds, and an entry that arrives after
    the block its peers executed it in is an anchor mismatch, repaired
-   ("Two mismatches", 2). Staging need not be exact (Paul).
+   ("Two mismatches", 2). Staging need not be exact (Paul) — **but not
+   below `Received`** (step 3, 2026-09-28): the node hands off only once it
+   holds everything from `Delivered` + 1 to `Received`. What is requested is
+   what is above `Received`, or a hole no peer holds either.
 
 **Two mismatches, handled differently** (Paul). They are not the same
 failure, and the join treats them apart:
@@ -948,14 +961,14 @@ there is nothing in staging to worry about.**
 **A gap is an entry that arrived before the node was listening.** `B + 1`
 delivers #105 while the node's `Delivered` is 103 and #104 is not in `B + 1`:
 the peers held #104 from a block before `B`, and executing `B + 1` without it
-is the #4290 divergence. **The node executes anyway** ("The algorithm", step
-6; "Two mismatches", 2): it requests the missing number from the source, and
-a block executed without an entry it needed is wrong only in the accounts its
-record names; the anchor check finds it at the next block that anchors, and
-the repair brings those accounts — the synthetic ledger's `Delivered` among
-them — to what the peers ran (§2). The gap is said and put on
-the gauge (below); it no longer holds the handoff. Before, the node advanced
-the sync one block at a time until a block had no gap (#4362).
+is the #4290 divergence. **The gap holds the handoff** ("The algorithm", step
+3 and step 6; #4442, 2026-09-28): the gap reaches to the proven state's
+`Received` as well as to what staging holds, and a node with one pulls on and
+is proven at a later block, once the peers have delivered what they held.
+Executing anyway — the rule from #4362 to #4442 — made every Directory
+follower of run 20260928T051402Z miss on the first blocks after its proof,
+in `dn.acme/anchors`, `dn.acme/ledger` and `ACME`. The gap is said and put on
+the gauge (below).
 
 **A restart is a join, and it finds a gap when it stopped holding an
 unexecuted entry.** Staging is memory: whatever the node held unexecuted when
@@ -1015,11 +1028,11 @@ because the peers hold what this node lacks, and here no peer holds anything
 it did not execute itself.
 
 **The gap line names what it found** (`join.StreamGap`, #4432). For every
-stream with a gap, `The next block has a gap; executing anyway, and repairing on
-a mismatch` carries, under
-`gaps`, the stream as `source->ledger`, its `Delivered`, the first run of
-numbers nothing is held for (`missing=<first>-<last>`), the highest number held
-and the highest a validated hash stands at. The same first missing number is
+stream with a gap, `The next block has a gap; not executing until the peers
+have delivered what they held` carries, under `gaps`, the stream as
+`source->ledger`, its `Delivered`, the first run of numbers nothing is held for
+(`missing=<first>-<last>`), the highest number held, the highest a validated
+hash stands at, and the proven state's `Received`. The same first missing number is
 on the gauge `accumulate_join_gap_first_missing{partition,stream}`; each check
 replaces the partition's series, so a stream is on it only while its gap
 stands.

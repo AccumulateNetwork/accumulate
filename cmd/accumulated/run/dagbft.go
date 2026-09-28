@@ -588,7 +588,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		if !ok {
 			return errors.InternalError.With("this executor cannot join: it cannot settle staging")
 		}
-		stage := &join.ExecutorStage{Settler: settler, Staging: staging, Database: db}
+		stage := &join.ExecutorStage{Settler: settler, Staging: staging, Database: db, Partition: protocol.PartitionUrl(s.Partition.ID)}
 		opts := joinOptions(s.Partition.ID, joinState, s.service, stage,
 			&join.APIPeers{Partition: s.Partition.ID, Client: client, Network: inst.config.Network})
 		go func() {

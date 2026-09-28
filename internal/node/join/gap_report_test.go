@@ -22,8 +22,8 @@ import (
 // advancing the sync block=158 synced=157" and nothing more, so no one could
 // say which stream it was or at which number (#4432). The line names every
 // stream with a gap and its numbers, and the gauge carries the first missing
-// number per stream. A gap no longer holds the handoff (executor spec, "Sync",
-// "Two mismatches"); it is still said.
+// number per stream. A gap holds the handoff (executor spec, "Sync", "The
+// algorithm", step 6; #4442), and is said.
 func TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber(t *testing.T) {
 	const b = 157
 	const partition = "TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber"
@@ -41,13 +41,18 @@ func TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber(t *testing.T) {
 	state := &gapState{stage: stage, b: b}
 	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
 
-	_, err := run(t, Options{Partition: partition, Buffer: buf, Stage: stage, State: state, Peers: peers, Logger: logger})
+	// The gauge as the next check finds it: the gap at B+1 holds the
+	// handoff, and the join asks about B+2 next.
+	var gauge float64
+	probe := &gaugeProbe{fakeStage: stage, at: b + 2, read: func() {
+		gauge = testutil.ToFloat64(mGapMissing.WithLabelValues(partition, gap.StreamName()))
+	}}
+	_, err := run(t, Options{Partition: partition, Buffer: buf, Stage: probe, State: state, Peers: peers, Logger: logger})
 	require.NoError(t, err)
 
-	require.Contains(t, out.String(), "The next block has a gap; executing anyway")
+	require.Contains(t, out.String(), "The next block has a gap; not executing")
 	require.Contains(t, out.String(), gap.String(), "the gap line names the stream, its Delivered, the missing run and what is held")
-	require.Equal(t, 104.0, testutil.ToFloat64(mGapMissing.WithLabelValues(partition, gap.StreamName())),
-		"the gauge is the first missing number of the gapped stream")
+	require.Equal(t, 104.0, gauge, "the gauge is the first missing number of the gapped stream")
 
 	// The next check that finds no gap clears the partition's series.
 	stage = &fakeStage{}
@@ -56,4 +61,18 @@ func TestJoin_TheGapLineAndGaugeNameTheStreamAndNumber(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, testutil.CollectAndCount(mGapMissing, "accumulate_join_gap_first_missing"),
 		"the check that found no gap did not clear the partition's series")
+}
+
+// gaugeProbe runs read when the join asks about block at, before the check.
+type gaugeProbe struct {
+	*fakeStage
+	at   uint64
+	read func()
+}
+
+func (p *gaugeProbe) HasGap(block uint64) ([]StreamGap, error) {
+	if block == p.at {
+		p.read()
+	}
+	return p.fakeStage.HasGap(block)
 }

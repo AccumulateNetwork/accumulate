@@ -494,6 +494,14 @@ departs:
   again (`startRepair`), taking whole every account whose leaf differs from a
   page's (Paul, 2026-09-25: "the joining node has to pull the accounts
   again"); the spec re-pulls at the first root mismatch.
+- **The join does not request what it lacks between `Delivered` and
+  `Received`; it waits** for its peers to deliver it (#4442). A request's
+  answer, submitted through consensus, carries the collection proof that
+  validates the entries, and peers that already hold them do not take the
+  proof from the duplicate: in the simulator the follower then executed
+  them blocks before its peers (bob's account and the synthetic ledger
+  differed). Step 6's request is for a hole no peer holds, which the peers'
+  own healing asks for; a stream held open that long holds the join off.
 - **A miss is located only where the peers retain BPT history** for V
   (#4441); where none does, or the location names nothing, the join walks
   the tree again.

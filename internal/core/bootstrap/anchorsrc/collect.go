@@ -181,9 +181,28 @@ func (c *Collector) Read(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if !done && (answered || c.next >= c.newest) {
-			// Held at an anchor no quorum signed, or at one not produced
-			// yet: the next read asks again.
+		if !done && !answered && c.next >= c.newest {
+			// Not answered, at or past the newest the ledgers named when
+			// the read was positioned: not produced yet -- or no longer
+			// held, if the producer has moved on since. A collector read
+			// less often than the producer anchors falls out of the
+			// validators' caches, and with a newest that never moved it
+			// waited on a number no one would answer again: the BVN side
+			// of run 20260928T051402Z sat at one anchor for nine hours
+			// (#4442). The ledgers are asked again; a number below what
+			// they name now is skipped, to the backfill below it.
+			last, err := c.lastProduced(ctx)
+			if err != nil || last <= c.next {
+				return nil
+			}
+			c.newest = last
+			if last > collectBackfill && last-collectBackfill > c.next {
+				c.next = last - collectBackfill
+				continue
+			}
+		}
+		if !done && answered {
+			// Held at an anchor no quorum signed: the next read asks again.
 			return nil
 		}
 		// Taken, or older than the newest and answered by nobody: a

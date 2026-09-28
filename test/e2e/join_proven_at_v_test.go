@@ -126,7 +126,7 @@ func (f *provenFixture) join(t *testing.T, maxRounds int, stop func(*provenState
 	_, err := join.Run(ctx, join.Options{
 		Partition: f.name,
 		Buffer:    f.p.NodeJoin(provenJoiner),
-		Stage:     &join.ExecutorStage{Settler: settler, Staging: f.p.NodeStaging(provenJoiner), Database: f.p.NodeDatabase(provenJoiner)},
+		Stage:     &join.ExecutorStage{Settler: settler, Staging: f.p.NodeStaging(provenJoiner), Database: f.p.NodeDatabase(provenJoiner), Partition: f.part},
 		State:     st,
 		Peers:     &join.APIPeers{Partition: f.name, Client: f.sim.S.Services(), Network: t.Name()},
 		Retry:     time.Millisecond,
