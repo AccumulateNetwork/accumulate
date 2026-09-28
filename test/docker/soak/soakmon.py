@@ -3061,8 +3061,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 .legend{color:var(--mut);font-size:11px;margin-top:8px}
 /* The stats panel: one column per KIND of value, numbers right-aligned so a
    column reads as a column. Every id is unchanged; only the arrangement is. */
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 28px;align-items:start}
-.col h4{margin:0 0 2px;color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));align-items:start}
 .col .sub{color:var(--mut);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-top:6px;opacity:.8}
 .kv{display:grid;grid-template-columns:max-content 1fr;gap:0 8px;align-items:baseline}
 .kv b,.kv .n{font-size:15px;font-weight:680;font-variant-numeric:tabular-nums;text-align:right}
@@ -3076,6 +3075,17 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
    it wraps inside its column; .clamp cuts a long one at three lines and the
    whole text is its tooltip. */
 .stats>.col{min-width:0}
+/* Collapsible panels (Paul: "too much information on one panel"). The header
+   toggles; a collapsed panel shows only its header and a one-line summary. */
+.stats{margin-bottom:12px;gap:12px}
+.stats>.panel{margin-bottom:0}
+.panel>h2.ph{cursor:pointer;user-select:none;display:flex;gap:8px;align-items:baseline;min-width:0}
+.ph .chev{display:inline-block;transition:transform .12s;flex:none}
+.panel:not(.collapsed)>.ph .chev{transform:rotate(90deg)}
+.panel.collapsed>:not(h2){display:none!important}
+.panel.collapsed>h2{margin:0}
+.ph .psum{display:none;text-transform:none;letter-spacing:0;font-weight:500;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 0}
+.panel.collapsed>.ph .psum{display:block}
 .kv .cap{contain:inline-size;overflow-wrap:anywhere}
 .kv .cap.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .panel{min-width:0;overflow-wrap:anywhere}
@@ -3093,10 +3103,9 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
   <span id=net class="badge down">network ?</span>
   <span class=sub id=sub></span>
 </header>
-<div class="grid cards" id=cards></div>
-<div class=panel style="padding:9px 12px">
-  <div class=stats>
-    <div class=col><h4>rates</h4>
+<div class=panel data-p=summary><h2>Summary</h2><div class="grid cards" id=cards></div></div>
+<div class=stats>
+    <div class="panel col" data-p=rates><h2>rates</h2>
       <div class=sub>Current tx Rates (last 30 s)</div>
       <div class=kv>
         <b id=rtotal>—</b><span class=sl>total tx/s</span>
@@ -3116,7 +3125,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class=cap id=raover></span>
       </div>
     </div>
-    <div class=col><h4>chain</h4>
+    <div class="panel col" data-p=chain><h2>chain</h2>
       <div class=sub>heights</div>
       <div class=kv><span id=heights></span></div>
       <div class=sub>blocks</div>
@@ -3126,7 +3135,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class=cap id=lidle></span>
       </div>
     </div>
-    <div class=col><h4>follower</h4>
+    <div class="panel col" data-p=follower><h2>follower</h2>
       <div class=sub>a node in no committee, launched with the network or added mid-run</div>
       <div class=kv>
         <b id=fbehind>—</b><span class=sl>behind (blocks, now)</span>
@@ -3138,7 +3147,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class="cap clamp" id=fstate></span>
       </div>
     </div>
-    <div class=col><h4>nodes</h4>
+    <div class="panel col" data-p=nodes><h2>nodes</h2>
       <div class=sub>resident memory</div>
       <div class=kv>
         <b id=nrssavg>—</b><span class=sl>avg</span>
@@ -3173,7 +3182,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class="cap clamp" id=nsrows></span>
       </div>
     </div>
-    <div class=col><h4>delivery</h4>
+    <div class="panel col" data-p=delivery><h2>delivery</h2>
       <div class=sub>retention</div>
       <div class=kv>
         <b id=lheld>—</b><span class=sl>held (#)</span>
@@ -3187,7 +3196,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=sub>batch waits (#, by reason)</div>
       <div class=kv><span class=cap id=lwaits>—</span></div>
     </div>
-    <div class=col><h4>execution &middot; step 0 (#4169)</h4>
+    <div class="panel col" data-p=exec><h2>execution &middot; step 0 (#4169)</h2>
       <div class=kv>
         <b id=x0a>—</b><span class=sl>serial share</span>
         <b id=x0b>—</b><span class=sl>flushes per block</span>
@@ -3195,27 +3204,26 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
         <span class=cap id=x0note></span>
       </div>
     </div>
-  </div>
 </div>
-<div class=panel id=fjpanel>
+<div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
   <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node). Phase is the latest of Pulling the state / The walk has covered / Joined / not executing in agreement (BOOTING) / executing in agreement (ACTIVE). Counts are whole-run, from the log, and never clear.</div>
   <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>add → first ACTIVE</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>ACTIVE → BOOTING (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
-  <div class=panel>
+  <div class=panel data-p=synflow>
     <h2>Synthetic flow &nbsp;·&nbsp; src&nbsp;▸&nbsp;dst</h2>
     <div style="overflow-x:auto"><table class=mx id=mxSyn></table></div>
     <div class=legend>cell = received / <b>delivered</b>, sent + status below. In-flight lag is judged against the expected proof-path latency (8s + 7 block intervals): <b>caught up</b> under 2&times;, <b style="color:var(--yel)">warning</b> at 2&times;, <b style="color:var(--red)">red</b> at 4&times;. Undelivered messages draining behind holes show as <b style="color:var(--yel)">healing</b>; <b style="color:var(--red)">red</b> undelivered means delivery has actually stalled.</div>
   </div>
-  <div class=panel>
+  <div class=panel data-p=ancflow>
     <h2>Anchor flow &nbsp;·&nbsp; src&nbsp;▸&nbsp;dst</h2>
     <div style="overflow-x:auto"><table class=mx id=mxAnc></table></div>
     <div class=legend>Directory anchors to every BVN; each BVN anchors only to the Directory — so BVN↔BVN cells stay empty by design.</div>
   </div>
 </div>
 <div class=two id=whrow>
-  <div class=panel id=wpanel>
+  <div class=panel id=wpanel data-p=wedges>
     <h2>Wedges — dropped cross-partition messages</h2>
     <div class=pills>
       <div class=pill><div class=n id=wsyn>—</div><div class=l>queue-full (block bound)</div></div>
@@ -3225,7 +3233,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
     <svg class=spark id=spWedge viewBox="0 0 300 44" preserveAspectRatio=none></svg>
     <table id=wdest><thead><tr><th>dropped toward (destination)</th><th>drops by senders (#)</th></tr></thead><tbody></tbody></table>
   </div>
-  <div class=panel>
+  <div class=panel data-p=healing>
     <h2>Healing — span requests and what came back</h2>
     <div class=pills>
       <div class=pill><div class="n grn" id=hent>—</div><div class=l>entries healed</div></div>
@@ -3241,16 +3249,16 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
     <table id=hheldt><thead><tr><th>held in staging (source → ledger)</th><th>txs (#)</th><th>size</th></tr></thead><tbody></tbody></table>
   </div>
 </div>
-<div class=panel>
+<div class=panel data-p=mix>
   <h2>Transaction type mix (live)</h2>
   <table id=mix><thead><tr><th>type</th><th>generated (#)</th><th>rejected (#)</th><th>skipped (#)</th></tr></thead><tbody></tbody></table>
 </div>
 <div class=two>
-  <div class=panel>
+  <div class=panel data-p=accounts>
     <h2>Accounts created</h2>
     <div class=pills id=acct></div>
   </div>
-  <div class=panel>
+  <div class=panel data-p=chaos>
     <h2>Chaos events</h2>
     <div class=pills id=chaosc></div>
     <div class=chaoslog id=chaoslog></div>
@@ -3394,6 +3402,36 @@ function followersView(fj){
       +`<td>${n(r.rootMisses,'yel')}</td><td>${n(r.repairs,'yel')}</td><td>${n(r.repairChanged,'red')}</td><td>${n(r.drops,'red')}</td>`
       +`<td>${r.memMiB==null?'—':fmt(Math.round(r.memMiB))}</td><td>${st}</td></tr>`;
   }).join('');
+}
+// One-line summaries a collapsed panel shows in its header.
+function followersSummary(fj){
+  if(!fj||!fj.rows)return 'not measured yet';
+  if(!fj.rows.length)return fj.why||'no follower in this topology';
+  const by={};
+  for(const r of fj.rows)(by[r.container]=by[r.container]||[]).push(r);
+  const names=Object.keys(by);
+  const act=names.filter(n=>by[n].every(r=>r.phase==='ACTIVE'||(r.life==='launched'&&r.phase==='not started'))).length;
+  const beh=fj.rows.map(r=>r.behind).filter(v=>v!=null);
+  const sum=k=>fj.rows.reduce((a,r)=>a+(r[k]||0),0);
+  const dead=fj.rows.filter(r=>r.oomKilled||(r.status&&r.status!=='running')).map(r=>r.container);
+  return `${act} of ${names.length} ACTIVE`
+    +` · worst ${beh.length?fmt(Math.max(...beh))+' blocks behind':'lag unread'}`
+    +` · ${fmt(sum('rootMisses'))} root misses · ${fmt(sum('drops'))} drops`
+    +(dead.length?` · DOWN: ${[...new Set(dead)].join(', ')}`:'');
+}
+function flowSummary(mat,parts){
+  if(!mat||!parts)return 'waiting';
+  let n=0,red=0,warn=0,heal=0;
+  for(const a of parts)for(const b of parts){
+    const c=(mat[a]&&mat[a][b])||null;
+    if(a===b||!c||!(c.sent||c.recv||c.deliv))continue;
+    n++;
+    if(c.state==='red')red++;else if(c.state==='warn')warn++;
+    if(/healing/.test(c.note||''))heal++;
+  }
+  if(!n)return 'no streams yet';
+  if(!red&&!warn&&!heal)return `all ${n} streams caught up`;
+  return [red&&`${red} red`,warn&&`${warn} warning`,heal&&`${heal} healing`].filter(Boolean).join(' · ')+` of ${n} streams`;
 }
 // --- end pure render helpers ---
 function spark(el,pts,color){
@@ -3638,8 +3676,44 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   $('lwaits').innerHTML = wk.length? wk.sort().map(k=>`${k}=<b>${wr[k]}</b>`).join(' · ')
     : '<span class=mut>none</span>';
 
+  try{summaries(s);}catch(e){}
   $('foot').textContent=`updated ${age}s ago · flow+wedges+heals refresh ~1s · monitor read-only`;
 }
+const OPEN_DEFAULT={summary:1,rates:1,chain:1,followers:1};
+function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function initPanels(){
+  for(const p of document.querySelectorAll('.panel[data-p]')){
+    const k=p.dataset.p,h=p.querySelector(':scope>h2');
+    if(!h)continue;
+    h.classList.add('ph');
+    h.innerHTML=`<span class=chev>&#9656;</span><span>${h.innerHTML}</span><span class=psum></span>`;
+    const saved=lsGet('soakmon.panel.'+k);
+    p.classList.toggle('collapsed',!(saved==null?OPEN_DEFAULT[k]:saved==='1'));
+    h.addEventListener('click',()=>lsSet('soakmon.panel.'+k,p.classList.toggle('collapsed')?'0':'1'));
+  }
+}
+function setSum(k,t){const e=document.querySelector(`.panel[data-p="${k}"]>.ph .psum`);if(e){e.textContent=t;e.title=t;}}
+const tx=id=>($(id)?$(id).textContent.trim():'—');
+function summaries(s){
+  const mx=s.matrix||{},h=s.heals||{},hr=h.requests||{},w=s.wedges||{},lg=s.loadgen||{},ch=(s.chaos||{}).counts||{},a=lg.accounts||{};
+  setSum('summary',`DN height ${fmt((s.network||{}).dnHeight)} · ${fmt(lg.generated)} tx generated · ${fmt(lg.rejected||0)} rejected`);
+  setSum('rates',`${tx('rtotal')} tx/s now (last 30 s) · ${tx('ratotal')} tx/s whole run`);
+  setSum('chain',`${fmt(((s.life||{}).blocks))} blocks produced · ${tx('lempty')} empty`);
+  setSum('follower',`${tx('fbehind')} blocks behind now · ${tx('fmax')} worst whole run`);
+  setSum('nodes',`RSS ${tx('nrssavg')} avg, ${tx('nrssmax')} max · ${tx('nsact')} node×partition ACTIVE`);
+  setSum('delivery',`${tx('lheld')} held · ${tx('lredel')} re-delivered`);
+  setSum('exec',`serial share ${tx('x0a')} · ${tx('x0b')} flushes per block`);
+  setSum('followers',followersSummary(s.followerJoins));
+  setSum('synflow',flowSummary((mx.flows||{}).synthetic,mx.parts));
+  setSum('ancflow',flowSummary((mx.flows||{}).anchor,mx.parts));
+  setSum('wedges',w.measured?`${fmt(w.total||0)} dropped`:'not measured');
+  setSum('healing',h.requests?`${fmt(hr.answered||0)} answered · ${fmt(hr['not-yet']||0)} not-yet · ${fmt(hr.miss||0)} miss · ${fmt(hr.failed||0)} failed`:'not measured');
+  setSum('mix',`${fmt(lg.generated)} generated · ${fmt(lg.rejected||0)} rejected · ${fmt(lg.skipped||0)} skipped`);
+  setSum('accounts',`${fmt(a.identities||0)} identities · ${fmt(a.accounts||0)} accounts`);
+  setSum('chaos',`${fmt(ch.restart||0)} restarts · ${fmt(ch.pause||0)} pauses · ${fmt(ch.skip||0)} skips`);
+}
+initPanels();
 tick();setInterval(tick,1000);
 </script>
 <details id=defs style="margin:14px 0 6px 0"><summary style="cursor:pointer;color:var(--mut)">definitions — what every number on this board is</summary><dl id=defsl style="columns:2;column-gap:28px;font-size:12px;line-height:1.35"></dl></details>

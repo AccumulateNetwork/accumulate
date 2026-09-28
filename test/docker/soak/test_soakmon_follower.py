@@ -228,7 +228,7 @@ class TheRowGroupIsOnTheBoard(unittest.TestCase):
     del _fh
 
     def test_the_panel_and_its_ids_exist(self):
-        for tag in ("<h4>follower", "id=fbehind", "id=fheight", "id=fmax",
+        for tag in ("<h2>follower", "id=fbehind", "id=fheight", "id=fmax",
                     "id=fres"):
             self.assertIn(tag, self.PAGE, tag)
 

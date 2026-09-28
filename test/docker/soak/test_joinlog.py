@@ -109,11 +109,12 @@ class TheRows(unittest.TestCase):
         self.assertEqual(137, rows[0]["exitCode"])
 
 
-def render(fj):
+def render(fj, fn="followersView", *more):
     import test_soakmon_render as tr
     src = tr.helpers()
+    args = ",".join(json.dumps(a) for a in (fj,) + more)
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
-        f.write(src + "\nprocess.stdout.write(JSON.stringify(followersView(%s)));" % json.dumps(fj))
+        f.write(src + "\nprocess.stdout.write(JSON.stringify(%s(%s)));" % (fn, args))
         path = f.name
     try:
         p = subprocess.run([NODE, path], capture_output=True, text=True)
@@ -148,6 +149,34 @@ class ThePanelRenders(unittest.TestCase):
         self.assertIn("acc-bvn2-fol1 → BVN2", html)
         self.assertIn("not added", html)
         self.assertIn("not created", html)
+
+
+
+@unittest.skipIf(NODE is None, "no node on this machine")
+class TheCollapsedSummaries(unittest.TestCase):
+    """A collapsed panel shows one line in its header; these run it in node."""
+
+    def test_followers_summary(self):
+        row = lambda c, ph, **k: dict({"container": c, "partition": "p", "life": "added",
+                                       "phase": ph, "behind": None, "rootMisses": 0,
+                                       "drops": 0, "status": "running"}, **k)
+        t = render({"rows": [
+            row("a", "ACTIVE", behind=2), row("a", "ACTIVE", behind=12, rootMisses=3),
+            row("b", "pulling", rootMisses=2, drops=1),
+            row("g", "not started", life="launched", behind=0),
+            row("c", "BOOTING", status="exited", oomKilled=True)]}, "followersSummary")
+        self.assertEqual("2 of 4 ACTIVE · worst 12 blocks behind · 5 root misses"
+                         " · 1 drops · DOWN: c", t)
+        self.assertEqual("not measured yet", render(None, "followersSummary"))
+
+    def test_flow_summary(self):
+        parts = ["Directory", "BVN1"]
+        ok = {"Directory": {"BVN1": {"sent": 5, "recv": 5, "deliv": 5}},
+              "BVN1": {"Directory": {"sent": 5, "recv": 5, "deliv": 5}}}
+        self.assertEqual("all 2 streams caught up", render(ok, "flowSummary", parts))
+        ok["BVN1"]["Directory"].update(state="red")
+        ok["Directory"]["BVN1"].update(note="1 healing, draining")
+        self.assertEqual("1 red · 1 healing of 2 streams", render(ok, "flowSummary", parts))
 
 
 if __name__ == "__main__":
