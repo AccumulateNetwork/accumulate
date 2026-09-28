@@ -3209,7 +3209,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 <div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
   <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node). Phase is the latest of Pulling the state / The walk has covered / Joined / not executing in agreement (BOOTING) / executing in agreement (ACTIVE). Counts are whole-run, from the log, and never clear.</div>
-  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>add → first proven</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>proven → repairing (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>catch-up: state downloaded</th><th>catch-up: state proven</th><th>catch-up: in agreement</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>proven → repairing (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
   <div class=panel data-p=synflow>
@@ -3388,7 +3388,7 @@ function followersView(fj){
   const PC={ACTIVE:'grn',BOOTING:'red','handed off':'yel',walked:'yel',pulling:'yel'};
   const fresh=r=>r.life==='waiting'||r.life==='removed';
   // Plain words for the join's own phase names (Paul: "handed off? walked?").
-  const PHASE_WORDS={'pulling':'downloading state','walked':'state downloaded','handed off':'executing, not yet proven','BOOTING':'root missed, repairing','ACTIVE':'proven, in agreement','no join line yet':'starting'};
+  const PHASE_WORDS={'pulling':'downloading state','walked':'state downloaded','proven':'state proven','handed off':'executing, not yet proven','BOOTING':'root missed, repairing','ACTIVE':'proven, in agreement','no join line yet':'starting'};
   const n=(v,col)=>v==null?'—':`<span class="${v&&col?col:''}">${fmt(v)}</span>`;
   return fj.rows.map(r=>{
     const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')
@@ -3401,13 +3401,14 @@ function followersView(fj){
     const toA=r.toActiveSec!=null?d(r.toActiveSec):(r.phase==='ACTIVE'||r.life==='launched'?'<span class=mut>—</span>':'—');
     return `<tr><td class=name>${r.container}${launched} → ${shortP(r.partition)}</td>`
       +`<td class=${phc} title="${ph}">${PHASE_WORDS[ph]||ph}</td><td>${h}</td><td>${fresh(r)?'—':n(r.behind,'yel')}</td>`
-      +`<td>${fresh(r)?'—':d(r.sinceAddSec)}</td><td>${toA}</td>`
+      +`<td>${fresh(r)?'—':d(r.sinceAddSec)}</td><td>${r.toWalkedSec!=null?d(r.toWalkedSec):'—'}</td><td>${r.toProvenSec!=null?d(r.toProvenSec):'—'}</td><td><b>${toA}</b></td>`
       +`<td>${n(r.rootMisses,'yel')}</td><td>${n(r.repairs,'yel')}</td><td>${n(r.repairChanged,'red')}</td><td>${n(r.drops,'red')}</td>`
       +`<td>${r.memMiB==null?'—':fmt(Math.round(r.memMiB))}</td><td>${st}</td></tr>`;
   }).join('');
 }
 // One-line summaries a collapsed panel shows in its header.
 function followersSummary(fj){
+  const d=s=>s==null?'—':(s<3600?`${Math.floor(s/60)}m ${String(Math.floor(s%60)).padStart(2,'0')}s`:`${Math.floor(s/3600)}h ${String(Math.floor(s%3600/60)).padStart(2,'0')}m`);
   if(!fj||!fj.rows)return 'not measured yet';
   if(!fj.rows.length)return fj.why||'no follower in this topology';
   const by={};
@@ -3417,7 +3418,9 @@ function followersSummary(fj){
   const beh=fj.rows.map(r=>r.behind).filter(v=>v!=null);
   const sum=k=>fj.rows.reduce((a,r)=>a+(r[k]||0),0);
   const dead=fj.rows.filter(r=>r.oomKilled||(r.status&&r.status!=='running')).map(r=>r.container);
+  const cu=names.map(n=>by[n].every(r=>r.toActiveSec!=null)?Math.max(...by[n].map(r=>r.toActiveSec)):null).filter(v=>v!=null);
   return `${act} of ${names.length} ACTIVE`
+    +(cu.length?` · caught up in ${d(Math.min(...cu))}–${d(Math.max(...cu))}`:'')
     +` · worst ${beh.length?fmt(Math.max(...beh))+' blocks behind':'lag unread'}`
     +` · ${fmt(sum('rootMisses'))} root misses · ${fmt(sum('drops'))} drops`
     +(dead.length?` · DOWN: ${[...new Set(dead)].join(', ')}`:'');

@@ -36,6 +36,7 @@ PHASES = (
     ("not executing in agreement", "BOOTING"),
     ("executing in agreement", "ACTIVE"),
     ("Joined", "handed off"),
+    ("The state is proven", "proven"),
     ("The walk has covered", "walked"),
     ("Pulling the state", "pulling"),
 )
@@ -70,8 +71,14 @@ def part_key(p):
     return p
 
 
+def _since(at, added):
+    """Seconds from the add to a first-seen phase, or None."""
+    return (at - added) if (at and added and at >= added) else None
+
+
 def new_partition():
     return {"phase": "not started", "phaseAt": None, "firstActiveAt": None,
+            "firstWalkedAt": None, "firstProvenAt": None,
             "rootMisses": 0, "repairs": 0, "repairChanged": 0, "drops": 0}
 
 
@@ -122,6 +129,10 @@ class Reader:
                     p["phase"], p["phaseAt"] = phase, at
                     if phase == "ACTIVE" and p["firstActiveAt"] is None:
                         p["firstActiveAt"] = at
+                    if phase == "walked" and p["firstWalkedAt"] is None:
+                        p["firstWalkedAt"] = at
+                    if phase == "proven" and p["firstProvenAt"] is None:
+                        p["firstProvenAt"] = at
                     if phase == "BOOTING":
                         p["drops"] += 1
                     break
@@ -236,6 +247,8 @@ def rows(followers, reader, heights, lives, state, mem, now):
                 "addedAt": added,
                 "sinceAddSec": (now - added) if added else None,
                 "toActiveSec": (fa - added) if (fa and added and fa >= added) else None,
+                "toWalkedSec": _since(lp["firstWalkedAt"], added),
+                "toProvenSec": _since(lp["firstProvenAt"], added),
                 "rootMisses": lp["rootMisses"], "repairs": lp["repairs"],
                 "repairChanged": lp["repairChanged"], "drops": lp["drops"],
                 "memMiB": mem.get(c),
