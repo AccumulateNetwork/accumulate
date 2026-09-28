@@ -224,8 +224,12 @@ type simNode struct {
 	nodeP  atomic.Pointer[consensus.Node]
 	height atomic.Uint64
 	kept   atomic.Uint64 // the last block that carried a transaction
-	txs    atomic.Uint64
-	fatal  atomic.Value // error that stopped this node's consumer, if any
+
+	// The block the node resumed after at its last restart, and the last
+	// block that carried a transaction when it stopped.
+	resumedAt, keptAtRestart uint64
+	txs                      atomic.Uint64
+	fatal                    atomic.Value // error that stopped this node's consumer, if any
 
 	// What a restart needs to rebuild the node (Sim.Restart).
 	key       ed25519.PrivateKey

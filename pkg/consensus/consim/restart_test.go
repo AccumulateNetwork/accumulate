@@ -96,32 +96,34 @@ func TestRestartDoesNotReauthorARound(t *testing.T) {
 	runRestart(t, 300*time.Millisecond, 0, 1, 3)
 }
 
-// TestRestartNetworkAfterEmptyBlocks restarts every validator of every
-// partition together, as the Docker network was recreated on 2026-09-28,
-// with the executor keeping no empty block and BVN1's load stopped long
-// before, so its last blocks carried nothing while the Directory's were busy.
-// Each BVN1 executor's last block is then below both of its checkpoints; the
-// Directory resumed and every BVN validator started at round zero (#4448).
-// Every partition must resume and order what its peers order.
-func TestRestartNetworkAfterEmptyBlocks(t *testing.T) {
+// runNetworkRestart restarts every validator of every partition together, as
+// the Docker network was recreated on 2026-09-28, with the executor keeping
+// no empty block, and with the load to the partitions in loadUntil stopped
+// once they reach that height, so their last blocks before the restart
+// carry nothing. Each such executor's last block is then below both of its
+// checkpoints; on Docker the BVN validators started at round zero (#4448).
+// Every node of every partition must resume, order what its peers order and
+// go on producing: sustained blocks past its height at the restart.
+func runNetworkRestart(t *testing.T, loadUntil map[string]uint64) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("runs the full consensus stack for tens of seconds")
 	}
+	const restartAt, sustained = 60, 150
 	sim, err := New(Config{
 		BVNs:               1,
 		ValidatorsPerBVN:   4,
 		TPS:                20,
-		TPSByPartition:     map[string]int{"Directory": 20},
 		MinRoundInterval:   5 * time.Millisecond,
 		BatchTimeout:       10 * time.Millisecond,
 		BatchSize:          20,
-		TargetHeight:       160,
+		TargetHeight:       restartAt + 30 + sustained,
 		Duration:           3 * time.Minute,
 		StallAfter:         20 * time.Second,
 		StateDir:           t.TempDir(),
 		DiscardEmptyBlocks: true,
-		LoadUntilHeight:    map[string]uint64{"BVN1": 20},
-		Restarts:           []Restart{{Part: "BVN1", Network: true, AtHeight: 60}},
+		LoadUntilHeight:    loadUntil,
+		Restarts:           []Restart{{Part: "BVN1", Network: true, AtHeight: restartAt}},
 		Out:                os.Stdout,
 	})
 	if err != nil {
@@ -141,15 +143,30 @@ func TestRestartNetworkAfterEmptyBlocks(t *testing.T) {
 			t.Fatalf("%s: %d conflicting certificates refused", part, n)
 		}
 		for i, sn := range sim.byPart[part] {
-			if h := sn.height.Load(); h < 160 {
-				t.Fatalf("%s node %d reached only height %d", part, i, h)
+			if sn.resumedAt == 0 {
+				t.Fatalf("%s node %d was not restarted", part, i)
+			}
+			if h := sn.height.Load(); h < sn.resumedAt+sustained {
+				t.Fatalf("%s node %d resumed at block %d and produced only to %d; want %d blocks after it", part, i, sn.resumedAt, h, sustained)
+			}
+			if _, quiet := loadUntil[part]; quiet && sn.keptAtRestart >= sn.resumedAt {
+				t.Fatalf("%s node %d kept block %d at the restart: its last blocks were not empty, so the test did not restart the shape it names", part, i, sn.keptAtRestart)
 			}
 		}
 	}
-	for i, sn := range sim.byPart["BVN1"] {
-		if k := sn.kept.Load(); k >= 60 {
-			t.Fatalf("BVN1 node %d kept block %d: its blocks after the load stopped were not empty, so the test did not restart the shape it names", i, k)
-		}
-	}
 	t.Logf("reached heights %v in %s", res.Heights, res.Elapsed.Truncate(time.Second))
+}
+
+// TestRestartNetworkAfterEmptyBlocks is the Docker shape: the Directory busy
+// up to the restart, BVN1's last blocks empty.
+func TestRestartNetworkAfterEmptyBlocks(t *testing.T) {
+	runNetworkRestart(t, map[string]uint64{"BVN1": 20})
+}
+
+// TestRestartNetworkAllIdle restarts the network with every partition's last
+// blocks empty, the Directory's included: the shape the Docker network had
+// by 23:44Z, the Directory producing only empty blocks (1739 of 1745) with
+// its executor at 12410 and its checkpoints at 14142 and 14143.
+func TestRestartNetworkAllIdle(t *testing.T) {
+	runNetworkRestart(t, map[string]uint64{"BVN1": 20, "Directory": 20})
 }

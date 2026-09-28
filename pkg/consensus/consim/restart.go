@@ -123,6 +123,7 @@ func (s *Sim) restart(nodes []*simNode, executorFirst time.Duration) error {
 		node.Restore(cp)
 		sn.lastSaved = cp
 		sn.height.Store(cp.BlockIndex)
+		sn.resumedAt, sn.keptAtRestart = cp.BlockIndex, sn.kept.Load()
 		sn.nodeP.Store(node)
 	}
 	// Start them together, as a partition restarted as a whole comes back:
