@@ -269,3 +269,79 @@ func TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord(t *testing.T
 	require.Equal(t, rm1, rm2,
 		"the records round made %d commits for 200 accounts and %d for 2,000", rm1, rm2)
 }
+
+// omittingQuerier leaves one account out of every ChangedAccountStates answer
+// while omit is set.
+type omittingQuerier struct {
+	api.Querier
+	victim *url.URL
+	omit   bool
+}
+
+func (q *omittingQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	r, err := q.Querier.Query(ctx, scope, query)
+	if _, ok := query.(*api.ChangedAccountStatesQuery); !ok || err != nil || !q.omit {
+		return r, err
+	}
+	rec := r.(*api.AccountStatesRecord)
+	var kept []*api.AccountState
+	for _, st := range rec.States {
+		if !st.Url.Equal(q.victim) {
+			kept = append(kept, st)
+		}
+	}
+	rec.States = kept
+	return rec, nil
+}
+
+// TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused — #4461. The
+// catch-up answer carries the block-ledger records after I and the accounts
+// they name. An answer that leaves out an account one of its records names is
+// refused whole: nothing of it is written, and L does not move. The same
+// records answered whole are taken.
+func TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	alice := protocol.AccountUrl("alice", "tokens")
+	bob := protocol.AccountUrl("bob", "tokens")
+	peerDB := peerStore(t)
+	putLedger(t, peerDB, here, 10)
+	putTokens(t, peerDB, alice, 5)
+	putTokens(t, peerDB, bob, 5)
+	q := &omittingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}), victim: bob}
+
+	db := database.OpenInMemory(nil)
+	db.SetObserver(database.NewDatabaseObserver())
+	t.Cleanup(func() { _ = db.Close() })
+	values, _ := genesisValues(t, 4)
+	putNetwork(t, db, here, values)
+	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: q, block: 10}, ExecutedBlock: 1})
+	require.NoError(t, err)
+	ctx := context.Background()
+	for round := 0; round == 0 || !s.sync.walked; round++ {
+		require.NoError(t, s.Pull(ctx))
+		require.Less(t, round, 10)
+	}
+
+	// Block 11 changes alice and bob.
+	putTokens(t, peerDB, alice, 11)
+	putTokens(t, peerDB, bob, 12)
+	b := peerDB.Begin(true)
+	require.NoError(t, b.Account(here.JoinPath(protocol.Ledger)).BlockLedger(11).Put(&database.BlockLedger{Index: 11, Entries: []*protocol.BlockEntry{
+		{Account: alice, Chain: "main", Index: 1},
+		{Account: bob, Chain: "main", Index: 1},
+	}}))
+	require.NoError(t, b.Commit())
+	putLedger(t, peerDB, here, 11)
+	s.sources.(*onePeer).block = 11
+
+	q.omit = true
+	require.NoError(t, s.Pull(ctx))
+	require.Equal(t, uint64(10), s.sync.last, "an answer that left out bob, whom block 11's record names, was taken")
+	require.Equal(t, int64(5), balanceIn(t, db, alice), "alice was written from an answer that was refused")
+
+	q.omit = false
+	require.NoError(t, s.Pull(ctx))
+	require.Equal(t, uint64(11), s.sync.last)
+	require.Equal(t, int64(11), balanceIn(t, db, alice))
+	require.Equal(t, int64(12), balanceIn(t, db, bob))
+}

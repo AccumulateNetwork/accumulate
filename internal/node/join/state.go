@@ -734,6 +734,12 @@ func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peers
 		calls += n
 		switch {
 		case err == nil:
+		case errors.Is(err, errRefusedAnswer):
+			// Nothing of it was written: another peer is asked.
+			s.log.Info("A peer's answer of the block-ledger records was refused; the next is asked",
+				"partition", s.partition, "peer", sourceKey(src), "after", p.last, "error", err)
+			i++
+			continue
 		case n <= 1:
 			// The first page was not served: another peer is asked.
 			s.log.Info("A peer did not answer the block-ledger records; the next is asked",
@@ -759,13 +765,28 @@ func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peers
 	}
 }
 
+// errRefusedAnswer is an answer of the records refused whole: nothing of it
+// is written, and the next peer is asked.
+var errRefusedAnswer = errors.Conflict.With("the answer was refused")
+
 // recordsOnce asks one peer for one answer of ChangedAccountStates after L,
-// every page of it, and takes every account it answers. It returns the
+// every page of it, and takes it: the block-ledger records it carries, and
+// every account they name (#4461). The answer is taken whole or not at all.
+// Its pages are held until the last, and the records must name exactly the
+// accounts the pages serve: an answer that leaves out an account a record
+// names, or serves one no record names, is refused, nothing of it is written,
+// and the next peer is asked. The accounts of a taken answer are marked
+// current by the records' names and written in one commit. It returns the
 // records' end T, the block the last page was read at, and how many pages it
 // asked for.
 func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Source) (through, block uint64, calls int, err error) {
 	after := p.last
 	var cursor []byte
+	var records []*api.BlockLedgerRecord
+	var states []*api.AccountState
+	var blocks []uint64
+	answered := map[[32]byte]bool{}
+	highest := uint64(0)
 	p.part = nil
 	for {
 		calls++
@@ -779,25 +800,87 @@ func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Sour
 		if rec.Through < after || rec.Block < rec.Through || cursor != nil && rec.Through != through {
 			return 0, 0, calls, errors.Conflict.WithFormat("the peer answered the records after %d through %d at block %d", after, rec.Through, rec.Block)
 		}
-		through, block = rec.Through, rec.Block
-		p.highest = max(p.highest, block)
-		states := s.statesOf(p, rec)
-		for _, st := range states {
-			if st.Url != nil {
-				p.current[accountKey(st.Url)] = true
-			}
+		if cursor == nil {
+			records = rec.Records
 		}
-		taken := s.takeStates(ctx, p, src, states, rec.Block)
-		for _, st := range states {
-			if st.Url != nil && !taken[accountKey(st.Url)] {
-				p.retry[accountKey(st.Url)] = st.Url
+		through, block = rec.Through, rec.Block
+		highest = max(highest, block)
+		if rec.Part != nil && rec.Part.Url != nil {
+			answered[accountKey(rec.Part.Url)] = true
+		}
+		for _, st := range s.statesOf(p, rec) {
+			if st.Url == nil {
+				continue
 			}
+			answered[accountKey(st.Url)] = true
+			states = append(states, st)
+			blocks = append(blocks, rec.Block)
 		}
 		if len(rec.Cursor) == 0 {
-			return through, block, calls, nil
+			break
 		}
 		cursor = rec.Cursor
 	}
+
+	named, err := namedByRecords(records, after, through)
+	if err == nil {
+		err = coversExactly(named, answered)
+	}
+	if err != nil {
+		return 0, 0, calls, fmt.Errorf("%w: records after %d through %d: %w", errRefusedAnswer, after, through, err)
+	}
+
+	p.highest = max(p.highest, highest)
+	for k, u := range named {
+		p.current[k] = true
+		if !answered[k] {
+			p.retry[k] = u
+		}
+	}
+	taken := s.takeStates(ctx, p, src, states, blocks)
+	for _, st := range states {
+		if !taken[accountKey(st.Url)] {
+			p.retry[accountKey(st.Url)] = st.Url
+		}
+	}
+	return through, block, calls, nil
+}
+
+// namedByRecords is every account the records name, by the rule the peer
+// answers them by (api.RecordNames). A record of a block outside the
+// answer's span, or two of one block, is refused.
+func namedByRecords(records []*api.BlockLedgerRecord, after, through uint64) (map[[32]byte]*url.URL, error) {
+	named := map[[32]byte]*url.URL{}
+	seen := map[uint64]bool{}
+	for _, r := range records {
+		if r == nil {
+			return nil, errors.Conflict.With("an empty record")
+		}
+		if r.Index <= after || r.Index > through || seen[r.Index] {
+			return nil, errors.Conflict.WithFormat("a record of block %d, outside %d through %d or repeated", r.Index, after+1, through)
+		}
+		seen[r.Index] = true
+		for _, u := range api.RecordNames(r.Entries) {
+			named[accountKey(u)] = u
+		}
+	}
+	return named, nil
+}
+
+// coversExactly says whether the accounts an answer served are exactly those
+// its records name.
+func coversExactly(named map[[32]byte]*url.URL, answered map[[32]byte]bool) error {
+	for k, u := range named {
+		if !answered[k] {
+			return errors.Conflict.WithFormat("a record names %v and the answer does not serve it", u)
+		}
+	}
+	for k := range answered {
+		if _, ok := named[k]; !ok {
+			return errors.Conflict.WithFormat("the answer serves an account no record names (%x)", k[:8])
+		}
+	}
+	return nil
 }
 
 // statePart is an account answered in parts: the bytes of its marshalled
@@ -860,14 +943,17 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 // it does not exist, and a record after it names it if a block creates it.
 // Every other account is checked against its leaf and written as served
 // (pull.KeepStates).
-func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Source, states []*api.AccountState, block uint64) map[[32]byte]bool {
+//
+// blocks[i] is the block of the view states[i] was read from.
+func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Source, states []*api.AccountState, blocks []uint64) map[[32]byte]bool {
 	taken := map[[32]byte]bool{}
 	type keeping struct {
 		st              *api.AccountState
 		whole, windowed bool
 	}
 	var keep []keeping
-	for _, st := range states {
+	for i, st := range states {
+		block := blocks[i]
 		u := st.Url
 		if u == nil {
 			continue
@@ -1037,7 +1123,11 @@ func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source
 					states = append(states, st)
 				}
 			}
-			for k := range s.takeStates(ctx, p, src, states, rec.Block) {
+			blocks := make([]uint64, len(states))
+			for i := range blocks {
+				blocks[i] = rec.Block
+			}
+			for k := range s.takeStates(ctx, p, src, states, blocks) {
 				served[k] = true
 			}
 			if len(rec.Cursor) == 0 {

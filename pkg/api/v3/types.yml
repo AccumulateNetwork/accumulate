@@ -275,6 +275,19 @@ ChainOpenEntries:
       type: bytes
       repeatable: true
 
+BlockLedgerRecord:
+  description: is one block's block-ledger record, every (account, chain, index) the block changed (executor.md, "The block ledger"; #4461)
+  fields:
+    - name: Index
+      description: is the block
+      type: uint
+      keep-empty: true
+    - name: Entries
+      type: protocol.BlockEntry
+      marshal-as: reference
+      pointer: true
+      repeatable: true
+
 AccountStatePart:
   fields:
     - name: Url

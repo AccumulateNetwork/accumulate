@@ -331,6 +331,12 @@ AccountStatesRecord:
     - name: Cursor
       description: continues the answer; empty when this page completes it
       type: bytes
+    - name: Records
+      description: is, on the first page of a ChangedAccountStates answer, the block-ledger record of every block after After through T that has one. The answer's pages serve every account they name (#4461)
+      type: BlockLedgerRecord
+      marshal-as: reference
+      pointer: true
+      repeatable: true
 
 BptBlockRecord:
   union: { type: record }

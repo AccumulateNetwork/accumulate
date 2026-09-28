@@ -76,15 +76,19 @@ func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.UR
 		return nil, errors.BadRequest.WithFormat("the cursor names block %d, not between %d and this node's block %d", through, query.After, block)
 	}
 
-	named, err := s.named.get(query.After, through, func() ([]*url.URL, error) {
+	span, err := s.named.get(query.After, through, func() (*recordSpan, error) {
 		return s.namedBetween(batch, query.After, through)
 	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	r, err := s.statesPage(batch, named, cur)
+	r, err := s.statesPage(batch, span.named, cur)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+	if len(query.Cursor) == 0 {
+		// The records themselves, once, on the first page (#4461).
+		r.Records = span.records
 	}
 	r.Through, r.Block = through, block
 	if len(r.Cursor) > 0 {
@@ -143,13 +147,20 @@ func (s *Querier) viewBlock(batch *database.Batch) (uint64, error) {
 	}
 }
 
-// namedBetween is the union of the accounts the block-ledger records of the
-// blocks after after through through name, once each, in a fixed order, so
-// every page of one answer walks the same list. A block with no record changed
-// nothing. The placeholder acc://unknown names no account and is left out.
-func (s *Querier) namedBetween(batch *database.Batch, after, through uint64) ([]*url.URL, error) {
+// A recordSpan is the block-ledger records of the blocks after one block
+// through another, and the union of the accounts they name, once each, in a
+// fixed order, so every page of one answer walks the same list.
+type recordSpan struct {
+	records []*api.BlockLedgerRecord
+	named   []*url.URL
+}
+
+// namedBetween reads the block-ledger records of the blocks after after
+// through through, and the union of the accounts they name (RecordNames). A
+// block with no record changed nothing.
+func (s *Querier) namedBetween(batch *database.Batch, after, through uint64) (*recordSpan, error) {
 	ledger := batch.Account(s.partition.Ledger())
-	unknown := protocol.UnknownUrl()
+	span := new(recordSpan)
 	seen := map[string]*url.URL{}
 	for n := after + 1; n <= through; n++ {
 		_, entries, err := indexing.LoadBlockLedger(ledger, n)
@@ -160,14 +171,11 @@ func (s *Querier) namedBetween(batch *database.Batch, after, through uint64) ([]
 		default:
 			return nil, errors.UnknownError.WithFormat("load the record of block %d: %w", n, err)
 		}
-		for _, e := range entries {
-			if e == nil || e.Account == nil || e.Account.Authority == "" ||
-				e.Account.Equal(unknown) || e.Account.Identity().Equal(unknown) {
-				continue
-			}
-			k := strings.ToLower(e.Account.String())
+		span.records = append(span.records, &api.BlockLedgerRecord{Index: n, Entries: entries})
+		for _, u := range api.RecordNames(entries) {
+			k := strings.ToLower(u.String())
 			if _, ok := seen[k]; !ok {
-				seen[k] = e.Account
+				seen[k] = u
 			}
 		}
 	}
@@ -176,11 +184,11 @@ func (s *Querier) namedBetween(batch *database.Batch, after, through uint64) ([]
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	out := make([]*url.URL, len(keys))
+	span.named = make([]*url.URL, len(keys))
 	for i, k := range keys {
-		out[i] = seen[k]
+		span.named[i] = seen[k]
 	}
-	return out, nil
+	return span, nil
 }
 
 // namedCache holds the unions of named accounts of the last few answers, by
@@ -194,10 +202,10 @@ type namedCache struct {
 
 type namedEntry struct {
 	after, through uint64
-	named          []*url.URL
+	span           *recordSpan
 }
 
-func (c *namedCache) get(after, through uint64, read func() ([]*url.URL, error)) ([]*url.URL, error) {
+func (c *namedCache) get(after, through uint64, read func() (*recordSpan, error)) (*recordSpan, error) {
 	if c == nil {
 		return read()
 	}
@@ -205,22 +213,22 @@ func (c *namedCache) get(after, through uint64, read func() ([]*url.URL, error))
 	for _, e := range c.entries {
 		if e.after == after && e.through == through {
 			c.mu.Unlock()
-			return e.named, nil
+			return e.span, nil
 		}
 	}
 	c.mu.Unlock()
 
-	named, err := read()
+	span, err := read()
 	if err != nil {
 		return nil, err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries = append(c.entries, namedEntry{after, through, named})
+	c.entries = append(c.entries, namedEntry{after, through, span})
 	if len(c.entries) > namedAnswers {
 		c.entries = c.entries[len(c.entries)-namedAnswers:]
 	}
-	return named, nil
+	return span, nil
 }
 
 // statesPage answers the accounts from cur on, as many whole as fit the

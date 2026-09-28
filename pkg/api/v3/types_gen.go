@@ -111,7 +111,9 @@ type AccountStatesRecord struct {
 	// Block is B, the block of the view this page was read from; B is at or after T.
 	Block uint64 `json:"block" form:"block" query:"block" validate:"required"`
 	// Cursor continues the answer; empty when this page completes it.
-	Cursor    []byte `json:"cursor,omitempty" form:"cursor" query:"cursor" validate:"required"`
+	Cursor []byte `json:"cursor,omitempty" form:"cursor" query:"cursor" validate:"required"`
+	// Records is, on the first page of a ChangedAccountStates answer, the block-ledger record of every block after After through T that has one. The answer's pages serve every account they name (#4461).
+	Records   []*BlockLedgerRecord `json:"records,omitempty" form:"records" query:"records" validate:"required"`
 	extraData []byte
 }
 
@@ -152,6 +154,15 @@ type BlockEvent struct {
 	Time      time.Time                   `json:"time,omitempty" form:"time" query:"time" validate:"required"`
 	Major     uint64                      `json:"major,omitempty" form:"major" query:"major" validate:"required"`
 	Entries   []*ChainEntryRecord[Record] `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	extraData []byte
+}
+
+// BlockLedgerRecord is one block's block-ledger record, every (account, chain, index) the block changed (executor.md, "The block ledger";.
+type BlockLedgerRecord struct {
+	fieldsSet []bool
+	// Index is the block.
+	Index     uint64                 `json:"index" form:"index" query:"index" validate:"required"`
+	Entries   []*protocol.BlockEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
 	extraData []byte
 }
 
@@ -1050,6 +1061,13 @@ func (v *AccountStatesRecord) Copy() *AccountStatesRecord {
 	u.Through = v.Through
 	u.Block = v.Block
 	u.Cursor = encoding.BytesCopy(v.Cursor)
+	u.Records = make([]*BlockLedgerRecord, len(v.Records))
+	for i, v := range v.Records {
+		v := v
+		if v != nil {
+			u.Records[i] = (v).Copy()
+		}
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -1134,6 +1152,27 @@ func (v *BlockEvent) Copy() *BlockEvent {
 }
 
 func (v *BlockEvent) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *BlockLedgerRecord) Copy() *BlockLedgerRecord {
+	u := new(BlockLedgerRecord)
+
+	u.Index = v.Index
+	u.Entries = make([]*protocol.BlockEntry, len(v.Entries))
+	for i, v := range v.Entries {
+		v := v
+		if v != nil {
+			u.Entries[i] = (v).Copy()
+		}
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *BlockLedgerRecord) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *BlockPending) Copy() *BlockPending {
 	u := new(BlockPending)
@@ -2855,6 +2894,14 @@ func (v *AccountStatesRecord) Equal(u *AccountStatesRecord) bool {
 	if !(bytes.Equal(v.Cursor, u.Cursor)) {
 		return false
 	}
+	if len(v.Records) != len(u.Records) {
+		return false
+	}
+	for i := range v.Records {
+		if !((v.Records[i]).Equal(u.Records[i])) {
+			return false
+		}
+	}
 
 	return true
 }
@@ -2919,6 +2966,22 @@ func (v *BlockEvent) Equal(u *BlockEvent) bool {
 		return false
 	}
 	if !(v.Major == u.Major) {
+		return false
+	}
+	if len(v.Entries) != len(u.Entries) {
+		return false
+	}
+	for i := range v.Entries {
+		if !((v.Entries[i]).Equal(u.Entries[i])) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *BlockLedgerRecord) Equal(u *BlockLedgerRecord) bool {
+	if !(v.Index == u.Index) {
 		return false
 	}
 	if len(v.Entries) != len(u.Entries) {
@@ -4933,6 +4996,7 @@ var fieldNames_AccountStatesRecord = []string{
 	4: "Through",
 	5: "Block",
 	6: "Cursor",
+	7: "Records",
 }
 
 func (v *AccountStatesRecord) MarshalBinary() ([]byte, error) {
@@ -4958,6 +5022,11 @@ func (v *AccountStatesRecord) MarshalBinary() ([]byte, error) {
 	writer.WriteUint(5, v.Block)
 	if !(len(v.Cursor) == 0) {
 		writer.WriteBytes(6, v.Cursor)
+	}
+	if !(len(v.Records) == 0) {
+		for _, v := range v.Records {
+			writer.WriteValue(7, v.MarshalBinary)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountStatesRecord)
@@ -4998,6 +5067,11 @@ func (v *AccountStatesRecord) IsValid() error {
 		errs = append(errs, "field Cursor is missing")
 	} else if len(v.Cursor) == 0 {
 		errs = append(errs, "field Cursor is not set")
+	}
+	if len(v.fieldsSet) > 6 && !v.fieldsSet[6] {
+		errs = append(errs, "field Records is missing")
+	} else if len(v.Records) == 0 {
+		errs = append(errs, "field Records is not set")
 	}
 
 	switch len(errs) {
@@ -5264,6 +5338,62 @@ func (v *BlockEvent) IsValid() error {
 		errs = append(errs, "field Major is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
+		errs = append(errs, "field Entries is missing")
+	} else if len(v.Entries) == 0 {
+		errs = append(errs, "field Entries is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_BlockLedgerRecord = []string{
+	1: "Index",
+	2: "Entries",
+}
+
+func (v *BlockLedgerRecord) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteUint(1, v.Index)
+	if !(len(v.Entries) == 0) {
+		for _, v := range v.Entries {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
+	}
+
+	_, _, err := writer.Reset(fieldNames_BlockLedgerRecord)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *BlockLedgerRecord) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Index is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Entries is missing")
 	} else if len(v.Entries) == 0 {
 		errs = append(errs, "field Entries is not set")
@@ -10200,6 +10330,13 @@ func (v *AccountStatesRecord) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	if x, ok := reader.ReadBytes(6); ok {
 		v.Cursor = x
 	}
+	for {
+		if x := new(BlockLedgerRecord); reader.ReadValue(7, x.UnmarshalBinaryFrom) {
+			v.Records = append(v.Records, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_AccountStatesRecord)
 	if err != nil {
@@ -10349,6 +10486,36 @@ func (v *BlockEvent) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	}
 
 	seen, err := reader.Reset(fieldNames_BlockEvent)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *BlockLedgerRecord) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *BlockLedgerRecord) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Index = x
+	}
+	for {
+		if x := new(protocol.BlockEntry); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Entries = append(v.Entries, x)
+		} else {
+			break
+		}
+	}
+
+	seen, err := reader.Reset(fieldNames_BlockLedgerRecord)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -12951,6 +13118,7 @@ func init() {
 		encoding.NewTypeField("through", "uint64"),
 		encoding.NewTypeField("block", "uint64"),
 		encoding.NewTypeField("cursor", "bytes"),
+		encoding.NewTypeField("records", "BlockLedgerRecord[]"),
 	}, "AccountStatesRecord", "accountStatesRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -12979,6 +13147,11 @@ func init() {
 		encoding.NewTypeField("major", "uint64"),
 		encoding.NewTypeField("entries", "ChainEntryRecord[Record][]"),
 	}, "BlockEvent", "blockEvent")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("index", "uint64"),
+		encoding.NewTypeField("entries", "protocol.BlockEntry[]"),
+	}, "BlockLedgerRecord", "blockLedgerRecord")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("block", "uint64"),
@@ -13599,13 +13772,14 @@ func (v *AccountStatesQuery) MarshalJSON() ([]byte, error) {
 
 func (v *AccountStatesRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
-		RecordType RecordType                       `json:"recordType"`
-		States     encoding.JsonList[*AccountState] `json:"states,omitempty"`
-		Part       *AccountStatePart                `json:"part,omitempty"`
-		Through    uint64                           `json:"through"`
-		Block      uint64                           `json:"block"`
-		Cursor     *string                          `json:"cursor,omitempty"`
-		ExtraData  *string                          `json:"$epilogue,omitempty"`
+		RecordType RecordType                            `json:"recordType"`
+		States     encoding.JsonList[*AccountState]      `json:"states,omitempty"`
+		Part       *AccountStatePart                     `json:"part,omitempty"`
+		Through    uint64                                `json:"through"`
+		Block      uint64                                `json:"block"`
+		Cursor     *string                               `json:"cursor,omitempty"`
+		Records    encoding.JsonList[*BlockLedgerRecord] `json:"records,omitempty"`
+		ExtraData  *string                               `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	if !(len(v.States) == 0) {
@@ -13618,6 +13792,9 @@ func (v *AccountStatesRecord) MarshalJSON() ([]byte, error) {
 	u.Block = v.Block
 	if !(len(v.Cursor) == 0) {
 		u.Cursor = encoding.BytesToJSON(v.Cursor)
+	}
+	if !(len(v.Records) == 0) {
+		u.Records = v.Records
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -13684,6 +13861,20 @@ func (v *BlockEvent) MarshalJSON() ([]byte, error) {
 	if !(v.Major == 0) {
 		u.Major = v.Major
 	}
+	if !(len(v.Entries) == 0) {
+		u.Entries = v.Entries
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *BlockLedgerRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Index     uint64                                  `json:"index"`
+		Entries   encoding.JsonList[*protocol.BlockEntry] `json:"entries,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Index = v.Index
 	if !(len(v.Entries) == 0) {
 		u.Entries = v.Entries
 	}
@@ -15122,13 +15313,14 @@ func (v *AccountStatesQuery) UnmarshalJSON(data []byte) error {
 
 func (v *AccountStatesRecord) UnmarshalJSON(data []byte) error {
 	u := struct {
-		RecordType RecordType                       `json:"recordType"`
-		States     encoding.JsonList[*AccountState] `json:"states,omitempty"`
-		Part       *AccountStatePart                `json:"part,omitempty"`
-		Through    uint64                           `json:"through"`
-		Block      uint64                           `json:"block"`
-		Cursor     *string                          `json:"cursor,omitempty"`
-		ExtraData  *string                          `json:"$epilogue,omitempty"`
+		RecordType RecordType                            `json:"recordType"`
+		States     encoding.JsonList[*AccountState]      `json:"states,omitempty"`
+		Part       *AccountStatePart                     `json:"part,omitempty"`
+		Through    uint64                                `json:"through"`
+		Block      uint64                                `json:"block"`
+		Cursor     *string                               `json:"cursor,omitempty"`
+		Records    encoding.JsonList[*BlockLedgerRecord] `json:"records,omitempty"`
+		ExtraData  *string                               `json:"$epilogue,omitempty"`
 	}{}
 	u.RecordType = v.RecordType()
 	u.States = v.States
@@ -15136,6 +15328,7 @@ func (v *AccountStatesRecord) UnmarshalJSON(data []byte) error {
 	u.Through = v.Through
 	u.Block = v.Block
 	u.Cursor = encoding.BytesToJSON(v.Cursor)
+	u.Records = v.Records
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -15152,6 +15345,7 @@ func (v *AccountStatesRecord) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cursor = x
 	}
+	v.Records = u.Records
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -15244,6 +15438,27 @@ func (v *BlockEvent) UnmarshalJSON(data []byte) error {
 	v.Index = u.Index
 	v.Time = u.Time
 	v.Major = u.Major
+	v.Entries = u.Entries
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BlockLedgerRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Index     uint64                                  `json:"index"`
+		Entries   encoding.JsonList[*protocol.BlockEntry] `json:"entries,omitempty"`
+		ExtraData *string                                 `json:"$epilogue,omitempty"`
+	}{}
+	u.Index = v.Index
+	u.Entries = v.Entries
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Index = u.Index
 	v.Entries = u.Entries
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {

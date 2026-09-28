@@ -741,8 +741,18 @@ replace them, beside `BptPage`:
   blocks after `I` — a bound, not the expected case (Paul: "We can limit the
   number of blocks per request, but it should never be that much"): with the
   walk a page a second, the records after `I` are a few blocks, and an answer
-  the cap cuts short is logged by the joining node as having fallen behind. The records themselves are not sent: what the node does with a
-  record is take the accounts it names, and the answer is those accounts.
+  the cap cuts short is logged by the joining node as having fallen behind.
+  **The answer carries the records themselves** (Paul, 2026-09-28): its
+  first page holds the block-ledger record of every block after `I` through
+  `T` that has one, and its pages serve exactly the accounts those records
+  name. The joining node holds the pages until the last and checks the
+  records against them: a record of a block outside `I + 1` through `T` or
+  given twice, an account a record names that no page serves, or an account
+  served that no record names refuses the answer whole — nothing of it is
+  written, `L` does not move, and the next peer is asked
+  (`TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused`). A taken
+  answer marks current every account its records name, and is written in one
+  commit.
 - **`AccountStates{Partition, Accounts}`** — the same sync state for the
   accounts a walk page shows stale, from one view, stamped with its `B`.
 
@@ -756,9 +766,9 @@ each from one view. Messages are not included; an account taken by its state
 carries none (below), and the windowed accounts' recent chains are taken by
 the window pull.
 
-**An answer's page is written in one commit, not a commit per account**
-(#4461). The accounts a page answers — of the records, of `AccountStates`,
-of what is owed — are written in one batch with the BPT and committed once;
+**An answer is written in one commit, not a commit per account** (#4461).
+The accounts a records answer serves, and those an `AccountStates` page
+serves — for the walk or for what is owed — are written in one batch with the BPT and committed once;
 each is written in a batch nested in it, so an account the write refuses is
 not written at all and the others are. What is left to backfill is recorded
 once per page too. A commit per account cost about 85 ms on BlockchainDB: a
@@ -786,8 +796,9 @@ taken; another peer is asked. The records are never read back before `S`.
 Each round, in this order:
 
 1. **The records.** `ChangedAccountStates` with `After = L`, every page of
-   it. Every account it answers is written and marked current; `L` moves to
-   `T`. A page that cannot be read stops the round's records there, and the
+   it, checked against the records it carries. Every account its records
+   name is marked current and every account it serves is written; `L` moves
+   to `T`. An answer refused is asked of the next peer. A page that cannot be read stops the round's records there, and the
    next round asks again from `L`.
 2. **What is owed.** An account a batch did not answer whole, or whose reply
    was refused, is asked for again, once a round, whoever named it.
