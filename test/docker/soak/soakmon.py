@@ -3393,11 +3393,11 @@ function followersView(fj){
     const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')
       :r.oomKilled?`<span class=red>OOMKilled (exit ${r.exitCode})</span>`
       :r.status!=='running'?`<span class=red>${r.status} (exit ${r.exitCode})</span>`:'running';
-    const ph=r.life==='waiting'?'not added':r.phase==='not started'?(r.life==='launched'?'from genesis':'no join line yet'):r.phase;
+    const ph=r.life==='waiting'?'not added':r.phase==='not started'?(r.life==='launched'?'started with the network (never joined)':'no join line yet'):r.phase;
     const phc=r.phase==='not started'&&r.life==='launched'?'mut':(PC[ph]||'mut');
-    const launched=r.life==='launched'?' <span class=mut>(genesis)</span>':'';
+    const launched=r.life==='launched'?' <span class=mut>(comparison)</span>':'';
     const h=fresh(r)?'—':`${fmt(r.height)} / ${fmt(r.network)}`;
-    const toA=r.toActiveSec!=null?d(r.toActiveSec):(r.phase==='ACTIVE'||r.life==='launched'?'<span class=mut>no join line</span>':'—');
+    const toA=r.toActiveSec!=null?d(r.toActiveSec):(r.phase==='ACTIVE'||r.life==='launched'?'<span class=mut>—</span>':'—');
     return `<tr><td class=name>${r.container}${launched} → ${shortP(r.partition)}</td>`
       +`<td class=${phc} title="${ph}">${PHASE_WORDS[ph]||ph}</td><td>${h}</td><td>${fresh(r)?'—':n(r.behind,'yel')}</td>`
       +`<td>${fresh(r)?'—':d(r.sinceAddSec)}</td><td>${toA}</td>`
