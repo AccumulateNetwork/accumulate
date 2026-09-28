@@ -108,7 +108,10 @@ fi
 if [ "$duration_seconds" -le 1800 ]; then
   LG_GRACE=${LG_GRACE:-45s}; LG_TIMEOUT=${LG_TIMEOUT:-$(( duration_seconds + 900 ))s}
 else
-  LG_GRACE=${LG_GRACE:-5m}; LG_TIMEOUT=${LG_TIMEOUT:-26h}
+  # The ceiling follows the duration: a fixed 26h here ended every run longer
+  # than a day at 26h and tore its network down (20260927T003926Z, a 72h run,
+  # finished at 26h with driver-exit=0).
+  LG_GRACE=${LG_GRACE:-5m}; LG_TIMEOUT=${LG_TIMEOUT:-$(( duration_seconds + 7200 ))s}
 fi
 # The 100-sub-treasury bootstrap front-loads cross-partition funding traffic
 # regardless of -tps, which keeps every channel busy. Reproducing an idle-stream
