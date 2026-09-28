@@ -212,6 +212,11 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	// the store has, not what a shallow read reaches.
 	missing := entriesWithNoMessage(t, part.NodeDatabase(fresh).Deep(), partition)
 	require.NoError(t, err, "a fresh %s node did not join within %d pull rounds", partition, maxRounds)
+	// Every peer is honest: no answer of the records is refused (#4461).
+	require.Zero(t, part.NodeJoinState(fresh).RefusedRecordAnswers(),
+		"a fresh %s node refused an honest peer's answer of the block-ledger records", partition)
+	require.Zero(t, part.NodeJoinState(fresh).UncheckedRecordAnswers(),
+		"a fresh %s node took an answer of the block-ledger records with no records in it", partition)
 	require.Equal(t, join.Joined, outcome)
 	require.False(t, part.Joining(fresh))
 	// The handoff's first block opens the seed, which reads the pool's newest

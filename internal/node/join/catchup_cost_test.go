@@ -345,3 +345,58 @@ func TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused(t *testing.T) {
 	require.Equal(t, int64(11), balanceIn(t, db, alice))
 	require.Equal(t, int64(12), balanceIn(t, db, bob))
 }
+
+// recordlessQuerier is a peer that predates the records in the answer: its
+// ChangedAccountStates answers carry the accounts and no records.
+type recordlessQuerier struct{ api.Querier }
+
+func (q recordlessQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	r, err := q.Querier.Query(ctx, scope, query)
+	if rec, ok := r.(*api.AccountStatesRecord); ok && err == nil {
+		rec.Records = nil
+	}
+	return r, err
+}
+
+// TestAnAnswerFromAPeerBeforeTheRecordsIsTaken — #4461, Docker run of
+// 2f0e32d32: the followers joined a network whose validators predate the
+// records in the answer, and refused every answer ("the answer serves an
+// account no record names") for ten minutes. Such an answer carries accounts
+// and no records; there is nothing to check it against, and it is taken as
+// answers were before.
+func TestAnAnswerFromAPeerBeforeTheRecordsIsTaken(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	alice := protocol.AccountUrl("alice", "tokens")
+	peerDB := peerStore(t)
+	putLedger(t, peerDB, here, 10)
+	putTokens(t, peerDB, alice, 5)
+	q := recordlessQuerier{apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
+
+	db := database.OpenInMemory(nil)
+	db.SetObserver(database.NewDatabaseObserver())
+	t.Cleanup(func() { _ = db.Close() })
+	values, _ := genesisValues(t, 4)
+	putNetwork(t, db, here, values)
+	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: q, block: 10}, ExecutedBlock: 1})
+	require.NoError(t, err)
+	ctx := context.Background()
+	for round := 0; round == 0 || !s.sync.walked; round++ {
+		require.NoError(t, s.Pull(ctx))
+		require.Less(t, round, 10)
+	}
+
+	putTokens(t, peerDB, alice, 11)
+	b := peerDB.Begin(true)
+	require.NoError(t, b.Account(here.JoinPath(protocol.Ledger)).BlockLedger(11).Put(&database.BlockLedger{Index: 11, Entries: []*protocol.BlockEntry{
+		{Account: alice, Chain: "main", Index: 1},
+	}}))
+	require.NoError(t, b.Commit())
+	putLedger(t, peerDB, here, 11)
+	s.sources.(*onePeer).block = 11
+
+	require.NoError(t, s.Pull(ctx))
+	require.Zero(t, s.RefusedRecordAnswers(), "an answer from a peer before the records was refused")
+	require.Equal(t, uint64(11), s.sync.last)
+	require.Equal(t, int64(11), balanceIn(t, db, alice))
+	require.NotZero(t, s.UncheckedRecordAnswers())
+}

@@ -442,6 +442,15 @@ read at, and every account is then as of `L`.
   executor v1 is served as its `V1Hashes`, which the check on arrival hashes,
   but the v1 transaction record the local leaf hashes is not written, so such
   an account's local leaf differs until the match finds it.
+- **An answer with accounts and no records is taken unchecked** (#4461).
+  The spec has every records answer checked against the records it carries.
+  A peer that predates the records in the answer sends accounts and none, and
+  the Docker network the followers of 2f0e32d32 joined was all such peers:
+  every answer was refused and no follower was proven in ten minutes. Such an
+  answer is taken as the peer named its accounts, counted
+  (`UncheckedRecordAnswers`) and logged. A peer that withholds its records
+  passes the same way; the tolerance goes once no network runs a peer before
+  #4461.
 - **A reply's `B` is unbounded above.** The records are asked first of the peer
   whose ledger named the lowest block, but a walk page or an `AccountStates`
   answer stamped with a block far ahead raises the highest `B` beyond what `L`
