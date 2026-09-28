@@ -74,10 +74,6 @@ type PulledState struct {
 	// refusedAnswers counts the records answers refused (recordsOnce).
 	refusedAnswers int
 
-	// uncheckedAnswers counts the records answers taken with no records
-	// to check them against, from a peer before #4461 (recordsOnce).
-	uncheckedAnswers int
-
 	partition *url.URL
 	db        *database.Database
 	sources   Sources
@@ -777,10 +773,6 @@ func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peers
 // join has refused. An honest peer's answer is never refused.
 func (s *PulledState) RefusedRecordAnswers() int { return s.refusedAnswers }
 
-// UncheckedRecordAnswers is how many answers of the block-ledger records this
-// join took with no records to check them against.
-func (s *PulledState) UncheckedRecordAnswers() int { return s.uncheckedAnswers }
-
 // errRefusedAnswer is an answer of the records refused whole: nothing of it
 // is written, and the next peer is asked.
 var errRefusedAnswer = errors.Conflict.With("the answer was refused")
@@ -841,20 +833,6 @@ func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Sour
 	named, err := namedByRecords(records, after, through)
 	switch {
 	case err != nil:
-	case len(records) == 0 && len(answered) > 0:
-		// Accounts and no records: a peer that predates the records in
-		// the answer (#4461), which a network mid-upgrade has -- every
-		// peer of the Docker network the followers first joined with
-		// them was one, and every answer was refused. There is nothing to
-		// check its accounts against; they are taken as the peer named
-		// them, as they were before.
-		s.uncheckedAnswers++
-		s.log.Info("A peer's answer of the block-ledger records carries no records; its accounts are taken unchecked",
-			"partition", s.partition, "peer", sourceKey(src), "after", after, "through", through, "accounts", len(answered))
-		named = map[[32]byte]*url.URL{}
-		for _, st := range states {
-			named[accountKey(st.Url)] = st.Url
-		}
 	default:
 		err = coversExactly(named, answered)
 	}

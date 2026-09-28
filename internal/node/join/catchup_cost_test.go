@@ -346,7 +346,7 @@ func TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused(t *testing.T) {
 	require.Equal(t, int64(12), balanceIn(t, db, bob))
 }
 
-// recordlessQuerier is a peer that predates the records in the answer: its
+// recordlessQuerier is a peer that withholds its records: its
 // ChangedAccountStates answers carry the accounts and no records.
 type recordlessQuerier struct{ api.Querier }
 
@@ -358,13 +358,13 @@ func (q recordlessQuerier) Query(ctx context.Context, scope *url.URL, query api.
 	return r, err
 }
 
-// TestAnAnswerFromAPeerBeforeTheRecordsIsTaken — #4461, Docker run of
-// 2f0e32d32: the followers joined a network whose validators predate the
-// records in the answer, and refused every answer ("the answer serves an
-// account no record names") for ten minutes. Such an answer carries accounts
-// and no records; there is nothing to check it against, and it is taken as
-// answers were before.
-func TestAnAnswerFromAPeerBeforeTheRecordsIsTaken(t *testing.T) {
+// TestAnAnswerStrippedOfItsRecordsIsRefused — #4461. An answer that serves
+// accounts and carries no records names nothing its accounts can be checked
+// against, and a withheld record must not pass the check: it is refused like
+// any answer that fails coverage, nothing of it is written, and L does not
+// move. This line runs no peer from before the records were in the answer
+// (Paul, 2026-09-28: fresh installs, no mixed versions).
+func TestAnAnswerStrippedOfItsRecordsIsRefused(t *testing.T) {
 	here := protocol.PartitionUrl("BVN0")
 	alice := protocol.AccountUrl("alice", "tokens")
 	peerDB := peerStore(t)
@@ -395,8 +395,7 @@ func TestAnAnswerFromAPeerBeforeTheRecordsIsTaken(t *testing.T) {
 	s.sources.(*onePeer).block = 11
 
 	require.NoError(t, s.Pull(ctx))
-	require.Zero(t, s.RefusedRecordAnswers(), "an answer from a peer before the records was refused")
-	require.Equal(t, uint64(11), s.sync.last)
-	require.Equal(t, int64(11), balanceIn(t, db, alice))
-	require.NotZero(t, s.UncheckedRecordAnswers())
+	require.NotZero(t, s.RefusedRecordAnswers(), "an answer stripped of its records was not refused")
+	require.Equal(t, uint64(10), s.sync.last, "an answer stripped of its records moved L")
+	require.Equal(t, int64(5), balanceIn(t, db, alice), "alice was written from an answer stripped of its records")
 }
