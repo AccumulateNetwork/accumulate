@@ -245,12 +245,14 @@ func catchUpCost(t *testing.T, u, k int) (walkCalls, walkCommits, recordCalls, r
 // ~6,000 blocks of history a BVN's join took 9 minutes: 24 s a walk page, 2.5
 // minutes of records, nearly all of it the joining node committing each
 // account it took in a batch of its own. The records after the node's index I
-// are one answer however many blocks they span, and each answer's accounts
-// are written in one commit. Ten times the accounts and the records cost the
+// are one answer up to the peer's cap of blocks per answer, and each answer's
+// accounts are written in one commit. Ten times the accounts and the records cost the
 // same calls, and commits that grow with pages, not accounts.
 func TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord(t *testing.T) {
-	wc1, wm1, rc1, rm1 := catchUpCost(t, 200, 400)
-	wc2, wm2, rc2, rm2 := catchUpCost(t, 2000, 4000)
+	// Records within the peer's cap of blocks per answer (1,024): the
+	// catch-up after a fast walk is a few blocks (#4461).
+	wc1, wm1, rc1, rm1 := catchUpCost(t, 200, 100)
+	wc2, wm2, rc2, rm2 := catchUpCost(t, 2000, 1000)
 
 	// The walk asks a BPT page and an AccountStates answer per 256 accounts:
 	// ten times the accounts is ten times the pages, and no more.
@@ -263,7 +265,7 @@ func TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord(t *testing.T
 
 	// The records: one answer, whatever the blocks and accounts.
 	require.Equal(t, rc1, rc2,
-		"the records round asked %d calls for 400 blocks naming 200 accounts and %d for 4,000 blocks naming 2,000", rc1, rc2)
+		"the records round asked %d calls for 100 blocks naming 200 accounts and %d for 1,000 blocks naming 2,000", rc1, rc2)
 	require.Equal(t, rm1, rm2,
 		"the records round made %d commits for 200 accounts and %d for 2,000", rm1, rm2)
 }

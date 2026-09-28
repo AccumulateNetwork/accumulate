@@ -25,6 +25,12 @@ import (
 // is answered in parts. A variable so a test can page a small store.
 var accountStatesBudget = 1 << 20
 
+// maxRecordSpan is how many blocks of records one ChangedAccountStates answer
+// covers: T is at most After plus this. It is a bound, not the expected case:
+// a joining node's catch-up after its index is a few blocks, and an answer the
+// cap cuts short means the join fell behind (Paul, 2026-09-28; #4461).
+const maxRecordSpan = 1024
+
 // namedAnswers is how many answers' unions of named accounts a querier keeps
 // (namedCache).
 const namedAnswers = 4
@@ -36,12 +42,12 @@ const maxAccountStatesAsked = 4096
 // queryChangedAccountStates answers the sync state of every account the block
 // ledger's records of the blocks after After name, through T, from this one
 // view of the store (executor.md, "Sync", §3; #4453). T is this node's block B
-// on a first page, and the cursor carries it so every page of the answer
-// covers the same records: an account the records name many times is in the
-// union once, and in the answer once. One answer is the whole catch-up from
-// After, however many blocks that is (#4461): the union is read from the
-// records once per answer (namedCache), not once per page, so a page costs
-// the accounts it carries.
+// on a first page, capped at maxRecordSpan blocks after After, and the cursor
+// carries it so every page of the answer covers the same records: an account
+// the records name many times is in the union once, and in the answer once.
+// One answer is the whole catch-up from After up to the cap (#4461): the union
+// is read from the records once per answer (namedCache), not once per page, so
+// a page costs the accounts it carries.
 func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
 	if scope == nil || !s.partition.URL.Equal(scope) {
 		return nil, errors.BadRequest.WithFormat(
@@ -64,7 +70,7 @@ func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.UR
 	}
 	through := cur.through
 	if len(query.Cursor) == 0 {
-		through = block
+		through = min(block, query.After+maxRecordSpan)
 	}
 	if through < query.After || through > block {
 		return nil, errors.BadRequest.WithFormat("the cursor names block %d, not between %d and this node's block %d", through, query.After, block)

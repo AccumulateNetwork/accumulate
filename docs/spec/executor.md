@@ -727,17 +727,21 @@ replace them, beside `BptPage`:
   block-ledger records for the blocks after `After` through its current block
   `T`, takes the union of the accounts they name (invariant 14: a record names
   every account its block changed), and answers each account's sync state. The
-  reply says `T`, the block the records run through, and `B`, the block the
+  reply says `T`, the block the records run through (at most 1,024 blocks
+  after `After`), and `B`, the block the
   view it was read from is at (`B ≥ T`). It is paged by a byte budget; the
   cursor continues the same union, and each page is a view of its own with its
   own `B` — a view held open across pages pins BlockchainDB's overlays (#4446).
   An account a record names many times is in the union once, so how often an
   account changes costs nothing in calls. **One answer is the node's whole
   catch-up** (Paul, 2026-09-28; #4461): the node sends its index `I` (`After
-  = L`), and the peer answers every account the records after `I` name,
-  however many blocks that is, in pages of one answer; it reads the union
-  once per answer, not once per page, so a page costs the accounts it
-  carries. The records themselves are not sent: what the node does with a
+  = L`), and the peer answers every account the records after `I` name, in
+  pages of one answer; it reads the union once per answer, not once per page,
+  so a page costs the accounts it carries. An answer covers at most 1,024
+  blocks after `I` — a bound, not the expected case (Paul: "We can limit the
+  number of blocks per request, but it should never be that much"): with the
+  walk a page a second, the records after `I` are a few blocks, and an answer
+  the cap cuts short is logged by the joining node as having fallen behind. The records themselves are not sent: what the node does with a
   record is take the accounts it names, and the answer is those accounts.
 - **`AccountStates{Partition, Accounts}`** — the same sync state for the
   accounts a walk page shows stale, from one view, stamped with its `B`.

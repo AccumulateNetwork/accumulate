@@ -746,6 +746,13 @@ func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peers
 			return
 		}
 		p.last = through
+		if through < block {
+			// The answer was cut short by the peer's cap on blocks per
+			// answer. The walk is fast enough that the records after L
+			// should be a few blocks: the join has fallen behind (#4461).
+			s.log.Info("The block-ledger records after L were more blocks than one answer covers; the join has fallen behind",
+				"partition", s.partition, "peer", sourceKey(src), "through", through, "peer-block", block)
+		}
 		if through >= block || through >= peer.block {
 			return
 		}
