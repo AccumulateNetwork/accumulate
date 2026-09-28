@@ -332,14 +332,6 @@ func (s *steppingState) HandedOff(q uint64) {
 	}
 }
 
-func (s *steppingState) TakeHistory(ctx context.Context, v uint64, staged []*url.TxID) {
-	if h, ok := s.State.(interface {
-		TakeHistory(context.Context, uint64, []*url.TxID)
-	}); ok {
-		h.TakeHistory(ctx, v, staged)
-	}
-}
-
 func (s *steppingState) Diverged(ctx context.Context) (uint64, bool, error) {
 	w, ok := s.State.(join.RootWatch)
 	if !ok {

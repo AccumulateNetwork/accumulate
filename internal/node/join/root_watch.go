@@ -17,6 +17,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -348,4 +349,45 @@ func (s *PulledState) sayStates(ctx context.Context, batch *database.Batch, u *u
 	}
 	s.log.Warn("The states of an account an executed block left other than the peer's",
 		"partition", s.partition, "account", u, "local", localJSON, "peers", peers)
+	s.sayMainChain(ctx, batch, u)
+}
+
+// mainEntriesSaid is how many of an account's newest main chain entries a
+// miss compares.
+const mainEntriesSaid = 8
+
+// sayMainChain logs the newest entries of an account's main chain as this
+// node holds them, and for each, where the peers hold it: its index on their
+// chain and the block they first received it at, or that they have not
+// executed it. An entry this node executed that its peers executed later, or
+// not at all, is the transaction the miss is (#4442).
+func (s *PulledState) sayMainChain(ctx context.Context, batch *database.Batch, u *url.URL) {
+	chain := batch.Account(u).MainChain()
+	head, err := chain.Head().Get()
+	if err != nil || head.Count == 0 {
+		return
+	}
+	srcs := s.partitionSources(ctx)
+	if len(srcs) == 0 {
+		return
+	}
+	src := srcs[0]
+	from := max(head.Count-mainEntriesSaid, 0)
+	for i := from; i < head.Count; i++ {
+		e, err := chain.Inner().Entry(i)
+		if err != nil {
+			continue
+		}
+		id := u.WithTxID([32]byte(e))
+		peerIndex, peerReceived := "absent", uint64(0)
+		if r, err := src.QueryChainEntry(ctx, u, &api.ChainQuery{Name: "main", Entry: e}); err == nil && r != nil {
+			peerIndex = fmt.Sprint(r.Index)
+		}
+		if m, err := src.QueryMessage(ctx, id, nil); err == nil && m != nil {
+			peerReceived = m.Received
+		}
+		s.log.Warn("A main chain entry of an account an executed block left other than the peer's",
+			"partition", s.partition, "account", u, "index", i, "txid", id,
+			"peer", sourceKey(src), "peer-index", peerIndex, "peer-received", peerReceived)
+	}
 }

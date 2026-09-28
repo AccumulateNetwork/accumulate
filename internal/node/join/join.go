@@ -26,7 +26,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // mHandoffFailures counts the handoffs that could not be performed. A join
@@ -424,7 +423,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			}
 		}
 		if ok {
-			done, err := stageAndHandOff(ctx, opts, log, q, &failures)
+			done, err := stageAndHandOff(opts, log, q, &failures)
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)
 			}
@@ -451,7 +450,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 // its signed anchor, so the node is promoted at q once it is executing. It
 // reports whether the node handed off; false with no error means the join
 // pulls again. failures counts the handoffs that failed.
-func stageAndHandOff(ctx context.Context, opts Options, log *slog.Logger, q uint64, failures *int) (bool, error) {
+func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (bool, error) {
 	// Staging holds everything collected through q + 1 and nothing after it
 	// (#4398): the gap check asks what q + 1 carries, and a block delivers
 	// the run it can from what is held, so a staging that also held what
@@ -496,20 +495,6 @@ func stageAndHandOff(ctx context.Context, opts Options, log *slog.Logger, q uint
 		}
 		log.Info("The next block has a gap; not executing until the peers have delivered what they held", "synced", q, "block", q+1, "gaps", streams)
 		return false, nil
-	}
-
-	// What the peers know of the transactions the blocks after q execute,
-	// that the pulled state does not say: which of them were delivered
-	// already (PulledState.TakeHistory; #4442).
-	if h, ok := opts.State.(historyTaker); ok {
-		var staged []*url.TxID
-		if held, ok := opts.Stage.(heldTransactions); ok {
-			staged, err = held.HeldTransactions()
-			if err != nil {
-				return false, errors.UnknownError.WithFormat("list the staged transactions: %w", err)
-			}
-		}
-		h.TakeHistory(ctx, q, staged)
 	}
 
 	err = opts.Stage.SettleStagingAt(q)
@@ -611,16 +596,4 @@ func findValidators(ctx context.Context, opts Options, log *slog.Logger, retry t
 		log.Info("No validator of this partition has been found yet", "attempt", attempt+1, "of", rounds)
 	}
 	return 0, nil
-}
-
-// A historyTaker takes what the peers know of the transactions the node is
-// about to execute (PulledState.TakeHistory).
-type historyTaker interface {
-	TakeHistory(ctx context.Context, v uint64, staged []*url.TxID)
-}
-
-// heldTransactions lists the transactions inside what staging holds
-// (ExecutorStage.HeldTransactions).
-type heldTransactions interface {
-	HeldTransactions() ([]*url.TxID, error)
 }

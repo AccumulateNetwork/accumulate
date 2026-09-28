@@ -12,7 +12,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -202,28 +201,4 @@ func positionFrom(batch *database.Batch, id execute.StreamID) (delivered, receiv
 		return 0, 0, nil
 	}
 	return p.Delivered, p.Received, nil
-}
-
-// HeldTransactions is the transaction inside every entry staging holds above
-// Delivered: what the node will execute in the blocks after the handoff
-// (PulledState.TakeHistory).
-func (s *ExecutorStage) HeldTransactions() ([]*url.TxID, error) {
-	if s.Staging == nil {
-		return nil, nil
-	}
-	tx := s.Staging.Begin()
-	defer tx.Discard()
-	var out []*url.TxID
-	for _, st := range tx.Streams() {
-		for n := st.Delivered + 1; n <= st.Sighted; n++ {
-			h, ok := tx.IDOf(st.ID, n)
-			if !ok || h.Message == nil {
-				continue
-			}
-			if txn, ok := messaging.UnwrapAs[*messaging.TransactionMessage](h.Message); ok && txn.Transaction != nil {
-				out = append(out, txn.ID())
-			}
-		}
-	}
-	return out, nil
 }
