@@ -57,19 +57,21 @@ func TestAJoinExecutesWithTheGlobalsOfTheStateItIsProvenAt(t *testing.T) {
 	f.requireInAgreement(t)
 }
 
-// TestAJoinDoesNotBurnAgainWhatItsPeersSkipped is #4442's follow-up from run
+// TestAJoinAgreesAcrossRepeatedBurns is #4442's follow-up from run
 // 20260928T051402Z, where every Directory follower's first block after its
-// proof left acc://ACME's issued amount below its peers'. A burn of ACME is a
-// SyntheticBurnTokens to acc://ACME carrying only its amount, so two burns of
-// one amount are one transaction by hash, and the peers, holding the first
-// one's status, skip every later one. That status is not in the BPT: a joined
-// node held none, and burned again. The burn reaches the Directory two ways:
-// queued as a local delivery when the Directory's own account buys credits,
-// and as a synthetic from a BVN when a BVN account does.
+// proof left acc://ACME's issued amount below its peers'. A block-end burn of
+// ACME carried only its amount, so two burns of one amount were one
+// transaction by hash: the peers, holding the first one's status, skipped
+// every later one, and a joined node, holding no status (it is not in the
+// BPT), burned again. The fix is #4458: each burn names the partition and
+// block that produced it, so no burn repeats and there is no status for a
+// join to take. The burn reaches the Directory two ways: queued as a local
+// delivery when the Directory's own account buys credits, and as a synthetic
+// from a BVN when a BVN account does.
 //
 // An account buys the same credits every block, so every block the follower
-// can be proven at carries or queues a burn its peers will skip.
-func TestAJoinDoesNotBurnAgainWhatItsPeersSkipped(t *testing.T) {
+// can be proven at carries or queues a burn of an amount burnt before.
+func TestAJoinAgreesAcrossRepeatedBurns(t *testing.T) {
 	t.Run("queued on the Directory", func(t *testing.T) { joinDoesNotBurnAgain(t, Directory) })
 	t.Run("sent from a BVN", func(t *testing.T) { joinDoesNotBurnAgain(t, "BVN1") })
 }

@@ -888,7 +888,7 @@ func (s *PulledState) takeState(ctx context.Context, p *syncing, src pull.Source
 			"account", u, "peer", sourceKey(src), "error", err)
 		return false
 	}
-	if err := pull.KeepQueuedMessages(ctx, src, s.db, st, block); err != nil {
+	if err := pull.KeepQueuedMessages(ctx, src, s.db, st); err != nil {
 		s.log.Info("A queued delivery's message could not be taken; the account is asked of another",
 			"account", u, "peer", sourceKey(src), "error", err)
 		return false

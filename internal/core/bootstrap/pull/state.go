@@ -273,22 +273,12 @@ func putPendingSets(account *database.Account, p *database.RetainedPendingTransa
 	return txn.Signatures().Put(p.Signatures)
 }
 
-// KeepQueuedMessages fetches, from src, what the store lacks of each queued
-// local delivery of a served synthetic ledger: the message, which the next
-// block executes from (block.drainDeliveryQueues), and its transaction's
-// status where the peer had delivered it by block, the block the state was
-// served at.
-//
-// The status matters because a local delivery is deduplicated by hash: a burn
-// the Directory queues for its own credit purchases is a SyntheticBurnTokens
-// to acc://ACME carrying only its amount, so two burns of one amount are one
-// transaction, and a node holding the first one's status skips the second.
-// The status is not in the BPT. A joined node held none and burned again,
-// leaving ACME's issued amount below its peers' at the first block after its
-// proof (#4442, run 20260928T051402Z). A status the peer first received after
-// block is the drain the next block does, which this node does too: it is not
-// taken.
-func KeepQueuedMessages(ctx context.Context, src Source, store Store, st *api.AccountState, block uint64) error {
+// KeepQueuedMessages fetches, from src, the message behind each queued local
+// delivery of a served synthetic ledger that the store does not hold, and
+// keeps each only if it hashes to the ID the queue names. The next block
+// executes each from its stored message (block.drainDeliveryQueues), so a
+// queue written by KeepState without them cannot be executed from (#4442).
+func KeepQueuedMessages(ctx context.Context, src Source, store Store, st *api.AccountState) error {
 	if st == nil || st.Url == nil || st.Leaf == nil || len(st.Leaf.LocalDeliveryQueue) == 0 {
 		return nil
 	}
@@ -298,34 +288,15 @@ func KeepQueuedMessages(ctx context.Context, src Source, store Store, st *api.Ac
 	batch := store.Begin(true)
 	defer batch.Discard()
 	for _, id := range st.Leaf.LocalDeliveryQueue {
-		rec, err := src.QueryMessage(ctx, id, nil)
-		if err != nil {
+		_, err := batch.Message(id.Hash()).Main().Get()
+		switch {
+		case err == nil:
+			continue
+		case !errors.Is(err, errors.NotFound):
 			return errors.UnknownError.WithFormat("queued local delivery %v: %w", id, err)
 		}
-		if rec == nil || rec.Message == nil {
-			return errors.Conflict.WithFormat("queued local delivery %v: the peer served no message", id)
-		}
-		if h := rec.Message.Hash(); h != id.Hash() {
-			return errors.Conflict.WithFormat("queued local delivery %v: the peer served a message that hashes to %x", id, h[:8])
-		}
-		if err := batch.Message(id.Hash()).Main().Put(rec.Message); err != nil {
+		if err := pullMessage(ctx, src, batch, id); err != nil {
 			return errors.UnknownError.WithFormat("queued local delivery %v: %w", id, err)
-		}
-
-		status := &protocol.TransactionStatus{TxID: id, Code: rec.Status, Error: rec.Error, Result: rec.Result, Received: rec.Received}
-		if rec.Received == 0 || rec.Received > block || !status.Delivered() {
-			continue
-		}
-		h := id.Hash()
-		held, err := batch.Transaction(h[:]).Status().Get()
-		if err != nil {
-			return errors.UnknownError.WithFormat("queued local delivery %v: load status: %w", id, err)
-		}
-		if held.Delivered() {
-			continue
-		}
-		if err := batch.Transaction(h[:]).Status().Put(status); err != nil {
-			return errors.UnknownError.WithFormat("queued local delivery %v: store status: %w", id, err)
 		}
 	}
 	return errors.UnknownError.Wrap(batch.Commit())
