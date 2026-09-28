@@ -46,3 +46,72 @@ func (x *Executor) loadGlobals(view func(func(batch *database.Batch) error) erro
 	g.Pending = *g.Active.Copy()
 	return nil
 }
+
+// reloadGlobals makes the executor's globals the ones the store holds, and
+// reports which parts differed. A node that joins pulls the state it
+// executes from, the network definition, oracle, globals, routing and
+// executor versions among it, and the executor loaded its globals from what
+// the store held when it started -- genesis, for a fresh node -- and reloads
+// them only when a block it executes writes them. Executing the first block
+// after the handoff with the old ones executes it differently from the peers
+// (#4442, run 20260928T051402Z).
+func (x *Executor) reloadGlobals(batch *database.Batch) ([]string, error) {
+	fresh := new(core.GlobalValues)
+	err := fresh.Load(x.Describe.NodeUrl(), func(account *url.URL, target interface{}) error {
+		return batch.Account(account).Main().GetAs(target)
+	})
+	switch {
+	case errors.Is(err, errors.NotFound):
+		// A store with no network accounts has no globals to reload.
+		return nil, nil
+	case err != nil:
+		return nil, errors.UnknownError.WithFormat("load globals: %w", err)
+	}
+	cur := x.globals()
+	var differ []string
+	if cur != nil {
+		differ = globalsDiffer(&cur.Active, fresh)
+		if len(differ) == 0 && cur.Active.Equal(&cur.Pending) {
+			return nil, nil
+		}
+	}
+	old := new(core.GlobalValues)
+	if cur != nil {
+		old = cur.Active.Copy()
+	}
+	x.globalsPtr.Store(&Globals{Active: *fresh.Copy(), Pending: *fresh.Copy()})
+	err = x.EventBus.Publish(events.WillChangeGlobals{New: fresh.Copy(), Old: old})
+	if err != nil {
+		return differ, errors.UnknownError.WithFormat("publish globals update: %w", err)
+	}
+	return differ, nil
+}
+
+// globalsDiffer names the parts of two sets of globals that differ.
+func globalsDiffer(a, b *core.GlobalValues) []string {
+	var out []string
+	part := func(name string, x, y interface{ MarshalBinary() ([]byte, error) }, nx, ny bool) {
+		if nx || ny {
+			if nx != ny {
+				out = append(out, name)
+			}
+			return
+		}
+		bx, _ := x.MarshalBinary()
+		by, _ := y.MarshalBinary()
+		if string(bx) != string(by) {
+			out = append(out, name)
+		}
+	}
+	part("oracle", a.Oracle, b.Oracle, a.Oracle == nil, b.Oracle == nil)
+	part("globals", a.Globals, b.Globals, a.Globals == nil, b.Globals == nil)
+	part("network", a.Network, b.Network, a.Network == nil, b.Network == nil)
+	part("routing", a.Routing, b.Routing, a.Routing == nil, b.Routing == nil)
+	if a.ExecutorVersion != b.ExecutorVersion {
+		out = append(out, "executor-version")
+	}
+	if len(out) == 0 && !a.Equal(b) {
+		out = append(out, "bvn-executor-versions")
+	}
+	return out
+}

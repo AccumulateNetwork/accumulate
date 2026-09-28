@@ -8,6 +8,7 @@ package join
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -306,9 +307,45 @@ func (s *PulledState) locateExecuted(ctx context.Context, batch *database.Batch,
 			"partition", s.partition, "block", n, "error", err)
 		return
 	}
-	for _, d := range diffs {
+	for i, d := range diffs {
 		s.log.Warn("An executed block left an account other than the peer's",
 			"partition", s.partition, "block", n, "peer", peer, "account", d.Account,
 			"key", fmt.Sprintf("%x", d.KeyHash), "local", fmt.Sprintf("%x", d.Local), "peer-leaf", fmt.Sprintf("%x", d.Peer))
+		if i < maxStatesSaid && d.Account != nil {
+			s.sayStates(ctx, batch, d.Account)
+		}
 	}
+}
+
+// maxStatesSaid is how many differing accounts a miss logs the states of.
+const maxStatesSaid = 4
+
+// sayStates logs an account's main state as this node holds it and as each
+// peer serves it now, so a miss says which field differs. Both are the
+// current state: the node has executed past the missed block by a block or
+// two and the peer by as many, so a field that moves every block differs
+// for that reason alone; one that does not is the difference.
+func (s *PulledState) sayStates(ctx context.Context, batch *database.Batch, u *url.URL) {
+	local, err := batch.Account(u).Main().Get()
+	localJSON := "<none>"
+	if err == nil {
+		if b, err := json.Marshal(local); err == nil {
+			localJSON = string(b)
+		}
+	}
+	peers := map[string]string{}
+	for _, src := range s.partitionSources(ctx) {
+		rec, err := src.QueryAccount(ctx, u, nil)
+		if err != nil || rec == nil || rec.Account == nil {
+			continue
+		}
+		if b, err := json.Marshal(rec.Account); err == nil {
+			peers[sourceKey(src)] = string(b)
+		}
+		if len(peers) >= 2 {
+			break
+		}
+	}
+	s.log.Warn("The states of an account an executed block left other than the peer's",
+		"partition", s.partition, "account", u, "local", localJSON, "peers", peers)
 }

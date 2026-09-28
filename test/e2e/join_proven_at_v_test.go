@@ -55,6 +55,12 @@ func newProvenFixture(t *testing.T, opts ...simulator.Option) *provenFixture {
 // newProvenFixtureOn is the fixture with the node that restarts on the named
 // partition.
 func newProvenFixtureOn(t *testing.T, partition string, opts ...simulator.Option) *provenFixture {
+	return newProvenFixtureWith(t, partition, nil, opts...)
+}
+
+// newProvenFixtureWith is the fixture with while run on the network while the
+// node is down.
+func newProvenFixtureWith(t *testing.T, partition string, while func(*Sim), opts ...simulator.Option) *provenFixture {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	carol := url.MustParse("carol")
@@ -98,6 +104,9 @@ func newProvenFixtureOn(t *testing.T, partition string, opts ...simulator.Option
 	require.Len(t, rec.States, 1)
 	f.early = rec.States[0]
 	f.p.RestartNode(provenJoiner)
+	if while != nil {
+		while(sim)
+	}
 	for i := 0; i < 30; i++ {
 		f.traffic()
 	}

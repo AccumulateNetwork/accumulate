@@ -316,6 +316,17 @@ func (x *Executor) SettleStaging(batch *database.Batch, q uint64) error {
 			x.Describe.PartitionId, q, ledger.Index)
 	}
 
+	// The globals the block after Q executes with are the state's at Q, not
+	// the ones this executor loaded when it started (#4442).
+	differ, err := x.reloadGlobals(batch)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if len(differ) > 0 {
+		x.logger.Info("The executor's globals were not the state's; reloaded them from the state it settles at",
+			"partition", x.Describe.PartitionId, "block", q, "differed", differ)
+	}
+
 	b := &Block{
 		BlockParams: execute.BlockParams{Index: q},
 		Executor:    x,
