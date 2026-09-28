@@ -470,14 +470,13 @@ func (w *provenWatch) HandedOff(q uint64) {
 	w.steppingState.HandedOff(q)
 }
 
-// TestARootWatchMatchMovesTheTrustedSets — #4438 threat review "in passing",
-// code review F5. A node that hands off from a pulled state not yet proven is
-// proven by the root watch (Diverged), not by Matched. The network definition
-// changed while the node was down; at the root watch's match the state holding
-// the new definition is proven, and the node trusts it from there. Before,
-// only Matched moved the sets, so a node proven by the root watch verified with
-// the definition it started with for as long as it ran.
-func TestARootWatchMatchMovesTheTrustedSets(t *testing.T) {
+// TestAJoinProvenAtItsHandoffMovesTheTrustedSets — #4438 threat review "in
+// passing", code review F5, and #4442. The network definition changed while
+// the node was down. The join hands off only from a state proven at the block
+// it is complete at (Matched), never from one the root watch proves later;
+// at that proof the state holding the new definition is proven, and the node
+// trusts it from there.
+func TestAJoinProvenAtItsHandoffMovesTheTrustedSets(t *testing.T) {
 	const joiner = 1
 	// A joining node executes nothing, so it reports no results for the
 	// blocks it collects; that is not a consensus failure.
@@ -532,7 +531,7 @@ func TestARootWatchMatchMovesTheTrustedSets(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, nodestate.StateActive, state.Machine().State(), "precondition: the node was never proven")
-	require.NotZero(t, watch.unproven, "precondition: the node was proven at its handoff, by Matched, not by the root watch")
+	require.Zero(t, watch.unproven, "the node handed off from a state not yet proven")
 	require.Equal(t, after, state.TrustedVersion(),
-		"the root watch proved a state holding definition version %d and the node still trusts version %d", after, state.TrustedVersion())
+		"the join proved a state holding definition version %d and the node still trusts version %d", after, state.TrustedVersion())
 }

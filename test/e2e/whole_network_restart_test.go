@@ -232,12 +232,6 @@ func (s *lockedState) Matched(ctx context.Context) (uint64, bool, error) {
 	return s.State.Matched(ctx)
 }
 
-func (s *lockedState) Ready() (uint64, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.State.Ready()
-}
-
 func (s *lockedState) Resumable() (uint64, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -79,6 +79,11 @@ type Collector struct {
 	// OnRefused is called when a produced anchor could not be taken.
 	OnRefused func(block uint64, err error)
 
+	// OnRootChain is called with the same anchors as OnAnchor, with the root
+	// chain position and anchor the anchor carries: what a receipt from an
+	// entry of this partition's chains ends at.
+	OnRootChain func(block, rootIndex uint64, rootAnchor [32]byte)
+
 	mu     sync.Mutex
 	next   uint64 // the next sequence number to collect; zero until positioned
 	newest uint64 // the newest number the ledger named when the read was positioned
@@ -270,6 +275,9 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 		taken = true
 		if c.OnAnchor != nil {
 			c.OnAnchor(c.Producer, pa.MinorBlockIndex, pa.StateTreeAnchor)
+		}
+		if c.OnRootChain != nil {
+			c.OnRootChain(pa.MinorBlockIndex, pa.RootChainIndex, pa.RootChainAnchor)
 		}
 	}
 	if taken {

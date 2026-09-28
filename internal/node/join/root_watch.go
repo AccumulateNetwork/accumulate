@@ -27,10 +27,9 @@ import (
 // and comparing an anchor from before the handoff against the first root
 // recorded after it would report a divergence that is not there.
 //
-// The state handed off at may be unproven: once the walk is done the node
-// executes and compares at every block that anchors (executor spec, "Sync",
-// "Two mismatches"). From here executed is the last block
-// compared, or the block handed off at.
+// The state handed off at is proven: the join hands off only on a match at the
+// block its state is complete at (Matched; #4442). From here executed is the
+// last block compared, or the block handed off at.
 func (s *PulledState) HandedOff(q uint64) {
 	s.executed = q
 	// The store is a block's state again: the pull that began is done.
@@ -47,8 +46,7 @@ func (s *PulledState) HandedOff(q uint64) {
 // Diverged compares the root this node computed after each block it executed
 // since the handoff with the partition's signed anchor for that block, at
 // every block that sent one (executor spec, "Sync", "Two
-// mismatches"). A match is the proof, step 3: a node that handed off from an
-// unproven state is promoted there. A mismatch is reported, and the next pull
+// mismatches"). A mismatch is reported, and the next pull
 // is a repair from the block ledger, from the last block that matched -- or
 // from the start of the pull, if none has.
 //

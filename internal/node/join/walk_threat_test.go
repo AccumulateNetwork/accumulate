@@ -182,24 +182,6 @@ func TestTheWalkDropsLeavesNoPeerHolds(t *testing.T) {
 	})
 }
 
-// TestReadyIsNotBehindTheRecords: the pulled ledger names the block the node
-// hands off at, and a ledger pulled from a peer behind the records read is not
-// a block the state is at: the records have brought accounts past it.
-func TestReadyIsNotBehindTheRecords(t *testing.T) {
-	here := protocol.PartitionUrl("BVN0")
-	peer := &scriptedPeer{partition: here, block: 12, records: map[uint64][]*url.URL{}, state: peerStore(t)}
-	s, db := joiningAt(t, peer)
-	s.sync = newSyncing()
-	s.sync.last, s.sync.ready = 12, true
-	putLedger(t, db, here, 10)
-	_, ok := s.Ready()
-	require.False(t, ok, "the node was ready at block 10 with the records read through 12")
-	putLedger(t, db, here, 12)
-	n, ok := s.Ready()
-	require.True(t, ok)
-	require.Equal(t, uint64(12), n)
-}
-
 // View is a read of db.
 func View(db *database.Database, fn func(*database.Batch)) {
 	batch := db.Begin(false)

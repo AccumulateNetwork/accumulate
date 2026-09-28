@@ -90,8 +90,13 @@ func TestTheTrustedSetsMoveOnlyAtAMatch(t *testing.T) {
 	require.Equal(t, uint64(1), s.TrustedVersion(),
 		"a pull round took the validator sets out of state nothing has proven")
 
-	// The local root now equals a root the trusted set signed for block 9:
-	// the state is proven, the definition with it.
+	// The state is complete at block 9 and its root equals the root the
+	// trusted set signed for block 9: the state is proven, the definition
+	// with it.
+	if s.sync == nil {
+		s.sync = newSyncing()
+	}
+	s.sync.last, s.sync.ready = 9, true
 	batch := db.Begin(false)
 	root, err := batch.GetBptRootHash()
 	batch.Discard()

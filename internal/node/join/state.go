@@ -7,7 +7,6 @@
 package join
 
 import (
-	"bytes"
 	"context"
 	stderrors "errors"
 	"fmt"
@@ -179,6 +178,20 @@ type PulledState struct {
 	// already holds on the accounts it takes whole for their messages
 	// (pull.Options.CheckHeld). Once a process.
 	checkedHeld bool
+
+	// rootChains are the root chain positions and anchors of the blocks this
+	// partition's validators signed anchors for (provenByBptChain).
+	rootMu     sync.Mutex
+	rootChains map[uint64]rootChainAt
+
+	// mismatches are the accounts the last location found differing from
+	// the peer's tree as of mismatchAt (locate).
+	mismatchAt uint64
+	mismatches []LeafDiff
+
+	// anchorWait is how long a pull that stands complete at V holds there
+	// for V's signed anchor before it goes on to the next V (Matched).
+	anchorWait time.Duration
 }
 
 // syncing is one pull: the two cursors of the algorithm, and what the records
@@ -231,9 +244,18 @@ type syncing struct {
 	// servedBy names the peers whose answers this pull took.
 	servedBy map[string]bool
 
-	// ready is whether the last round left the walk done and nothing owed:
-	// the state stands at last, and the node may execute from there (Ready).
+	// ready is whether the last round left the state complete at last, V:
+	// the walk has covered the tree, nothing is owed, and every record
+	// through V is applied with nothing read after V left standing. The root
+	// is compared with V's signed anchor then, and only then (Matched).
 	ready bool
+
+	// compared is the last V whose root was compared with its anchor, so
+	// each V is compared once. waitFor is the V whose anchor the pull holds
+	// for, since waitSince.
+	compared  uint64
+	waitFor   uint64
+	waitSince time.Time
 }
 
 func newSyncing() *syncing {
@@ -264,8 +286,17 @@ type StateOptions struct {
 	// where this node stands.
 	ExecutedBlock uint64
 
+	// AnchorWait is how long a pull complete at a block V holds for V's
+	// signed anchor before going on to the next V. Zero is DefaultAnchorWait.
+	AnchorWait time.Duration
+
 	Logger *slog.Logger
 }
+
+// DefaultAnchorWait is how long a complete pull holds for its block's signed
+// anchor. A partition's validators sign a block's anchor as it closes, so a
+// block's anchor is collected at quorum within a block or two of it.
+const DefaultAnchorWait = 10 * time.Second
 
 // NewState wires the pull, the anchor reader and the tracker together.
 func NewState(opts StateOptions) (*PulledState, error) {
@@ -282,13 +313,17 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		log = slog.Default()
 	}
 	s := &PulledState{
-		partition: opts.Partition,
-		db:        opts.Database,
-		sources:   opts.Sources,
-		machine:   machine,
-		tracker:   track,
-		log:       log.With("module", "join"),
-		executed:  opts.ExecutedBlock,
+		partition:  opts.Partition,
+		db:         opts.Database,
+		sources:    opts.Sources,
+		machine:    machine,
+		tracker:    track,
+		log:        log.With("module", "join"),
+		executed:   opts.ExecutedBlock,
+		anchorWait: opts.AnchorWait,
+	}
+	if s.anchorWait <= 0 {
+		s.anchorWait = DefaultAnchorWait
 	}
 
 	// Read NOW, before the pull writes anything, or not at all. The store's
@@ -354,6 +389,7 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	}
 	collector.OnAnchor = track.Observe
 	collector.OnRefused = s.anchorRefused
+	collector.OnRootChain = s.observeRootChain
 	s.anchors = collector
 
 	// Watchable from the moment the node starts joining, and on every change.
@@ -498,6 +534,18 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			"partition", s.partition, "error", err)
 	}
 
+	// A pull complete at V holds there, briefly, for V's signed anchor: the
+	// root is compared at V once V's anchor is in (Matched). It is given up
+	// on, and the next round's V is compared, once an anchor of a later
+	// block has been collected without one for V -- a block that anchors
+	// nothing -- or after AnchorWait.
+	if p := s.sync; p != nil && p.ready && p.compared != p.last && p.waitFor == p.last &&
+		s.clock().Sub(p.waitSince) < s.anchorWait {
+		if _, ok := s.tracker.AnchorAt(p.last); ok || s.tracker.LatestObservedBlock() < p.last {
+			return nil
+		}
+	}
+
 	peer, err := s.peersBlock(ctx)
 	if err != nil {
 		// No peer could say where the partition is. Nothing is lost by
@@ -574,37 +622,14 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	}
 
 	// With the walk done, nothing owed and L at or above the highest block
-	// any reply was read at, every account is as of L if the pull is right.
-	// The node may execute from here, comparing at every block that anchors
-	// (Ready; DIFFERENCES.md E11: the spec's "Two mismatches" executes only
-	// once the root has matched).
+	// any reply was read at, every account is as of L, V, if the pull is
+	// right: the walk never wrote over what a record wrote, and every record
+	// through V is applied. The root is compared with V's signed anchor
+	// (Matched), and nothing is executed before it matches (executor spec,
+	// "Sync", "The algorithm": no block n executes until the tree is
+	// complete and every record through n - 1 is applied).
 	p.ready = p.walked && len(p.retry) == 0 && p.last >= p.highest
 	return nil
-}
-
-// Ready reports the block the pulled state stands at once the walk has covered
-// the tree and nothing is owed a retry: the block the node may hand off at and
-// execute from, unproven, comparing its root with the partition's signed
-// anchor at every block that sends one. A match there is the proof, and
-// Diverged promotes the node at it; a mismatch is repaired from the block
-// ledger. The spec's "Two mismatches" executes nothing until the root has
-// matched; handing off unproven is today's departure from it (DIFFERENCES.md
-// E11), kept until the as-of-block pulls land (#4442).
-//
-// The block is the one the pulled ledger names, not the last record read: the
-// ledger is pulled as it is on the peer now, and the peer may have moved past
-// the last record while the round pulled. A block the records have not reached
-// is wrong only in the accounts its record names, which the repair brings
-// current if the root does not match.
-func (s *PulledState) Ready() (uint64, bool) {
-	if s.sync == nil || !s.sync.ready {
-		return 0, false
-	}
-	n, err := readExecutedBlock(s.db, s.partition)
-	if err != nil || n < s.sync.last {
-		return 0, false
-	}
-	return n, true
 }
 
 // startRepair begins the pull that repairs the state after an executed
@@ -744,7 +769,7 @@ func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Sour
 			if st.Url != nil {
 				p.current[accountKey(st.Url)] = true
 			}
-			if !s.takeState(ctx, p, src, st) && st.Url != nil {
+			if !s.takeState(ctx, p, src, st, rec.Block) && st.Url != nil {
 				p.retry[accountKey(st.Url)] = st.Url
 			}
 		}
@@ -804,10 +829,14 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 // The trust chain (pull.WholeAccounts) and the windowed accounts
 // (pull.WindowAccounts) are taken with their chains' entries and the
 // messages behind them, by pullOne, and so is every account of a repair
-// (taken whole). An account the peer holds no leaf for is asked of every peer
-// by pullOne, and deleted when none holds one. Every other account is checked
-// against its leaf and written as served (pull.KeepState).
-func (s *PulledState) takeState(ctx context.Context, p *syncing, src pull.Source, st *api.AccountState) bool {
+// (taken whole). pullOne reads the account as the peer holds it now, a block
+// after the answer's; the answer's state is written over it, so the account
+// stands at the answer's block like every other (#4442; #4453 review F1).
+// An account the answer holds no leaf for is deleted: at the answer's block
+// it does not exist, and a record after it names it if a block creates it.
+// Every other account is checked against its leaf and written as served
+// (pull.KeepState).
+func (s *PulledState) takeState(ctx context.Context, p *syncing, src pull.Source, st *api.AccountState, block uint64) bool {
 	u := st.Url
 	if u == nil {
 		return false
@@ -820,25 +849,55 @@ func (s *PulledState) takeState(ctx context.Context, p *syncing, src pull.Source
 			"account", u, "partition", s.partition)
 		return true
 	}
-	if p.repair || st.NoLeaf || s.takenWhole(u) || s.windowed(u) {
-		s.pullOne(ctx, p, u)
+	if st.NoLeaf {
+		s.forget(u)
+		delete(p.retry, accountKey(u))
 		return true
+	}
+	// The chains' entries and the messages behind them, to the answer's
+	// heads and no further (pull.TakeChainsAt).
+	window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
+	whole := s.takenWhole(u) || p.repair && !windowed
+	if whole || windowed {
+		srcs, _, err := s.sourcesFor(ctx, u)
+		if err == nil {
+			srcs = append([]pull.Source{src}, s.order(srcs)...)
+			_, err = pull.TakeChainsAt(ctx, srcs, s.db, st, block, whole, window)
+		}
+		if err != nil {
+			s.log.Info("An account's chains could not be taken to the answer's heads; it is asked for again",
+				"account", u, "block", block, "error", err)
+			return false
+		}
 	}
 	if err := pull.KeepState(s.db, st); err != nil {
 		s.log.Info("A peer's answer for an account was refused; it is asked of another",
 			"account", u, "peer", sourceKey(src), "error", err)
 		return false
 	}
+	if err := pull.KeepQueuedMessages(ctx, src, s.db, st); err != nil {
+		s.log.Info("A queued delivery's message could not be taken; the account is asked of another",
+			"account", u, "peer", sourceKey(src), "error", err)
+		return false
+	}
 	delete(p.retry, accountKey(u))
 	p.servedBy[sourceKey(src)] = true
-	s.markHeadOnly(u)
+	switch {
+	case p.repair && !windowed && !s.takenWhole(u):
+		// A repair takes the account whole, entries included, now, while
+		// the node is not executing. An account already held entire needs
+		// only what was appended.
+		if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
+			s.unmarkHeadOnly(accountKey(u))
+		} else {
+			s.markHeadOnly(u)
+		}
+	case !whole:
+		// Taken by its heads, or its window: the rest is backfilled once
+		// the state has matched.
+		s.markHeadOnly(u)
+	}
 	return true
-}
-
-// windowed is whether u is one of the accounts taken by its recent window.
-func (s *PulledState) windowed(u *url.URL) bool {
-	_, ok := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
-	return ok
 }
 
 // accountRouter is how the join tells an account's partition without asking
@@ -869,8 +928,6 @@ func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.
 		case ctx.Err() != nil:
 			p.retry[accountKey(u)] = u
 		case !Routable(u):
-		case p.repair || s.takenWhole(u) || s.windowed(u):
-			s.pullOne(ctx, p, u)
 		default:
 			batchable = append(batchable, u)
 		}
@@ -922,7 +979,7 @@ func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source
 				if st.Url == nil || !asked(chunk, st.Url) {
 					continue
 				}
-				if s.takeState(ctx, p, src, st) {
+				if s.takeState(ctx, p, src, st, rec.Block) {
 					served[accountKey(st.Url)] = true
 				}
 			}
@@ -1103,14 +1160,6 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 
 	window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
 	whole := s.takenWhole(u) || p.repair && !windowed
-	// A repair names the accounts a block changed; the ones whose leaf the
-	// repair actually moves are the ones this node executed differently
-	// from its peers. Said per account, so a root miss can be traced to
-	// what differed rather than inferred.
-	var leafBefore []byte
-	if p.repair {
-		leafBefore = s.leafOf(u)
-	}
 	mode := pull.ModeStateOnly
 	switch {
 	case whole:
@@ -1145,6 +1194,11 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 	})
 	if err == nil && served >= 0 && served < len(srcs) {
 		p.servedBy[sourceKey(srcs[served])] = true
+	}
+	if err == nil {
+		// Read as the peer holds it now: the state is complete only once
+		// the records have reached this block (Pull).
+		p.highest = max(p.highest, pending.Block)
 	}
 	defer func() {
 		// What was taken by its heads alone is backfilled once the state
@@ -1199,25 +1253,7 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		p.retry[accountKey(u)] = u
 		return owed
 	}
-	if p.repair {
-		if after := s.leafOf(u); !bytes.Equal(leafBefore, after) {
-			s.log.Warn("A repair changed an account this node had executed differently",
-				"account", u, "partition", s.partition,
-				"before", fmt.Sprintf("%x", leafBefore), "after", fmt.Sprintf("%x", after))
-		}
-	}
 	return taken
-}
-
-// leafOf is the account's BPT leaf as this node holds it, nil when it has none.
-func (s *PulledState) leafOf(u *url.URL) []byte {
-	batch := s.db.Begin(false)
-	defer batch.Discard()
-	v, err := batch.BPT().Get(batch.Account(u).Key())
-	if err != nil {
-		return nil
-	}
-	return v
 }
 
 // readExecutedBlock is what the daemon reads to decide whether a node must
@@ -1600,34 +1636,125 @@ func (s *PulledState) Demote(block uint64) {
 		"partition", s.partition, "block", block)
 }
 
-// Matched reports the block whose anchored root the local root equals. Until
-// it does, the node keeps pulling: a root that matches is the only statement
-// that the state this node holds is a block's state (executor spec, "Sync").
+// Matched compares the local root with the signed anchor of block V, once the
+// pull stands complete at V: the walk has covered the tree, nothing is owed,
+// and every block-ledger record through V is applied, with nothing read after
+// V left standing (Pull). Then the local state is block V's, and its root must
+// be V's anchored root (executor spec, "Sync", "The algorithm", step 3; Paul,
+// 2026-09-28: "once the BPT is caught up, and once all the blockledger
+// accounts are updated, THAT block should match the anchor and BPT hash").
 //
-// It is the local root's block every time it is asked, not the block of the
-// first match: a join that found a gap pulls on, so the state moves past the
-// block it first matched, and answering with that block would settle staging
-// against a state it is not (#4362). It changes nothing about the node's
-// state: the join promotes when it hands off (Promote).
+// A match is the proof, and the join hands off at V: V + 1 executes from the
+// consensus buffer. Nothing is executed before it: no block n executes until
+// the tree is complete and every record through n - 1 is applied.
+//
+// V's anchor is collected at quorum as V closes; until it is in, the pull
+// holds at V (Pull), for AnchorWait at most, and then goes on to the next
+// round's V. A mismatch is a pull bug: the accounts whose leaves differ from
+// the peer's tree as of V are found and named (locate), and taken again, and
+// the root is compared at the next V. Each V is compared once.
+//
+// It changes nothing about the node's state: the join promotes when it hands
+// off (Promote).
 func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
-	// The anchors first: the anchor of the block the state stands at is
-	// collected as that block closes, and without this read the state would
-	// be compared only with anchors read before the round that put it there.
+	// The anchors first: V's is collected as V closes.
 	if err := s.readAnchors(ctx); err != nil && !(errors.Is(err, errors.NotReady) && s.spineStalled()) {
 		s.log.Debug("This partition's anchors could not be read", "partition", s.partition, "error", err)
 	}
-	m, ok, err := s.tracker.Check(ctx)
-	if err != nil {
-		return 0, false, errors.UnknownError.Wrap(err)
-	}
-	if !ok {
+	p := s.sync
+	if p == nil || !p.ready || p.compared == p.last {
 		return 0, false, nil
 	}
-	s.matched = m
-	s.provenAt = m.Block
+	v := p.last
+	batch := s.db.Begin(false)
+	local, err := batch.GetBptRootHash()
+	batch.Discard()
+	if err != nil {
+		return 0, false, errors.UnknownError.WithFormat("read the local root: %w", err)
+	}
+
+	anchor, ok := s.tracker.AnchorAt(v)
+	if !ok {
+		// A block that sends no anchor of its own -- a partition at rest
+		// anchors at most every fourth block -- or whose anchor is not
+		// signed yet: its root is proven by a later block's signed root
+		// chain, if one has been collected (provenByBptChain).
+		anchor, ok = s.rootOfUnanchored(ctx, v, local)
+	}
+	if !ok {
+		if p.waitFor != v {
+			p.waitFor, p.waitSince = v, s.clock()
+			s.log.Info("The state is complete at a block; waiting for its signed anchor",
+				"partition", s.partition, "block", v, "latest-anchor", s.tracker.LatestObservedBlock())
+		}
+		return 0, false, nil
+	}
+	p.compared = v
+	if local != anchor {
+		s.log.Warn("The state complete at a block does not have its signed root; locating the accounts that differ",
+			"partition", s.partition, "block", v, "local", fmt.Sprintf("%x", local), "anchor", fmt.Sprintf("%x", anchor))
+		s.locate(ctx, p, v)
+		return 0, false, nil
+	}
+
+	s.log.Info("The state is proven at the block it is complete at",
+		"partition", s.partition, "block", v, "root", fmt.Sprintf("%x", anchor))
+	s.matched = tracker.Match{Block: v, Anchor: anchor}
+	s.provenAt = v
 	s.repairs = 0
 
 	// The state is proven now, and with it the network definition it holds.
 	s.refreshAuthority()
-	return m.Block, true, nil
+	return v, true, nil
+}
+
+// RecordsThrough is the last block whose block-ledger record the pull in
+// progress has applied, and zero when no pull is in progress.
+func (s *PulledState) RecordsThrough() uint64 {
+	if s.sync == nil {
+		return 0
+	}
+	return s.sync.last
+}
+
+// Mismatches is every account the last location at a mismatch found differing
+// from the peer's tree, and the block it was located at.
+func (s *PulledState) Mismatches() (uint64, []LeafDiff) {
+	return s.mismatchAt, s.mismatches
+}
+
+// locate walks the peer's BPT as of v against the local tree (#4441), names
+// every account whose leaf differs, with both leaves, and owes each to the
+// next round, which takes it again. A location that cannot be made, or that
+// finds nothing, walks the tree again.
+func (s *PulledState) locate(ctx context.Context, p *syncing, v uint64) {
+	batch := s.db.Begin(false)
+	diffs, peer, err := locateAt(ctx, s.partition, s.partitionSources(ctx), batch.BPT(), v)
+	batch.Discard()
+	s.mismatchAt, s.mismatches = v, diffs
+	if err != nil || len(diffs) == 0 {
+		s.log.Warn("The accounts that differ at a block could not be located; walking the tree again",
+			"partition", s.partition, "block", v, "error", err)
+		p.walked, p.cursor, p.named = false, [32]byte{}, map[[32]byte]bool{}
+		return
+	}
+	named := 0
+	for _, d := range diffs {
+		if d.Account != nil {
+			named++
+		}
+	}
+	if named == 0 {
+		s.log.Warn("The accounts that differ at a block could not be named; walking the tree again",
+			"partition", s.partition, "block", v, "differ", len(diffs))
+		p.walked, p.cursor, p.named = false, [32]byte{}, map[[32]byte]bool{}
+	}
+	for _, d := range diffs {
+		s.log.Warn("An account differs from the peer's as of the block the state is complete at",
+			"partition", s.partition, "block", v, "peer", peer, "account", d.Account,
+			"key", fmt.Sprintf("%x", d.KeyHash), "local", fmt.Sprintf("%x", d.Local), "peer-leaf", fmt.Sprintf("%x", d.Peer))
+		if d.Account != nil {
+			p.retry[accountKey(d.Account)] = d.Account
+		}
+	}
 }

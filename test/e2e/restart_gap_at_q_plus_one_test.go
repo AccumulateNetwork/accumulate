@@ -265,8 +265,11 @@ func restartGapAtQPlusOne(t *testing.T, traffic bool, anchorLag int, wantGap boo
 	}
 
 	require.NotZero(t, lost, "precondition: entries are held unexecuted at the restart")
-	require.Equal(t, stoodAt+1, first.block,
-		"precondition, as in the run: the node matched its own state and the gap is at Q + 1")
+	// The join executes nothing before its state is complete and proven at a
+	// block Q, the peers' block when it pulled (#4442), not the block it
+	// stood at; the gap is at that Q + 1.
+	require.Greater(t, first.block, stoodAt,
+		"precondition: the first check is at a block after the one the node stood at")
 	require.NotEmpty(t, first.gaps, "the node lost what it held, and Q + 1 carries a number above it")
 	for _, g := range first.gaps {
 		k := g.StreamName()

@@ -8,6 +8,7 @@ package pull
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -270,4 +271,33 @@ func putPendingSets(account *database.Account, p *database.RetainedPendingTransa
 		return err
 	}
 	return txn.Signatures().Put(p.Signatures)
+}
+
+// KeepQueuedMessages fetches, from src, the message behind each queued local
+// delivery of a served synthetic ledger that the store does not hold, and
+// keeps each only if it hashes to the ID the queue names. The next block
+// executes each from its stored message (block.drainDeliveryQueues), so a
+// queue written by KeepState without them cannot be executed from (#4442).
+func KeepQueuedMessages(ctx context.Context, src Source, store Store, st *api.AccountState) error {
+	if st == nil || st.Url == nil || st.Leaf == nil || len(st.Leaf.LocalDeliveryQueue) == 0 {
+		return nil
+	}
+	if _, ok := protocol.ParsePartitionUrl(st.Url); !ok || !st.Url.PathEqual(protocol.Synthetic) {
+		return nil
+	}
+	batch := store.Begin(true)
+	defer batch.Discard()
+	for _, id := range st.Leaf.LocalDeliveryQueue {
+		_, err := batch.Message(id.Hash()).Main().Get()
+		switch {
+		case err == nil:
+			continue
+		case !errors.Is(err, errors.NotFound):
+			return errors.UnknownError.WithFormat("queued local delivery %v: %w", id, err)
+		}
+		if err := pullMessage(ctx, src, batch, id); err != nil {
+			return errors.UnknownError.WithFormat("queued local delivery %v: %w", id, err)
+		}
+	}
+	return errors.UnknownError.Wrap(batch.Commit())
 }

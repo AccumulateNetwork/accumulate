@@ -639,3 +639,11 @@ func (s *dbSource) QueryChangedAccountStates(context.Context, *url.URL, *api.Cha
 func (s *dbSource) QueryAccountStates(context.Context, *url.URL, *api.AccountStatesQuery) (*api.AccountStatesRecord, error) {
 	return nil, apierrors.NotAllowed.With("dbSource does not serve account states")
 }
+
+func (s *dbSource) QueryBptBlock(context.Context, *url.URL, *api.BptBlockQuery) (*api.BptBlockRecord, error) {
+	return nil, apierrors.NotAllowed.With("dbSource does not serve BPT blocks")
+}
+
+func (s *dbSource) QueryChainEntry(context.Context, *url.URL, *api.ChainQuery) (*api.ChainEntryRecord[api.Record], error) {
+	return nil, apierrors.NotAllowed.With("dbSource does not serve chain entries by value")
+}

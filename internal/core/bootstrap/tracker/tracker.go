@@ -84,6 +84,10 @@ type Tracker struct {
 	// order is the anchors in the order they were first observed, for
 	// eviction. Anchors arrive in block order, so the front is the oldest.
 	order [][32]byte
+	// byBlock is every observed block's anchor, including a block whose root
+	// an earlier block already had: observed keeps only the earliest, and a
+	// join compares the root of the block its state is complete at (AnchorAt).
+	byBlock map[uint64][32]byte
 	// latestBlock is the highest block an anchor has been seen at.
 	latestBlock uint64
 	// consecutive is the current consecutive-match streak, reset on any
@@ -103,6 +107,7 @@ func New(db *database.Database, partition *url.URL) (*Tracker, error) {
 		db:        db,
 		partition: partition,
 		observed:  make(map[[32]byte]uint64),
+		byBlock:   make(map[uint64][32]byte),
 	}, nil
 }
 
@@ -139,6 +144,14 @@ func (t *Tracker) Observe(partition *url.URL, block uint64, anchor [32]byte) {
 	max := t.MaxObserved
 	if max <= 0 {
 		max = DefaultMaxObserved
+	}
+	t.byBlock[block] = anchor
+	if len(t.byBlock) > 2*max {
+		for b := range t.byBlock {
+			if b+uint64(max) < t.latestBlock {
+				delete(t.byBlock, b)
+			}
+		}
 	}
 	for len(t.order) > max {
 		delete(t.observed, t.order[0])
@@ -185,6 +198,14 @@ func (t *Tracker) Check(ctx context.Context) (Match, bool, error) {
 		return Match{}, false, nil
 	}
 	return Match{Block: block, Anchor: local}, true, nil
+}
+
+// AnchorAt is the anchor observed for block, if one has been.
+func (t *Tracker) AnchorAt(block uint64) ([32]byte, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	a, ok := t.byBlock[block]
+	return a, ok
 }
 
 // ResetStreak starts the consecutive-match streak again. The join calls it

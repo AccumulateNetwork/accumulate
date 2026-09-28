@@ -137,18 +137,13 @@ type State interface {
 	// block's envelopes are not the set (#4306).
 	Pull(ctx context.Context) error
 
-	// Matched reports the block whose anchored root the local root equals,
-	// and whether it has been reached. It follows the state: after a pull
-	// that advanced the sync, it reports the block the sync advanced to.
+	// Matched reports the block V whose signed anchor the local root equals,
+	// and whether it has been reached: the state is complete at V -- the walk
+	// has covered the tree and every block-ledger record through V is
+	// applied -- and its root is V's anchored root. It is the only way to a
+	// handoff from a pulled state: no block n executes until the state is
+	// complete and proven at n - 1 (executor spec, "Sync", "The algorithm").
 	Matched(ctx context.Context) (uint64, bool, error)
-
-	// Ready reports the block the pulled state may be executed from before it
-	// is proven: the walk is done and the records are processed through it.
-	// The node hands off there and stays BOOTING; the root watch promotes it
-	// at the first executed block whose root equals the partition's signed
-	// anchor, and the state is repaired from the block ledger at a mismatch
-	// (executor spec, "Sync", "Two mismatches").
-	Ready() (uint64, bool)
 
 	// Promote says the node handed off at block, the block Matched last
 	// reported, and is executing from the block after it: it is ACTIVE from
@@ -412,16 +407,11 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			overran = false
 		}
 
-		q, proven, err := opts.State.Matched(ctx)
+		// The state is proven at q, or the node executes nothing: a pulled
+		// state that is not proven is never handed off (#4442).
+		q, ok, err := opts.State.Matched(ctx)
 		if err != nil {
 			return 0, errors.UnknownError.WithFormat("match the anchored root: %w", err)
-		}
-		ok := proven
-		if !ok {
-			// Not proven, but the walk is done: the node may execute from
-			// here and compare at every block that anchors (executor spec,
-			// "Sync", "Two mismatches").
-			q, ok = opts.State.Ready()
 		}
 		if !ok {
 			// Nothing to join from: every peer that answered is joining
@@ -433,7 +423,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			}
 		}
 		if ok {
-			done, err := stageAndHandOff(opts, log, q, proven, &failures)
+			done, err := stageAndHandOff(opts, log, q, &failures)
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)
 			}
@@ -456,12 +446,11 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 }
 
 // stageAndHandOff stages the kept blocks through q + 1, asks whether q + 1 has
-// a gap, and if not settles staging at q and hands off. proven says the state
-// at q matched a signed anchor; only then is the node promoted here, and
-// otherwise at the first executed block that matches. It reports whether the
-// node handed off; false with no error means the join pulls again. failures
-// counts the handoffs that failed.
-func stageAndHandOff(opts Options, log *slog.Logger, q uint64, proven bool, failures *int) (bool, error) {
+// a gap, and if not settles staging at q and hands off. The state at q matched
+// its signed anchor, so the node is promoted at q once it is executing. It
+// reports whether the node handed off; false with no error means the join
+// pulls again. failures counts the handoffs that failed.
+func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (bool, error) {
 	// Staging holds everything collected through q + 1 and nothing after it
 	// (#4398): the gap check asks what q + 1 carries, and a block delivers
 	// the run it can from what is held, so a staging that also held what
@@ -510,10 +499,6 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, proven bool, fail
 		// match, is where it becomes ACTIVE (#4385). A handoff that is
 		// refused or fails below never promotes, so a retried handoff never
 		// flips the node's state.
-		if !proven {
-			log.Info("Executing from the pulled state, unproven; comparing at every block that anchors", "block", q, "executes", q+1)
-			return true, nil
-		}
 		log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
 		opts.State.Promote(q)
 		return true, nil

@@ -108,6 +108,13 @@ type Source interface {
 	QueryBptPage(ctx context.Context, scope *url.URL, query *api.BptPageQuery) (*api.BptPageRecord, error)
 	QueryChangedAccountStates(ctx context.Context, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error)
 	QueryAccountStates(ctx context.Context, scope *url.URL, query *api.AccountStatesQuery) (*api.AccountStatesRecord, error)
+
+	// What the join checks its state with (#4442): a stored block of the
+	// peer's BPT as of a block, to locate the accounts a mismatch is in
+	// (#4441), and one chain entry by value with its receipt, to prove a
+	// root by a later block's signed root chain.
+	QueryBptBlock(ctx context.Context, scope *url.URL, query *api.BptBlockQuery) (*api.BptBlockRecord, error)
+	QueryChainEntry(ctx context.Context, scope *url.URL, query *api.ChainQuery) (*api.ChainEntryRecord[api.Record], error)
 }
 
 // The v3 client is a Source as it stands.
