@@ -24,6 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import topology
 import heights
+import joinlog
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMPOSE = os.path.join(HERE, "docker-compose.yml")
@@ -172,6 +173,7 @@ _SHFAIL = {"n": 0, "last": "", "calls": 0}
 # is ~70 curl subprocesses a second on the host running the soak. A flow
 # matrix does not change meaningfully inside five seconds.
 I_STATS, I_HEIGHT, I_WEDGE, I_HEAL, I_CHAOS, I_FLOW = 1, 1, 5, 5, 5, 5
+I_JOINS = 10  # seconds between reads of the followers' logs, stats and state (Followers panel)
 I_MEM = 30  # seconds between rows of mem.csv, the run-long memory/GC series (PLAN S0)
 # Per-node runtime series. process_* and go_memstats_* come from the default
 # Go collector; go_gc_cycles_* and go_cpu_classes_gc_* need the runtime-metrics
@@ -2815,6 +2817,44 @@ def collector():
             time.sleep(1)
 
 
+_JOINS = joinlog.Reader()
+
+
+def collect_follower_joins(now=None):
+    """The Followers panel: one row per follower x partition, from each
+    container's own log (joinlog.py), docker stats and docker inspect. Its
+    own thread, because the first read of a long log is slow and must not
+    hold the height and flow samples."""
+    now = time.time() if now is None else now
+    names = [f["container"] for f in FOLLOWERS]
+    state = joinlog.docker_state(names)
+    for c in names:
+        if c in state:
+            _JOINS.poll(c)
+    mem = joinlog.docker_mem([c for c in names
+                              if (state.get(c) or {}).get("status") == "running"])
+    with LOCK:
+        fo = STATE.get("follower") or {}
+    lives = {c: v.get("life") for c, v in (fo.get("nodes") or {}).items()}
+    lv, late = follower_lives(), late_followers()
+    for c in names:
+        lives.setdefault(c, follower_life(c, lv, late))
+    return {"measured": bool(FOLLOWERS), "at": int(now),
+            "rows": joinlog.rows(FOLLOWERS, _JOINS, fo, lives, state, mem, now),
+            "why": None if FOLLOWERS else "no follower in this topology"}
+
+
+def follower_join_loop():
+    while True:
+        try:
+            j = collect_follower_joins()
+            with LOCK:
+                STATE["followerJoins"] = j
+        except Exception as e:
+            log("followerJoins: %s: %s" % (type(e).__name__, str(e)[:200]))
+        time.sleep(I_JOINS)
+
+
 def _collect_once(last, hist):
     if True:
         now = time.time()
@@ -2964,7 +3004,7 @@ class Handler(BaseHTTPRequestHandler):
 
 PAGE = r"""<!doctype html><html lang=en><head><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>Synthetic-healing soak monitor</title>
+<title>DAG-BFT soak — joins</title>
 <style>
 :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2430;--bd:#2a3240;--fg:#e6edf3;--mut:#8b949e;
 --acc:#58a6ff;--grn:#3fb950;--red:#f85149;--yel:#d29922;--pur:#bc8cff;--cyan:#39c5cf}
@@ -3030,9 +3070,25 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 .kv .l,.kv .sl{color:var(--mut);font-size:10.5px}
 .kv .cap{grid-column:1/-1;color:var(--mut);font-size:10.5px;margin-top:1px}
 #heights{display:contents}
+/* A caption spans both tracks of .kv, whose first track is max-content: an
+   unwrapped caption sized that track to its whole length and drew over the
+   next columns. inline-size containment keeps it out of the track sizing, so
+   it wraps inside its column; .clamp cuts a long one at three lines and the
+   whole text is its tooltip. */
+.stats>.col{min-width:0}
+.kv .cap{contain:inline-size;overflow-wrap:anywhere}
+.kv .cap.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.panel{min-width:0;overflow-wrap:anywhere}
+.two>*{min-width:0}
+.card{min-width:0}
+.ftab td{white-space:nowrap}
+.ftab th{white-space:normal;overflow-wrap:normal;vertical-align:bottom}
+.ftab td.why{white-space:normal;text-align:left;color:var(--mut);font-size:11px}
+.scrollx{overflow-x:auto}
+.note{color:var(--mut);font-size:11px;margin:6px 0}
 </style></head><body><div class=wrap>
 <header>
-  <h1>Synthetic-healing soak</h1>
+  <h1>DAG-BFT soak — joins</h1>
   <span id=phase class="badge phase">—</span>
   <span id=net class="badge down">network ?</span>
   <span class=sub id=sub></span>
@@ -3075,11 +3131,11 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=kv>
         <b id=fbehind>—</b><span class=sl>behind (blocks, now)</span>
         <b id=fmax>—</b><span class=sl>behind (blocks, whole run)</span>
-        <span class=mut id=fheight>—</span><span class=sl>its height / the validators&rsquo;</span>
+        <span class="cap clamp">height / the validators&rsquo;: <span id=fheight>—</span></span>
         <span class=mut id=fres>—</span><span class=sl>its RSS (MiB) / heals (#)</span>
         <b id=fstrand>—</b><span class=sl>accepted, neither certified here, taken on relay, nor refused (#, whole run)</span>
         <span class=mut id=frelay>—</span><span class=sl>relayed (#, whole run): taken / refused / target not ready / unreachable</span>
-        <span class=cap id=fstate></span>
+        <span class="cap clamp" id=fstate></span>
       </div>
     </div>
     <div class=col><h4>nodes</h4>
@@ -3114,7 +3170,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=kv>
         <b id=nsact>—</b><span class=sl>ACTIVE, now (node × partition rows)</span>
         <span class=mut id=nsboot>—</span><span class=sl>BOOTING, now (rows)</span>
-        <span class=cap id=nsrows></span>
+        <span class="cap clamp" id=nsrows></span>
       </div>
     </div>
     <div class=col><h4>delivery</h4>
@@ -3141,6 +3197,11 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
     </div>
   </div>
 </div>
+<div class=panel id=fjpanel>
+  <h2>Followers — joins, read from each container&rsquo;s log</h2>
+  <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node). Phase is the latest of Pulling the state / The walk has covered / Joined / not executing in agreement (BOOTING) / executing in agreement (ACTIVE). Counts are whole-run, from the log, and never clear.</div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>add → first ACTIVE</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>ACTIVE → BOOTING (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
+</div>
 <div class=two>
   <div class=panel>
     <h2>Synthetic flow &nbsp;·&nbsp; src&nbsp;▸&nbsp;dst</h2>
@@ -3153,8 +3214,8 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
     <div class=legend>Directory anchors to every BVN; each BVN anchors only to the Directory — so BVN↔BVN cells stay empty by design.</div>
   </div>
 </div>
-<div class=two>
-  <div class=panel>
+<div class=two id=whrow>
+  <div class=panel id=wpanel>
     <h2>Wedges — dropped cross-partition messages</h2>
     <div class=pills>
       <div class=pill><div class=n id=wsyn>—</div><div class=l>queue-full (block bound)</div></div>
@@ -3174,6 +3235,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
       <div class=pill><div class="n red" id=hfail>—</div><div class=l>failed</div></div>
       <div class=pill><div class="n" id=hheld>—</div><div class=l id=hheldl>txs held in staging</div></div>
     </div>
+    <div class=note id=hnotyet>not-yet: a span request the source answered NotReady — it has not dispatched that span yet (requester.go:458). A quiet stream is probed about once every 12 blocks and the answer is &ldquo;the next anchor is not produced yet&rdquo;, so this climbs for the whole run by design and is not a problem. Trouble is miss or failed above zero, or a flow cell that stops advancing.</div>
     <svg class=spark id=spHeal viewBox="0 0 300 44" preserveAspectRatio=none></svg>
     <table id=hpart><thead><tr><th>stream (source → destination)</th><th>answered (#)</th><th>requests for txs in flight (#)</th><th>miss (#)</th><th>failed (#)</th></tr></thead><tbody></tbody></table>
     <table id=hheldt><thead><tr><th>held in staging (source → ledger)</th><th>txs (#)</th><th>size</th></tr></thead><tbody></tbody></table>
@@ -3200,7 +3262,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 const $=id=>document.getElementById(id);
 const fmt=n=>(n==null?'—':n.toLocaleString());
 const dur=s=>{s=Math.max(0,s|0);const h=(s/3600|0),m=(s%3600/60|0);return h+'h '+String(m).padStart(2,'0')+'m';};
-function card(k,v,d){return `<div class=card><div class=k>${k}</div><div class=v>${v}</div><div class=d>${d||''}</div></div>`;}
+function card(k,v,d){const t=String(d||'').replace(/<[^>]*>/g,'').replace(/"/g,'&quot;');return `<div class=card><div class=k>${k}</div><div class=v>${v}</div><div class=d title="${t}">${d||''}</div></div>`;}
 // --- pure render helpers (executed by test_soakmon_render.py) ---
 // These take state and return HTML. They touch no DOM, so a test can run
 // them in node and assert on what they produce — which is the difference
@@ -3308,6 +3370,31 @@ function nodestateView(nsd){
   out.rows=odd.length?odd.join(' · '):`every row ACTIVE and within ${nsd.maxBehind} blocks of its partition · alarm bound ${nsd.boundS}s after container start`;
   return out;
 }
+// The Followers panel (followerJoins on /data): one row per follower x
+// partition, from each container's log. Absent is `— not measured`, never 0.
+function followersView(fj){
+  if(!fj||!fj.rows)return '<tr><td class=mut colspan=12>— not measured: the monitor has not read the followers yet</td></tr>';
+  if(!fj.rows.length)return `<tr><td class=mut colspan=12>${fj.why||'no follower in this topology'}</td></tr>`;
+  const d=s=>s==null?'—':(s<3600?`${Math.floor(s/60)}m ${String(Math.floor(s%60)).padStart(2,'0')}s`:`${Math.floor(s/3600)}h ${String(Math.floor(s%3600/60)).padStart(2,'0')}m`);
+  const PC={ACTIVE:'grn',BOOTING:'red','handed off':'yel',walked:'yel',pulling:'yel'};
+  const fresh=r=>r.life==='waiting'||r.life==='removed';
+  const n=(v,col)=>v==null?'—':`<span class="${v&&col?col:''}">${fmt(v)}</span>`;
+  return fj.rows.map(r=>{
+    const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')
+      :r.oomKilled?`<span class=red>OOMKilled (exit ${r.exitCode})</span>`
+      :r.status!=='running'?`<span class=red>${r.status} (exit ${r.exitCode})</span>`:'running';
+    const ph=r.life==='waiting'?'not added':r.phase==='not started'?(r.life==='launched'?'from genesis':'no join line yet'):r.phase;
+    const phc=r.phase==='not started'&&r.life==='launched'?'mut':(PC[ph]||'mut');
+    const launched=r.life==='launched'?' <span class=mut>(genesis)</span>':'';
+    const h=fresh(r)?'—':`${fmt(r.height)} / ${fmt(r.network)}`;
+    const toA=r.toActiveSec!=null?d(r.toActiveSec):(r.phase==='ACTIVE'||r.life==='launched'?'<span class=mut>no join line</span>':'—');
+    return `<tr><td class=name>${r.container}${launched} → ${shortP(r.partition)}</td>`
+      +`<td class=${phc}>${ph}</td><td>${h}</td><td>${fresh(r)?'—':n(r.behind,'yel')}</td>`
+      +`<td>${fresh(r)?'—':d(r.sinceAddSec)}</td><td>${toA}</td>`
+      +`<td>${n(r.rootMisses,'yel')}</td><td>${n(r.repairs,'yel')}</td><td>${n(r.repairChanged,'red')}</td><td>${n(r.drops,'red')}</td>`
+      +`<td>${r.memMiB==null?'—':fmt(Math.round(r.memMiB))}</td><td>${st}</td></tr>`;
+  }).join('');
+}
 // --- end pure render helpers ---
 function spark(el,pts,color){
   if(!pts||pts.length<2){el.innerHTML='';return;}
@@ -3401,10 +3488,10 @@ async function tick(){
   const hr=h.requests,hp=h.proofs,hld=h.held,hf=s.handoff||{};
   $('cards').innerHTML=[
     card('DN height',fmt(nw.dnHeight),`${fmt(gen)} tx · ${pct.toFixed(0)}% of plan`),
-    card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':`received in answer to span requests · ${h.scope||'the validators'}`),
+    h.entries==null?'':card('Healed entries',`<span class=grn>${nm(h.entries)}</span>`,h.entries==null?'not measured':`received in answer to span requests · ${h.scope||'the validators'}`),
     card('Heal requests',nm(hr&&hr.answered),hr?`answered · ${h.notYetPerMin!=null?h.notYetPerMin.toFixed(0):'—'}/min requests for txs in flight`:'not measured'),
     card('Proofs',nm(hp&&hp.validated),hp?`${fmt(hp.staged)} staged · ${fmt(hp.disproved)} disproved`:'not measured'),
-    card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'not measured — no node exports a drop counter'),
+    !w.measured?'':card('Wedges',`<span class="${(w.total||0)?'yel':''}">${nm(w.total)}</span>`,w.measured?Object.entries(w.byReason||{}).map(([k,v])=>`${fmt(v)} ${k}`).join(' · ')||'none':'not measured — no node exports a drop counter'),
     card('Heal misses',`<span class="${(h.errors||0)?'red':''}">${nm(h.errors)}</span>`,hr?`${fmt(hr.miss)} miss · ${fmt(hr.failed)} failed`:'not measured'),
     card('Not executed',`<span class="${(hf.unexecuted||0)?'red':''}">${nm(hf.measured?hf.unexecuted:null)}</span>`,
       hf.measured?`${fmt(hf.arrived)} arrived · ${fmt(hf.executed)} executed`:'not measured — needs a node built after #4279'),
@@ -3449,9 +3536,15 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
       +((sub.impossible&&sub.impossible.length)?' · INSTRUMENT ALARM: '+sub.impossible.join('; '):'')
       +(unk.length?' · unknown relay outcome: '+unk.map(([k,v])=>`${k} ${fmt(v)}`).join(', '):''))
     :'no node exports accumulate_dagbft_relayed_total (#4366, #4369)';
+  // A panel that measures nothing is hidden, not shown as a wall of dashes.
+  $('wpanel').style.display=w.measured?'':'none';
+  $('whrow').style.gridTemplateColumns=w.measured?'':'1fr';
+  $('fjtab').querySelector('tbody').innerHTML=followersView(s.followerJoins);
+  for(const el of document.querySelectorAll('.cap.clamp'))el.title=el.textContent;
   // wedges / heals pills
   $('wsyn').innerHTML=w.measured?fmt((w.byReason||{})['queue-full']||0):nm(null);$('wanc').innerHTML=w.measured?fmt((w.byReason||{}).deadline||0):nm(null);$('wtot').innerHTML=nm(w.total);
   $('hent').innerHTML=nm(h.entries);
+  $('hent').parentElement.style.display=h.entries==null?'none':'';
   $('hans').innerHTML=nm(hr&&hr.answered);$('hnot').innerHTML=nm(hr&&hr['not-yet']);
   $('hmiss').innerHTML=nm(hr&&hr.miss);$('hfail').innerHTML=nm(hr&&hr.failed);
   $('hheld').innerHTML=nm(hld&&hld.entries);$('hheldl').textContent=hld?('txs held in staging · '+bytes(hld.bytes)):'txs held in staging';
@@ -3630,6 +3723,7 @@ def main():
         os.getpid(), PORT, os.environ.get("RUN_DIR", "(unset)"),
         sys.version.split()[0]))
     threading.Thread(target=collector, daemon=True).start()
+    threading.Thread(target=follower_join_loop, daemon=True).start()
     threading.Thread(target=heartbeat, args=(started,), daemon=True).start()
     try:
         srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)

@@ -487,6 +487,25 @@ is on, as the follower "started only by the add-follower disturbance". Outside
 that it has no `follower.csv` row, no probe read and no `exec.` column, and the
 follower report's behind figures are read from its own follower's rows only.
 
+### The Followers panel: a join read from the log
+
+`/data`'s `followerJoins` (and the dashboard's Followers panel) is one row per
+follower × partition — the late followers and the genesis follower beside them
+— read from each container's own log by `joinlog.py`, incrementally (`docker
+logs --timestamps --since` the last line read), plus `docker stats` for RSS
+and `docker inspect` for exited / OOMKilled. It uses no node metric. Per row:
+`phase` (the latest of pulling / walked / handed off / BOOTING / ACTIVE, or
+`not added`, `removed`), `height`/`network`/`behind` (from the `follower`
+record), `sinceAddSec` (chaos.log's add, or the container's start for the
+genesis follower), `toActiveSec` (add to the first `executing in agreement`),
+and whole-log counts that never clear: `rootMisses` (`not its anchored root`),
+`repairs` (`Repairing the state`), `repairChanged` (`A repair changed an
+account`), `drops` (ACTIVE → BOOTING). The join logs a partition as its URL
+and dagbft as its ID; both are folded to one key. The counts cover every line
+the monitor has read under that container name, re-adds included; a monitor
+restart re-reads the current container's log from its start, so after one
+they cover the current container only. Nothing in the run directory changes.
+
 ### The add-follower and remove-follower verdicts (#4364)
 
 The manifest's follower section carries one row per `add-follower` and one
