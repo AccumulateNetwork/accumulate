@@ -33,6 +33,7 @@ import (
 // that changes in every block: a send within BVN0 (alice to carol) and one to
 // BVN1 (alice to bob), every block.
 type provenFixture struct {
+	name    string
 	sim     *Sim
 	p       *simulator.Partition
 	part    *url.URL
@@ -48,6 +49,12 @@ type provenFixture struct {
 const provenJoiner = 1
 
 func newProvenFixture(t *testing.T, opts ...simulator.Option) *provenFixture {
+	return newProvenFixtureOn(t, "BVN0", opts...)
+}
+
+// newProvenFixtureOn is the fixture with the node that restarts on the named
+// partition.
+func newProvenFixtureOn(t *testing.T, partition string, opts ...simulator.Option) *provenFixture {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	carol := url.MustParse("carol")
@@ -71,7 +78,7 @@ func newProvenFixture(t *testing.T, opts ...simulator.Option) *provenFixture {
 	MakeIdentity(t, sim.DatabaseFor(carol), carol, acctesting.GenerateKey(carol)[32:])
 	MakeAccount(t, sim.DatabaseFor(carol), &TokenAccount{Url: carol.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
-	f := &provenFixture{sim: sim, p: sim.S.Partition("BVN0"), part: PartitionUrl("BVN0"), carol: carol.JoinPath("tokens")}
+	f := &provenFixture{name: partition, sim: sim, p: sim.S.Partition(partition), part: PartitionUrl(partition), carol: carol.JoinPath("tokens")}
 	var ts uint64
 	f.traffic = func() {
 		for _, to := range []*url.URL{carol, bob} {
@@ -117,11 +124,11 @@ func (f *provenFixture) join(t *testing.T, maxRounds int, stop func(*provenState
 	settler, ok := f.p.NodeExecutor(provenJoiner).(join.Settler)
 	require.True(t, ok)
 	_, err := join.Run(ctx, join.Options{
-		Partition: "BVN0",
+		Partition: f.name,
 		Buffer:    f.p.NodeJoin(provenJoiner),
 		Stage:     &join.ExecutorStage{Settler: settler, Staging: f.p.NodeStaging(provenJoiner), Database: f.p.NodeDatabase(provenJoiner)},
 		State:     st,
-		Peers:     &join.APIPeers{Partition: "BVN0", Client: f.sim.S.Services(), Network: t.Name()},
+		Peers:     &join.APIPeers{Partition: f.name, Client: f.sim.S.Services(), Network: t.Name()},
 		Retry:     time.Millisecond,
 	})
 	return st, err
@@ -365,4 +372,42 @@ func sourceName(s pull.Source) string {
 		return n.String()
 	}
 	return "a peer"
+}
+
+// TestAnExecutedBlockThatMissesNamesTheAccountItDiffersIn is #4442's follow-up
+// from the Docker run 20260928T051402Z: followers proven at V missed a few
+// blocks later, and the root watch said only which block. The watch now
+// locates the accounts the executed block's root differs in, as the match at V
+// does: the node's tree as of that block, from the history it retains,
+// against a peer's as of the same block (#4441). Here the follower's copy of
+// carol's account is changed behind its executor's back after the handoff,
+// and the watch names carol, and nothing else.
+func TestAnExecutedBlockThatMissesNamesTheAccountItDiffersIn(t *testing.T) {
+	f := newProvenFixture(t, simulator.BPTHistoryDepth(4096))
+	_, err := f.join(t, 150, nil)
+	require.NoError(t, err)
+	state := f.p.NodeJoinState(provenJoiner)
+	require.Equal(t, nodestate.StateActive, state.Machine().State(), "precondition: the node joined")
+
+	// carol's balance, on the follower only.
+	db := f.p.NodeDatabase(provenJoiner)
+	b := db.Begin(true)
+	var acct *TokenAccount
+	require.NoError(t, b.Account(f.carol).Main().GetAs(&acct))
+	acct.Balance.Add(&acct.Balance, big.NewInt(1000))
+	require.NoError(t, b.Account(f.carol).Main().Put(acct))
+	require.NoError(t, b.Commit())
+
+	diverged := false
+	for i := 0; i < 20 && !diverged; i++ {
+		f.traffic()
+		_, diverged, err = state.Diverged(context.Background())
+		require.NoError(t, err)
+	}
+	require.True(t, diverged, "precondition: the follower's root left its peers'")
+	n, diffs := state.Mismatches()
+	require.NotZero(t, n)
+	require.Len(t, diffs, 1, "the executed block %d's miss names %v", n, diffs)
+	require.NotNil(t, diffs[0].Account)
+	require.True(t, diffs[0].Account.Equal(f.carol), "the miss names %v, not %v", diffs[0].Account, f.carol)
 }

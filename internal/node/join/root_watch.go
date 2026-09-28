@@ -8,6 +8,7 @@ package join
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
@@ -87,6 +88,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 		if local != o.Anchor {
 			s.log.Warn("An executed block's root is not its anchored root; repairing from the block ledger",
 				"partition", s.partition, "block", o.Block, "compared", s.executed, "matched", s.provenAt)
+			s.locateExecuted(ctx, batch, o.Block, local)
 			// Since the last comparison: the last block whose root was
 			// compared and matched, or the block the node handed off at
 			// (executor spec, "Sync", "Two mismatches").
@@ -287,4 +289,26 @@ func rootAfter(bpt *database.Chain2, n uint64) ([32]byte, bool, error) {
 		return [32]byte{}, false, errors.InternalError.WithFormat("bpt chain entry %d is %d bytes", entry.Source, len(hash))
 	}
 	return [32]byte(hash), true, nil
+}
+
+// locateExecuted names the accounts whose leaves differ, after block n, between
+// this node's tree and the peers' (#4441): the tree as of n from the history
+// this node retains, against a peer's as of n. It is how an execution that
+// differs from the peers' is traced to what differed; it repairs nothing
+// (the repair from the block ledger does). A node that retains no history for
+// n says so.
+func (s *PulledState) locateExecuted(ctx context.Context, batch *database.Batch, n uint64, root [32]byte) {
+	tree := treeAt{tree: batch.BPT(), height: n, root: root}
+	diffs, peer, err := locateAt(ctx, s.partition, s.partitionSources(ctx), tree, n)
+	s.mismatchAt, s.mismatches = n, diffs
+	if err != nil {
+		s.log.Info("The accounts an executed block's root differs in could not be located",
+			"partition", s.partition, "block", n, "error", err)
+		return
+	}
+	for _, d := range diffs {
+		s.log.Warn("An executed block left an account other than the peer's",
+			"partition", s.partition, "block", n, "peer", peer, "account", d.Account,
+			"key", fmt.Sprintf("%x", d.KeyHash), "local", fmt.Sprintf("%x", d.Local), "peer-leaf", fmt.Sprintf("%x", d.Peer))
+	}
 }

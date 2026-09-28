@@ -48,7 +48,7 @@ type locator struct {
 	ctx       context.Context
 	partition *url.URL
 	peer      pull.Source
-	local     *bpt.BPT
+	local     localTree
 	v         uint64
 	calls     int
 	diffs     []LeafDiff
@@ -210,7 +210,7 @@ func accountOfKey(k *recordpkg.Key) *url.URL {
 // locateAt walks the peers' BPTs as of block v against this node's tree, the
 // first that answers, and returns every account whose leaf differs and the
 // peer that answered.
-func locateAt(ctx context.Context, partition *url.URL, srcs []pull.Source, local *bpt.BPT, v uint64) ([]LeafDiff, string, error) {
+func locateAt(ctx context.Context, partition *url.URL, srcs []pull.Source, local localTree, v uint64) ([]LeafDiff, string, error) {
 	var last error = errors.NotFound.With("no peer to locate against")
 	for _, src := range srcs {
 		l := &locator{ctx: ctx, partition: partition, peer: src, local: local, v: v}
@@ -225,4 +225,27 @@ func locateAt(ctx context.Context, partition *url.URL, srcs []pull.Source, local
 		return l.diffs, sourceKey(src), nil
 	}
 	return nil, "", last
+}
+
+// localTree is this node's tree as the locator reads it: now, or as of a
+// block it retains history for.
+type localTree interface {
+	GetStoredBlock(prefix []byte) (*bpt.StoredBlock, error)
+	GetRange(start [32]byte, count int) ([]bpt.KeyValuePair, [32]byte, error)
+}
+
+// treeAt is this node's tree as of block height, whose root was root, from the
+// BPT history it retains.
+type treeAt struct {
+	tree   *bpt.BPT
+	height uint64
+	root   [32]byte
+}
+
+func (t treeAt) GetStoredBlock(prefix []byte) (*bpt.StoredBlock, error) {
+	return t.tree.GetStoredBlockAt(t.height, t.root, prefix)
+}
+
+func (t treeAt) GetRange(start [32]byte, count int) ([]bpt.KeyValuePair, [32]byte, error) {
+	return t.tree.GetRangeAt(t.height, t.root, start, count)
 }

@@ -28,7 +28,14 @@ import (
 // against (merkle.Chain.AddEntry): the node would then execute V + 1 without
 // appending what its peers appended. Entries are immutable, so those below V's
 // head are the same whichever block the peer is at.
-func TakeChainsAt(ctx context.Context, srcs []Source, store Store, st *api.AccountState, block uint64, whole bool, window uint64) (int, error) {
+//
+// held says the node took this account's chains earlier in the same pull, to
+// an earlier answer's heads: a windowed chain is then brought on from its own
+// head, as a whole one is, without searching the peer's index chain for the
+// window again -- a search of several calls a chain, which on every answer
+// made the records of a loaded partition slower than the partition (#4442).
+// A chain that does not continue from its head is taken by its window.
+func TakeChainsAt(ctx context.Context, srcs []Source, store Store, st *api.AccountState, block uint64, whole, held bool, window uint64) (int, error) {
 	if len(srcs) == 0 {
 		return -1, errors.BadRequest.With("pull.TakeChainsAt: at least one source required")
 	}
@@ -47,7 +54,7 @@ func TakeChainsAt(ctx context.Context, srcs []Source, store Store, st *api.Accou
 	}
 	var refusals []error
 	for i, src := range srcs {
-		err := takeChainsAt(ctx, src, store, st, records, byName, block, whole, window)
+		err := takeChainsAt(ctx, src, store, st, records, byName, block, whole, held, window)
 		if err == nil {
 			return i, nil
 		}
@@ -59,7 +66,7 @@ func TakeChainsAt(ctx context.Context, srcs []Source, store Store, st *api.Accou
 	return -1, errors.Conflict.WithFormat("%v: no source served its chains to the heads of block %d: %w", st.Url, block, stderrors.Join(refusals...))
 }
 
-func takeChainsAt(ctx context.Context, src Source, store Store, st *api.AccountState, records []*api.ChainRecord, byName map[string]*api.ChainRecord, block uint64, whole bool, window uint64) error {
+func takeChainsAt(ctx context.Context, src Source, store Store, st *api.AccountState, records []*api.ChainRecord, byName map[string]*api.ChainRecord, block uint64, whole, held bool, window uint64) error {
 	const pageSize = 256
 	u := st.Url
 	found := map[string]indexFound{}
@@ -71,6 +78,15 @@ func takeChainsAt(ctx context.Context, src Source, store Store, st *api.AccountS
 				_, err = streamChain(ctx, src, store, u, c, pageSize, false, true)
 			}
 		} else {
+			if held {
+				_, err = streamChain(ctx, src, store, u, c, pageSize, false, false)
+				if err == nil {
+					continue
+				}
+				if !stderrors.Is(err, errNotThePeers) && !stderrors.Is(err, errLongerThanThePeers) {
+					return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+				}
+			}
 			_, err = streamChainWindow(ctx, src, store, u, c, byName, found, pageSize, block, window, false, true)
 		}
 		if err != nil {

@@ -57,6 +57,11 @@ type scriptedPeer struct {
 	// and minAfter is the lowest After any asked for (zero when none was).
 	blockReads int
 	minAfter   uint64
+
+	// moves, when set, is a partition that moves while an answer of the
+	// records is read: each answer's last page is of a view one block past
+	// its T, and the peer stands a block further on after it.
+	moves bool
 }
 
 func (p *scriptedPeer) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
@@ -115,6 +120,10 @@ func (s scriptedSource) QueryChangedAccountStates(ctx context.Context, scope *ur
 		}
 	}
 	r := &api.AccountStatesRecord{Through: through, Block: p.block}
+	if p.moves {
+		p.block++
+		r.Block = p.block
+	}
 	if len(named) > 0 {
 		served, err := p.served().QueryAccountStates(ctx, scope, &api.AccountStatesQuery{Accounts: named})
 		if err != nil {
@@ -320,4 +329,20 @@ func TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord(t *testing.T) {
 	require.Equal(t, uint64(12), s.sync.last, "precondition: the records reached block 12")
 	require.Equal(t, int64(11), balanceIn(t, db, alice),
 		"the record did not write over what the walk wrote: an account ends at the state of the last record processed")
+}
+
+// TestARoundsRecordsDoNotChaseAMovingPartition — #4442, Docker run
+// 20260928T051402Z: on a partition under load, an answer of the records spans
+// many pages, and its last page is read at a view past its T. The records of a
+// round went on asking from T for as long as that was so, and when an answer
+// took about as long as the blocks it covered, the BVN pull stayed in its
+// first round's records for minutes and never reached its walk. A round takes
+// the records to the target the peers named at its start, and walks.
+func TestARoundsRecordsDoNotChaseAMovingPartition(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	peer := &scriptedPeer{partition: here, block: 10, records: map[uint64][]*url.URL{}, state: peerStore(t), moves: true}
+	s, _ := joiningAt(t, peer)
+	require.NoError(t, s.Pull(context.Background()))
+	require.Equal(t, 1, peer.blockReads, "one round asked for the records %d times, chasing the partition", peer.blockReads)
+	require.True(t, s.sync.walked, "the round never reached the walk")
 }

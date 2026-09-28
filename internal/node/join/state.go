@@ -244,6 +244,10 @@ type syncing struct {
 	// servedBy names the peers whose answers this pull took.
 	servedBy map[string]bool
 
+	// chainsTaken are the accounts whose chains this pull took to an
+	// answer's heads (pull.TakeChainsAt).
+	chainsTaken map[[32]byte]bool
+
 	// ready is whether the last round left the state complete at last, V:
 	// the walk has covered the tree, nothing is owed, and every record
 	// through V is applied with nothing read after V left standing. The root
@@ -259,7 +263,7 @@ type syncing struct {
 }
 
 func newSyncing() *syncing {
-	return &syncing{current: map[[32]byte]bool{}, retry: map[[32]byte]*url.URL{}, named: map[[32]byte]bool{}, servedBy: map[string]bool{}}
+	return &syncing{current: map[[32]byte]bool{}, retry: map[[32]byte]*url.URL{}, named: map[[32]byte]bool{}, servedBy: map[string]bool{}, chainsTaken: map[[32]byte]bool{}}
 }
 
 func accountKey(u *url.URL) [32]byte { return u.AccountID32() }
@@ -714,9 +718,14 @@ const maxRecordCallsPerRound = 64
 // peer naming a block far ahead does not carry L there (#4438 threat F3). An
 // answer covers the records through its T, which the peer caps at its own
 // block and at a span of records; L moves to T, and a peer with records past
-// T is asked again from there, within the round's calls. A page that cannot
-// be read stops the round's records there, and the next round asks again from
-// L.
+// T is asked again from there, within the round's calls, until L reaches the
+// round's target. It does not go past the target in one round: under load an
+// answer of many pages ends at a view newer than its T, and chasing that view
+// kept a join in its first round's records for as long as an answer took
+// about as long as the blocks it covered (#4442, Docker 20260928T051402Z:
+// the BVN pull never reached its walk). The next round goes on from L. A page
+// that cannot be read stops the round's records there, and the next round
+// asks again from L.
 func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peersAt) {
 	calls := 0
 	for i := 0; i < len(peer.sources) && ctx.Err() == nil && calls < maxRecordCallsPerRound; {
@@ -737,7 +746,7 @@ func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peers
 			return
 		}
 		p.last = through
-		if through >= block {
+		if through >= block || through >= peer.block {
 			return
 		}
 	}
@@ -862,7 +871,11 @@ func (s *PulledState) takeState(ctx context.Context, p *syncing, src pull.Source
 		srcs, _, err := s.sourcesFor(ctx, u)
 		if err == nil {
 			srcs = append([]pull.Source{src}, s.order(srcs)...)
-			_, err = pull.TakeChainsAt(ctx, srcs, s.db, st, block, whole, window)
+			k := accountKey(u)
+			_, err = pull.TakeChainsAt(ctx, srcs, s.db, st, block, whole, p.chainsTaken[k], window)
+			if err == nil {
+				p.chainsTaken[k] = true
+			}
 		}
 		if err != nil {
 			s.log.Info("An account's chains could not be taken to the answer's heads; it is asked for again",
