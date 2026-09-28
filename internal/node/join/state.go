@@ -774,11 +774,15 @@ func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Sour
 		}
 		through, block = rec.Through, rec.Block
 		p.highest = max(p.highest, block)
-		for _, st := range s.statesOf(p, rec) {
+		states := s.statesOf(p, rec)
+		for _, st := range states {
 			if st.Url != nil {
 				p.current[accountKey(st.Url)] = true
 			}
-			if !s.takeState(ctx, p, src, st, rec.Block) && st.Url != nil {
+		}
+		taken := s.takeStates(ctx, p, src, states, rec.Block)
+		for _, st := range states {
+			if st.Url != nil && !taken[accountKey(st.Url)] {
 				p.retry[accountKey(st.Url)] = st.Url
 			}
 		}
@@ -831,9 +835,13 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 	return append(append([]*api.AccountState(nil), out...), st)
 }
 
-// takeState writes one served account, or hands it to the pull that takes it
-// another way, and says whether the peer's answer for it was taken. An answer
-// refused is that peer's: the account is asked of the next peer, or owed.
+// takeStates writes the accounts one answer serves, or hands each to the
+// pull that takes it another way, and returns those whose answer was taken. An
+// answer refused is that peer's: the account is asked of the next peer, or
+// owed. Every account written by its served state is written in one commit
+// (pull.KeepStates), and what is left to backfill is recorded in one more: a
+// commit per account made a walk page of 256 accounts cost 22 s on
+// BlockchainDB (#4461).
 //
 // The trust chain (pull.WholeAccounts) and the windowed accounts
 // (pull.WindowAccounts) are taken with their chains' entries and the
@@ -844,73 +852,97 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 // An account the answer holds no leaf for is deleted: at the answer's block
 // it does not exist, and a record after it names it if a block creates it.
 // Every other account is checked against its leaf and written as served
-// (pull.KeepState).
-func (s *PulledState) takeState(ctx context.Context, p *syncing, src pull.Source, st *api.AccountState, block uint64) bool {
-	u := st.Url
-	if u == nil {
-		return false
+// (pull.KeepStates).
+func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Source, states []*api.AccountState, block uint64) map[[32]byte]bool {
+	taken := map[[32]byte]bool{}
+	type keeping struct {
+		st              *api.AccountState
+		whole, windowed bool
 	}
-	if !Routable(u) {
-		return true
-	}
-	if !s.ours(ctx, u) {
-		s.log.Info("A named account is not this partition's and was dropped",
-			"account", u, "partition", s.partition)
-		return true
-	}
-	if st.NoLeaf {
-		s.forget(u)
-		delete(p.retry, accountKey(u))
-		return true
-	}
-	// The chains' entries and the messages behind them, to the answer's
-	// heads and no further (pull.TakeChainsAt).
-	window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
-	whole := s.takenWhole(u) || p.repair && !windowed
-	if whole || windowed {
-		srcs, _, err := s.sourcesFor(ctx, u)
-		if err == nil {
-			srcs = append([]pull.Source{src}, s.order(srcs)...)
-			k := accountKey(u)
-			_, err = pull.TakeChainsAt(ctx, srcs, s.db, st, block, whole, p.chainsTaken[k], window)
+	var keep []keeping
+	for _, st := range states {
+		u := st.Url
+		if u == nil {
+			continue
+		}
+		if !Routable(u) {
+			taken[accountKey(u)] = true
+			continue
+		}
+		if !s.ours(ctx, u) {
+			s.log.Info("A named account is not this partition's and was dropped",
+				"account", u, "partition", s.partition)
+			taken[accountKey(u)] = true
+			continue
+		}
+		if st.NoLeaf {
+			s.forget(u)
+			delete(p.retry, accountKey(u))
+			taken[accountKey(u)] = true
+			continue
+		}
+		// The chains' entries and the messages behind them, to the answer's
+		// heads and no further (pull.TakeChainsAt).
+		window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
+		whole := s.takenWhole(u) || p.repair && !windowed
+		if whole || windowed {
+			srcs, _, err := s.sourcesFor(ctx, u)
 			if err == nil {
-				p.chainsTaken[k] = true
+				srcs = append([]pull.Source{src}, s.order(srcs)...)
+				k := accountKey(u)
+				_, err = pull.TakeChainsAt(ctx, srcs, s.db, st, block, whole, p.chainsTaken[k], window)
+				if err == nil {
+					p.chainsTaken[k] = true
+				}
+			}
+			if err != nil {
+				s.log.Info("An account's chains could not be taken to the answer's heads; it is asked for again",
+					"account", u, "block", block, "error", err)
+				continue
 			}
 		}
-		if err != nil {
-			s.log.Info("An account's chains could not be taken to the answer's heads; it is asked for again",
-				"account", u, "block", block, "error", err)
-			return false
+		keep = append(keep, keeping{st, whole, windowed})
+	}
+
+	list := make([]*api.AccountState, len(keep))
+	for i, k := range keep {
+		list[i] = k.st
+	}
+	errs := pull.KeepStates(s.db, list)
+	var headOnly []*url.URL
+	for i, k := range keep {
+		u := k.st.Url
+		if errs[i] != nil {
+			s.log.Info("A peer's answer for an account was refused; it is asked of another",
+				"account", u, "peer", sourceKey(src), "error", errs[i])
+			continue
+		}
+		if err := pull.KeepQueuedMessages(ctx, src, s.db, k.st); err != nil {
+			s.log.Info("A queued delivery's message could not be taken; the account is asked of another",
+				"account", u, "peer", sourceKey(src), "error", err)
+			continue
+		}
+		delete(p.retry, accountKey(u))
+		p.servedBy[sourceKey(src)] = true
+		taken[accountKey(u)] = true
+		switch {
+		case p.repair && !k.windowed && !s.takenWhole(u):
+			// A repair takes the account whole, entries included, now, while
+			// the node is not executing. An account already held entire needs
+			// only what was appended.
+			if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
+				s.unmarkHeadOnly(accountKey(u))
+			} else {
+				headOnly = append(headOnly, u)
+			}
+		case !k.whole:
+			// Taken by its heads, or its window: the rest is backfilled once
+			// the state has matched.
+			headOnly = append(headOnly, u)
 		}
 	}
-	if err := pull.KeepState(s.db, st); err != nil {
-		s.log.Info("A peer's answer for an account was refused; it is asked of another",
-			"account", u, "peer", sourceKey(src), "error", err)
-		return false
-	}
-	if err := pull.KeepQueuedMessages(ctx, src, s.db, st); err != nil {
-		s.log.Info("A queued delivery's message could not be taken; the account is asked of another",
-			"account", u, "peer", sourceKey(src), "error", err)
-		return false
-	}
-	delete(p.retry, accountKey(u))
-	p.servedBy[sourceKey(src)] = true
-	switch {
-	case p.repair && !windowed && !s.takenWhole(u):
-		// A repair takes the account whole, entries included, now, while
-		// the node is not executing. An account already held entire needs
-		// only what was appended.
-		if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
-			s.unmarkHeadOnly(accountKey(u))
-		} else {
-			s.markHeadOnly(u)
-		}
-	case !whole:
-		// Taken by its heads, or its window: the rest is backfilled once
-		// the state has matched.
-		s.markHeadOnly(u)
-	}
-	return true
+	s.markHeadOnly(headOnly...)
+	return taken
 }
 
 // accountRouter is how the join tells an account's partition without asking
@@ -973,6 +1005,10 @@ func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source
 		accounts = accounts[n:]
 
 		served := map[[32]byte]bool{}
+		inChunk := make(map[[32]byte]bool, len(chunk))
+		for _, u := range chunk {
+			inChunk[accountKey(u)] = true
+		}
 		var cursor []byte
 		p.part = nil
 		for ctx.Err() == nil {
@@ -988,13 +1024,14 @@ func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source
 				break
 			}
 			p.highest = max(p.highest, rec.Block)
+			var states []*api.AccountState
 			for _, st := range s.statesOf(p, rec) {
-				if st.Url == nil || !asked(chunk, st.Url) {
-					continue
+				if st.Url != nil && inChunk[accountKey(st.Url)] {
+					states = append(states, st)
 				}
-				if s.takeState(ctx, p, src, st, rec.Block) {
-					served[accountKey(st.Url)] = true
-				}
+			}
+			for k := range s.takeStates(ctx, p, src, states, rec.Block) {
+				served[k] = true
 			}
 			if len(rec.Cursor) == 0 {
 				break
@@ -1008,15 +1045,6 @@ func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source
 		}
 	}
 	return left
-}
-
-func asked(list []*url.URL, u *url.URL) bool {
-	for _, v := range list {
-		if v.Equal(u) {
-			return true
-		}
-	}
-	return false
 }
 
 // partitionSources is the partition's peers, each reached by name, in the

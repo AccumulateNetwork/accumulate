@@ -49,6 +49,7 @@ type Querier struct {
 	partition config.NetworkUrl
 	consensus api.ConsensusService
 	nodeState nodestate.Serving
+	named     *namedCache
 }
 
 var _ api.Querier = (*Querier)(nil)
@@ -73,6 +74,7 @@ func NewQuerier(params QuerierParams) *Querier {
 	s.db = params.Database
 	s.consensus = params.Consensus
 	s.nodeState = params.NodeState
+	s.named = new(namedCache)
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
 }

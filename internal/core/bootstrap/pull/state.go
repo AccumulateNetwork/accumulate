@@ -177,21 +177,71 @@ func openEntries(st *api.AccountState) map[string][][]byte {
 }
 
 // KeepState writes a served account state, checked by CheckState, into the
-// store in a batch of its own, with the BPT, and commits it. What is written
-// replaces what the node held for the account (executor.md, "Sync", §3): its
-// body, directory, pending list and what it holds for each pending
-// transaction, its chain index and each chain's head with its open mark set.
+// store in a batch of its own, with the BPT, and commits it (KeepStates).
 func KeepState(store Store, st *api.AccountState) error {
-	if err := CheckState(st); err != nil {
-		return err
+	return KeepStates(store, []*api.AccountState{st})[0]
+}
+
+// KeepStates writes served account states, each checked by CheckState, into
+// the store in one batch, with the BPT, and commits it once: one commit per
+// answer, not per account (#4461: on BlockchainDB a commit cost the join about
+// 85 ms, and a walk page of 256 accounts 22 s). What is written replaces what
+// the node held for each account (executor.md, "Sync", §3): its body,
+// directory, pending list and what it holds for each pending transaction, its
+// chain index and each chain's head with its open mark set.
+//
+// The result holds, for each state, why it was refused, or nil. An account
+// refused is written not at all -- each is written in a batch nested in the
+// one committed -- and the others are written. If the commit fails, every
+// account is refused with its error.
+func KeepStates(store Store, states []*api.AccountState) []error {
+	errs := make([]error, len(states))
+	batch := store.Begin(true)
+	defer batch.Discard()
+	kept := 0
+	for i, st := range states {
+		if err := CheckState(st); err != nil {
+			errs[i] = err
+			continue
+		}
+		one := batch.Begin(true)
+		err := writeState(one, st)
+		if err == nil {
+			err = one.Commit()
+		}
+		one.Discard()
+		if err != nil {
+			errs[i] = err
+			continue
+		}
+		kept++
 	}
+	if kept == 0 {
+		return errs
+	}
+
+	// Commit does not update the BPT (#4305).
+	err := batch.UpdateBPT()
+	if err == nil {
+		err = batch.Commit()
+	}
+	if err != nil {
+		for i := range errs {
+			if errs[i] == nil {
+				errs[i] = errors.UnknownError.Wrap(err)
+			}
+		}
+	}
+	return errs
+}
+
+// writeState writes one checked account state into the batch.
+func writeState(batch *database.Batch, st *api.AccountState) error {
 	leaf, err := retainedLeaf(st)
 	if err != nil {
 		return errors.Conflict.WithFormat("%v: %w", st.Url, err)
 	}
 
-	batch := store.Begin(true)
-	defer batch.Discard()
 	u := st.Url
 	account := batch.Account(u)
 	if err := account.Main().Put(st.Main); err != nil {
@@ -251,12 +301,7 @@ func KeepState(store Store, st *api.AccountState) error {
 	if err := account.Chains().Put(index); err != nil {
 		return errors.UnknownError.WithFormat("%v: store the chain index: %w", u, err)
 	}
-
-	// Commit does not update the BPT (#4305).
-	if err := batch.UpdateBPT(); err != nil {
-		return errors.UnknownError.Wrap(err)
-	}
-	return errors.UnknownError.Wrap(batch.Commit())
+	return nil
 }
 
 func putPendingSets(account *database.Account, p *database.RetainedPendingTransaction) error {

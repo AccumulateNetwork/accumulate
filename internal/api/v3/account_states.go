@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"sort"
 	"strings"
+	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -24,11 +25,9 @@ import (
 // is answered in parts. A variable so a test can page a small store.
 var accountStatesBudget = 1 << 20
 
-// maxRecordSpan is how many blocks of records one ChangedAccountStates answer
-// covers: T is at most After plus this. Every page of the answer reads the
-// records of the span again -- each page is a view of its own, and none is
-// held across pages (#4446) -- so the span bounds what one page costs.
-const maxRecordSpan = 1024
+// namedAnswers is how many answers' unions of named accounts a querier keeps
+// (namedCache).
+const namedAnswers = 4
 
 // maxAccountStatesAsked is how many accounts one AccountStates query may name:
 // a walk page's worth and more (executor.md, "Sync", §3).
@@ -37,9 +36,12 @@ const maxAccountStatesAsked = 4096
 // queryChangedAccountStates answers the sync state of every account the block
 // ledger's records of the blocks after After name, through T, from this one
 // view of the store (executor.md, "Sync", §3; #4453). T is this node's block B
-// on a first page, capped at maxRecordSpan blocks after After, and the cursor
-// carries it so every page of the answer covers the same records: an account
-// the records name many times is in the union once, and in the answer once.
+// on a first page, and the cursor carries it so every page of the answer
+// covers the same records: an account the records name many times is in the
+// union once, and in the answer once. One answer is the whole catch-up from
+// After, however many blocks that is (#4461): the union is read from the
+// records once per answer (namedCache), not once per page, so a page costs
+// the accounts it carries.
 func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
 	if scope == nil || !s.partition.URL.Equal(scope) {
 		return nil, errors.BadRequest.WithFormat(
@@ -62,13 +64,15 @@ func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.UR
 	}
 	through := cur.through
 	if len(query.Cursor) == 0 {
-		through = min(block, query.After+maxRecordSpan)
+		through = block
 	}
 	if through < query.After || through > block {
 		return nil, errors.BadRequest.WithFormat("the cursor names block %d, not between %d and this node's block %d", through, query.After, block)
 	}
 
-	named, err := s.namedBetween(batch, query.After, through)
+	named, err := s.named.get(query.After, through, func() ([]*url.URL, error) {
+		return s.namedBetween(batch, query.After, through)
+	})
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -171,6 +175,46 @@ func (s *Querier) namedBetween(batch *database.Batch, after, through uint64) ([]
 		out[i] = seen[k]
 	}
 	return out, nil
+}
+
+// namedCache holds the unions of named accounts of the last few answers, by
+// their After and T. The records of a block this node has executed do not
+// change, so the union of the records after After through T is the same
+// whichever view reads it.
+type namedCache struct {
+	mu      sync.Mutex
+	entries []namedEntry
+}
+
+type namedEntry struct {
+	after, through uint64
+	named          []*url.URL
+}
+
+func (c *namedCache) get(after, through uint64, read func() ([]*url.URL, error)) ([]*url.URL, error) {
+	if c == nil {
+		return read()
+	}
+	c.mu.Lock()
+	for _, e := range c.entries {
+		if e.after == after && e.through == through {
+			c.mu.Unlock()
+			return e.named, nil
+		}
+	}
+	c.mu.Unlock()
+
+	named, err := read()
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = append(c.entries, namedEntry{after, through, named})
+	if len(c.entries) > namedAnswers {
+		c.entries = c.entries[len(c.entries)-namedAnswers:]
+	}
+	return named, nil
 }
 
 // statesPage answers the accounts from cur on, as many whole as fit the

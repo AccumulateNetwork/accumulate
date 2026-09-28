@@ -178,16 +178,25 @@ func (s *PulledState) backfill(ctx context.Context) {
 // and under SystemData, where no pull reaches, so that a restart before the
 // backfill ends still backfills it. The next pull would not name it again:
 // its leaf is the peers'.
-func (s *PulledState) markHeadOnly(u *url.URL) {
-	k := accountKey(u)
-	if _, ok := s.headOnly[k]; ok {
+//
+// The accounts of one answer are recorded in one commit (#4461).
+func (s *PulledState) markHeadOnly(urls ...*url.URL) {
+	var add []*url.URL
+	for _, u := range urls {
+		k := accountKey(u)
+		if _, ok := s.headOnly[k]; ok {
+			continue
+		}
+		if s.headOnly == nil {
+			s.headOnly = map[[32]byte]*url.URL{}
+		}
+		s.headOnly[k] = u
+		add = append(add, u)
+	}
+	if len(add) == 0 {
 		return
 	}
-	if s.headOnly == nil {
-		s.headOnly = map[[32]byte]*url.URL{}
-	}
-	s.headOnly[k] = u
-	s.writeHeadOnly(u, func(set values.Set[*url.URL]) error { return set.Add(u) })
+	s.writeHeadOnly(add[0], func(set values.Set[*url.URL]) error { return set.Add(add...) })
 }
 
 // unmarkHeadOnly records that the account keyed k is held whole.
