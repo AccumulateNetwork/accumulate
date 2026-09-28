@@ -265,6 +265,34 @@ where they disagree with it, this wins.
    answers an anchor by number signed by the validator that answers (#4424:
    committee members only) — and the anchor is verified when distinct members
    reaching the partition's threshold have signed it.
+
+   **The match is at V, the block the state is complete at** (Paul,
+   2026-09-28: "Catching up with the BPT the block height does not matter. As
+   long as it never overwrites what blockledger updated accounts. So once the
+   BPT is caught up, and once all the blockledger accounts are updated, THAT
+   block should match the anchor and BPT hash."). A records answer is read
+   from one view of the peer's store, stamped with its block V (§3). Once the
+   walk has covered the tree, nothing is owed, and every record through V is
+   applied with nothing read after V left standing, the local state is block
+   V's, and after each such round its root is compared with V's signed
+   anchor, once. An account whose chains the executor reads (the trust chain,
+   the windowed accounts, every account of a repair) is taken to the heads
+   V's state names and no further, entries and messages included; an entry
+   held past V's head is one a later append would be deduplicated against.
+   The node waits briefly for V's anchor; a block that sends no anchor of its
+   own — at rest a partition anchors at most every fourth block — is proven
+   by a later block's signed root chain: every block after V that changes
+   anything records the root after V on the ledger's bpt chain, and a peer's
+   receipt from the local root, as that chain's entry, to the root chain
+   anchor a quorum signed for a later block proves it. The block is not the
+   peer's word: the root commits to the ledger, whose index is V. Failing
+   both, the next round's V is compared.
+
+   **No block executes before the state it runs on is complete and proven**
+   (Paul, 2026-09-28: "You can't execute any txs at height n until we have
+   processed all blockledger accounts and have the complete BPT for n-1.").
+   The node hands off at V only on the match, and V + 1 executes from the
+   consensus buffer. There is no unproven handoff.
 4. **The synthetic ledgers give the staging floor.** In the state at B, each
    stream's `Delivered` says every synthetic transaction at or below it has
    been received and processed. Staging never needs any of them.
@@ -302,15 +330,17 @@ failure, and the join treats them apart:
    peers keep the BPT's node history by height (`bpt.NodeAt`), so a peer can
    serve the root, and the interior hashes, as of block B even after it has
    moved on. Only a block that sent an anchor proves anything; the others'
-   roots are a peer's word and only localize. When the roots differ, the node locates the difference along the
+   roots are a peer's word and only localize. When the roots differ at V, the
+   node locates the difference along the
    tree's own storage: the BPT is stored in blocks of eight levels, so a
    peer serves, as of B, the 256 hashes eight levels down (one stored
    block), the node compares them with its own, and for each that differs
    asks for the 256 hashes eight levels below it — at a million accounts
    that isolates about sixteen accounts, at about 8 KiB an answer (Paul
    asked for a cut a few levels above the leaves; this is the cut the
-   storage makes exact). The node pulls again, whole, only the accounts under
-   the branches that differ. **It deletes nothing on this comparison:** a
+   storage makes exact). It names each account that differs, with its own
+   leaf and the peer's, and pulls again only those accounts, then compares
+   at the next V. A location that names nothing walks the tree again. **It deletes nothing on this comparison:** a
    root that is not a signed anchor's is a peer's word, so a leaf the peer's
    branch lacks is marked, and removed only when the comparison was at a
    signed block and the match that follows confirms it. **A record is taken

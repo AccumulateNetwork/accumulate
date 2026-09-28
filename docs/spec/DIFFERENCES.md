@@ -427,14 +427,12 @@ read at, and every account is then as of `L`.
 
 **Code** (`internal/node/join/state.go`, `internal/core/bootstrap/pull`,
 `internal/api/v3/account_states.go`) does this, except:
-- **Accounts taken by `pull.Fetch` are not as of `L`.** The trust chain
-  (`WholeAccounts`), the windowed accounts (`WindowAccounts`), every account of
-  a repair (taken whole), and an account a peer answers with no leaf are still
-  taken by `pullOne`, a call per part at the peer's current block. Those blocks
-  are not counted toward the highest `B`, and `Ready()` returns the pulled
-  ledger's index. Counting them would chase a live network, since these
-  accounts change every block; the fix is to take them as of a block, which is
-  #4442 (the as-of-block windowed pull).
+- **The spine's first pull and a repair's own accounts are read at the
+  peer's current block** (`pullOne`); that block is counted toward the
+  highest `B`, so the state is complete only once the records reach it. A
+  record-named account is no longer taken this way: its chains are taken to
+  the heads the answer's state names (`pull.TakeChainsAt`) and the state is
+  the answer's (#4442).
 - **A large account's parts come from different views.** An account larger
   than a page is answered in parts, one per page, each read from its own view.
   When the account changed between parts, the reassembled whole does not
@@ -483,29 +481,22 @@ a differing execution (the anchor does not match after the root has: repair
 the accounts the block ledger names, move to the next block). Where the code
 departs:
 
-- **The code executes before the pulled root has matched.** It hands off
-  unproven, `BOOTING`, once the walk is done and nothing is owed
-  (`PulledState.Ready`), executes, and treats every mismatch as an anchor
-  mismatch; the root watch (`Diverged`) promotes it at the first executed
-  block whose root equals the partition's signed anchor. The spec executes
-  nothing until the pulled root matches, keeps processing records to the next
-  anchored block, and answers a root mismatch by pulling again. Kept, by
-  decision, until the as-of-block pulls land (#4442).
+- ~~**The code executes before the pulled root has matched.**~~ *Retired
+  2026-09-28 (#4442)*: the unproven handoff (`PulledState.Ready`) is deleted;
+  the join hands off only on a match at the block its state is complete at,
+  and locates a mismatch there (executor.md "Sync", "The algorithm", step 3).
 - **A repair stops executing, repairs, and hands off again** at the block the
   repaired ledger names, rather than repairing and moving to the next block;
   the spec allows this until #4440. A repair reaches back to the last
   comparison (the last block that matched, or the block handed off at).
-- **Accounts are pulled as the peer holds them now, not as of the block**
-  (#4442), so a block's records bring the tree to that block's root only in
-  a lull.
 - **A root mismatch re-pulls only after a repair from the block ledger
   brought no match.** The repair after one that did not match walks the tree
   again (`startRepair`), taking whole every account whose leaf differs from a
   page's (Paul, 2026-09-25: "the joining node has to pull the accounts
   again"); the spec re-pulls at the first root mismatch.
-- **Nothing serves BPT interior hashes as of a block** (#4441), so the join
-  compares its root only at anchored blocks and cannot locate a miss by
-  subtree; a re-pull is the whole walk.
+- **A miss is located only where the peers retain BPT history** for V
+  (#4441); where none does, or the location names nothing, the join walks
+  the tree again.
 - **Records are read without a receipt** to a signed root, so a peer can
   drop or add names in a record; the match detects it, the repair or re-walk
   recovers it.
