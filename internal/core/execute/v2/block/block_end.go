@@ -897,8 +897,19 @@ func (b *Block) produceBlockMessages() error {
 	// If the active version is Vandenberg and ACME has been burnt
 	if b.Executor.globals().Active.ExecutorVersion.V2VandenbergEnabled() &&
 		b.State.AcmeBurnt.Sign() > 0 {
+		// The burn's identity is the partition and the block that produced
+		// it (#4458). Its body is otherwise only an amount, so two burns of
+		// one amount were one transaction by hash, and every node skipped
+		// the repeat as already delivered, leaving ACME's issued too high.
+		// A burn from a user's transaction takes its origin from that
+		// transaction (setSyntheticOrigin, didProduce); this one sums the
+		// block's credit purchases and has no single producing transaction,
+		// so its origin names the partition as initiator and the block as
+		// index, and no cause.
 		body := new(protocol.SyntheticBurnTokens)
 		body.Amount = b.State.AcmeBurnt
+		body.Initiator = b.Executor.Describe.NodeUrl()
+		body.Index = b.Index
 		txn := new(protocol.Transaction)
 		txn.Header.Principal = protocol.AcmeUrl()
 		txn.Body = body

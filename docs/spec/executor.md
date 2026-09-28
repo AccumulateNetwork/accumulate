@@ -2547,6 +2547,19 @@ which is what makes the drain deterministic. Each entry is
 `destination.WithTxID(msgHash)`, so the drain re-checks routing without
 re-deriving the destination from the message type.
 
+**Every produced message is unique** (#4458). A message is deduplicated by
+hash: one whose hash already has a delivered status is skipped. So no two
+messages a partition produces may hash the same unless they are the same
+effect. A synthetic transaction produced by a transaction carries its synthetic
+origin — the cause (the producer's ID, which names its source), the initiator,
+and its index among the producer's outputs (`setSyntheticOrigin`,
+`didProduce`). A message the block itself produces, with no producing
+transaction, carries what names the block instead: the partition's block-end
+ACME burn names the partition as its initiator and the block number as its
+index, and no cause. Before #4458 that burn carried only its amount, and every
+node skipped a burn whose amount repeated an earlier one, leaving ACME's issued
+too high by each repeat.
+
 ### The database write
 
 Executors write into the block's `*database.Batch` as they run. A message

@@ -447,6 +447,29 @@ read at, and every account is then as of `L`.
   answer stamped with a block far ahead raises the highest `B` beyond what `L`
   can reach, and holds completion off. The follow-up is [#4454](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4454).
 
+### E22. A block-end burn naming its partition and block is not gated on a version
+
+*[#4458](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4458)*
+
+**Spec** ([executor.md](executor.md), "Versioning"): behaviour that changes
+what a block produces is gated on an `ExecutorVersion`.
+
+**Code**: `produceBlockMessages` sets the block-end `SyntheticBurnTokens`'
+`Initiator` to the partition's URL and its `Index` to the block number
+([executor.md](executor.md), "Produced messages, and the local/remote split").
+Before #4458 the body held only the amount. Unconditional: every block that
+burns ACME produces a different transaction on either side of the change, and
+two binaries on one chain fork there. The repeated burns that were skipped
+before are executed after, so ACME's issued differs as well.
+
+**Why it stands**: the fresh-install rule of E14 and E15, as for #4358, #4412
+and #4437 — `dagbft-integration` runs no network that outlives a run and every
+node is rebuilt together. A network run before it has ACME's issued too high
+by every skipped repeat; nothing here corrects that.
+
+**Size**: an `ExecutorVersion` predicate around the two assignments in
+`produceBlockMessages`, if the assumption ever stops holding.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
