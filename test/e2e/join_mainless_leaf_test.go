@@ -98,6 +98,21 @@ func (q namingSource) QueryChangedAccountStates(ctx context.Context, scope *url.
 		return nil, err
 	}
 	r.States = append(r.States, extra.States...)
+
+	// The records name it too: the answer serves what its records name
+	// (#4461). A copy, for the peer's records are its own.
+	if r.Through > query.After {
+		named := &api.BlockLedgerRecord{Index: r.Through, Entries: []*BlockEntry{{Account: inject, Chain: "main", Index: 1}}}
+		records := make([]*api.BlockLedgerRecord, 0, len(r.Records)+1)
+		for _, rec := range r.Records {
+			if rec.Index == r.Through {
+				named.Entries = append(append([]*BlockEntry(nil), rec.Entries...), named.Entries...)
+				continue
+			}
+			records = append(records, rec)
+		}
+		r.Records = append(records, named)
+	}
 	return r, nil
 }
 
