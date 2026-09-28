@@ -356,3 +356,38 @@ func entriesWithNoMessage(t *testing.T, db *database.Database, partition string)
 	}
 	return out
 }
+
+// TestAFreshBVNNodeJoinsAtThousandsOfAccountsOnBlockchainDB — #4461. The same
+// join on BlockchainDB at a few thousand accounts: a walk of many pages. The
+// Docker join at ~3,800 accounts took 6 minutes of walk, 24 s a page, because
+// the joining node committed each account it took; each page's accounts are
+// now one commit, and the join is proven at this size in the simulator.
+func TestAFreshBVNNodeJoinsAtThousandsOfAccountsOnBlockchainDB(t *testing.T) {
+	const accounts = 3000
+	dir := t.TempDir()
+	open := func(partition *PartitionInfo, node int, _ logging.Logger) keyvalue.Beginner {
+		db, err := bcdb.Open(filepath.Join(dir, partition.ID, fmt.Sprint(node)))
+		require.NoError(t, err)
+		require.NoError(t, db.SetMergeLag(20))
+		t.Cleanup(func() { _ = db.Close() })
+		return db
+	}
+	many := func(sim *Sim, part *simulator.Partition, fresh int, _ func()) {
+		alice := url.MustParse("alice")
+		for n := 0; n < part.NodeCount(); n++ {
+			if n == fresh {
+				continue
+			}
+			b := part.NodeDatabase(n).Begin(true)
+			for i := 0; i < accounts; i++ {
+				u := alice.JoinPath(fmt.Sprintf("t%d", i))
+				require.NoError(t, b.Account(u).Main().Put(&TokenAccount{Url: u, TokenUrl: AcmeUrl()}))
+			}
+			require.NoError(t, b.UpdateBPT())
+			require.NoError(t, b.Commit())
+		}
+	}
+	start := time.Now()
+	freshNodeJoinsByPull(t, "BVN0", many, simulator.WithDatabase(open))
+	t.Logf("a fresh node joined a partition of %d accounts in %v", accounts, time.Since(start).Round(time.Second))
+}

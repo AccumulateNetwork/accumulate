@@ -442,6 +442,10 @@ read at, and every account is then as of `L`.
   executor v1 is served as its `V1Hashes`, which the check on arrival hashes,
   but the v1 transaction record the local leaf hashes is not written, so such
   an account's local leaf differs until the match finds it.
+- **Closed by #4461: the records' span.** `ChangedAccountStates` capped an
+  answer at 1,024 blocks after `After` where the spec has it run through the
+  peer's block; a catch-up of 6,000 blocks took six answers. The cap is gone,
+  and one answer covers every record after `After`.
 - **A reply's `B` is unbounded above.** The records are asked first of the peer
   whose ledger named the lowest block, but a walk page or an `AccountStates`
   answer stamped with a block far ahead raises the highest `B` beyond what `L`

@@ -732,7 +732,13 @@ replace them, beside `BptPage`:
   cursor continues the same union, and each page is a view of its own with its
   own `B` — a view held open across pages pins BlockchainDB's overlays (#4446).
   An account a record names many times is in the union once, so how often an
-  account changes costs nothing in calls.
+  account changes costs nothing in calls. **One answer is the node's whole
+  catch-up** (Paul, 2026-09-28; #4461): the node sends its index `I` (`After
+  = L`), and the peer answers every account the records after `I` name,
+  however many blocks that is, in pages of one answer; it reads the union
+  once per answer, not once per page, so a page costs the accounts it
+  carries. The records themselves are not sent: what the node does with a
+  record is take the accounts it names, and the answer is those accounts.
 - **`AccountStates{Partition, Accounts}`** — the same sync state for the
   accounts a walk page shows stale, from one view, stamped with its `B`.
 
@@ -745,6 +751,20 @@ what an append needs. An account larger than the budget is answered in parts,
 each from one view. Messages are not included; an account taken by its state
 carries none (below), and the windowed accounts' recent chains are taken by
 the window pull.
+
+**An answer's page is written in one commit, not a commit per account**
+(#4461). The accounts a page answers — of the records, of `AccountStates`,
+of what is owed — are written in one batch with the BPT and committed once;
+each is written in a batch nested in it, so an account the write refuses is
+not written at all and the others are. What is left to backfill is recorded
+once per page too. A commit per account cost about 85 ms on BlockchainDB: a
+walk page of 256 accounts took 24 s, and the records 2.5 minutes, of a BVN
+join at ~6,000 blocks (Docker `20260928T194436Z`), while the peer's answers
+were 1–2 % of that time. At 3,000 accounts both stores BlockchainDB, the walk
+went from 4 m 12 s to 1.3 s and the records of 1,000 blocks from 2 m 29 s to
+0.28 s (`TestMeasureTheWalkAndTheRecords`); a join's calls and commits grow
+with its pages, not its accounts or records
+(`TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord`).
 
 **Each account is checked against its own leaf as it arrives.** The node
 hashes the state it was served, as `hashState` does, and compares it with the
