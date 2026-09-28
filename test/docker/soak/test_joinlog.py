@@ -181,3 +181,22 @@ class TheCollapsedSummaries(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRemovedFollowerIsForgotten(unittest.TestCase):
+    """A follower removed, or removed and added again under the same name,
+    carries none of the old container's phase or counts (Paul: the monitor
+    should clean up after followers are removed)."""
+
+    def test_forget_and_replace(self):
+        import joinlog
+        r = joinlog.Reader()
+        r.track("f", {"startedAt": 1.0})
+        r.feed("f", ["2026-09-28T07:00:00.000000000Z x partition=Directory An executed block's root is not its anchored root"])
+        self.assertTrue(r.parts.get("f"))
+        r.track("f", {"startedAt": 2.0})  # a new container under the same name
+        self.assertFalse(r.parts.get("f"))
+        r.feed("f", ["2026-09-28T07:01:00.000000000Z x partition=Directory An executed block's root is not its anchored root"])
+        r.track("f", None)                # removed
+        self.assertFalse(r.parts.get("f"))
+        self.assertNotIn("f", r.last)

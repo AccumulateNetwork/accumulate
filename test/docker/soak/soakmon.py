@@ -2829,6 +2829,7 @@ def collect_follower_joins(now=None):
     names = [f["container"] for f in FOLLOWERS]
     state = joinlog.docker_state(names)
     for c in names:
+        _JOINS.track(c, state.get(c))
         if c in state:
             _JOINS.poll(c)
     mem = joinlog.docker_mem([c for c in names

@@ -82,6 +82,23 @@ class Reader:
     def __init__(self):
         self.last = {}     # container -> docker RFC3339Nano of the last line
         self.parts = {}    # container -> {partition: new_partition()}
+        self.started = {}  # container -> startedAt of the container read
+
+    def track(self, container, st):
+        """Forget a container that is gone, or that is a new container under
+        the same name (a follower removed and added again): its phase and
+        counts belong to the container that logged them, not to the name."""
+        if st is None:
+            self.forget(container)
+            return
+        if self.started.get(container) not in (None, st.get("startedAt")):
+            self.forget(container)
+        self.started[container] = st.get("startedAt")
+
+    def forget(self, container):
+        self.last.pop(container, None)
+        self.parts.pop(container, None)
+        self.started.pop(container, None)
 
     def feed(self, container, lines):
         """Take `docker logs --timestamps` lines (docker's timestamp first)."""
@@ -205,9 +222,10 @@ def rows(followers, reader, heights, lives, state, mem, now):
             lp = (reader.parts.get(c) or {}).get(part_key(part)) or new_partition()
             h = (fh.get("partitions") or {}).get(part) or {}
             phase = lp["phase"]
+            gone = st is None and life["kind"] != "waiting"
             if life["kind"] == "waiting":
                 phase = "not added"
-            elif life["kind"] == "removed":
+            elif life["kind"] == "removed" or gone:
                 phase = "removed"
             fa = lp["firstActiveAt"]
             out.append({
