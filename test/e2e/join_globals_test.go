@@ -7,12 +7,16 @@
 package e2e
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
+	. "gitlab.com/accumulatenetwork/accumulate/test/helpers"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -50,5 +54,48 @@ func TestAJoinExecutesWithTheGlobalsOfTheStateItIsProvenAt(t *testing.T) {
 	require.Equal(t, want, f.p.NodeConductor(provenJoiner).Globals.Load().Network.Version,
 		"the joined node executes with the network definition it started with, not the proven state's")
 	require.Zero(t, s.diverged)
+	f.requireInAgreement(t)
+}
+
+// TestAJoinDoesNotBurnAgainWhatItsPeersSkipped is #4442's follow-up from run
+// 20260928T051402Z, where every Directory follower's first block after its
+// proof left acc://ACME's issued amount 3,008,000 below its peers'. A burn
+// the Directory makes for its own credit purchases is queued as a local
+// delivery (a SyntheticBurnTokens to acc://ACME carrying only its amount) and
+// drained at the next block. Two burns of one amount are one transaction by
+// hash, and the peers, holding the first one's status, skip the second. That
+// status is not in the BPT: the joined node held none, and burned again.
+//
+// A Directory account buys the same credits every block, so every block the
+// follower can be proven at queues a burn its peers will skip.
+func TestAJoinDoesNotBurnAgainWhatItsPeersSkipped(t *testing.T) {
+	dave := url.MustParse("dave")
+	daveKey := acctesting.GenerateKey(dave)
+	var ts uint64
+	f := newProvenFixtureWith(t, "Directory", func(sim *Sim) {
+		sim.SetRoute(dave, Directory)
+		MakeIdentity(t, sim.DatabaseFor(dave), dave, daveKey[32:])
+		CreditCredits(t, sim.DatabaseFor(dave), dave.JoinPath("book", "1"), 1e12)
+		MakeAccount(t, sim.DatabaseFor(dave), &TokenAccount{Url: dave.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+		CreditTokens(t, sim.DatabaseFor(dave), dave.JoinPath("tokens"), big.NewInt(1e12))
+	}, simulator.BPTHistoryDepth(4096))
+	traffic := f.traffic
+	f.traffic = func() {
+		ts++
+		f.sim.BuildAndSubmitTxnSuccessfully(
+			build.Transaction().For(dave, "tokens").
+				AddCredits().Spend(1).To(dave.JoinPath("book", "1")).WithOracle(InitialAcmeOracle).
+				SignWith(dave, "book", "1").Version(1).Timestamp(ts).PrivateKey(daveKey))
+		traffic()
+	}
+	for i := 0; i < 5; i++ {
+		f.traffic()
+	}
+
+	s, err := f.join(t, 150, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, s.handoffs)
+	require.Zero(t, s.diverged, "the follower executed a block other than its peers' %d times after handing off (handoffs at %v)",
+		s.diverged, handoffBlocks(s))
 	f.requireInAgreement(t)
 }
