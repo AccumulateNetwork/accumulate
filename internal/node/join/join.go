@@ -164,8 +164,9 @@ type State interface {
 	// Resumable reports the block this node executed itself, and whether it
 	// may execute from there with nothing matched: validators of the
 	// partition that answered are joining, fewer serve than sign an anchor
-	// (#4466), and nothing has been pulled into this store. That is a partition restarted as a whole, and no peer
-	// holds a state to start from but its own (executor spec, "Sync", "A
+	// (#4466), and nothing has been pulled into this store. That is a
+	// partition restarted as a whole, and no peer holds a state to start
+	// from but its own (executor spec, "Sync", "A
 	// partition that restarts as a whole"; #4447).
 	Resumable() (uint64, bool)
 

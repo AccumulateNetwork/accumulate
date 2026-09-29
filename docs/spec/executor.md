@@ -1032,13 +1032,22 @@ which block the partition is at and no anchor can be read, so no join can
 match anything, and before #4447 every validator collected for ever. The join
 takes one exit from that, and only when both of these hold:
 
-1. **Every peer that answered is joining.** A round that asks the partition's
-   peers for their block finds at least one refusing as joining (the
-   `NotReady` whose reason is that it is joining, not any `NotReady`: an
-   `ACTIVE` node out of query capacity says `NotReady` too), and none serving
-   a ledger or busy. A peer that cannot be reached says nothing either way. A
-   peer that serves is one to join from, so a restart of some validators while
-   others are `ACTIVE` always takes the ordinary path.
+1. **Too few of the partition's validators serve to sign an anchor.** A
+   round that asks the partition's peers for their block finds at least one
+   refusing as joining (the `NotReady` whose reason is that it is joining, not
+   any `NotReady`: an `ACTIVE` node out of query capacity says `NotReady`
+   too), and fewer serving a ledger or busy than the partition's threshold of
+   anchor signers in the set the node trusts. A peer that cannot be reached
+   says nothing either way. Peers that serve are ones to join from only when
+   enough of them serve to sign the anchor a join matches against: a joining
+   validator signs nothing, so with fewer serving, no anchor after the
+   restart reaches its quorum until more of them execute. The exit is a race
+   — the first validators to take it serve again, and are as few as the
+   timing made them — so a validator that finds fewer than the threshold
+   serving takes it too, and one that finds the threshold serving joins from
+   them (#4466). A restart of some validators while at least the threshold of
+   them are `ACTIVE` takes the ordinary path. A node that could resume does
+   not start a pull.
 2. **The node's store is its own execution.** No pull has started, in this
    process or in an earlier one that did not hand off — `SystemData.PullStarted`
    is written before a pull writes anything and cleared at the handoff — and
@@ -1053,9 +1062,8 @@ checkpoint put it — the position that produced its last block (consensus.md,
 never stopped would. Nothing is staged or settled first: staging is what
 consensus delivers from here. **It never seeds** (#4405): a node that restored
 no checkpoint does not know the round its state was produced at, and is
-refused and keeps collecting. The node is `ACTIVE` on its own root, since no
-peer had a root to verify it against and every one of them takes the same
-exit; from there every executed block is checked against its signed anchor as
+refused and keeps collecting. The node is `ACTIVE` on its own root, since too
+few peers had a root to verify it against; from there every executed block is checked against its signed anchor as
 after any handoff, and a mismatch is repaired ("Two mismatches").
 
 This is safe for the reason the join exists: a join takes a peer's state
