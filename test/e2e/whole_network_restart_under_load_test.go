@@ -15,6 +15,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -75,7 +76,11 @@ func wholeNetworkRestartUnderLoad(t *testing.T, nodes int, held func(messaging.M
 	bobKey := acctesting.GenerateKey(bob)
 
 	var hold atomic.Bool
-	sim := NewSim(t,
+	// Built as NewSim builds it, with a logger that writes the stream lines
+	// — `Stream head blocked`, `Produced messages`, `Cause re-emitted` — which
+	// say why a stream stops and what its source minted. NewSim's own logger
+	// would replace it.
+	s, err := simulator.New(
 		simulator.SimpleNetwork(t.Name(), 2, nodes),
 		simulator.CaptureDispatchedMessages(func(_ context.Context, env *messaging.Envelope) (bool, error) {
 			if !hold.Load() {
@@ -91,7 +96,11 @@ func wholeNetworkRestartUnderLoad(t *testing.T, nodes int, held func(messaging.M
 		simulator.Genesis(GenesisTime),
 		simulator.IgnoreDeliverResults(),
 		simulator.IgnoreCommitResults(),
+		simulator.WithRecordings(Recordings(t)),
+		simulator.WithLogger(logging.ConsoleLoggerForTest(t, acctesting.DefaultLogLevels+";stream=info")),
 	)
+	require.NoError(t, err)
+	sim := NewSimWith(t, s)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN1")
 	for _, a := range []struct {

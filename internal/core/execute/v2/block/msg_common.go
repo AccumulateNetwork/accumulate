@@ -39,6 +39,12 @@ type MessageContext struct {
 	// SequencedMessage.process, applied by SequencedMessage.Process.
 	advance func() error
 
+	// producedBefore is how many messages this context's message had
+	// produced before this execution, read at its first production
+	// (producedBeforeKnown). Non-zero is a re-emission for the same cause.
+	producedBefore      int
+	producedBeforeKnown bool
+
 	// syntheticCount distinguishes otherwise-identical messages produced by
 	// THIS message. It was a block-scoped counter, which stamped delivery-
 	// order-dependent content into synthetic transaction bodies — under
@@ -198,11 +204,21 @@ func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg me
 	if err != nil {
 		return errors.UnknownError.WithFormat("pad produced message: %w", err)
 	}
+	// What this message had already produced before this execution: read
+	// once, from the record the Add below reads anyway
+	produced := batch.Transaction2(m.message.Hash()).Produced()
+	if !m.producedBeforeKnown {
+		m.producedBeforeKnown = true
+		if l, err := produced.Get(); err == nil {
+			m.producedBefore = len(l)
+		}
+	}
+	p.cause, p.causeHash, p.causeBefore = messageKind(m.message), m.message.Hash(), m.producedBefore
 	m.produced = append(m.produced, p)
 
 	// What this message produced: one set, written as it is produced
 	// (database spec, "A record is written once per thing it records")
-	err = batch.Transaction2(m.message.Hash()).Produced().Add(p.Message.ID())
+	err = produced.Add(p.Message.ID())
 	if err != nil {
 		return errors.UnknownError.WithFormat("store message cause: %w", err)
 	}

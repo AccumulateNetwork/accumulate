@@ -1011,6 +1011,16 @@ func (b *Block) produceBlockMessages() error {
 	}
 	b.State.Produced += len(remote)
 	b.logProduced()
+	// The cache block's entries are remote's, in remote's order, each with
+	// the partition it was sequenced for
+	var dest []*url.URL
+	if b.cacheBlock != nil && len(b.cacheBlock.Entries) == len(remote) {
+		dest = make([]*url.URL, len(remote))
+		for i, e := range b.cacheBlock.Entries {
+			dest[i] = e.Stream
+		}
+	}
+	b.noteProducedKinds(remote, dest)
 	b.produced = nil
 
 	return nil

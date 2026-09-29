@@ -74,6 +74,14 @@ type ProducedMessage struct {
 
 	// Message is the produced message.
 	Message messaging.Message
+
+	// cause names the producing message by type and what it carries, and
+	// causeBefore is how many messages that same cause had produced before
+	// the execution that produced this one: non-zero is a re-emission. Both
+	// are for the block's produced-messages log (#4465) and nothing else.
+	cause       string
+	causeHash   [32]byte
+	causeBefore int
 }
 
 // Empty returns true if nothing happened during the block.

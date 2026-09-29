@@ -2229,6 +2229,23 @@ when (#4279). Every block therefore writes, at Info, `module=stream`:
   synthetics for: `block`, `destination`, `from`, `to`, `count`. One block's
   `to` and the next block's `from` are contiguous; a gap or a step backwards
   in the producer's own log is a defect in the producer, not in delivery.
+- **`Produced messages`**, what the blocks sequenced for other partitions,
+  by kind: `blocks` (the span counted), `count`, `produced` (per
+  destination partition and message kind — message type, and the body type
+  of a transaction or the type of a signature — as `BVN1
+  transaction/syntheticDepositTokens=12, ...`, largest first), and `causes`
+  (the same count by the kind of the message whose execution produced them;
+  `system` for a block's own). Written only when something was produced, and
+  no more often than once per 10 s of block time; what is produced in between
+  is counted into the next line, so nothing goes unreported.
+- **`Cause re-emitted`**, with the same cadence, when a cause produced again
+  in a later execution what it had produced before: per cause (at most five
+  named, the rest counted in `others`), its full hash, its kind, `before`
+  (how many messages its record of what it produced held before that
+  execution) and `times` (messages it produced again in the span). #4465:
+  after a whole-network restart a source minted 15 to 80 times as many
+  synthetics for one destination as before, every one new, and no line said
+  what they were or what caused them.
 
 `test/docker/soak/streamlog.py` reads those lines back out of a run's node
 log and reports, per node and stream, where it stands, when it last
