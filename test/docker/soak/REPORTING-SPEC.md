@@ -620,6 +620,13 @@ network reads frozen on it: run 20260928T235326Z was stopped as "stalled
 307s" on all four partitions while each executed about a block a second.
 `progress.<partition>.height` is that executed height, not the ledger index.
 
+**stallkill names the clock.** Its `watching:` and `STOPPING:` lines, and the
+manifest's `reason:`, say per stalled partition whether it is stalled `on
+height` or `on delivery`, and for delivery each red inbound synthetic flow as
+`source → destination: <the matrix's note>`. Run 20260929T005140Z's stop,
+"stalled 92s: BVN1,BVN2,BVN3", was read as a block stall while every BVN
+closed a block a second; it was a delivery stall.
+
 - **Wedge** — some partition closed no block for `WEDGE_SECS`. The capture is
   `wedge-<ts>/`.
 - **Delivery stall** — every partition closed a block within the last

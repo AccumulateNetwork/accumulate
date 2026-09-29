@@ -166,16 +166,36 @@ while :; do
   fi
   blind=0
 
-  read -r worst names blocks empties <<< "$(printf '%s' "$d" | python3 -c '
+  # `why` says WHICH clock each stalled partition is stalled on (#4414): its
+  # height (a wedge) or an inbound synthetic flow (a delivery stall), with the
+  # red flows named "source → destination" and the matrix's own note. Run
+  # 20260929T005140Z's log said "worstStall=72s (BVN1,BVN2,BVN3)" and was read
+  # as a block stall while every BVN closed a block a second; the cause was
+  # delivery, and nothing in the log said so.
+  read -r worst names blocks empties why <<< "$(printf '%s' "$d" | python3 -c '
 import json,sys
 try: d=json.load(sys.stdin)
 except Exception: print("0 - 0 0"); raise SystemExit
 p=d.get("progress") or {}
 s=[(v.get("stalledFor") or 0,k) for k,v in p.items() if v.get("state")=="stalled"]
 lf=d.get("life") or {}
-print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
+syn=(((d.get("matrix") or {}).get("flows") or {}).get("synthetic") or {})
+why=[]
+for _,k in sorted(s, key=lambda x: x[1]):
+    v=p[k]; by=v.get("stalledBy")
+    if by=="delivery":
+        red=["%s \u2192 %s: %s" % (src,k,(c or {}).get("note") or "red")
+             for src,row in sorted(syn.items()) for dst,c in (row or {}).items()
+             if dst==k and (c or {}).get("state")=="red"]
+        why.append("%s on delivery for %ds, height moved %ds ago (%s)" % (
+            k, v.get("deliveryStalledFor") or 0, v.get("blocksStalledFor") or 0,
+            "; ".join(red) or "red flows not in this reading"))
+    elif by=="blocks":
+        why.append("%s on height, still for %ds" % (k, v.get("blocksStalledFor") or 0))
+print("%d %s %d %d %s" % (max([x[0] for x in s]) if s else 0,
                        ",".join(sorted(k for _,k in s)) or "-",
-                       lf.get("blocks") or 0, lf.get("blocksEmpty") or 0))
+                       lf.get("blocks") or 0, lf.get("blocksEmpty") or 0,
+                       (" \u2014 " + " | ".join(why)) if why else ""))
 ' 2>/dev/null)"
   [ -z "${worst:-}" ] && continue
 
@@ -184,7 +204,7 @@ print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
   # not acting — the run record should show the decision, not just the verdict.
   ticks=$(( ${ticks:-0} + 1 ))
   if [ $(( ticks % 6 )) -eq 1 ]; then
-    log "watching: worstStall=${worst}s (${names}) threshold=${KILL_SECS}s blocks=${blocks} empty=${empties} blindPolls=${blind}"
+    log "watching: worstStall=${worst}s (${names}) threshold=${KILL_SECS}s blocks=${blocks} empty=${empties} blindPolls=${blind}${why:+ ${why}}"
   fi
 
   # An IDLE network is not a wedged one, and the monitor cannot tell them
@@ -213,7 +233,7 @@ print("%d %s %d %d" % (max([x[0] for x in s]) if s else 0,
   [ "$worst" -lt "$KILL_SECS" ] && continue
 
   decided=$(date -u +%FT%TZ)
-  echo "$decided STOPPING: stalled ${worst}s: $names"
-  stop_run "stalled ${worst}s: $names (threshold ${KILL_SECS}s)" "$decided"
+  echo "$decided STOPPING: stalled ${worst}s: $names${why:+ ${why}}"
+  stop_run "stalled ${worst}s: $names (threshold ${KILL_SECS}s)${why:+ ${why}}" "$decided"
   exit 0
 done
