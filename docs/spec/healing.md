@@ -397,12 +397,23 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   is the partition's, and a validator of the destination that restarted as
   the partition executed those entries lost them from staging and pulls them
   back from here before its first block (see Rejoining). Released at once,
-  they would be gone by the time it asked. A stream with no reverse traffic
-  hears nothing and falls back to the horizon, which is the backstop, not the
-  mechanism. The value is taken only from a message whose signer is a current
+  they would be gone by the time it asked. **Nothing else drops an entry or
+  an anchor the destination has not delivered** (#4464): not a horizon of
+  blocks, not a restart. A memory bound remains for safety; reaching it drops
+  the oldest, strands their destinations, and is logged as an error and
+  counted, because it is a defect, never the mechanism. A stream with no
+  reverse traffic hears nothing and is held to that bound. The value is taken only from a message whose signer is a current
   validator of the sender (a synthetic about to execute, an anchor copy whose
   signature is recorded): a collected entry's word is not trusted, since
   dropping what a source still needs would leave it a gap no one can fill.
+- **Rebuilt at start from what each destination has delivered.** The
+  cache is memory and a restart empties it; a whole-network restart leaves no
+  peer that remembers anything either. So the node records, node-local and
+  with the block that applies it, each destination's word as its cache
+  applies it — the number the destination has delivered of the synthetic
+  stream and of the anchor stream — and at start rebuilds the cache from the
+  chains from the number after it: every entry and anchor still owed. That
+  read at start-up is the only read of the historical record the cache makes.
 - **Never served from storage.** Every entry is also persisted to the
   permanent layer through execution; that is the record, not a fallback. A
   request for an entry the cache does not hold is refused and **counted as a
@@ -542,17 +553,29 @@ before it is applied, see Rejoining — anchor acks likewise), and on every disp
 `BlockAnchor` for the anchor stream (`Txn.ReleaseAnchors`, taken where the
 copy's validator signature is recorded, applied at commit once every
 destination of the anchor has spoken; `anchors_released_total`); a block that
-produced nothing is dropped when it is dispatched. A horizon of blocks
-(`DefaultHorizon`, ten minutes) remains as the backstop for a stream with no
-reverse traffic. At the first block an executor opens, the cache is seeded from the
+produced nothing is dropped when it is dispatched. No entry or anchor is
+dropped for age (#4464): the horizon (`DefaultHorizon`, ten minutes) drops
+only blocks that hold nothing to serve, and the memory bound
+(`MaxHeldEntries`, `MaxHeldAnchors`) drops the oldest with an error log and
+`accumulate_synthcache_bound_dropped_total{kind}`. Each block's close writes,
+in its own batch, what its commit applies of the destinations' words
+(`Cache.SettledBy`) to `SystemData(partition).SyntheticDelivered(destination)`
+and `AnchorDelivered(destination)`: node-local, not an account, not hashed,
+only ever forward. At the first block an executor opens, the cache is seeded from the
 node's own chains by position (`seedSynthCache`, #4241): genesis produces
 through another executor, and a node that starts has produced blocks whose
 anchors have not returned — a start-up step, not a runtime path. What is
-seeded is decided by what the store durably knows: every own block the
-Directory has not receipted, found from the Directory anchors executed here
-(nothing from those blocks was dispatched), and the in-flight tail
-(`InFlightBlocks`) below the newest receipt, marked dispatched so healing is
-answered from it; capped by the horizon. The receipted blocks the newest
+seeded is decided by what the store durably knows: every block from the one
+that produced the oldest entry a destination has not delivered, found per
+stream from its recorded `SyntheticDelivered` on the stream's index chain
+(`owedFrom`; a stream with no record is owed from its first entry); every own
+block the Directory has not receipted, found from the Directory anchors
+executed here (nothing from those blocks was dispatched); and the in-flight
+tail (`InFlightBlocks`) below the newest receipt. Receipted blocks are marked
+dispatched under the anchor that receipted them, back to the oldest owed
+block, so healing is answered from them. Produced anchors are seeded from the
+lowest `AnchorDelivered` of the anchor stream's destinations. The rebuild is
+bounded (`maxSeedBlocks`) and logs an error past it. The receipted blocks the newest
 anchor carried are dispatched again by the leader — the list of anchors
 awaiting dispatch is memory, and the block that would have dispatched them
 may not have run; a destination tosses what it has delivered. The store path in the sequencer remains only for the v1

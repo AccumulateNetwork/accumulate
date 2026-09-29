@@ -36,8 +36,11 @@ import (
 
 // A restarted node's cache holds every own block the Directory has not
 // receipted — nothing from them was dispatched — and the in-flight tail below
-// the newest receipt, marked dispatched so healing can be answered from it;
-// nothing older (#4241). Here the Directory's anchors stop executing on BVN0
+// the newest receipt, marked dispatched so healing can be answered from it
+// (#4241). An older block is held only for an entry its destination has not
+// delivered, and then it was receipted and is dispatched (#4464): no
+// destination has delivered anything this node has recorded here, so every
+// produced block is owed. Here the Directory's anchors stop executing on BVN0
 // while it keeps producing, so its newest receipt falls well behind.
 func TestSeedHoldsWhatTheDirectoryHasNotReceipted(t *testing.T) {
 	alice := url.MustParse("alice")
@@ -148,8 +151,10 @@ func TestSeedHoldsWhatTheDirectoryHasNotReceipted(t *testing.T) {
 	require.Less(t, newest+synthcache.InFlightBlocks, current-1, "precondition: the Directory lags by more than the in-flight tail")
 
 	for _, b := range held {
-		require.GreaterOrEqual(t, b, newest-synthcache.InFlightBlocks, "block %d is older than the in-flight tail below the newest receipt", b)
 		blk, _ := cache.Block(b)
+		if b < newest-synthcache.InFlightBlocks {
+			require.NotEmpty(t, blk.Entries, "block %d is older than the in-flight tail and holds nothing owed", b)
+		}
 		if b <= newest {
 			require.True(t, blk.Dispatched, "block %d was receipted, so it was dispatched", b)
 		} else {

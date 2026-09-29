@@ -903,11 +903,10 @@ simulator still does not do as the daemon does:
   #4400's skip of blocks the node did not execute. Before #4421 the latch
   survived, a restarted simulator node never seeded again, and a join that
   left pool entries with no message behind them "passed". It does not rebuild
-  the executor: the in-memory producer cache, the conductor, the dispatcher
-  and the executor's other memory survive the "restart". The seed adds to a
-  cache that still holds what the node produced before it (`Cache.Seed` skips
-  a block already held), so what the seed alone would have held is not what a
-  simulated restart dispatches and serves from.
+  the executor: the conductor, the dispatcher and the executor's other memory
+  survive the "restart". The producer cache does not: `RestartNode` empties
+  it (`Cache.Reset`, #4464), so a restarted simulator node serves only what
+  its seed rebuilt, as a new process does.
 - A simulator follower still votes and counts its own vote
   (`Node.isValidatorOn`), so stopping it cannot show that no quorum waited on
   it; the cadence assertion shows only that the partition runs on.
@@ -1800,8 +1799,15 @@ Synthetic entries are released by the destination's `Delivered`, carried on
 every dispatched message and package (2026-09-06); produced anchors by the
 `Delivered` carried on every anchor copy, once every destination has spoken
 (#4232); blocks with nothing left to prove are dropped; the horizon backstop
-is ten minutes. Remaining: a synthetic stream whose reverse direction is idle
-shrinks only at the horizon (anchors say nothing about synthetics); the v1
+no longer drops an undelivered entry (#4464). Remaining: a synthetic stream
+whose reverse direction is idle is never released, since anchors say
+nothing about synthetics, and is held to the memory bound — which logs an
+error when it is reached. The BVN→Directory streams are such streams: the
+Directory produces almost no synthetics for a BVN, so a BVN holds its stream
+to the Directory until the bound (on the 2026-09-29 Docker network, ~15,000
+entries over 17,000 blocks), and each start rebuilds it from its first entry.
+The fix is a word on a path that does flow — the synthetic `Delivered` on the
+anchor copies — which is a message change and a decision; the v1
 simulator's sequencer still reads the store, since the v1 executor has no
 cache; the Directory receipt a block was dispatched under is
 the only anchor a bundle can be proven under (`ProveAgainstAnchor` for any
@@ -1810,17 +1816,20 @@ sequencer by span. The stage bound for a collected entry (`maxSequenceAhead`)
 is a constant, not the source's produced count: the destination learns that
 count on no wire path (#4243).
 
-The destination's `Delivered` of this stream — the release signal — lives only
-in the cache. A restart therefore cannot seed "what the destination has not
-delivered"; it seeds what the Directory has not receipted plus the in-flight
-tail (healing.md, "The cache"; #4241). A destination lagging more than
-`InFlightBlocks` of the source's blocks at the source's restart heals from a
-cache that lacks its entries, and the miss is counted. The fix is to persist
-the release watermark per stream as a node-local record — it is per-node
-state and must not enter the hashed ledger (executor.md, "Sync") — which is
-the cache's to do.
+The destination's `Delivered` of each stream, as the cache applies it, is
+now recorded node-local with the block that applies it
+(`SystemData.SyntheticDelivered`, `AnchorDelivered`; #4464), and the seed
+rebuilds from it. What remains: a store with no record — every node's first
+start on this code, a stream whose destination has never spoken, a node that
+joined — is owed from the stream's first entry, so that start rebuilds the
+stream's whole history, up to `maxSeedBlocks` (100,000 blocks) with an error
+past it. The 2026-09-29 Docker network is such a store: at its next start
+BVN2 rebuilds from about block 1 of 17,000 and the Directory re-seeds its
+13,000 anchors. That covers BVN2→BVN1's owed entries (from block 12475) and the
+Directory's anchors from 12262, at a one-time cost in start time and memory
+until the destinations' words arrive and release them.
 
-**Size**: small; the delivery signal is the open design point.
+**Size**: small; the idle reverse stream's word is the open design point.
 
 ---
 

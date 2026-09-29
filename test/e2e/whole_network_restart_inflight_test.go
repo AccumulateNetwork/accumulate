@@ -30,20 +30,24 @@ import (
 // anchor stream for longer than the producer's cache holds (the horizon),
 // with synthetics produced for it in that time. Then every validator of every
 // partition restarts at once, from its own store, through the production join
-// (restartAndJoin), and the streams open again.
+// (restartAndJoin), with its producer cache emptied as a new process's is, and
+// the streams open again.
 //
-// Nothing in memory anywhere holds what BVN1 lacks: BVN0's cache trimmed its
-// entries at the horizon and its seed reaches back only to the Directory's
-// newest receipt; the Directory's cache trimmed the anchors the same way; and
-// every peer restarted too. The entries are on the producers' own chains. A
-// destination's requester asks the source by number, and the source must
-// answer from those chains, with a proof BVN1 accepts: every synthetic
-// produced for BVN1 is delivered afterwards, and every anchor.
+// Every process restarted, so no peer remembers what BVN1 lacks. The
+// producers' caches hold an entry until its destination has delivered it,
+// not for a horizon of blocks, and each producer's seed rebuilds its cache at
+// start from what each destination had delivered, recorded node-local as the
+// cache applied the destination's word (#4464). So BVN1's requester asks, and
+// the source answers from the cache the seed rebuilt: every synthetic produced
+// for BVN1 is delivered afterwards, and every anchor, and no request after
+// start-up misses the cache — the sequencer reads nothing else.
 //
-// Before #4464 the source answered "synthetic N is not in the cache" and
-// "anchor N is not in the cache" for ever, as the Docker network did after
-// the whole-network restart at 2026-09-29T00:49:32Z (BVN2→BVN1 97 short,
-// Directory anchor 12262 never delivered).
+// Before #4464 the cache dropped them at the horizon while they were held,
+// and the seed reached back only to the Directory's newest receipt; the
+// source answered "synthetic N is not in the cache" and "anchor N is not in
+// the cache" for ever, as the Docker network did after the whole-network
+// restart at 2026-09-29T00:49:32Z (BVN2→BVN1 97 short, Directory anchor 12262
+// never delivered).
 func TestAWholeNetworkRestartDeliversWhatWasInFlight(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
@@ -109,6 +113,18 @@ func TestAWholeNetworkRestartDeliversWhatWasInFlight(t *testing.T) {
 	anchorsHeld := anchorLedger(t, sim.S.Partition("BVN1").NodeDatabase(0), "BVN1").Partition(DnUrl()).Delivered
 	t.Logf("before the restart: BVN0 produced %d for BVN1, BVN1 delivered %d; BVN1 delivered Directory anchor %d", produced, delivered, anchorsHeld)
 
+	// What the producers recorded of BVN1's word, which their seeds start
+	// from: the Directory's anchors to BVN1, as BVN1 delivered them
+	for i := 0; i < 3; i++ {
+		var rec uint64
+		require.NoError(t, sim.S.Partition(Directory).NodeDatabase(i).View(func(batch *database.Batch) error {
+			var err error
+			rec, err = batch.SystemData(Directory).AnchorDelivered(synthcache.StreamKey(PartitionUrl("BVN1"))).Get()
+			return err
+		}))
+		require.Equal(t, anchorsHeld, rec, "Directory node %d did not record what BVN1 delivered of its anchors", i)
+	}
+
 	// The whole network, at once
 	var all []restartTarget
 	for _, name := range []string{Directory, "BVN0", "BVN1"} {
@@ -118,6 +134,7 @@ func TestAWholeNetworkRestartDeliversWhatWasInFlight(t *testing.T) {
 		}
 	}
 	restartAndJoin(t, sim, all)
+	missed := synthcache.Stats().Misses
 
 	// The streams open again, and everything in flight is delivered
 	hold.Store(false)
@@ -133,6 +150,13 @@ func TestAWholeNetworkRestartDeliversWhatWasInFlight(t *testing.T) {
 		a := anchorLedger(t, sim.S.Partition("BVN1").NodeDatabase(i), "BVN1").Partition(DnUrl()).Delivered
 		require.Greater(t, a, anchorsHeld, "BVN1 node %d delivered no Directory anchor after the restart", i)
 	}
+	// Every answer came from the cache the seed rebuilt: nothing was asked
+	// that it did not hold, and the sequencer has no other source to answer
+	// from (healing spec, "The cache": never served from storage)
+	after := synthcache.Stats().Misses
+	require.Equal(t, missed["entry"], after["entry"], "a synthetic was asked for that the cache did not hold after start-up")
+	require.Equal(t, missed["anchor"], after["anchor"], "an anchor was asked for that the cache did not hold after start-up")
+
 	var account *TokenAccount
 	require.NoError(t, sim.S.Partition("BVN1").View(func(batch *database.Batch) error {
 		return batch.Account(bob.JoinPath("tokens")).Main().GetAs(&account)

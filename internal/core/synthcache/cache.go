@@ -14,6 +14,8 @@
 package synthcache
 
 import (
+	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,13 +28,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// DefaultHorizon is how many blocks a produced entry is kept at most: ten
-// minutes at one block a second. It is the backstop, not the mechanism: the
-// destination's Delivered, carried on every synthetic and every anchor it
-// dispatches, releases what it has executed as soon as the word arrives
-// (healing spec, "The cache"), so the horizon only binds a stream whose
-// destination says nothing — one that produces neither synthetics nor
-// anchors back — and bounds what such a stream can cost.
+// DefaultHorizon is how many blocks a block that holds no undelivered entry
+// is kept: ten minutes at one block a second. It never drops an entry. An
+// entry, synthetic or anchor, is kept until the destination has delivered it
+// (healing spec, "The cache"; #4464): the destination's Delivered, carried on
+// every synthetic and every anchor it dispatches, releases it, and nothing
+// else does but the memory bound (MaxHeldEntries, MaxHeldAnchors).
 const DefaultHorizon = 600
 
 // An Entry is one produced synthetic message: the sequenced message, the
@@ -175,7 +176,21 @@ type Cache struct {
 	lastAnchorNumber uint64
 	lastAnchorBlock  uint64
 	lastAnchorOK     bool
+
+	// the memory bound: past it the oldest are dropped and the drop is
+	// logged as the defect it is (#4464)
+	maxEntries, maxAnchors int
 }
+
+// MaxHeldEntries and MaxHeldAnchors bound the cache's memory. An entry is
+// held until its destination has delivered it, so a destination that stops
+// holds its stream here for as long as it is stopped; the bound is what that
+// may cost. Reaching it drops the oldest and strands the destination, and is
+// logged as an error: it is never the mechanism (#4464).
+const (
+	MaxHeldEntries = 250_000
+	MaxHeldAnchors = 50_000
+)
 
 type anchorEntry struct {
 	block uint64 // the block that produced it
@@ -243,11 +258,13 @@ func New(horizon uint64) *Cache {
 		horizon = DefaultHorizon
 	}
 	return &Cache{
-		horizon: horizon,
-		entries: map[string]map[uint64]*Entry{},
-		byHash:  map[[32]byte]*Entry{},
-		blocks:  map[uint64]*Block{},
-		anchors: map[uint64]*anchorEntry{},
+		horizon:    horizon,
+		maxEntries: MaxHeldEntries,
+		maxAnchors: MaxHeldAnchors,
+		entries:    map[string]map[uint64]*Entry{},
+		byHash:     map[[32]byte]*Entry{},
+		blocks:     map[uint64]*Block{},
+		anchors:    map[uint64]*anchorEntry{},
 	}
 }
 
@@ -360,7 +377,8 @@ func (t *Txn) AddReceived(a *protocol.DirectoryAnchor) {
 	t.received = append(t.received, &ReceivedAnchor{t.block, a})
 }
 
-// Commit makes the block's additions visible and trims what the horizon has
+// Commit makes the block's additions visible, applies the destinations'
+// words whose grace has run, and drops the empty blocks the horizon has
 // passed.
 func (t *Txn) Commit() {
 	if t == nil || t.c == nil {
@@ -549,28 +567,124 @@ func (c *Cache) releaseLocked(k string, n uint64) {
 	mReleased.Add(float64(dropped))
 }
 
+// trimLocked drops the blocks that hold nothing to serve once the horizon
+// has passed them, and holds the cache to its memory bound. No undelivered
+// entry passes at the horizon (#4464).
 func (c *Cache) trimLocked() {
-	if c.newest <= c.horizon {
-		return
-	}
-	cutoff := c.newest - c.horizon
-	for idx, b := range c.blocks {
-		if idx >= cutoff {
-			continue
-		}
-		for _, e := range b.Entries {
-			if m := c.entries[streamKey(e.Stream)]; m != nil {
-				delete(m, e.Number)
+	if c.newest > c.horizon {
+		cutoff := c.newest - c.horizon
+		for idx, b := range c.blocks {
+			if idx < cutoff && len(b.Entries) == 0 {
+				delete(c.blocks, idx)
 			}
-			delete(c.byHash, e.Hash)
 		}
-		delete(c.blocks, idx)
 	}
-	for n, a := range c.anchors {
-		if a.block < cutoff {
+	c.boundLocked()
+}
+
+// boundLocked drops the oldest entries past MaxHeldEntries and the oldest
+// anchors past MaxHeldAnchors, and says so loudly: a destination that has
+// not delivered them will ask for them and be refused.
+func (c *Cache) boundLocked() {
+	if len(c.byHash) > c.maxEntries {
+		idx := make([]uint64, 0, len(c.blocks))
+		for i := range c.blocks {
+			idx = append(idx, i)
+		}
+		sort.Slice(idx, func(i, j int) bool { return idx[i] < idx[j] })
+		before, streams := len(c.byHash), map[string]uint64{}
+		for _, i := range idx {
+			if len(c.byHash) <= c.maxEntries {
+				break
+			}
+			for _, e := range c.blocks[i].Entries {
+				k := streamKey(e.Stream)
+				if m := c.entries[k]; m != nil {
+					delete(m, e.Number)
+				}
+				delete(c.byHash, e.Hash)
+				if e.Number > streams[k] {
+					streams[k] = e.Number
+				}
+			}
+			delete(c.blocks, i)
+		}
+		mBoundDropped.WithLabelValues("entry").Add(float64(before - len(c.byHash)))
+		slog.Error("The producer cache reached its bound and dropped undelivered synthetic entries; their destinations cannot be answered for them",
+			"module", "synthcache", "bound", c.maxEntries, "dropped", before-len(c.byHash), "through", streams)
+	}
+	if len(c.anchors) > c.maxAnchors {
+		nums := make([]uint64, 0, len(c.anchors))
+		for n := range c.anchors {
+			nums = append(nums, n)
+		}
+		sort.Slice(nums, func(i, j int) bool { return nums[i] < nums[j] })
+		drop := nums[:len(nums)-c.maxAnchors]
+		for _, n := range drop {
 			delete(c.anchors, n)
 		}
+		mBoundDropped.WithLabelValues("anchor").Add(float64(len(drop)))
+		slog.Error("The producer cache reached its bound and dropped undelivered anchors; their destinations cannot be answered for them",
+			"module", "synthcache", "bound", c.maxAnchors, "dropped", len(drop), "through", drop[len(drop)-1])
 	}
+}
+
+// SetBound sets the memory bound, for a test.
+func (c *Cache) SetBound(entries, anchors int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.maxEntries, c.maxAnchors = entries, anchors
+}
+
+// SettledBy is what the commit of block applies of the destinations' words:
+// per stream key, the number a destination has delivered of this partition's
+// synthetic stream to it, and of its anchor stream, once the word's grace has
+// run. The block writes them, node-local, so a restart seeds from them
+// (#4464); they are the same values the commit releases by.
+func (c *Cache) SettledBy(block uint64) (synthetic, anchors map[string]uint64) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, p := range c.pending {
+		if p.at+RejoinGrace <= block {
+			if synthetic == nil {
+				synthetic = map[string]uint64{}
+			}
+			if p.through > synthetic[p.stream] {
+				synthetic[p.stream] = p.through
+			}
+		}
+	}
+	for _, p := range c.pendingAnchorAcks {
+		if p.at+RejoinGrace <= block {
+			if anchors == nil {
+				anchors = map[string]uint64{}
+			}
+			if p.ack.through > anchors[p.stream] {
+				anchors[p.stream] = p.ack.through
+			}
+		}
+	}
+	return synthetic, anchors
+}
+
+// Reset empties the cache as a process restart does: everything it holds is
+// memory. The simulator keeps one cache per node across a restart and calls
+// it so a restarted node starts from what its seed rebuilds.
+func (c *Cache) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = map[string]map[uint64]*Entry{}
+	c.byHash = map[[32]byte]*Entry{}
+	c.blocks = map[uint64]*Block{}
+	c.anchors = map[uint64]*anchorEntry{}
+	c.received = nil
+	c.newest = 0
+	c.released = nil
+	c.pending = nil
+	c.pendingAnchorAcks = nil
+	c.anchorAcks = nil
+	c.joinedAt = 0
+	c.lastAnchorNumber, c.lastAnchorBlock, c.lastAnchorOK = 0, 0, false
 }
 
 // Seed inserts blocks rebuilt from the node's own chains at start, before
@@ -888,6 +1002,10 @@ var (
 		Name:      "anchors_released_total",
 		Help:      "Produced anchors dropped because every destination said it had executed them (the Delivered carried on its anchors)",
 	})
+	mBoundDropped = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "synthcache", Name: "bound_dropped_total",
+		Help: "Undelivered entries and anchors dropped because the cache reached its memory bound. Nonzero is a defect: their destinations cannot be answered for them",
+	}, []string{"kind"})
 	mEntries = promauto.NewGauge(prometheus.GaugeOpts{
 		Namespace: "accumulate", Subsystem: "synthcache", Name: "entries",
 		Help: "Produced entries held",

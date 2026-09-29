@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -30,22 +31,26 @@ type ownReceipt struct {
 
 // seedSynthCache rebuilds the producer's cache at start, once, at the first
 // block open (healing spec, "The cache"). What it holds is decided by what the
-// store durably knows (#4241):
+// store durably knows (#4241, #4464):
 //
-//   - Every own block the Directory has not receipted yet. Nothing from it
-//     has been dispatched, so every entry it produced is still to send; a
-//     restart with a lagging Directory holds them all, up to the horizon.
-//   - The blocks in flight below the newest receipt: dispatched, and what a
-//     destination may still be executing or asking healing for. The
-//     destination's own Delivered of this stream is not durable here, so
-//     this is the bound (DIFFERENCES, H1).
+//   - Every entry a destination has not delivered: each stream from the
+//     number after the destination's Delivered, as this node recorded it
+//     when its cache applied the destination's word (SystemData
+//     SyntheticDelivered). A whole-network restart has no peer that holds
+//     them, and the cache holds an entry until it is delivered, so this is
+//     what the running cache held.
+//   - Every own block the Directory has not receipted yet, and the blocks in
+//     flight below the newest receipt, as before: dispatch looks each of them
+//     up, an empty one included.
 //
 // The receipts come from the Directory anchors executed here, the same
 // anchors whose dispatch the block after them performs. That list is memory
 // and a restart loses it, so what the newest anchor receipted is marked
 // dispatched again — healing serves only dispatched blocks — and sent again
-// by the leader. A destination tosses what it has delivered, so the resend
-// costs a package, never a duplicate execution.
+// by the leader; the older receipted blocks are marked dispatched under the
+// anchor that receipted them, back to the oldest undelivered entry. A
+// destination tosses what it has delivered, so the resend costs a package,
+// never a duplicate execution.
 //
 // This is the one place the cache is filled from the store, by position, and
 // it is a start-up step, not a runtime path.
@@ -55,8 +60,19 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		oldest = current - synthcache.DefaultHorizon
 	}
 
+	// The oldest block that produced an entry a destination has not delivered
+	owed, err := x.owedFrom(batch, current, oldest)
+	if err != nil {
+		return errors.UnknownError.WithFormat("find the undelivered entries: %w", err)
+	}
+	if current > maxSeedBlocks && owed < current-maxSeedBlocks {
+		x.logger.Error("The seed would rebuild more blocks than its bound; entries older than the bound are not held and their destinations cannot be answered for them",
+			"module", "synthetic", "owed-from", owed, "bound", maxSeedBlocks, "current", current)
+		owed = current - maxSeedBlocks
+	}
+
 	// What the Directory has receipted of ours, newest first
-	receipts, err := x.ownReceipts(batch, oldest)
+	receipts, err := x.ownReceipts(batch, oldest, owed)
 	if err != nil {
 		return errors.UnknownError.WithFormat("load Directory receipts: %w", err)
 	}
@@ -66,6 +82,9 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		if newest > synthcache.InFlightBlocks && newest-synthcache.InFlightBlocks > from {
 			from = newest - synthcache.InFlightBlocks
 		}
+	}
+	if owed < from {
+		from = owed
 	}
 
 	// A block a join carried this node past it did not execute: it produced
@@ -99,9 +118,9 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 	}
 	x.synthCache().Seed(blocks)
 	if len(blocks) > 0 || len(skipped) > 0 {
-		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "to", current-1, "blocks", len(blocks), "receipted", len(receipts), "skipped", len(skipped), "skipped-blocks", skipped)
+		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "owed-from", owed, "to", current-1, "blocks", len(blocks), "receipted", len(receipts), "skipped", len(skipped), "skipped-blocks", skipped)
 	}
-	err = x.seedProducedAnchors(batch, oldest)
+	err = x.seedProducedAnchors(batch)
 	if err != nil {
 		return errors.UnknownError.WithFormat("seed produced anchors: %w", err)
 	}
@@ -136,8 +155,9 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 
 // ownReceipts walks the Directory anchors this partition executed, newest
 // first, and returns their receipts for this partition's blocks down to the
-// in-flight tail below the newest, or to oldest.
-func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownReceipt, error) {
+// in-flight tail below the newest, or to oldest, and in either case down to
+// floor, the oldest block holding an undelivered entry.
+func (x *Executor) ownReceipts(batch *database.Batch, oldest, floor uint64) ([]ownReceipt, error) {
 	c := batch.Account(x.Describe.AnchorPool()).MainChain()
 	head, err := c.Head().Get()
 	if err != nil {
@@ -145,7 +165,7 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 	}
 	own := x.Describe.PartitionUrl().URL
 	var receipts []ownReceipt
-	bound := oldest
+	bound := min(oldest, floor)
 	for i := head.Count - 1; i >= 0; i-- {
 		entry, err := c.Entry(i)
 		switch {
@@ -194,6 +214,7 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 			if newest > synthcache.InFlightBlocks && newest-synthcache.InFlightBlocks > bound {
 				bound = newest - synthcache.InFlightBlocks
 			}
+			bound = min(bound, floor)
 		}
 		receipts = append(receipts, found...)
 		below := true
@@ -384,17 +405,19 @@ func (x *Executor) rebuildCacheBlock(batch *database.Batch, b uint64) (*synthcac
 }
 
 // seedProducedAnchors puts this partition's own anchors back in the cache at
-// start, down to the horizon (#4277).
+// start (#4277): every anchor a destination has not delivered, from the
+// lowest Delivered this node recorded for its destinations (SystemData
+// AnchorDelivered; #4464). A produced anchor goes to every destination under
+// one number — the Directory for a BVN, every partition for the Directory —
+// so the lowest of them is what is still owed.
 //
 // The anchor sequence chain is the durable record of what this partition
 // produced: entry i is the anchor with sequence number i+1. The cache that
 // answers for them is memory, filled a block at a time as each anchor is
 // produced, so without this a restart can serve nothing it produced before —
 // and a destination that is behind on the stream asks, is refused, and stays
-// behind, because there is no other place the anchor can come from. The
-// heartbeat makes that reachable: it produces enough anchors that a
-// destination is routinely behind by more than a restart can re-send.
-func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) error {
+// behind, because there is no other place the anchor can come from.
+func (x *Executor) seedProducedAnchors(batch *database.Batch) error {
 	record := batch.Account(x.Describe.AnchorPool()).AnchorSequenceChain()
 	head, err := record.Head().Get()
 	if err != nil {
@@ -408,10 +431,33 @@ func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) err
 		return errors.UnknownError.WithFormat("load anchor sequence chain: %w", err)
 	}
 
-	// Newest first, and stop at the horizon: an anchor for a block the cache
-	// no longer covers is not one this partition answers for.
+	// The lowest any destination has delivered
+	dests := []*url.URL{protocol.DnUrl()}
+	if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
+		dests = nil
+		for _, part := range x.globals().Active.Network.Partitions {
+			dests = append(dests, protocol.PartitionUrl(part.ID))
+		}
+	}
+	var delivered uint64
+	for i, dst := range dests {
+		n, err := batch.SystemData(x.Describe.PartitionId).AnchorDelivered(synthcache.StreamKey(dst)).Get()
+		if err != nil && !errors.Is(err, errors.NotFound) {
+			return errors.UnknownError.WithFormat("load %v's delivered anchor: %w", dst, err)
+		}
+		if i == 0 || n < delivered {
+			delivered = n
+		}
+	}
+
+	// Newest first, down to what every destination has delivered
 	var anchors []synthcache.SeededAnchor
-	for i := head.Count - 1; i >= 0; i-- {
+	for i := head.Count - 1; i >= 0 && uint64(i) >= delivered; i-- {
+		if len(anchors) >= synthcache.MaxHeldAnchors {
+			x.logger.Error("The seed reached the cache's anchor bound; older undelivered anchors are not held and their destinations cannot be answered for them",
+				"module", "synthetic", "bound", synthcache.MaxHeldAnchors, "delivered", delivered, "oldest-held", uint64(i)+2)
+			break
+		}
 		hash, err := chain.Entry(i)
 		if errors.Is(err, errors.NotFound) {
 			break // Below the window a join took (#4452): not held yet
@@ -432,19 +478,65 @@ func (x *Executor) seedProducedAnchors(batch *database.Batch, oldest uint64) err
 		if !ok {
 			continue
 		}
-		block := body.GetPartitionAnchor().MinorBlockIndex
-		if block < oldest {
-			break
-		}
-		anchors = append(anchors, synthcache.SeededAnchor{Number: uint64(i) + 1, Block: block, Txn: txn.Transaction})
+		anchors = append(anchors, synthcache.SeededAnchor{Number: uint64(i) + 1, Block: body.GetPartitionAnchor().MinorBlockIndex, Txn: txn.Transaction})
 	}
 	if len(anchors) == 0 {
 		return nil
 	}
 	x.synthCache().SeedAnchors(anchors)
 	x.logger.Info("Seeded produced anchors from the sequence chain", "module", "synthetic",
-		"count", len(anchors), "from", anchors[len(anchors)-1].Number, "to", anchors[0].Number)
+		"count", len(anchors), "from", anchors[len(anchors)-1].Number, "to", anchors[0].Number, "delivered", delivered)
 	return nil
+}
+
+// maxSeedBlocks bounds how far back the seed rebuilds: the blocks it reads
+// at start, and with them the time a start takes. Past it the seed logs an
+// error, as the cache does at its memory bound.
+const maxSeedBlocks = 100_000
+
+// owedFrom is the oldest block that produced an entry a destination has not
+// delivered: per stream, the block of the number after the destination's
+// Delivered as this node recorded it, found on the stream's index chain.
+// current when nothing is owed. A stream whose owed entries lie below the
+// window a join took is owed from oldest: the node did not produce them.
+func (x *Executor) owedFrom(batch *database.Batch, current, oldest uint64) (uint64, error) {
+	owed := current
+	record := batch.Account(x.Describe.Synthetic())
+	sys := batch.SystemData(x.Describe.PartitionId)
+	for _, part := range x.globals().Active.Network.Partitions {
+		dst := protocol.PartitionUrl(part.ID)
+		c := record.SyntheticChain(part.ID)
+		head, err := c.Head().Get()
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("load synthetic chain head for %v: %w", dst, err)
+		}
+		delivered, err := sys.SyntheticDelivered(synthcache.StreamKey(dst)).Get()
+		if err != nil && !errors.Is(err, errors.NotFound) {
+			return 0, errors.UnknownError.WithFormat("load %v's delivered: %w", dst, err)
+		}
+		if int64(delivered) >= head.Count {
+			continue
+		}
+		index, err := c.Index().Get()
+		if err != nil {
+			return 0, errors.UnknownError.WithFormat("load synthetic index chain for %v: %w", dst, err)
+		}
+		if index.Height() == 0 {
+			continue
+		}
+		// Entry i is number i+1; the block's index entry is the first whose
+		// last position is at or past the entry's
+		_, entry, err := indexing.SearchIndexChain(index, uint64(index.Height()-1), indexing.MatchAfter, indexing.SearchIndexChainBySource(delivered))
+		switch {
+		case err == nil:
+			owed = min(owed, entry.BlockIndex)
+		case stderrors.Is(err, indexing.ErrNotHeld):
+			owed = min(owed, oldest)
+		default:
+			return 0, errors.UnknownError.WithFormat("locate synthetic %d for %v: %w", delivered+1, dst, err)
+		}
+	}
+	return owed, nil
 }
 
 // seedDeep is seedCacheOnce over a read-only batch that reaches past a
@@ -481,4 +573,38 @@ func (x *Executor) ForgetSeed() {
 	x.cacheSeedMu.Lock()
 	defer x.cacheSeedMu.Unlock()
 	x.cacheSeeded = false
+}
+
+// recordSettled writes, node-local, what the commit of block applies of the
+// destinations' words (Cache.SettledBy): per destination, the number it has
+// delivered of this partition's synthetic stream and of its anchor stream.
+// Only ever forward: a word is the partition's, and a later block may apply
+// an older one.
+func (x *Executor) recordSettled(batch *database.Batch, block uint64) error {
+	synthetic, anchors := x.synthCache().SettledBy(block)
+	sys := batch.SystemData(x.Describe.PartitionId)
+	put := func(v values.Value[uint64], through uint64) error {
+		held, err := v.Get()
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+		default:
+			return err
+		}
+		if through <= held {
+			return nil
+		}
+		return v.Put(through)
+	}
+	for k, n := range synthetic {
+		if err := put(sys.SyntheticDelivered(k), n); err != nil {
+			return errors.UnknownError.WithFormat("record %s delivered %d: %w", k, n, err)
+		}
+	}
+	for k, n := range anchors {
+		if err := put(sys.AnchorDelivered(k), n); err != nil {
+			return errors.UnknownError.WithFormat("record %s delivered anchor %d: %w", k, n, err)
+		}
+	}
+	return nil
 }

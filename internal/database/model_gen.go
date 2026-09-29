@@ -2137,6 +2137,8 @@ type SystemData struct {
 	syntheticIndexIndex map[systemDataSyntheticIndexIndexMapKey]values.Value[uint64]
 	executedBlock       values.Value[uint64]
 	pullStarted         values.Value[uint64]
+	syntheticDelivered  map[systemDataSyntheticDeliveredMapKey]values.Value[uint64]
+	anchorDelivered     map[systemDataAnchorDeliveredMapKey]values.Value[uint64]
 	trustedNetwork      values.Value[[]byte]
 	trustedGlobals      values.Value[[]byte]
 	headOnly            values.Set[*url.URL]
@@ -2154,6 +2156,30 @@ type systemDataSyntheticIndexIndexMapKey struct {
 
 func (k systemDataSyntheticIndexIndexKey) ForMap() systemDataSyntheticIndexIndexMapKey {
 	return systemDataSyntheticIndexIndexMapKey{k.Block}
+}
+
+type systemDataSyntheticDeliveredKey struct {
+	Destination string
+}
+
+type systemDataSyntheticDeliveredMapKey struct {
+	Destination string
+}
+
+func (k systemDataSyntheticDeliveredKey) ForMap() systemDataSyntheticDeliveredMapKey {
+	return systemDataSyntheticDeliveredMapKey{k.Destination}
+}
+
+type systemDataAnchorDeliveredKey struct {
+	Destination string
+}
+
+type systemDataAnchorDeliveredMapKey struct {
+	Destination string
+}
+
+func (k systemDataAnchorDeliveredKey) ForMap() systemDataAnchorDeliveredMapKey {
+	return systemDataAnchorDeliveredMapKey{k.Destination}
 }
 
 func (c *SystemData) SyntheticIndexIndex(block uint64) values.Value[uint64] {
@@ -2178,6 +2204,22 @@ func (c *SystemData) PullStarted() values.Value[uint64] {
 
 func (c *SystemData) newPullStarted() values.Value[uint64] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("PullStarted"), false, values.Wrapped(values.UintWrapper))
+}
+
+func (c *SystemData) SyntheticDelivered(destination string) values.Value[uint64] {
+	return values.GetOrCreateMap(c, &c.syntheticDelivered, systemDataSyntheticDeliveredKey{destination}, (*SystemData).newSyntheticDelivered)
+}
+
+func (c *SystemData) newSyntheticDelivered(k systemDataSyntheticDeliveredKey) values.Value[uint64] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("SyntheticDelivered", k.Destination), false, values.Wrapped(values.UintWrapper))
+}
+
+func (c *SystemData) AnchorDelivered(destination string) values.Value[uint64] {
+	return values.GetOrCreateMap(c, &c.anchorDelivered, systemDataAnchorDeliveredKey{destination}, (*SystemData).newAnchorDelivered)
+}
+
+func (c *SystemData) newAnchorDelivered(k systemDataAnchorDeliveredKey) values.Value[uint64] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("AnchorDelivered", k.Destination), false, values.Wrapped(values.UintWrapper))
 }
 
 func (c *SystemData) TrustedNetwork() values.Value[[]byte] {
@@ -2224,6 +2266,26 @@ func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error
 		return c.ExecutedBlock(), key.SliceI(1), nil
 	case "PullStarted":
 		return c.PullStarted(), key.SliceI(1), nil
+	case "SyntheticDelivered":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for system data (4)")
+		}
+		destination, okDestination := key.Get(1).(string)
+		if !okDestination {
+			return nil, nil, errors.InternalError.With("bad key for system data (5)")
+		}
+		v := c.SyntheticDelivered(destination)
+		return v, key.SliceI(2), nil
+	case "AnchorDelivered":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for system data (6)")
+		}
+		destination, okDestination := key.Get(1).(string)
+		if !okDestination {
+			return nil, nil, errors.InternalError.With("bad key for system data (7)")
+		}
+		v := c.AnchorDelivered(destination)
+		return v, key.SliceI(2), nil
 	case "TrustedNetwork":
 		return c.TrustedNetwork(), key.SliceI(1), nil
 	case "TrustedGlobals":
@@ -2231,7 +2293,7 @@ func (c *SystemData) Resolve(key *record.Key) (record.Record, *record.Key, error
 	case "HeadOnly":
 		return c.HeadOnly(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for system data (4)")
+		return nil, nil, errors.InternalError.With("bad key for system data (8)")
 	}
 }
 
@@ -2250,6 +2312,16 @@ func (c *SystemData) IsDirty() bool {
 	}
 	if values.IsDirty(c.pullStarted) {
 		return true
+	}
+	for _, v := range c.syntheticDelivered {
+		if v.IsDirty() {
+			return true
+		}
+	}
+	for _, v := range c.anchorDelivered {
+		if v.IsDirty() {
+			return true
+		}
 	}
 	if values.IsDirty(c.trustedNetwork) {
 		return true
@@ -2282,6 +2354,12 @@ func (c *SystemData) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	if !opts.IgnoreIndices {
 		values.WalkField(&err, c.pullStarted, c.newPullStarted, opts, fn)
 	}
+	if !opts.IgnoreIndices {
+		values.WalkMap(&err, c.syntheticDelivered, c.newSyntheticDelivered, nil, opts, fn)
+	}
+	if !opts.IgnoreIndices {
+		values.WalkMap(&err, c.anchorDelivered, c.newAnchorDelivered, nil, opts, fn)
+	}
 	values.WalkField(&err, c.trustedNetwork, c.newTrustedNetwork, opts, fn)
 	values.WalkField(&err, c.trustedGlobals, c.newTrustedGlobals, opts, fn)
 	values.WalkField(&err, c.headOnly, c.newHeadOnly, opts, fn)
@@ -2299,6 +2377,12 @@ func (c *SystemData) Commit() error {
 	}
 	values.Commit(&err, c.executedBlock)
 	values.Commit(&err, c.pullStarted)
+	for _, v := range c.syntheticDelivered {
+		values.Commit(&err, v)
+	}
+	for _, v := range c.anchorDelivered {
+		values.Commit(&err, v)
+	}
 	values.Commit(&err, c.trustedNetwork)
 	values.Commit(&err, c.trustedGlobals)
 	values.Commit(&err, c.headOnly)

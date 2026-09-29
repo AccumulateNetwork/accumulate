@@ -95,6 +95,11 @@ func (p *Partition) RestartNode(i int) {
 		f.ForgetSeed()
 	}
 
+	// The producer cache is memory: a new process starts with it empty and
+	// the seed rebuilds it from the store (#4464). Kept, it held what the
+	// seed would not, and a restart test proved the cache and not the seed.
+	n.synthCache.Reset()
+
 	// The daemon's own read: the record no pull writes (#4344), not the
 	// ledger the pull overwrites.
 	last, err := join.LastExecutedBlock(n.database, p.ID)

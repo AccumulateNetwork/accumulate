@@ -452,6 +452,24 @@
       # too: its state is no block's (#4447).
       type: index
       dataType: uint
+    - name: SyntheticDelivered
+      # The number a destination has delivered of this partition's
+      # synthetic stream to it, as this node's producer cache applied the
+      # destination's word (healing spec, "The cache"; #4464). Written with
+      # the block that applies it; read once, at start-up, so the seed
+      # rebuilds the cache from it. Node-local: not an account, not hashed.
+      type: index
+      dataType: uint
+      parameters:
+      - name: Destination
+        type: string
+    - name: AnchorDelivered
+      # The same for this partition's anchor stream, per destination.
+      type: index
+      dataType: uint
+      parameters:
+      - name: Destination
+        type: string
     - name: TrustedNetwork
       # The network definition THIS node trusts to verify its partition's
       # anchors, marshalled. It is here and not read from <partition>/network

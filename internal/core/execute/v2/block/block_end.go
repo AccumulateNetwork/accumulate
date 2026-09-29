@@ -91,6 +91,15 @@ func (block *Block) close() (execute.BlockState, error) {
 		return nil, errors.UnknownError.WithFormat("record this node's executed block: %w", err)
 	}
 
+	// What each destination has delivered of our streams, as this block's
+	// commit applies it to the cache: the seed rebuilds the cache from it at
+	// the next start (#4464). In the block's batch, so it is never ahead of
+	// the release it records.
+	err = m.recordSettled(block.Batch, block.Index)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("record the destinations' delivered: %w", err)
+	}
+
 	// Write each stream's advances to its ledger, once per stream (#4169 step
 	// 7). Before anything else reads or writes those records: production
 	// bumps Produced on the same ledger below.

@@ -64,27 +64,63 @@ func TestTxn_CommitAndDiscard(t *testing.T) {
 
 // The horizon clears whole blocks and everything they produced, and the
 // newest block is never trimmed.
+// The horizon never drops an undelivered entry or anchor (#4464): it drops
+// only blocks that hold nothing to serve. What bounds the cache is its memory
+// bound, which drops the oldest.
 func TestTrim(t *testing.T) {
 	c := New(3)
 	for b := uint64(1); b <= 6; b++ {
 		tx := c.Begin(b)
-		e := entry(b, "acc://bvn-BVN1.acme", b, int64(b))
-		tx.Add(e)
-		tx.SetBlock(&Block{Index: b, Entries: []*Entry{e}})
+		blk := &Block{Index: b}
+		if b%2 == 0 {
+			e := entry(b, "acc://bvn-BVN1.acme", b/2, int64(b/2-1))
+			tx.Add(e)
+			blk.Entries = []*Entry{e}
+		}
+		tx.SetBlock(blk)
 		tx.AddAnchor(b, b-1, &protocol.Transaction{})
 		tx.Commit()
 	}
 	entries, blocks := c.Len()
-	require.Equal(t, 4, blocks, "the newest block and the horizon before it: 3,4,5,6")
-	require.Equal(t, 4, entries)
-	_, ok := c.Block(2)
+	require.Equal(t, 3, entries, "every undelivered entry is held past the horizon")
+	require.Equal(t, 5, blocks, "the empty blocks 1 and 3 the horizon has passed are dropped; 5 is within it")
+	_, ok := c.Block(1)
 	require.False(t, ok)
-	_, ok = c.Block(6)
+	_, ok = c.Block(2)
 	require.True(t, ok)
 	_, _, ok = c.Anchor(1)
-	require.False(t, ok)
-	_, _, ok = c.Anchor(6)
+	require.True(t, ok, "an undelivered anchor is held past the horizon")
+
+	// The bound drops the oldest
+	c.SetBound(2, 4)
+	tx := c.Begin(7)
+	tx.SetBlock(&Block{Index: 7})
+	tx.Commit()
+	entries, _ = c.Len()
+	require.Equal(t, 2, entries)
+	_, ok = c.Block(2)
+	require.False(t, ok, "the oldest entry's block goes at the bound")
+	require.Equal(t, 4, c.AnchorLen())
+	_, _, ok = c.Anchor(2)
+	require.False(t, ok, "the oldest anchors go at the bound")
+	_, _, ok = c.Anchor(3)
 	require.True(t, ok)
+}
+
+// SettledBy is what a block's commit applies: the words whose grace has run.
+func TestCache_SettledBy(t *testing.T) {
+	c := New(0)
+	bvn1 := protocol.PartitionUrl("BVN1")
+	tx := c.Begin(10)
+	tx.Release(bvn1, 7)
+	tx.ReleaseAnchors(bvn1, 5, 1)
+	tx.Commit()
+	s, a := c.SettledBy(10 + RejoinGrace - 1)
+	require.Empty(t, s)
+	require.Empty(t, a)
+	s, a = c.SettledBy(10 + RejoinGrace)
+	require.Equal(t, map[string]uint64{StreamKey(bvn1): 7}, s)
+	require.Equal(t, map[string]uint64{StreamKey(bvn1): 5}, a)
 }
 
 // A destination's word — it has executed our stream through n — releases the
