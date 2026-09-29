@@ -14,12 +14,13 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
-func Open(a, b keyvalue.Beginner) keyvalue.Beginner {
-	return &Database{a, b}
+func Open(a, b keyvalue.Beginner) *Database {
+	return &Database{a: a, b: b}
 }
 
 type Database struct {
-	a, b keyvalue.Beginner
+	a, b   keyvalue.Beginner
+	repair *repairer
 }
 
 func (d *Database) Begin(prefix *database.Key, writable bool) keyvalue.ChangeSet {
@@ -27,14 +28,14 @@ func (d *Database) Begin(prefix *database.Key, writable bool) keyvalue.ChangeSet
 	b := d.b.Begin(prefix, false)
 
 	return memory.NewChangeSet(memory.ChangeSetOptions{
-		Get:     func(key *record.Key) ([]byte, error) { return get(a, b, key) },
+		Get:     func(key *record.Key) ([]byte, error) { return get(a, b, key, d.repair) },
 		ForEach: func(fn func(*record.Key, []byte) error) error { return forEach(a, b, fn) },
 		Discard: func() { a.Discard(); b.Discard() },
 		Commit:  func(m map[[32]byte]memory.Entry) error { return commit(a, b, m) },
 	})
 }
 
-func get(a, b keyvalue.ChangeSet, key *record.Key) ([]byte, error) {
+func get(a, b keyvalue.ChangeSet, key *record.Key, repair *repairer) ([]byte, error) {
 	// Get from a
 	v, err := a.Get(key)
 	switch {
@@ -48,6 +49,7 @@ func get(a, b keyvalue.ChangeSet, key *record.Key) ([]byte, error) {
 	v, err = b.Get(key)
 	switch {
 	case err == nil:
+		repair.enqueue(key, v)
 		return v, nil
 	case !errors.Is(err, errors.NotFound):
 		return nil, err

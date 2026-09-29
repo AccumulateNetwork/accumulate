@@ -600,6 +600,9 @@ Storage:
       fields:
         - name: Path
           type: string
+        - name: Sidecar
+          type: string
+          description: 'is the path to a read-only sidecar database (issue 4468). When set, a read that misses in the primary database falls through to it, and is written back into the primary in the background'
 
     - name: ExpBlockDBStorage
       class: composite
