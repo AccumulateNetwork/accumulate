@@ -167,6 +167,10 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 	m.mainDispatcher = opts.NewDispatcher()
 	m.isGenesis = false
 
+	// What the cache no longer holds is answered from this executor's chains
+	// (#4464)
+	m.synthCache().SetStore(m)
+
 	if opts.Logger != nil {
 		m.logger.L = opts.Logger.With("module", "executor")
 	}

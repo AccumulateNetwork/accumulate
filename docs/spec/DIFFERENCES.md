@@ -1794,8 +1794,9 @@ synthetic and anchor in play, keyed by hash and by stream position, with what
 its proofs are built from; dispatch and healing read it and nothing else;
 cleared as the destination delivers; a miss is refused and counted.
 
-**Code**: built (`internal/core/synthcache`). Dispatch and the sequencer's
-answers are built from it alone; the e2e suite fails on a dispatch miss.
+**Code**: built (`internal/core/synthcache`). Dispatch is built from it
+alone, the sequencer's answers from it and, for what it has let go of, from
+the source's chains (#4464); the e2e suite fails on a dispatch miss.
 Synthetic entries are released by the destination's `Delivered`, carried on
 every dispatched message and package (2026-09-06); produced anchors by the
 `Delivered` carried on every anchor copy, once every destination has spoken
@@ -1814,11 +1815,14 @@ The destination's `Delivered` of this stream — the release signal — lives on
 in the cache. A restart therefore cannot seed "what the destination has not
 delivered"; it seeds what the Directory has not receipted plus the in-flight
 tail (healing.md, "The cache"; #4241). A destination lagging more than
-`InFlightBlocks` of the source's blocks at the source's restart heals from a
-cache that lacks its entries, and the miss is counted. The fix is to persist
-the release watermark per stream as a node-local record — it is per-node
-state and must not enter the hashed ledger (executor.md, "Sync") — which is
-the cache's to do.
+`InFlightBlocks` of the source's blocks at the source's restart, or held past
+the horizon, asks for entries the cache does not hold; the miss is counted
+and the sequencer answers from the source's own chains (`synthcache.Store`,
+#4464), so the stream heals. What remains is cost, not correctness: each
+such answer rebuilds its blocks from the store, and nothing keeps them, so a
+destination far behind costs its source a store read per block per ask. A
+persisted per-stream release watermark would let the seed hold exactly what
+is owed instead.
 
 **Size**: small; the delivery signal is the open design point.
 

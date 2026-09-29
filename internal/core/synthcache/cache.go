@@ -9,8 +9,9 @@
 // still ask for, held in memory and read by dispatch and by healing. It is
 // filled at production, one write on a path the block already takes, and it
 // holds per block what a proof is built from, so a package or a bundle and
-// its proof are built from the cache alone. Any read of the historical
-// record to build one is a failure, and a miss here is counted as one.
+// its proof are built from the cache alone. A miss here is counted; what a
+// destination still lacks and the cache has let go of is rebuilt from the
+// producer's chains through the Store (#4464).
 package synthcache
 
 import (
@@ -175,6 +176,9 @@ type Cache struct {
 	lastAnchorNumber uint64
 	lastAnchorBlock  uint64
 	lastAnchorOK     bool
+
+	// the producer's chains, for what the cache no longer holds (#4464)
+	store atomic.Pointer[storeHolder]
 }
 
 type anchorEntry struct {

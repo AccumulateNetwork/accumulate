@@ -9,6 +9,7 @@ package api
 import (
 	"bytes"
 	"crypto/ed25519"
+	stderrors "errors"
 	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -25,10 +26,11 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// The answers below are built entirely from the producer's cache (healing
-// spec, "The answer", "The cache"): no chain walk, no receipt from the store,
-// no database read. An entry the cache does not hold is refused as NotFound
-// and counted as a miss by the cache; a miss is a defect.
+// The answers below are built from the producer's cache (healing spec, "The
+// answer", "The cache"). An entry the cache does not hold is counted as a
+// miss and, when this partition produced it, answered from its own chains
+// through the cache's store (#4464): a destination can fall behind what the
+// cache holds, and nothing else holds what it lacks.
 
 // signsAnswers reports whether this node's key is active on its partition in
 // the globals it holds, by the predicate the anchor send path asks
@@ -111,12 +113,83 @@ func (s *Sequencer) entryRecord(globals *core.GlobalValues, e *synthcache.Entry,
 }
 
 func (s *Sequencer) getSynthFromCache(globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
-	e, ok := s.cache.Entry(dst, num)
-	if !ok {
-		return nil, errors.NotFound.WithFormat("synthetic %d for %v is not in the cache", num, dst)
+	e, blk, _, err := s.synthEntry(dst, num, nil)
+	if err != nil {
+		return nil, err
 	}
-	blk, _ := s.cache.Block(e.Block)
 	return s.entryRecord(globals, e, blk)
+}
+
+// synthEntry finds synthetic num for dst and the block that produced it: in
+// the cache, else in rebuilt (the block the store rebuilt for the number
+// before), else rebuilt from this partition's own chains (#4464). The cache
+// holds what is in play; a destination can fall behind it — past the
+// horizon while its stream is held, or across a whole-network restart whose
+// seed reaches back only to the Directory's newest receipt — and what it
+// still lacks is on the chains, where no peer can supply it. fromStore says
+// the block came from the chains: it is old and dispatched, never in flight.
+// A cached entry whose block the cache does not hold comes with a nil block.
+func (s *Sequencer) synthEntry(dst *url.URL, num uint64, rebuilt **synthcache.Block) (_ *synthcache.Entry, _ *synthcache.Block, fromStore bool, _ error) {
+	if e, ok := s.cache.Peek(dst, num); ok {
+		synthcache.Count("entry", true)
+		blk, _ := s.cache.Block(e.Block) // nil when the cache holds the entry and not its block
+		return e, blk, false, nil
+	}
+	if rebuilt != nil && *rebuilt != nil {
+		if e := entryOf(*rebuilt, dst, num); e != nil {
+			return e, *rebuilt, true, nil
+		}
+	}
+
+	// Not produced yet is "not yet", and no miss: a quiet stream is probed
+	// every patience window and nothing is missing.
+	if produced, err := s.producedFor(dst); err == nil && num > produced {
+		return nil, nil, false, errors.NotReady.WithFormat("synthetic %d for %v is not produced yet (%d so far)", num, dst, produced)
+	}
+	synthcache.Count("entry", false)
+
+	// Produced, and not in the cache: the chains hold it
+	var notExecuted bool
+	if store := s.cache.Store(); store != nil {
+		blk, err := store.SyntheticBlock(dst, num)
+		switch {
+		case err == nil:
+			if e := entryOf(blk, dst, num); e != nil {
+				synthcache.Count("store-entry", true)
+				if rebuilt != nil {
+					*rebuilt = blk
+				}
+				return e, blk, true, nil
+			}
+		case stderrors.Is(err, synthcache.ErrNotExecuted):
+			notExecuted = true
+		case errors.Is(err, errors.NotReady):
+			return nil, nil, false, err
+		}
+		synthcache.Count("store-entry", false)
+	}
+
+	// A node that joined produced none of the blocks at or below the block
+	// it joined at, so it holds none of their entries and never will: there
+	// is no backfill on this line. That is not a miss — a miss says this node
+	// cannot answer for what it produced — and it must not be, because a
+	// miss is what strands a stream (healing spec, "Stranded streams"). It
+	// is "not from me", and the asker goes to a node that executed them
+	// (#4295).
+	if joined := s.cache.Joined(); joined > 0 || notExecuted {
+		return nil, nil, false, errors.NotReady.WithFormat("%v joined at block %d and produced nothing for %v at or before it; ask a node that did", s.partitionID, joined, dst)
+	}
+	return nil, nil, false, errors.NotFound.WithFormat("synthetic %d for %v is not in the cache", num, dst)
+}
+
+// entryOf is synthetic num for dst among the entries blk produced.
+func entryOf(blk *synthcache.Block, dst *url.URL, num uint64) *synthcache.Entry {
+	for _, e := range blk.Entries {
+		if e.Number == num && e.Stream.Equal(dst) {
+			return e
+		}
+	}
+	return nil
 }
 
 // getSynthRangeFromCache answers entries start..end for dst with one receipt
@@ -142,44 +215,27 @@ func (s *Sequencer) producedFor(dst *url.URL) (uint64, error) {
 func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.URL, start, end uint64, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
 	var records []*api.MessageRecord[messaging.Message]
 	var span *merkle.Segment
-	var last *synthcache.Block
+	var last, rebuilt *synthcache.Block
 	var lastIndex uint64
+	var firstIndex int64
 	for num := start; num <= end; num++ {
-		e, ok := s.cache.Peek(dst, num)
-		if !ok {
+		e, blk, fromStore, err := s.synthEntry(dst, num, &rebuilt)
+		if err != nil {
 			if num > start {
-				break // the range ends where production has so far
+				break // the range ends where this node can answer
 			}
-			// The first number asked for is not in the cache. Not produced
-			// yet is "not yet", and no miss: a quiet stream is probed every
-			// patience window and nothing is missing. Produced and gone is
-			// a miss, and a defect.
-			if produced, err := s.producedFor(dst); err == nil && num > produced {
-				return nil, errors.NotReady.WithFormat("synthetic %d for %v is not produced yet (%d so far)", num, dst, produced)
-			}
-			// A node that joined produced none of the blocks at or below the
-			// block it joined at, so it holds none of their entries and
-			// never will: there is no backfill on this line. That is not a
-			// miss — a miss says the cache failed to hold what this node
-			// produced — and it must not be, because a miss is what strands
-			// a stream (healing spec, "Stranded streams"). It is "not from
-			// me", and the asker goes to a node that executed them (#4295).
-			if joined := s.cache.Joined(); joined > 0 {
-				return nil, errors.NotReady.WithFormat("%v joined at block %d and produced nothing for %v at or before it; ask a node that did", s.partitionID, joined, dst)
-			}
-			synthcache.Count("entry", false)
-			return nil, errors.NotFound.WithFormat("synthetic %d for %v is not in the cache", num, dst)
+			return nil, err
 		}
-		synthcache.Count("entry", true)
 		if last == nil || last.Index != e.Block {
-			blk, ok := s.cache.Block(e.Block)
-			if !ok {
+			if blk == nil {
 				return nil, errors.NotFound.WithFormat("block %d is not in the cache", e.Block)
 			}
 			// A block still in flight is not served: its entries are on
 			// their way. Answer the dispatched prefix of the range, or "not
-			// yet" when even the first block is in flight.
-			if !s.cache.Servable(blk) {
+			// yet" when even the first block is in flight. A block rebuilt
+			// from the chains is one the cache has let go of, which a block
+			// in flight never is.
+			if !fromStore && !s.cache.Servable(blk) {
 				if len(records) > 0 {
 					break
 				}
@@ -203,6 +259,9 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 			}
 			last, lastIndex = blk, e.Block
 		}
+		if len(records) == 0 {
+			firstIndex = e.Index
+		}
 		r, err := s.entryRecord(globals, e, nil)
 		if err != nil {
 			return nil, err
@@ -217,8 +276,7 @@ func (s *Sequencer) getSynthRangeFromCache(globals *core.GlobalValues, dst *url.
 		return nil, errors.NotReady.WithFormat("the range is provable under Directory anchor %d, not %d", last.AnchorBlock, opts.ProveAgainstAnchor)
 	}
 
-	first, _ := s.cache.Entry(dst, start)
-	list, err := span.ReceiptList(first.Index, span.Last())
+	list, err := span.ReceiptList(firstIndex, span.Last())
 	if err != nil {
 		return nil, errors.InternalError.WithFormat("build receipt list: %w", err)
 	}
@@ -307,9 +365,28 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 func (s *Sequencer) getAnchorFromCache(globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	txn, _, ok := s.cache.Anchor(num)
 	if !ok {
+		txn, _, ok = s.anchorFromStore(num)
+	}
+	if !ok {
 		return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
 	}
 	return s.anchorRecord(globals, dst, num, txn)
+}
+
+// anchorFromStore reads a produced anchor the cache no longer holds from the
+// anchor sequence chain (#4464): a destination behind by more than the cache
+// holds is answered from the record, where nothing else can answer it.
+func (s *Sequencer) anchorFromStore(num uint64) (*protocol.Transaction, uint64, bool) {
+	store := s.cache.Store()
+	if store == nil {
+		return nil, 0, false
+	}
+	txn, block, err := store.ProducedAnchor(num)
+	if errors.Is(err, errors.NotFound) {
+		return nil, 0, false // not produced, or not held
+	}
+	synthcache.Count("store-anchor", err == nil)
+	return txn, block, err == nil
 }
 
 // getAnchorRangeFromCache answers anchors start..end, or the prefix of them
@@ -322,6 +399,12 @@ func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url
 	var records []*api.MessageRecord[messaging.Message]
 	for num := start; num <= end; num++ {
 		txn, block, ok := s.cache.PeekAnchor(num)
+		if ok {
+			synthcache.Count("anchor", true)
+		} else {
+			// Produced, and not in the cache: the chain holds it
+			txn, block, ok = s.anchorFromStore(num)
+		}
 		if !ok {
 			if len(records) > 0 {
 				return records, nil
@@ -332,7 +415,6 @@ func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url
 			synthcache.Count("anchor", false)
 			return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
 		}
-		synthcache.Count("anchor", true)
 		// The window is the sender's, not this node's mark: it widens by
 		// how far this node's executor is behind consensus, because the
 		// leader that actually sent the anchor is behind by about as much
