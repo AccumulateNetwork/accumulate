@@ -793,6 +793,40 @@ def apply_delivery_stall(progress, red_for):
     return progress
 
 
+def progress_heights(ledger, executed):
+    """The height each partition's stall clock runs on: the highest block its
+    validators have EXECUTED (accumulate_node_executed_block, the max over the
+    validators that answered the last scrape), floored by the ledger index.
+
+    The ledger index alone is not liveness. It moves only when a block writes
+    something, so an idle or lightly loaded network executing empty blocks at
+    one a second reads frozen on it. Run 20260928T235326Z (attached after a
+    whole-network recreate, 10 tps) had every partition's ledger index still
+    for five minutes while each executed ~1 block/s, and stallkill stopped the
+    run as "stalled 307s: BVN1,BVN2,BVN3,Directory". Both numbers are block
+    numbers, so the max of the two is one height; a validator that restarts
+    and answers low cannot drag it down while any other answers.
+
+    `executed` is {Partition: block}, as collect_metrics returns it under
+    `executedHeights`. A partition missing from both is None (unknown)."""
+    out = {}
+    for part in set(ledger or {}) | set(executed or {}):
+        v = [x for x in ((ledger or {}).get(part), (executed or {}).get(part))
+             if x is not None]
+        out[part] = max(v) if v else None
+    return out
+
+
+def executed_heights_from(per):
+    """{Partition: highest block any of these nodes executed}, from parsed
+    scrapes {container: [(name, labels, value)]}. Pass validators only."""
+    canon = {heights.canon_part(p): p for p in PARTITIONS}
+    exh = heights.partition_heights(
+        {n: heights.executed_from_rows(r) for n, r in (per or {}).items()},
+        list(per or {}))
+    return {canon[k]: v["height"] for k, v in exh.items() if k in canon}
+
+
 def assess_progress(heights, now):
     """Classify each partition as live, stalled, or unknown.
 
@@ -813,8 +847,11 @@ def assess_progress(heights, now):
             # omitting the partition and letting a blank read as fine.
             out[part] = {"height": None, "state": "unknown", "stalledFor": None}
             continue
+        # Movement is a height ABOVE the highest yet seen, not any change: a
+        # restarted or recreated validator can answer lower for a while, and
+        # a drop is not progress.
         prev = _PROGRESS.get(part)
-        if prev is None or prev["height"] != h:
+        if prev is None or h > prev["height"]:
             _PROGRESS[part] = {"height": h, "since": now}
         stalled = now - _PROGRESS[part]["since"]
 
@@ -2439,7 +2476,9 @@ def collect_metrics():
 
     ex = exec_from(per)
     ex["scope"] = SCOPE_VAL
-    return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": ex,
+    # Followers are already out of `per`.
+    executed_heights = executed_heights_from(per)
+    return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": ex, "executedHeights": executed_heights,
             "nodeState": nstate,
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)
@@ -2864,7 +2903,13 @@ def _collect_once(last, hist):
         if now - last["height"] >= I_HEIGHT:
             upd["network"] = collect_height()
             upd["heights"] = collect_heights()
-            upd["progress"] = assess_progress(upd["heights"], now)
+            # The stall clock runs on the executed height, not the ledger
+            # index alone (progress_heights). The executed reading is the last
+            # metrics scrape's, every I_FLOW seconds, inside STALL_SECS.
+            with LOCK:
+                exh = STATE.get("executedHeights")
+            upd["progress"] = assess_progress(
+                progress_heights(upd["heights"], exh), now)
             # The follower (#4365), against the validators' max read above.
             # Its own reading, not a thirteenth probe port: the max hides a
             # lagging node by construction, which is the whole measurement.
@@ -2887,6 +2932,7 @@ def _collect_once(last, hist):
             upd["ancProduced"] = m["ancProduced"]
             upd["life"] = m.get("life", {})
             upd["exec"] = m.get("exec", {})
+            upd["executedHeights"] = m.get("executedHeights", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
             upd["nodeState"] = m.get("nodeState", {})

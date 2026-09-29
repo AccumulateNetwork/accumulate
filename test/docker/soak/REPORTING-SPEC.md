@@ -611,6 +611,15 @@ by which it is (#4414).** The watchdogs read a partition as stalled either way
 (`deliveryStalledFor`); `stalledBy` is `blocks` when the height has not moved
 for the stall threshold and `delivery` when it has and only delivery stopped.
 
+**The partition's height, for these clocks, is the highest block its
+validators have executed** (`accumulate_node_executed_block`, max over the
+validators that answered the last scrape), floored by the ledger index; it
+moves only when it rises above the highest yet seen. The ledger index alone
+moves only when a block writes something, so an idle or lightly loaded
+network reads frozen on it: run 20260928T235326Z was stopped as "stalled
+307s" on all four partitions while each executed about a block a second.
+`progress.<partition>.height` is that executed height, not the ledger index.
+
 - **Wedge** — some partition closed no block for `WEDGE_SECS`. The capture is
   `wedge-<ts>/`.
 - **Delivery stall** — every partition closed a block within the last
