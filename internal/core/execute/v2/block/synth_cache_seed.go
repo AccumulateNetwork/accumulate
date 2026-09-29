@@ -143,6 +143,7 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load anchor pool main chain head: %w", err)
 	}
+	own := x.Describe.PartitionUrl().URL
 	var receipts []ownReceipt
 	bound := oldest
 	for i := head.Count - 1; i >= 0; i-- {
@@ -170,7 +171,15 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 		if !ok {
 			continue
 		}
-		found := x.ownReceiptsOf(body)
+		var found []ownReceipt
+		if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
+			found = append(found, ownReceipt{block: body.MinorBlockIndex, anchorBlock: body.MinorBlockIndex})
+		}
+		for _, r := range body.Receipts {
+			if own.LocalTo(r.Anchor.Source) {
+				found = append(found, ownReceipt{block: r.Anchor.MinorBlockIndex, anchorBlock: body.MinorBlockIndex, receipt: r})
+			}
+		}
 		if len(found) == 0 {
 			continue
 		}
@@ -198,23 +207,6 @@ func (x *Executor) ownReceipts(batch *database.Batch, oldest uint64) ([]ownRecei
 		}
 	}
 	return receipts, nil
-}
-
-// ownReceiptsOf is what a Directory anchor receipts of this partition's
-// blocks: on the Directory, the anchor's own block first, which it dispatches
-// with no receipt, then the receipts it carries for this partition's anchors.
-func (x *Executor) ownReceiptsOf(body *protocol.DirectoryAnchor) []ownReceipt {
-	own := x.Describe.PartitionUrl().URL
-	var found []ownReceipt
-	if x.Describe.NetworkType == protocol.PartitionTypeDirectory {
-		found = append(found, ownReceipt{block: body.MinorBlockIndex, anchorBlock: body.MinorBlockIndex})
-	}
-	for _, r := range body.Receipts {
-		if own.LocalTo(r.Anchor.Source) {
-			found = append(found, ownReceipt{block: r.Anchor.MinorBlockIndex, anchorBlock: body.MinorBlockIndex, receipt: r})
-		}
-	}
-	return found
 }
 
 // notExecutedError is the store's evidence that this node did not execute a

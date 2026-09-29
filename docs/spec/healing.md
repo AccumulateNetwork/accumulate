@@ -369,8 +369,9 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   production.
 - **Read by dispatch and by healing.** The executor builds every package from
   it (executor.md, "Dispatch"); the sequencer builds every bundle from it.
-  Dispatch never reads the historical record, and healing reads it only for
-  what the cache has let go of (below); each such read is counted.
+  Neither reads the historical record for anything: **any read of the
+  historical record while building a package, a bundle or a proof is a
+  failure**, and it is counted.
 - **Contents.** The sequenced message and, when it has one, the transaction it
   belongs to; and, per block and per destination, what a proof is built from —
   the block's span on that destination's synthetic chain and the receipt to
@@ -402,21 +403,12 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   validator of the sender (a synthetic about to execute, an anchor copy whose
   signature is recorded): a collected entry's word is not trusted, since
   dropping what a source still needs would leave it a gap no one can fill.
-- **What the cache has let go of is answered from the producer's own
-  chains.** Every entry is also persisted to the permanent layer through
-  execution, and a destination can fall behind the cache: its stream held
-  past the horizon, or a whole-network restart, where every cache is seeded
-  only back to the Directory's newest receipt and every peer restarted too.
-  What it still lacks was produced, is on the source's synthetic and anchor
-  sequence chains, and exists nowhere else, so the source rebuilds it from
-  them — the block that produced the entry, as the seed rebuilds it, proven
-  under the Directory anchor that receipted it; the anchor, from the anchor
-  sequence chain — and answers (#4464). A request the cache does not hold is
-  still **counted as a miss**, and the read from the chains is counted as
-  its own kind: dispatch never takes it, and on a healthy network healing
-  does not either. Only an entry that is neither held nor on this node's
-  chains is refused: not produced yet, or produced by blocks a join carried
-  this node past, which the nodes that executed them answer for.
+- **Never served from storage.** Every entry is also persisted to the
+  permanent layer through execution; that is the record, not a fallback. A
+  request for an entry the cache does not hold is refused and **counted as a
+  miss** with its depth — a miss means the cache is undersized or the request
+  is stale, and either is a defect worth a number. The historical record is
+  not read to build an answer.
 - **Nothing is invalidated.** An entry's content cannot change under its index
   or its hash.
 
@@ -538,19 +530,9 @@ byte-identically to the stored chain) with the receipt from that chain's
 anchor to the block's root, built at close from the root chain segment the
 block appended; the Directory receipt and anchor the
 block was dispatched under, recorded at dispatch (`MarkDispatched`).
-Dispatch (`sendSyntheticTransactionsForBlock`) reads it and nothing else.
-The sequencer service (`sequencer_cache.go`) reads it first; a miss is
-counted (`accumulate_synthcache_misses_total{kind}`) and, for a number the
-source has produced, answered from the executor, the cache's
-`synthcache.Store` (#4464): `SyntheticBlock` finds the block on the stream's
-synthetic index chain, rebuilds it as the seed does (`rebuildCacheBlock`),
-and finds the Directory anchor that receipted it by bisecting the anchor
-pool on the newest own block each Directory anchor receipts
-(`dispatchedUnder`; on the Directory, its own anchor for the block);
-`ProducedAnchor` reads the anchor sequence chain. Reads answered and refused
-count as the kinds `store-entry` and `store-anchor`. A block this node did
-not execute is `NotReady`, "ask a node that did"; a block the Directory has
-not receipted is `NotReady`; what the store does not hold is `NotFound`. Released by
+Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
+(`sequencer_cache.go`) read it and nothing else; a miss is refused as
+`NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Released by
 the destination's `Delivered` carried on every dispatched `SyntheticProof`
 and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
 at commit: the stream's entries at or below it, the block segments that held
