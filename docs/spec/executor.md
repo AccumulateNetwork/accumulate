@@ -2208,6 +2208,23 @@ when (#4279). Every block therefore writes, at Info, `module=stream`:
   every block, and before this line nothing said so: #4423 froze a
   stream with `waiting=0` and the entry at the head read `delivered` for as
   long as the run lasted.
+- **`Stream head blocked`**, when the stream's next number is held and not
+  runnable: `block`, `ledger`, `source`, `number`, `delivered`, `received`,
+  `held` (the held entry's hash), `validated` (the hash validated at that
+  number, or `none`), `own-proof`, and for an entry that arrived with its own
+  proof `proof-anchor`, `proof-anchor-block` and `anchor-executed`. `reason`
+  names the condition of runnability that refused it: `not-validated` (no
+  hash validated there and no proof of its own — it waits for a package
+  proof), `validated-hash-differs` (a different hash is validated there, which
+  no arrival can clear), `own-proof-anchor-not-executed` (its own proof names
+  a Directory anchor not on this node's Directory anchor chain),
+  `anchor-below-quorum`, or `error` with the error. Counted at every stage
+  (`accumulate_exec_head_blocked_total{stream,reason}`), and logged once per
+  stream, number and reason, and again no more often than once a minute of
+  block time. A head collected ahead of its anchor is blocked for a block or
+  two in normal running; one that stays blocked is the #4465 wedge, which
+  held every number from Delivered+1 to Received with `waiting=0` and
+  said nothing.
 - **`Stream produced`**, once per destination the block sequenced
   synthetics for: `block`, `destination`, `from`, `to`, `count`. One block's
   `to` and the next block's `from` are contiguous; a gap or a step backwards

@@ -101,13 +101,23 @@ func (p *streamPosition) has(n uint64) bool {
 // COLLECTED without one is runnable only once the hash validated at its
 // number is its own (executor spec, "Collection").
 func (p *streamPosition) runnable(n uint64) bool {
+	return p.blocker(n) == nil
+}
+
+// blocker is runnable's answer with its evidence: nil when the held number may
+// run, otherwise which condition holds it back and what it saw (#4465). Built
+// only on refusal, which ends the walk, so the walk pays nothing for it.
+func (p *streamPosition) blocker(n uint64) *headBlock {
 	h := p.heldAt(n)
 	if h == nil || !h.Collected {
-		return true
+		return nil
 	}
-	if p.staging.IsValidated(p.stream.id(), n, h.Hash) {
-		return true
+	v, validated := p.staging.Validated(p.stream.id(), n)
+	if validated && v == h.Hash {
+		return nil
 	}
+	why := &headBlock{number: n, held: h.Hash, validated: validated, validatedHash: v}
+
 	// An anchor is also validated by a validator signature quorum, which
 	// builds as its copies arrive (executor spec, "One chain per pair, one
 	// stage per chain").
@@ -115,7 +125,12 @@ func (p *streamPosition) runnable(n uint64) bool {
 		if seq, ok := h.Message.(*messaging.SequencedMessage); ok {
 			if txn, ok := seq.Message.(*messaging.TransactionMessage); ok {
 				ok, err := p.block.anchorIsAdmissible(p.batch, nil, txn.Transaction, p.stream.source)
-				return err == nil && ok
+				if err == nil && ok {
+					return nil
+				}
+				why.err = err
+				why.reason = headBelowQuorum
+				return why.settle()
 			}
 		}
 	}
@@ -136,10 +151,21 @@ func (p *streamPosition) runnable(n uint64) bool {
 	if p.block != nil {
 		if proof := heldCollectionProof(h); proof != nil {
 			_, ok, err := p.block.Executor.provingAnchorIndex(p.batch, proof)
-			return err == nil && ok
+			if err == nil && ok {
+				return nil
+			}
+			why.ownProof = true
+			why.proofAnchor = proof.TerminalAnchor()
+			if proof.Anchor != nil {
+				why.proofAnchorBlock = proof.Anchor.SourceBlock
+			}
+			why.err = err
+			why.reason = headOwnProofAnchorAbsent
+			return why.settle()
 		}
 	}
-	return false
+	why.reason = headNotValidated
+	return why.settle()
 }
 
 // heldCollectionProof is the proof a held entry arrived with, if it arrived

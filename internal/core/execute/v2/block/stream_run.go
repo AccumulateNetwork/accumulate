@@ -97,7 +97,14 @@ func buildRun(pos *streamPosition, arriving map[uint64]*arrival, limit uint64) (
 			// Not in this block — is it already staged, and may it run? A
 			// collected entry waits here until the proven set covers it.
 			id, held := pos.idOf(n)
-			if !held || !pos.runnable(n) {
+			if !held {
+				goto done
+			}
+			if why := pos.blocker(n); why != nil {
+				// The stream's head is here and may not run: say why (#4465)
+				if n == pos.next() {
+					pos.noteHeadBlocked(why)
+				}
 				goto done
 			}
 			run = append(run, runEntry{number: n, staged: id, envIdx: -1})

@@ -47,6 +47,7 @@ type Executor struct {
 	logger             logging.OptionalLogger
 	streamLog          streamLogState
 	runStopLog         runStopLogState
+	headBlockLog       headBlockLogState
 	db                 database.Beginner
 	cacheOnce          sync.Once
 	cacheDefault       *synthcache.Cache
