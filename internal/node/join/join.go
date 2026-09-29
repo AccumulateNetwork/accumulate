@@ -162,9 +162,9 @@ type State interface {
 	Demote(block uint64)
 
 	// Resumable reports the block this node executed itself, and whether it
-	// may execute from there with nothing matched: every validator of the
-	// partition that answered is joining too, and nothing has been pulled
-	// into this store. That is a partition restarted as a whole, and no peer
+	// may execute from there with nothing matched: validators of the
+	// partition that answered are joining, fewer serve than sign an anchor
+	// (#4466), and nothing has been pulled into this store. That is a partition restarted as a whole, and no peer
 	// holds a state to start from but its own (executor spec, "Sync", "A
 	// partition that restarts as a whole"; #4447).
 	Resumable() (uint64, bool)
@@ -415,9 +415,10 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 		}
 		if !ok {
 			// Nothing to join from: every peer that answered is joining
-			// too, and this node holds only what it executed. The partition
-			// restarted as a whole, and each validator executes from its own
-			// last block, as it would had it never stopped (#4447).
+			// too, or too few serve to sign an anchor (#4466), and this
+			// node holds only what it executed. The partition restarted as
+			// a whole, and each validator executes from its own last block,
+			// as it would had it never stopped (#4447).
 			if q, own := opts.State.Resumable(); own && resume(opts, log, q, &failures) {
 				return q, nil
 			}
@@ -551,7 +552,7 @@ func resume(opts Options, log *slog.Logger, q uint64, failures *int) bool {
 	err := opts.Buffer.Resume()
 	switch {
 	case err == nil:
-		log.Info("Every peer that answered is joining too: the partition restarted as a whole; executing from this node's own last block",
+		log.Info("The partition restarted as a whole: its peers are joining, and too few serve to sign an anchor; executing from this node's own last block",
 			"block", q)
 		if err := opts.State.Executing(q); err != nil {
 			log.Error("The node is executing from its own last block and could not say so; it stays BOOTING", "block", q, "error", err)

@@ -169,8 +169,15 @@ func restartAndJoin(t *testing.T, sim *Sim, nodes []restartTarget) []bool {
 		n.part.RestartNode(n.node)
 		require.True(t, n.part.Joining(n.node))
 	}
+	return joinRestarted(t, sim, nodes, 60*time.Second)
+}
+
+// joinRestarted runs the joins of nodes already restarted, together, while
+// the network steps, as restartAndJoin does, for at most timeout.
+func joinRestarted(t *testing.T, sim *Sim, nodes []restartTarget, timeout time.Duration) []bool {
+	t.Helper()
 	var mu sync.Mutex
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	exited := make([]atomic.Bool, len(nodes))
 	errs := make([]error, len(nodes))

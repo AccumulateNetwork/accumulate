@@ -170,10 +170,10 @@ type PulledState struct {
 	repairs int
 
 	// peersJoining is whether the last round that asked the partition's
-	// peers for their block found every one that answered refusing as
-	// joining, and none serving (peersBlock). pulled is whether this process
-	// has started a pull: from then its store holds a peer's accounts
-	// (Resumable).
+	// peers for their block found some refusing as joining, and fewer
+	// serving than the partition's validators need to sign an anchor
+	// (peersBlock; #4466). pulled is whether this process has started a
+	// pull: from then its store holds a peer's accounts (Resumable).
 	peersJoining bool
 	pulled       bool
 
@@ -558,6 +558,19 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		// No peer could say where the partition is. Nothing is lost by
 		// waiting: the records are read from where they stopped.
 		s.log.Info("No peer could say which block the partition is at this round", "partition", s.partition, "error", err)
+		return nil
+	}
+
+	// Peers serve, but fewer than sign an anchor: the first of a partition
+	// restarted as a whole to resume (#4466). A pull from them waits for an
+	// anchor a quorum signed, and none will be signed until more of the
+	// partition executes -- a joining validator signs nothing -- so a node
+	// that can resume from its own block does, and pulls nothing. Once it
+	// had pulled, its store would be no block's state and it could never
+	// resume.
+	if _, ok := s.Resumable(); ok {
+		s.log.Info("Fewer of this partition's validators serve than sign an anchor; resuming from this node's own block rather than pulling from them",
+			"partition", s.partition, "block", s.executed, "threshold", s.signingThreshold())
 		return nil
 	}
 
@@ -1456,7 +1469,7 @@ func (s *PulledState) peersBlock(ctx context.Context) (peersAt, error) {
 	var at []named
 	var last error
 	var joining, other int
-	defer func() { s.peersJoining = joining > 0 && other == 0 }()
+	defer func() { s.peersJoining = joining > 0 && uint64(other) < s.signingThreshold() }()
 	for _, src := range srcs {
 		n, err := ledgerIndexOf(ctx, src, s.partition)
 		switch {
@@ -1500,6 +1513,21 @@ func ledgerIndexOf(ctx context.Context, src pull.Source, partition *url.URL) (ui
 			partition.JoinPath(protocol.Ledger), rec.Account.Type())
 	}
 	return ledger.Index, nil
+}
+
+// signingThreshold is how many of this partition's validators sign an anchor,
+// in the set this node trusts; one when it names none, so that a peer serving
+// is then, as before #4466, one to join from.
+func (s *PulledState) signingThreshold() uint64 {
+	id, ok := protocol.ParsePartitionUrl(s.partition)
+	if !ok || s.authority == nil {
+		return 1
+	}
+	set, err := s.authority.SetFor(id)
+	if err != nil || set.Threshold == 0 {
+		return 1
+	}
+	return set.Threshold
 }
 
 // TrustedVersion is the network definition version this join verifies
@@ -1653,9 +1681,14 @@ func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source
 // whole (executor spec, "Sync", "A partition that restarts as a whole";
 // #4447). That is so when both hold:
 //
-//   - the last round found every peer that answered refusing as joining, and
-//     none serving or busy. An unreachable peer says nothing either way; a
-//     peer that serves is one to join from.
+//   - the last round found peers refusing as joining, and fewer serving or
+//     busy than the partition's threshold of anchor signers (#4466). An
+//     unreachable peer says nothing either way. Peers that serve are ones to
+//     join from only when enough of them serve to sign the anchor a join
+//     matches against: a joining validator signs nothing, so with fewer, no
+//     anchor after the restart reaches its quorum until more resume. The
+//     first validators of a partition restarted as a whole to resume serve
+//     again, and are as few as the race made them.
 //   - the store is this node's own execution through that block: no pull has
 //     started, in this process or in one before it that did not hand off
 //     (PullStarted), and the record the executor writes with every block
