@@ -604,7 +604,12 @@ left to backfill are recorded under `SystemData(partition).HeadOnly` as they
 are taken and cleared as they are backfilled, so a restart before the
 backfill ends still backfills them: the next join finds their leaves equal to
 the peers' and takes nothing of them
-(`TestARestartBeforeTheBackfillEndsStillBackfills`).
+(`TestARestartBeforeTheBackfillEndsStillBackfills`). How much is left is
+visible: `accumulate_join_backfill_accounts_left{partition}` counts the
+accounts not yet held whole, `Backfilling the history of accounts taken by
+their chain heads` says how far it has got at most once a minute, and `The
+backfill is done: every account is held whole` is said once when the last is
+brought in (#4471).
 
 **A message is proven by its entry.** The leaf covers a chain's head, and the
 head covers its entries, but an entry of a transaction chain is the hash of a

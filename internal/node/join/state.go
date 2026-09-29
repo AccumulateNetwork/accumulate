@@ -147,6 +147,11 @@ type PulledState struct {
 	// (markHeadOnly).
 	headOnly map[[32]byte]*url.URL
 
+	// backfilled counts the accounts this process has backfilled, and
+	// backfillSaid is when the backfill last said how far it had got (#4471).
+	backfilled   int
+	backfillSaid time.Time
+
 	// entire are the accounts this node holds whole, every entry of every
 	// chain with the message behind it (backfillOne). A whole pull of one
 	// goes on from what it holds, so it stays entire.
@@ -434,6 +439,17 @@ var mSpineStalled = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Name:      "spine_stalled_entry",
 	Help: "The sequence number of the partition's own anchor the join's anchor source is held at " +
 		"because no quorum of the partition's validators signed it; -1 when it is not held",
+}, []string{"partition"})
+
+// mBackfillLeft is how many accounts the join took by their chain heads alone
+// and has not yet brought in whole: the history a node still lacks after it
+// is ACTIVE (executor spec, "Past the match, every account taken by its heads
+// is brought in whole"; #4471).
+var mBackfillLeft = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "backfill_accounts_left",
+	Help:      "Accounts taken by their chain heads alone and not yet backfilled whole",
 }, []string{"partition"})
 
 // stallSayEvery is how often a stall, and a refusal repeated word for word,

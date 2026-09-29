@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -162,16 +163,40 @@ const backfillPerCheck = 64
 // chain's head, so it runs while the node executes. An account that cannot be
 // backfilled now is tried again on a later check.
 func (s *PulledState) backfill(ctx context.Context) {
+	if len(s.headOnly) == 0 {
+		return
+	}
 	n := 0
 	for k, u := range s.headOnly {
 		if n >= backfillPerCheck || ctx.Err() != nil {
-			return
+			break
 		}
 		n++
 		if s.backfillOne(ctx, u) {
 			s.unmarkHeadOnly(k)
+			s.backfilled++
 		}
 	}
+	s.sayBackfill()
+}
+
+// sayBackfill reports how much history is left to bring in: always on the
+// gauge, in the log at most once a minute, and once when the last account is
+// held whole (#4471).
+func (s *PulledState) sayBackfill() {
+	left := len(s.headOnly)
+	mBackfillLeft.WithLabelValues(s.label).Set(float64(left))
+	if left == 0 {
+		s.log.Info("The backfill is done: every account is held whole",
+			"partition", s.partition, "backfilled", s.backfilled, "executed", s.executed)
+		return
+	}
+	if time.Since(s.backfillSaid) < stallSayEvery {
+		return
+	}
+	s.backfillSaid = time.Now()
+	s.log.Info("Backfilling the history of accounts taken by their chain heads",
+		"partition", s.partition, "backfilled", s.backfilled, "left", left, "executed", s.executed)
 }
 
 // markHeadOnly records that u was taken by its chain heads alone: in memory,
@@ -197,6 +222,7 @@ func (s *PulledState) markHeadOnly(urls ...*url.URL) {
 		return
 	}
 	s.writeHeadOnly(add[0], func(set values.Set[*url.URL]) error { return set.Add(add...) })
+	mBackfillLeft.WithLabelValues(s.label).Set(float64(len(s.headOnly)))
 }
 
 // unmarkHeadOnly records that the account keyed k is held whole.
