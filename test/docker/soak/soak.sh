@@ -523,9 +523,21 @@ docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
 # Streaming into the run dir preserves everything; the file is large under
 # failure storms (gigabytes) and is gitignored — summarize, don't commit it.
 # Attached, from now: the network's earlier hours belong to the run that started it.
-nohup docker compose -f "$here/../docker-compose.yml" logs -f --no-color \
-  $([ "$ATTACH" = 1 ] && echo "--since $(date -u +%FT%TZ)") \
-  >> "$rd/node-logs-live.txt" 2>&1 &
+# The capture outlives a container being recreated (a whole-network restart,
+# an upgrade): `logs -f` ends when the containers it follows go away, so it is
+# started again from where the last stream ended, and the minutes around a
+# restart -- where in-flight messages are lost -- are kept (2026-09-29: four
+# restarts went uncaptured and their losses could not be traced).
+(
+  since=$([ "$ATTACH" = 1 ] && date -u +%FT%TZ)
+  while :; do
+    docker compose -f "$here/../docker-compose.yml" logs -f --no-color \
+      ${since:+--since "$since"} >> "$rd/node-logs-live.txt" 2>&1
+    since=$(date -u -d '-2 seconds' +%FT%TZ)
+    echo "=== log capture restarted at $(date -u +%FT%TZ) (a container went away) ===" >> "$rd/node-logs-live.txt"
+    sleep 2
+  done
+) &
 LOGCAP=$!
 
 up=""; for _ in $(seq 1 90); do
