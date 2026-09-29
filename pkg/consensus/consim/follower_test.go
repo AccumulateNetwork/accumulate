@@ -69,13 +69,18 @@ func TestFollowerJoinCatchesUp(t *testing.T) {
 	// a committed leader some way below the frontier (3574 against a handoff
 	// at 3606 in the Docker run).
 	const behind = 32
+	// The join pulls and proves a state before it seeds consensus; until
+	// then the node's DAG floor is zero and every live certificate it
+	// receives waits for parents (the Docker follower's Directory started
+	// its primary at round 0 and rejoined seconds later).
+	const followerPull = 10 * time.Second
 	seeds := map[string]types.Round{}
 	seed := func(part string) types.Round {
 		seeds[part] = sim.Validators(part)[0].LastCommitRound() - behind
 		return seeds[part]
 	}
 	parts := []string{"Directory", "BVN1"}
-	followers, err := sim.JoinFollower(ctx, seed, parts...)
+	followers, err := sim.JoinFollower(ctx, seed, followerPull, parts...)
 	if err != nil {
 		t.Fatalf("join follower: %v", err)
 	}

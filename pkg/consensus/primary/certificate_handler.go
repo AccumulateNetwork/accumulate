@@ -91,6 +91,22 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) Ce
 				if p.pendingCerts.Contains(cert.Digest()) {
 					return CertBuffered // already held
 				}
+				// The buffer is full and will not hold it. If this is a
+				// certificate the node needs to advance, ask for its parents
+				// anyway: re-delivery (round catch-up, stall recovery) brings
+				// the certificate back, and without the parents it is refused
+				// again every time. After a Rejoin at P the certificates at
+				// P+2 name, as weak links, those of P-6..P-1, which no round
+				// request asks for, while gossip fills the buffer with
+				// frontier certificates it never prunes -- a follower's
+				// Directory sat at P+2 for four minutes (#4469). Certificates
+				// further ahead are left to round catch-up.
+				p.roundMu.Lock()
+				needed := cert.Round() <= p.currentRound+1
+				p.roundMu.Unlock()
+				if needed && p.requestParents != nil {
+					p.requestParents(missingParents)
+				}
 				return CertDropped
 			}
 			return CertFailed

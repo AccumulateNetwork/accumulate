@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -21,11 +22,14 @@ import (
 
 // JoinFollower adds a node that is in no committee to a running network, as
 // a follower joins the soak: its own host and pubsub connected to every
-// validator, one consensus node per named partition with ordering held, each
-// seeded by Rejoin at seed(part) once started (internal/node/dagbft does the
-// same with the round its pulled state records, #4405). Its committed groups
-// are drained and reported executed; it takes no part in stall detection.
-func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Round, parts ...string) ([]*consensus.Node, error) {
+// validator, one consensus node per named partition, started with ordering
+// held. After pull -- the time the join takes to pull and prove a state --
+// each is seeded by Rejoin at seed(part), as internal/node/dagbft seeds it
+// with the leader round its pulled state records (#4405). Until then the
+// node receives certificates it cannot place, as the real one does. Its
+// committed groups are drained and reported executed; it takes no part in
+// stall detection.
+func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Round, pull time.Duration, parts ...string) ([]*consensus.Node, error) {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 	if err != nil {
 		return nil, fmt.Errorf("follower host: %w", err)
@@ -62,7 +66,6 @@ func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Rou
 		if err := n.Start(s.runCtx); err != nil {
 			return nil, fmt.Errorf("follower %s start: %w", part, err)
 		}
-		n.Rejoin(seed(part))
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
@@ -79,6 +82,11 @@ func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Rou
 			}
 		}()
 		nodes = append(nodes, n)
+	}
+
+	time.Sleep(pull)
+	for i, part := range parts {
+		nodes[i].Rejoin(seed(part))
 	}
 	return nodes, nil
 }

@@ -291,13 +291,33 @@ broadcast:
   parents, and so does a header it will not vote on for the same reason.
   Digest requests are batched, deduplicated for 5 s and retried up to ten
   times; the parents of every certificate held waiting are asked for again
-  every 15 s.
+  every 15 s. One request names at most 100 digests — what one response
+  carries — and a longer list goes as several requests: a peer leaves what
+  does not fit unanswered, and it would wait out the 30 s retry (#4469).
 
 A peer answers after a random delay of up to 200 ms with at most 100
 certificates, and does not answer a request whose ID it has already seen
 answered. What arrives is verified against the committee and inserted. A
 certificate whose parents are missing is held (up to `2 × 10 × committee`
-certificates) until they arrive.
+certificates) until they arrive, and its parents are asked for.
+
+**A certificate the node needs to advance is never refused without asking
+for its parents.** When the buffer is full, a certificate at or below the
+round after the node's own whose parents are missing is not held, but its
+parents are still asked for; catch-up re-delivers it, and it is inserted
+once they are in. Certificates further ahead are left to round catch-up.
+This is the common case for a node seeded by `Rejoin` at `P`, not a corner:
+the DAG accepts certificates at `P` and `P + 1` without their parents, but a
+header names as weak links every certificate of the rounds from eight below
+it to two below it, so the certificates at `P + 2` name those of
+`P − 6 … P − 1`, which no round request asks for (round catch-up starts one
+round below the node's own). And a joining node's buffer is already full:
+until `Rejoin` its floor is zero, so every live certificate gossip delivered
+while it pulled its state waits for parents, and none is pruned, being above
+its round. Refusing without asking left a follower's Directory at `P + 2`
+for four minutes, released only when a rescan happened to ask for the right
+parents (Docker run `20260929T152146Z`; consim `TestFollowerJoinCatchesUp`,
+#4469).
 
 What catch-up did is reported, per partition, in
 `accumulate_dagbft_cert_sync_requests_sent_total{kind}` (round, digest),

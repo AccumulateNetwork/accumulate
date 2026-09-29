@@ -348,13 +348,6 @@ func (s *CertSyncer) sendBatchRequest() {
 		return
 	}
 
-	// Create and send request
-	req := &gossip.CertSyncRequest{
-		Digests:   toRequest,
-		Requester: s.config.PublicKey,
-		RequestID: s.nextReqID.Add(1),
-	}
-
 	slog.Debug("Requesting missing certificates",
 		"count", len(toRequest))
 
@@ -363,16 +356,39 @@ func (s *CertSyncer) sendBatchRequest() {
 		return
 	}
 
-	if err := s.gossip.BroadcastSyncRequest(s.ctx, req); err != nil {
-		slog.Warn("Failed to broadcast sync request",
-			"partition", s.config.Partition,
-			"error", err)
-		return
+	for _, chunk := range digestChunks(toRequest) {
+		req := &gossip.CertSyncRequest{
+			Digests:   chunk,
+			Requester: s.config.PublicKey,
+			RequestID: s.nextReqID.Add(1),
+		}
+		if err := s.gossip.BroadcastSyncRequest(s.ctx, req); err != nil {
+			slog.Warn("Failed to broadcast sync request",
+				"partition", s.config.Partition,
+				"error", err)
+			return
+		}
+		s.requestsSent.Add(1)
+		metrics.CertSyncRequestsSentTotal.WithLabelValues(s.config.Partition, "digest").Inc()
+		s.window.digestRequest(len(chunk))
 	}
+}
 
-	s.requestsSent.Add(1)
-	metrics.CertSyncRequestsSentTotal.WithLabelValues(s.config.Partition, "digest").Inc()
-	s.window.digestRequest(len(toRequest))
+// digestChunks splits a digest request into requests a response can answer
+// whole. A peer answers with at most MaxSyncCertificates certificates and
+// silently leaves the rest, which then wait out the retry timeout (30 s)
+// in the in-flight set; asking for more than MaxSyncDigests fails to encode
+// and nothing is sent at all. A joining node's rescan asks for several
+// hundred at once, and the parents it needs next were beyond the first
+// hundred (#4469).
+func digestChunks(digests []types.CertificateDigest) [][]types.CertificateDigest {
+	var chunks [][]types.CertificateDigest
+	for len(digests) > 0 {
+		n := min(len(digests), gossip.MaxSyncCertificates)
+		chunks = append(chunks, digests[:n])
+		digests = digests[n:]
+	}
+	return chunks
 }
 
 // handleSyncRequests processes incoming sync requests from peers.

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -65,4 +66,31 @@ func TestRefusedCertificateStillRequestsItsParents(t *testing.T) {
 	require.Equal(t, CertDropped, p.receiveCertificate(next), "the buffer is full, so it is not held")
 	require.Equal(t, []types.CertificateDigest{absent}, asked,
 		"a refused certificate's missing parents must still be requested, or it is refused on every re-delivery")
+
+	// A refused certificate far ahead is left to round catch-up: asking for
+	// the parents of every frontier certificate would pull the frontier by
+	// digest alongside gossip.
+	asked = nil
+	require.Equal(t, CertDropped, p.receiveCertificate(certWithParent(3, 60, types.CertificateDigest{8})))
+	require.Empty(t, asked)
+}
+
+// #4469: a digest request is never larger than a response can answer. A peer
+// answers at most MaxSyncCertificates certificates and leaves the rest
+// unanswered until the 30 s retry, so a joining node asking for several
+// hundred parents at once waited on the ones it needed next.
+func TestDigestRequestsFitOneResponse(t *testing.T) {
+	digests := make([]types.CertificateDigest, 2*gossip.MaxSyncCertificates+7)
+	for i := range digests {
+		digests[i][0], digests[i][1] = byte(i), byte(i>>8)
+	}
+	chunks := digestChunks(digests)
+	require.Len(t, chunks, 3)
+	var all []types.CertificateDigest
+	for _, c := range chunks {
+		require.LessOrEqual(t, len(c), gossip.MaxSyncCertificates)
+		all = append(all, c...)
+	}
+	require.Equal(t, digests, all, "every digest is asked for, in order")
+	require.Empty(t, digestChunks(nil))
 }
