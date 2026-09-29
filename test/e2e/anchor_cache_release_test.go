@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
@@ -21,6 +22,14 @@ import (
 // partition's produced anchors are released as the destinations execute them:
 // the anchor cache holds the anchors in flight, not the horizon's worth
 // (healing spec, "The cache").
+//
+// A destination's word is applied only once it is RejoinGrace blocks old
+// (#4290), so for the first RejoinGrace blocks nothing is released and the
+// cache holds every anchor produced. The test runs past the grace and bounds
+// the cache by the anchors of the grace window at the idle heartbeat rate,
+// one every fourth block (#4463), plus the few in flight. Measured at 120
+// blocks, as it first was, it held every anchor produced and passed only
+// while idle anchors were fewer than one in four.
 func TestAnchorCacheReleasesOnDelivered(t *testing.T) {
 	globals := new(core.GlobalValues)
 	globals.ExecutorVersion = ExecutorVersionLatest
@@ -28,11 +37,12 @@ func TestAnchorCacheReleasesOnDelivered(t *testing.T) {
 		simulator.SimpleNetwork(t.Name(), 2, 1),
 		simulator.GenesisWith(GenesisTime, globals),
 	)
-	const blocks = 120
+	const blocks = synthcache.RejoinGrace + 120
+	const bound = synthcache.RejoinGrace/4 + 10
 	sim.StepN(blocks)
 	for _, part := range []string{Directory, "BVN0", "BVN1"} {
 		held := sim.S.Partition(part).SynthCache().AnchorLen()
 		t.Logf("%s holds %d produced anchors after %d blocks", part, held, blocks)
-		require.Less(t, held, blocks/4, "%s: the anchor cache should hold only the anchors in flight", part)
+		require.Less(t, held, bound, "%s: the anchor cache should hold only the anchors of the grace window and those in flight", part)
 	}
 }

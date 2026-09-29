@@ -298,11 +298,18 @@ func TestAFollowerJoinsARunningNetworkAndLeaves(t *testing.T) {
 	const window = 20
 	cadence := func() uint64 {
 		// The ledger records the last block that executed something, so
-		// after empty blocks it stands behind the partition's height. One
-		// loaded step first puts it at the height, or the window would count
-		// the empty blocks before it too (24 blocks in 20 steps, measured).
-		sim.SubmitTxnSuccessfully(send())
-		sim.Step()
+		// after empty blocks it stands behind the partition's height. Loaded
+		// steps first put it at the height, or the window would count the
+		// empty blocks before it too (24 blocks in 20 steps, measured). One
+		// is not always enough: a transaction submitted before a step
+		// executes in the block after it, so whether the first loaded step's
+		// block carries anything depends on where the heartbeat falls (21 in
+		// 20, measured, once idle blocks anchored every fourth, #4463).
+		for i := 0; partitionBlock(t, p.NodeDatabase(0), part) != sim.S.BlockIndex(p.ID); i++ {
+			require.Less(t, i, 5, "the ledger did not reach the partition's height under load")
+			sim.SubmitTxnSuccessfully(send())
+			sim.Step()
+		}
 		from := partitionBlock(t, p.NodeDatabase(0), part)
 		for i := 0; i < window; i++ {
 			sim.SubmitTxnSuccessfully(send())
