@@ -17,6 +17,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -42,6 +43,10 @@ const (
 	// DefaultSyncPendingRescanInterval is how often to rescan pending certificates
 	// and re-request their missing parents. This ensures recovery from dropped sync responses.
 	DefaultSyncPendingRescanInterval = 15 * time.Second
+
+	// DefaultSyncSummaryInterval is how often the catch-up summary is logged
+	// at Info, when there was catch-up traffic in the interval.
+	DefaultSyncSummaryInterval = 10 * time.Second
 )
 
 // CertSyncerConfig holds configuration for the CertSyncer.
@@ -67,6 +72,12 @@ type CertSyncerConfig struct {
 
 	// PublicKey is this node's public key for identifying ourselves in requests.
 	PublicKey ed25519.PublicKey
+
+	// Partition labels the syncer's metrics and log lines.
+	Partition string
+
+	// SummaryInterval is how often the catch-up summary is logged.
+	SummaryInterval time.Duration
 }
 
 // applyDefaults fills in default values for unset configuration fields.
@@ -88,6 +99,9 @@ func (c *CertSyncerConfig) applyDefaults() {
 	}
 	if c.PendingRescanInterval <= 0 {
 		c.PendingRescanInterval = DefaultSyncPendingRescanInterval
+	}
+	if c.SummaryInterval <= 0 {
+		c.SummaryInterval = DefaultSyncSummaryInterval
 	}
 }
 
@@ -116,8 +130,8 @@ type CertSyncer struct {
 	answered   map[uint64]struct{}
 	answeredMu sync.Mutex
 
-	// Callback for received certificates
-	onCertReceived func(*types.Certificate)
+	// Callback for received certificates; returns what inserting it did
+	onCertReceived func(*types.Certificate) CertOutcome
 
 	// Lifecycle management
 	ctx    context.Context
@@ -128,6 +142,9 @@ type CertSyncer struct {
 	requestsSent     atomic.Uint64
 	responsesRecv    atomic.Uint64
 	certificatesRecv atomic.Uint64
+
+	// What happened on the catch-up path since the last summary line
+	window syncWindow
 }
 
 // inFlightRequest tracks a pending sync request.
@@ -157,8 +174,9 @@ func NewCertSyncer(
 	}
 }
 
-// SetCertReceivedCallback sets the callback to invoke when a certificate is received.
-func (s *CertSyncer) SetCertReceivedCallback(cb func(*types.Certificate)) {
+// SetCertReceivedCallback sets the callback to invoke when a certificate is
+// received. It reports what inserting the certificate did.
+func (s *CertSyncer) SetCertReceivedCallback(cb func(*types.Certificate) CertOutcome) {
 	s.onCertReceived = cb
 }
 
@@ -174,6 +192,10 @@ func (s *CertSyncer) Start(ctx context.Context) error {
 	// Start retry loop
 	s.wg.Add(1)
 	go s.retryLoop()
+
+	// Start the catch-up summary
+	s.wg.Add(1)
+	go s.summaryLoop()
 
 	// Start pending rescan loop if configured
 	if s.config.PendingRescanInterval > 0 {
@@ -262,9 +284,12 @@ func (s *CertSyncer) RequestRounds(rounds []types.Round) {
 	}
 	if err := s.gossip.BroadcastSyncRequest(s.ctx, req); err != nil {
 		slog.Warn("Failed to send round sync request",
+			"partition", s.config.Partition,
 			"error", err, "start", rounds[0], "end", rounds[len(rounds)-1])
 		return
 	}
+	metrics.CertSyncRequestsSentTotal.WithLabelValues(s.config.Partition, "round").Inc()
+	s.window.roundRequest(rounds[0], rounds[len(rounds)-1])
 	slog.Debug("Requested certificates by round",
 		"start", rounds[0], "end", rounds[len(rounds)-1], "count", len(rounds))
 }
@@ -340,11 +365,14 @@ func (s *CertSyncer) sendBatchRequest() {
 
 	if err := s.gossip.BroadcastSyncRequest(s.ctx, req); err != nil {
 		slog.Warn("Failed to broadcast sync request",
+			"partition", s.config.Partition,
 			"error", err)
 		return
 	}
 
 	s.requestsSent.Add(1)
+	metrics.CertSyncRequestsSentTotal.WithLabelValues(s.config.Partition, "digest").Inc()
+	s.window.digestRequest(len(toRequest))
 }
 
 // handleSyncRequests processes incoming sync requests from peers.
@@ -397,6 +425,7 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 	_, answered := s.answered[req.RequestID]
 	s.answeredMu.Unlock()
 	if answered {
+		s.served("suppressed")
 		return
 	}
 
@@ -429,6 +458,7 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 
 	// Only respond if we have certificates to send
 	if len(certs) == 0 {
+		s.served("empty")
 		if len(req.Rounds) > 0 {
 			// A round request that matches nothing means the requester is
 			// asking for rounds we do not have — that is load-bearing
@@ -455,9 +485,11 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 
 	if err := s.gossip.BroadcastSyncResponse(s.ctx, resp); err != nil {
 		slog.Warn("Failed to send sync response",
+			"partition", s.config.Partition,
 			"error", err, "certificates", len(certs))
 		return
 	}
+	s.served("answered")
 
 	slog.Debug("Sent sync response",
 		"certificates", len(certs),
@@ -507,6 +539,8 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 	s.answeredMu.Unlock()
 
 	s.responsesRecv.Add(1)
+	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
+	s.window.response()
 
 	for _, cert := range resp.Certificates {
 		if cert == nil {
@@ -522,7 +556,9 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 
 		// Invoke callback if set
 		if s.onCertReceived != nil {
-			s.onCertReceived(cert)
+			outcome := s.onCertReceived(cert)
+			metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
+			s.window.certificate(outcome)
 		}
 
 		s.certificatesRecv.Add(1)
@@ -673,4 +709,158 @@ func (s *CertSyncer) InFlightCount() int {
 	s.inFlightMu.Lock()
 	defer s.inFlightMu.Unlock()
 	return len(s.inFlight)
+}
+
+// served records how this node handled a peer's sync request.
+func (s *CertSyncer) served(outcome string) {
+	metrics.CertSyncRequestsServedTotal.WithLabelValues(s.config.Partition, outcome).Inc()
+	s.window.served(outcome)
+}
+
+// summaryLoop logs the catch-up summary once per SummaryInterval.
+func (s *CertSyncer) summaryLoop() {
+	defer s.wg.Done()
+
+	ticker := time.NewTicker(s.config.SummaryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case <-ticker.C:
+			s.logSummary()
+		}
+	}
+}
+
+// logSummary writes one Info line for the interval just ended, if anything
+// crossed the catch-up path. The line is what distinguishes "nobody
+// answered" (round requests sent, no responses) from "everybody said no"
+// (responses received, certificates refused) -- the two need different fixes
+// and Debug logging hid both (#4469).
+func (s *CertSyncer) logSummary() {
+	w := s.window.take()
+	if w.isEmpty() {
+		return
+	}
+	args := []any{"partition", s.config.Partition}
+	if w.roundRequests > 0 {
+		args = append(args, "roundRequests", w.roundRequests, "roundsFrom", w.firstRound, "roundsTo", w.lastRound)
+	}
+	if w.digestRequests > 0 {
+		args = append(args, "digestRequests", w.digestRequests, "digestsAsked", w.digestsAsked)
+	}
+	args = append(args, "responses", w.responses, "certificates", w.certificates)
+	for _, o := range certOutcomes {
+		if n := w.outcomes[o]; n > 0 {
+			args = append(args, string(o), n)
+		}
+	}
+	if w.lastRefusal != "" {
+		args = append(args, "lastRefusal", w.lastRefusal)
+	}
+	if w.answered+w.suppressed+w.empty > 0 {
+		args = append(args, "served", w.answered, "suppressed", w.suppressed, "servedEmpty", w.empty)
+	}
+	slog.Info("Certificate catch-up", args...)
+}
+
+// CertOutcome is what inserting a received certificate did.
+type CertOutcome string
+
+const (
+	CertInserted     CertOutcome = "inserted"
+	CertDuplicate    CertOutcome = "duplicate"
+	CertBuffered     CertOutcome = "buffered"     // parents missing, held until they arrive
+	CertDropped      CertOutcome = "dropped"      // parents missing and the buffer did not take it
+	CertInvalid      CertOutcome = "invalid"      // failed verification against the committee
+	CertEquivocation CertOutcome = "equivocation" // a different certificate for the same author and round
+	CertFailed       CertOutcome = "failed"       // any other insert error
+)
+
+var certOutcomes = []CertOutcome{CertInserted, CertDuplicate, CertBuffered, CertDropped, CertInvalid, CertEquivocation, CertFailed}
+
+// syncWindow accumulates the catch-up path's events between summary lines.
+type syncWindow struct {
+	mu sync.Mutex
+	syncWindowCounts
+}
+
+type syncWindowCounts struct {
+	roundRequests         int
+	firstRound, lastRound types.Round
+	digestRequests        int
+	digestsAsked          int
+	responses             int
+	certificates          int
+	outcomes              map[CertOutcome]int
+	lastRefusal           string
+	answered, suppressed  int
+	empty                 int
+}
+
+func (c syncWindowCounts) isEmpty() bool {
+	return c.roundRequests == 0 && c.digestRequests == 0 && c.responses == 0 &&
+		c.answered == 0 && c.suppressed == 0 && c.empty == 0
+}
+
+func (w *syncWindow) take() syncWindowCounts {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	c := w.syncWindowCounts
+	w.syncWindowCounts = syncWindowCounts{}
+	return c
+}
+
+func (w *syncWindow) roundRequest(first, last types.Round) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.roundRequests == 0 || first < w.firstRound {
+		w.firstRound = first
+	}
+	if last > w.lastRound {
+		w.lastRound = last
+	}
+	w.roundRequests++
+}
+
+func (w *syncWindow) digestRequest(n int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.digestRequests++
+	w.digestsAsked += n
+}
+
+func (w *syncWindow) response() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.responses++
+}
+
+func (w *syncWindow) certificate(o CertOutcome) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.certificates++
+	if w.outcomes == nil {
+		w.outcomes = map[CertOutcome]int{}
+	}
+	w.outcomes[o]++
+	switch o {
+	case CertDropped, CertInvalid, CertEquivocation, CertFailed:
+		w.lastRefusal = string(o)
+	}
+}
+
+func (w *syncWindow) served(outcome string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	switch outcome {
+	case "answered":
+		w.answered++
+	case "suppressed":
+		w.suppressed++
+	case "empty":
+		w.empty++
+	}
 }

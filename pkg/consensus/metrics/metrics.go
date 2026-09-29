@@ -246,31 +246,50 @@ var (
 	})
 )
 
-// CertSync metrics
+// CertSync metrics: the certificate catch-up path (consensus spec,
+// "Certificate catch-up"). Labelled by partition: a node runs the Directory
+// and a BVN in one process, and the two catch up independently (#4469).
 var (
-	// CertSyncRequestsSentTotal is the total cert sync requests sent.
-	CertSyncRequestsSentTotal = promauto.NewCounter(prometheus.CounterOpts{
+	// CertSyncRequestsSentTotal counts sync requests this node broadcast, by
+	// kind: "round" (every certificate of a span of rounds) or "digest"
+	// (named missing parents).
+	CertSyncRequestsSentTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "cert_sync_requests_sent_total",
-		Help:      "Total certificate sync requests sent",
-	})
+		Help:      "Certificate sync requests sent, by partition and kind (round, digest)",
+	}, []string{"partition", "kind"})
 
-	// CertSyncResponsesReceivedTotal is the total cert sync responses received.
-	CertSyncResponsesReceivedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	// CertSyncRequestsServedTotal counts peers' sync requests this node
+	// handled, by outcome: "answered" (a response was sent), "suppressed"
+	// (a response for the request's ID had already been seen), "empty"
+	// (this node holds nothing the request names).
+	CertSyncRequestsServedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "cert_sync_requests_served_total",
+		Help:      "Peers' certificate sync requests handled, by partition and outcome (answered, suppressed, empty)",
+	}, []string{"partition", "outcome"})
+
+	// CertSyncResponsesReceivedTotal counts sync responses received. Responses
+	// are broadcast, so this includes responses to other nodes' requests.
+	CertSyncResponsesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "cert_sync_responses_received_total",
-		Help:      "Total certificate sync responses received",
-	})
+		Help:      "Certificate sync responses received, by partition",
+	}, []string{"partition"})
 
-	// CertSyncCertificatesReceivedTotal is the total certificates received via sync.
-	CertSyncCertificatesReceivedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	// CertSyncCertificatesReceivedTotal counts certificates received in sync
+	// responses, by what inserting them did: inserted, duplicate, buffered
+	// (parents missing), dropped (buffer refused it), invalid, equivocation,
+	// failed.
+	CertSyncCertificatesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "cert_sync_certificates_received_total",
-		Help:      "Total certificates received via sync",
-	})
+		Help:      "Certificates received via sync, by partition and insert outcome",
+	}, []string{"partition", "outcome"})
 )
 
 // Rate limiting metrics
@@ -469,27 +488,6 @@ func (m *Metrics) ObserveBlockProduction(partition string, seconds float64) {
 func (m *Metrics) ObserveTransactionLatency(seconds float64) {
 	if m.enabled {
 		TransactionLatencySeconds.Observe(seconds)
-	}
-}
-
-// IncCertSyncRequestsSent increments the cert sync requests sent counter.
-func (m *Metrics) IncCertSyncRequestsSent() {
-	if m.enabled {
-		CertSyncRequestsSentTotal.Inc()
-	}
-}
-
-// IncCertSyncResponsesReceived increments the cert sync responses received counter.
-func (m *Metrics) IncCertSyncResponsesReceived() {
-	if m.enabled {
-		CertSyncResponsesReceivedTotal.Inc()
-	}
-}
-
-// IncCertSyncCertificatesReceived increments the cert sync certificates received counter.
-func (m *Metrics) IncCertSyncCertificatesReceived(count int) {
-	if m.enabled {
-		CertSyncCertificatesReceivedTotal.Add(float64(count))
 	}
 }
 

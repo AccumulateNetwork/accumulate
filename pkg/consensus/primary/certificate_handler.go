@@ -19,8 +19,14 @@ import (
 
 // OnCertificateReceived handles an incoming certificate from another validator.
 func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
+	p.receiveCertificate(cert)
+}
+
+// receiveCertificate is OnCertificateReceived reporting what inserting the
+// certificate did, which the catch-up path counts (#4469).
+func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 	if cert == nil {
-		return
+		return CertFailed
 	}
 
 	// Cheap dedup FIRST: during round sync every broadcast response reaches
@@ -29,7 +35,7 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 	// Observed without this: 281k duplicate verifications in 3 minutes of
 	// catch-up (#4057).
 	if p.dag.Contains(cert.Digest()) {
-		return
+		return CertDuplicate
 	}
 
 	// Verify certificate
@@ -41,17 +47,17 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 			"round", cert.Round(),
 			"author", hexEncode(cert.Author()),
 			"digest", cert.Digest().String())
-		return
+		return CertInvalid
 	}
 
 	// Try to insert and process any newly-unblocked certificates
-	p.insertCertificateAndProcessPending(cert)
+	return p.insertCertificateAndProcessPending(cert)
 }
 
 // insertCertificateAndProcessPending attempts to insert a certificate into the DAG.
 // If insertion fails due to missing parents, the certificate is buffered.
 // If insertion succeeds, any pending certificates waiting for this one are processed.
-func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
+func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) CertOutcome {
 	// Insert into DAG (validates parents exist)
 	var err error
 	if cert.Round() == 0 {
@@ -77,12 +83,17 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 					}
 
 					// Request missing certificates via sync protocol
-					if p.certSyncer != nil {
-						p.certSyncer.RequestMissing(missingParents)
+					if p.requestParents != nil {
+						p.requestParents(missingParents)
 					}
+					return CertBuffered
 				}
+				if p.pendingCerts.Contains(cert.Digest()) {
+					return CertBuffered // already held
+				}
+				return CertDropped
 			}
-			return
+			return CertFailed
 		}
 
 		// EQUIVOCATION FIRST: a different certificate for the same author
@@ -97,19 +108,19 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 				"round", cert.Round(),
 				"author", hexEncode(cert.Author()),
 				"digest", cert.Digest().String())
-			return
+			return CertEquivocation
 		}
 		// Duplicates are routine — during round sync every broadcast response
 		// reaches every node, so most certificates have already been inserted
 		if strings.Contains(err.Error(), "already exists") {
 			slog.Debug("Duplicate certificate", "round", cert.Round())
-			return
+			return CertDuplicate
 		}
 		slog.Info("Failed to insert certificate into DAG",
 			"error", err,
 			"round", cert.Round(),
 			"digest", cert.Digest().String())
-		return
+		return CertFailed
 	}
 
 	slog.Debug("Inserted certificate from peer",
@@ -130,6 +141,7 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) {
 
 	// Maybe we can advance round now
 	p.tryAdvanceRound()
+	return CertInserted
 }
 
 // findMissingParents returns the parent digests that are not present in the DAG.

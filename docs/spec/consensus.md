@@ -273,6 +273,47 @@ are outside every peer's retention, so it could not have executed them
 frontier, and the round advance collects nothing the commit path would not.
 Collection walks only the rounds the cutoff moved over, never the whole DAG.
 
+### Certificate catch-up
+
+Certificates are broadcast once. A node that missed some — one that fell
+behind, or one that joined and was seeded at a round below the frontier
+(Restart, `Node.Rejoin`) — pulls them from its peers over the partition's
+certificate-sync topic. There are two kinds of request, and both are
+broadcast:
+
+- **By round.** A header more than one round ahead of the node's round asks
+  for every certificate of the rounds from one below the node's round
+  upward, at most 64 rounds, at most once a second
+  (`requestRoundCatchUp`). A node whose round has not advanced for 5 s
+  re-shares the certificates of its current and previous round and asks for
+  the rounds either side of its own, at most every 2 s (`recoverFromStall`).
+- **By digest.** A certificate whose parents the node lacks asks for those
+  parents, and so does a header it will not vote on for the same reason.
+  Digest requests are batched, deduplicated for 5 s and retried up to ten
+  times; the parents of every certificate held waiting are asked for again
+  every 15 s.
+
+A peer answers after a random delay of up to 200 ms with at most 100
+certificates, and does not answer a request whose ID it has already seen
+answered. What arrives is verified against the committee and inserted. A
+certificate whose parents are missing is held (up to `2 × 10 × committee`
+certificates) until they arrive.
+
+What catch-up did is reported, per partition, in
+`accumulate_dagbft_cert_sync_requests_sent_total{kind}` (round, digest),
+`…_requests_served_total{outcome}` (answered, suppressed, empty),
+`…_responses_received_total` and `…_certificates_received_total{outcome}`
+(inserted, duplicate, buffered, dropped, invalid, equivocation, failed),
+and in one Info line, `Certificate catch-up`, at most every 10 s and only
+when something crossed the path: round requests and the span they asked
+for, digest requests, responses, certificates by outcome and the last
+refusal, and the requests this node served or suppressed. The line is what
+tells "nobody answered" (requests, no responses) from "everybody answered
+and the node refused" (responses, certificates dropped) — a follower's
+Directory that sat at its seed round for four minutes could not tell the
+two apart with every line at Debug and the counters never incremented
+(#4469).
+
 ### The committed log
 
 The DAG's committed leader groups are the network's ordered record of what

@@ -13,10 +13,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -312,8 +314,9 @@ func TestCertSyncer_CertReceivedCallback(t *testing.T) {
 
 	// Track received certificates
 	var received []*types.Certificate
-	syncer.SetCertReceivedCallback(func(cert *types.Certificate) {
+	syncer.SetCertReceivedCallback(func(cert *types.Certificate) CertOutcome {
 		received = append(received, cert)
+		return CertInserted
 	})
 
 	// Create a certificate for the response
@@ -425,4 +428,41 @@ func TestCertSyncer_ServeRounds(t *testing.T) {
 
 	// RequestRounds without gossip must be a no-op
 	syncer.RequestRounds([]types.Round{1, 2, 3})
+}
+
+// TestCertSyncer_CountsByPartitionAndOutcome is #4469: the catch-up
+// counters read zero on a node that was catching up, because nothing ever
+// incremented them and they had no partition label. A response's
+// certificates are counted under the syncer's partition by what inserting
+// them did, and the summary window sees the same.
+func TestCertSyncer_CountsByPartitionAndOutcome(t *testing.T) {
+	config := CertSyncerConfig{PublicKey: make([]byte, 32), Partition: "t4469"}
+	config.applyDefaults()
+	syncer := NewCertSyncer(config, dag.NewDAG(10), nil, NewPendingCertificates(100))
+	outcomes := []CertOutcome{CertInserted, CertDropped}
+	syncer.SetCertReceivedCallback(func(*types.Certificate) CertOutcome {
+		o := outcomes[0]
+		outcomes = outcomes[1:]
+		return o
+	})
+
+	var certs []*types.Certificate
+	for i := 0; i < 2; i++ {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		h := types.NewHeader(pub, 1, 0, nil, nil)
+		require.NoError(t, h.Sign(priv))
+		certs = append(certs, types.NewCertificate(h, [][]byte{h.Signature}, []uint16{0}))
+	}
+	syncer.handleSyncResponse(&gossip.CertSyncResponse{Certificates: certs, RequestID: 1})
+
+	require.Equal(t, 1.0, testutil.ToFloat64(metrics.CertSyncResponsesReceivedTotal.WithLabelValues("t4469")))
+	require.Equal(t, 1.0, testutil.ToFloat64(metrics.CertSyncCertificatesReceivedTotal.WithLabelValues("t4469", "inserted")))
+	require.Equal(t, 1.0, testutil.ToFloat64(metrics.CertSyncCertificatesReceivedTotal.WithLabelValues("t4469", "dropped")))
+
+	w := syncer.window.take()
+	require.Equal(t, 1, w.responses)
+	require.Equal(t, 2, w.certificates)
+	require.Equal(t, "dropped", w.lastRefusal)
+	require.True(t, syncer.window.take().isEmpty(), "the window restarts after each summary")
 }

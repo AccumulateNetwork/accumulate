@@ -348,10 +348,11 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 	if g != nil {
 		syncerConfig := CertSyncerConfig{
 			PublicKey: config.KeyPair.Public().(ed25519.PublicKey),
+			Partition: config.Partition,
 		}
 		p.certSyncer = NewCertSyncer(syncerConfig, d, g, pendingCerts)
 		// Set callback to process received certificates
-		p.certSyncer.SetCertReceivedCallback(p.OnCertificateReceived)
+		p.certSyncer.SetCertReceivedCallback(p.receiveCertificate)
 		p.requestParents = p.certSyncer.RequestMissing
 	}
 
