@@ -470,6 +470,30 @@ by every skipped repeat; nothing here corrects that.
 **Size**: an `ExecutorVersion` predicate around the two assignments in
 `produceBlockMessages`, if the assumption ever stops holding.
 
+### E23. The self-starting heartbeat is not gated on a version
+
+*[#4463](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4463)*
+
+**Spec** ([executor.md](executor.md), "Versioning"): behaviour that changes
+what a block produces is gated on an `ExecutorVersion`.
+
+**Code**: `shouldSendAnchor` anchors any Kourou block more than
+`anchorHeartbeatSkip` blocks past `AnchorLedger.LastAnchorBlock`, whether or
+not the block received a directory anchor ([executor.md](executor.md),
+"Anchor emission, and the heartbeat"). Before #4463 it anchored such a block
+only when a directory anchor arrived in it. Unconditional within Kourou: an
+idle block the old binary discards as empty, the new one commits with an
+anchor, so the two diverge at the first idle block with no directory anchor
+in it.
+
+**Why it stands**: the fresh-install rule of E14, E15 and E22 —
+`dagbft-integration` runs no network that outlives a run and every node is
+rebuilt together.
+
+**Size**: an `ExecutorVersion` predicate restoring the `didAnchorDirectory`
+condition below it in `shouldSendAnchor`, if the assumption ever stops
+holding.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

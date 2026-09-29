@@ -712,22 +712,26 @@ func (b *Block) shouldSendAnchor() bool {
 		return true
 	}
 
-	if !didAnchorDirectory {
-		return false
-	}
-
 	// The heartbeat. A block whose only content is a received directory anchor
 	// still moves the BPT root, and a reader who queries at that moment gets a
 	// receipt against a root nothing will ever carry -- so the second call of an
 	// account proof cannot be answered until someone happens to transact
-	// (#4277). Anchoring these blocks keeps the directory-anchor cascade
-	// running, which keeps every root reachable.
+	// (#4277).
 	//
 	// From Kourou this is unconditional -- it was AnchorEmptyBlocks, a network
 	// global, default false, and a proof that only works on a busy network is
-	// not a proof anyone can rely on. But it is rate limited: anchoring every
-	// such block would run an idle network at full block rate forever, so at
-	// most one anchor per anchorHeartbeatSkip+1 blocks.
+	// not a proof anyone can rely on. It is rate limited: at most one anchor
+	// per anchorHeartbeatSkip+1 blocks, rather than one on every block.
+	//
+	// And it does not wait for anything to arrive (#4463). It fired only on a
+	// block that received a directory anchor, so it kept a running cascade
+	// alive but could not start one: a whole-network restart lost the anchors
+	// in flight, and the idle Docker network never anchored again. Now a
+	// partition whose last anchor is more than anchorHeartbeatSkip blocks old
+	// anchors this block whatever it holds. Both numbers are the same on every
+	// validator: the block index is consensus's, LastAnchorBlock is state. An
+	// anchoring block is not empty (BlockState.Empty), so the executor
+	// commits it rather than discarding it.
 	if b.Executor.globals().Active.ExecutorVersion.V2KourouEnabled() {
 		var anchorLedger *protocol.AnchorLedger
 		err := b.Batch.Account(b.Executor.Describe.AnchorPool()).Main().GetAs(&anchorLedger)
@@ -737,7 +741,7 @@ func (b *Block) shouldSendAnchor() bool {
 		}
 		return b.Index > anchorLedger.LastAnchorBlock+anchorHeartbeatSkip
 	}
-	return b.Executor.globals().Active.Globals.AnchorEmptyBlocks
+	return didAnchorDirectory && b.Executor.globals().Active.Globals.AnchorEmptyBlocks
 }
 
 // anchorHeartbeatSkip is how many blocks the heartbeat may skip before

@@ -2106,7 +2106,7 @@ Step 5 above decides whether the block sends an anchor. It does, if any of:
   pool — the system ledger changes every block, so counting it would make the
   test vacuous;
 - the block received an anchor from another partition;
-- **the block received a directory anchor and the heartbeat is due.**
+- **the heartbeat is due.**
 
 The last is the heartbeat, and it exists because the first four are not enough
 to keep a proof answerable. Every block moves the state tree root, including a
@@ -2116,8 +2116,8 @@ carry, and before Kourou that reader waited forever: the directory-anchor
 cascade died out, the network stopped, and nothing would ever put that root
 within reach. Measured on an idle network: the reader's root never bound.
 
-So from Kourou a partition anchors such a block anyway, which keeps the
-cascade alive and every root reachable. It is **not a setting**. It was
+So from Kourou a partition anchors such a block anyway, which keeps every
+root reachable. It is **not a setting**. It was
 `AnchorEmptyBlocks`, a network global defaulting to false, and a proof that
 only works on a busy network is not a proof anyone can rely on — an external
 reader does not control whether the network is busy.
@@ -2125,7 +2125,28 @@ reader does not control whether the network is busy.
 It is rate limited. `AnchorLedger.LastAnchorBlock` records where the last
 anchor went out, and the heartbeat fires only when the current block is more
 than `anchorHeartbeatSkip` (3) beyond it — at most one anchor every fourth
-block, rather than one on every block. Measured over 200 idle steps on one BVN:
+block, rather than one on every block.
+
+**It does not wait for anything to arrive** (#4463). As first written it fired
+only on a block that had received a directory anchor, so it kept a running
+cascade going — the Directory anchors itself and the BVNs, each arrival
+triggers the next — but could not start one. A whole-network restart of the
+Docker network (2026-09-28) lost the anchors in flight, which staging holds in
+memory; with no load after it the Directory produced 1,745 blocks, 1,739 of
+them empty, and no partition anchored again, so a joining follower had no
+signed anchor to prove against. Now a partition whose `LastAnchorBlock` is
+more than `anchorHeartbeatSkip` blocks behind the current block anchors it,
+whatever it holds, the Directory and every BVN alike: **an idle partition
+anchors every fourth block.** Both numbers are the same on every validator —
+the block index is consensus's, `LastAnchorBlock` is state — so every
+validator makes the same decision. The executor keeps no empty block
+(consensus spec, "Restart"), but an anchoring block is not empty
+(`BlockState.Empty` counts the anchor), so the heartbeat block is committed
+like any other: it writes the anchor ledger, the root chain and the anchor it
+sends.
+
+The numbers below were measured before #4463, when the heartbeat still
+waited for a directory anchor. Over 200 idle steps on one BVN:
 67 anchors uncapped, 34 at skip 3, 23 at skip 7. The cap governs anchors, not
 blocks: block production on an idle multi-BVN network is driven by the cascade
 as a whole and stays at roughly one per block interval either way.

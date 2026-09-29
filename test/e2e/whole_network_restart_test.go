@@ -79,11 +79,7 @@ func TestAWholeNetworkRestartResumes(t *testing.T) {
 	}
 	sim.StepN(10)
 
-	type target struct {
-		name string
-		part *simulator.Partition
-		node int
-	}
+	type target = restartTarget
 	var all []target
 	for _, name := range []string{Directory, "BVN0"} {
 		p := sim.S.Partition(name)
@@ -92,65 +88,9 @@ func TestAWholeNetworkRestartResumes(t *testing.T) {
 		}
 	}
 
-	// runJoins restarts the nodes named and runs their joins together, as
-	// their daemons would, while the network steps. The simulator is not
-	// safe for a join and a step at once, so every call a join makes into
-	// its node holds the lock a step holds. It returns, per node, whether it
-	// took the whole-restart exit.
 	runJoins := func(nodes []target) []bool {
 		t.Helper()
-		for _, n := range nodes {
-			n.part.RestartNode(n.node)
-			require.True(t, n.part.Joining(n.node))
-		}
-		var mu sync.Mutex
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		exited := make([]atomic.Bool, len(nodes))
-		errs := make([]error, len(nodes))
-		var wg sync.WaitGroup
-		for i, n := range nodes {
-			settler, ok := n.part.NodeExecutor(n.node).(join.Settler)
-			require.True(t, ok)
-			opts := join.Options{
-				Partition: n.name,
-				Buffer:    &lockedBuffer{Buffer: n.part.NodeJoin(n.node), mu: &mu},
-				Stage: &lockedStage{Stage: &join.ExecutorStage{Settler: settler,
-					Staging: n.part.NodeStaging(n.node), Database: n.part.NodeDatabase(n.node)}, mu: &mu},
-				State: &lockedState{State: n.part.NodeJoinState(n.node), mu: &mu, exited: &exited[i]},
-				Peers: &join.APIPeers{Partition: n.name, Client: sim.S.Services(), Network: t.Name()},
-				Retry: time.Millisecond,
-			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				// The state is not a RootWatch through the wrapper, so Run
-				// returns at the handoff.
-				_, errs[i] = join.Run(ctx, opts)
-			}()
-		}
-		done := make(chan struct{})
-		go func() { wg.Wait(); close(done) }()
-	step:
-		for {
-			select {
-			case <-done:
-				break step
-			default:
-			}
-			mu.Lock()
-			err := sim.S.Step()
-			mu.Unlock()
-			require.NoError(t, err)
-			time.Sleep(time.Millisecond)
-		}
-		out := make([]bool, len(nodes))
-		for i, n := range nodes {
-			require.NoError(t, errs[i], "%s node %d did not join", n.name, n.node)
-			require.False(t, n.part.Joining(n.node), "%s node %d is still collecting", n.name, n.node)
-			out[i] = exited[i].Load()
-		}
-		return out
+		return restartAndJoin(t, sim, nodes)
 	}
 
 	active := func(n target) {
@@ -209,6 +149,74 @@ func TestAWholeNetworkRestartResumes(t *testing.T) {
 	send()
 	sim.StepN(10)
 	agree()
+}
+
+// restartTarget names one validator of one partition.
+type restartTarget struct {
+	name string
+	part *simulator.Partition
+	node int
+}
+
+// restartAndJoin restarts the nodes named and runs their joins together, as
+// their daemons would, while the network steps. The simulator is not safe for
+// a join and a step at once, so every call a join makes into its node holds
+// the lock a step holds. It returns, per node, whether it took the
+// whole-restart exit.
+func restartAndJoin(t *testing.T, sim *Sim, nodes []restartTarget) []bool {
+	t.Helper()
+	for _, n := range nodes {
+		n.part.RestartNode(n.node)
+		require.True(t, n.part.Joining(n.node))
+	}
+	var mu sync.Mutex
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	exited := make([]atomic.Bool, len(nodes))
+	errs := make([]error, len(nodes))
+	var wg sync.WaitGroup
+	for i, n := range nodes {
+		settler, ok := n.part.NodeExecutor(n.node).(join.Settler)
+		require.True(t, ok)
+		opts := join.Options{
+			Partition: n.name,
+			Buffer:    &lockedBuffer{Buffer: n.part.NodeJoin(n.node), mu: &mu},
+			Stage: &lockedStage{Stage: &join.ExecutorStage{Settler: settler,
+				Staging: n.part.NodeStaging(n.node), Database: n.part.NodeDatabase(n.node)}, mu: &mu},
+			State: &lockedState{State: n.part.NodeJoinState(n.node), mu: &mu, exited: &exited[i]},
+			Peers: &join.APIPeers{Partition: n.name, Client: sim.S.Services(), Network: t.Name()},
+			Retry: time.Millisecond,
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// The state is not a RootWatch through the wrapper, so Run
+			// returns at the handoff.
+			_, errs[i] = join.Run(ctx, opts)
+		}()
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+step:
+	for {
+		select {
+		case <-done:
+			break step
+		default:
+		}
+		mu.Lock()
+		err := sim.S.Step()
+		mu.Unlock()
+		require.NoError(t, err)
+		time.Sleep(time.Millisecond)
+	}
+	out := make([]bool, len(nodes))
+	for i, n := range nodes {
+		require.NoError(t, errs[i], "%s node %d did not join", n.name, n.node)
+		require.False(t, n.part.Joining(n.node), "%s node %d is still collecting", n.name, n.node)
+		out[i] = exited[i].Load()
+	}
+	return out
 }
 
 // lockedState, lockedBuffer and lockedStage hold the simulator's lock for
