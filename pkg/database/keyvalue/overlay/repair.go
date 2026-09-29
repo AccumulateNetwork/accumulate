@@ -123,7 +123,7 @@ func (r *repairer) drainBatch(first entry) []entry {
 // it — is swallowed: repair is strictly best-effort, and must never be a way
 // for a to affect a read.
 func (r *repairer) write(batch []entry) {
-	defer func() { recover() }()
+	defer func() { _ = recover() }()
 	cs := r.a.Begin(nil, true)
 	defer cs.Discard()
 	for _, e := range batch {
