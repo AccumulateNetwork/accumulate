@@ -246,6 +246,7 @@ func (s *validatorLedgerState) Matched(context.Context) (uint64, bool, error) {
 func (s *validatorLedgerState) Ready() (uint64, bool)   { return 0, false }
 func (s *validatorLedgerState) Demote(uint64)           {}
 func (*validatorLedgerState) Resumable() (uint64, bool) { return 0, false }
+func (*validatorLedgerState) Backfill(context.Context)  {}
 func (*validatorLedgerState) Executing(uint64) error    { return nil }
 func (s *validatorLedgerState) Promote(q uint64) {
 	s.mu.Lock()

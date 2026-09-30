@@ -9,6 +9,7 @@ package database
 import (
 	"fmt"
 	"io"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -59,9 +60,7 @@ func New(store keyvalue.Beginner, logger logging.Logger) *Database {
 // On a store with no window this returns an equivalent database: their
 // batches already read everything.
 func (d *Database) Deep() *Database {
-	e := *d
-	e.store = keyvalue.Deep(d.store)
-	return &e
+	return d.view(keyvalue.Deep(d.store))
 }
 
 // Unisolated returns a view of this database whose batches read the
@@ -76,9 +75,20 @@ func (d *Database) Deep() *Database {
 // block committed. On a store that keeps isolation for free this returns
 // an equivalent database.
 func (d *Database) Unisolated() *Database {
-	e := *d
-	e.store = keyvalue.Unisolated(d.store)
-	return &e
+	return d.view(keyvalue.Unisolated(d.store))
+}
+
+// view is this database over store. It is not a copy of the struct: a batch
+// begun on another goroutine counts nextBatchId atomically, and a plain copy
+// reads it without (#4472: the join's backfill begins batches beside the
+// executor's CheckTx).
+func (d *Database) view(store keyvalue.Beginner) *Database {
+	return &Database{
+		store:       store,
+		logger:      d.logger,
+		nextBatchId: atomic.LoadInt64(&d.nextBatchId),
+		observer:    d.observer,
+	}
 }
 
 func OpenInMemory(logger logging.Logger) *Database {

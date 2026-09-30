@@ -36,6 +36,7 @@ import (
 // last block compared, or the block handed off at.
 func (s *PulledState) HandedOff(q uint64) {
 	s.executed = q
+	s.checked.Store(q)
 	// The store is a block's state again: the pull that began is done.
 	if err := s.writePullStarted(0); err != nil {
 		s.log.Info("The end of the pull could not be recorded", "partition", s.partition, "error", err)
@@ -101,6 +102,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 			return o.Block, true, nil
 		}
 		s.executed = o.Block
+		s.checked.Store(o.Block)
 		s.provenAt = o.Block
 		s.repairs = 0
 		s.served = nil // what it took is proven
@@ -121,11 +123,6 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 		s.refreshAuthority()
 	}
 
-	// Past the match, what the join took by its chain heads alone is
-	// brought in whole, a few accounts a check, while the node executes.
-	if s.machine.State() == nodestate.StateActive {
-		s.backfill(ctx)
-	}
 	return 0, false, nil
 }
 
@@ -155,40 +152,103 @@ func (s *PulledState) RepairFrom(block uint64) {
 	s.repairFrom = block
 }
 
-// backfillPerCheck is how many head-only accounts one root check backfills.
-const backfillPerCheck = 64
+// backfillPause is how long the backfill waits before it asks again for the
+// accounts it could not bring in, and how often it looks whether the node is
+// ACTIVE yet.
+const backfillPause = 2 * time.Second
 
-// backfill brings in the entries below the open mark set of accounts the join
-// took by their chain heads alone (pull.Backfill). It writes only below each
-// chain's head, so it runs while the node executes. An account that cannot be
-// backfilled now is tried again on a later check.
-func (s *PulledState) backfill(ctx context.Context) {
-	if len(s.headOnly) == 0 {
-		return
-	}
-	n := 0
-	for k, u := range s.headOnly {
-		if n >= backfillPerCheck || ctx.Err() != nil {
-			break
+// Backfill implements [State]: it brings in the entries below the open mark
+// set of the accounts the join took by their chain heads alone
+// (pull.Backfill), while the node executes, until every one is held whole or
+// ctx ends. It writes only below each chain's head, so the blocks the node
+// executes do not race it.
+//
+// It runs beside the root watch, never inside it: one account of the
+// Directory is minutes of pages, and a root watch waiting on it compares no
+// block's root for as long (#4472). It does nothing while the node is not
+// ACTIVE: a pull, a repair or a demotion rewrites the very accounts it
+// writes, so the join ends it before it demotes and pulls, and starts it
+// again after the next handoff (Run).
+func (s *PulledState) Backfill(ctx context.Context) {
+	for ctx.Err() == nil {
+		if s.machine.State() != nodestate.StateActive {
+			if !pause(ctx, backfillPause) {
+				return
+			}
+			continue
 		}
-		n++
-		if s.backfillOne(ctx, u) {
-			s.unmarkHeadOnly(k)
-			s.backfilled++
+		left := s.headOnlyList()
+		if len(left) == 0 {
+			return
+		}
+		for _, u := range left {
+			if ctx.Err() != nil || s.machine.State() != nodestate.StateActive {
+				break
+			}
+			if s.backfillOne(ctx, u) {
+				s.backfillDone(u)
+			}
+		}
+		if s.BackfillLeft() == 0 {
+			return
+		}
+		// What is left could not be brought in on this pass.
+		if !pause(ctx, backfillPause) {
+			return
 		}
 	}
-	s.sayBackfill()
 }
 
-// sayBackfill reports how much history is left to bring in: always on the
-// gauge, in the log at most once a minute, and once when the last account is
-// held whole (#4471).
-func (s *PulledState) sayBackfill() {
+// pause waits d, and reports false if ctx ended first.
+func pause(ctx context.Context, d time.Duration) bool {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-t.C:
+		return true
+	}
+}
+
+// BackfillLeft is how many accounts taken by their chain heads alone the
+// node does not hold whole yet.
+func (s *PulledState) BackfillLeft() int {
+	s.backfillMu.Lock()
+	defer s.backfillMu.Unlock()
+	return len(s.headOnly)
+}
+
+// headOnlyList is the accounts left to backfill, in a stable order.
+func (s *PulledState) headOnlyList() []*url.URL {
+	s.backfillMu.Lock()
+	defer s.backfillMu.Unlock()
+	out := make([]*url.URL, 0, len(s.headOnly))
+	for _, u := range s.headOnly {
+		out = append(out, u)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
+	return out
+}
+
+// backfillDone records that the backfill brought u in whole, and says so.
+func (s *PulledState) backfillDone(u *url.URL) {
+	s.backfillMu.Lock()
+	defer s.backfillMu.Unlock()
+	s.unmarkHeadOnlyLocked(accountKey(u))
+	s.backfilled++
+	s.sayBackfillLocked()
+}
+
+// sayBackfillLocked reports how much history is left to bring in: always on
+// the gauge, in the log at most once a minute, and once when the last account
+// is held whole (#4471). The caller holds backfillMu.
+func (s *PulledState) sayBackfillLocked() {
 	left := len(s.headOnly)
 	mBackfillLeft.WithLabelValues(s.label).Set(float64(left))
 	if left == 0 {
 		s.log.Info("The backfill is done: every account is held whole",
-			"partition", s.partition, "backfilled", s.backfilled, "executed", s.executed)
+			"partition", s.partition, "backfilled", s.backfilled, "executed", s.checked.Load())
 		return
 	}
 	if time.Since(s.backfillSaid) < stallSayEvery {
@@ -196,7 +256,14 @@ func (s *PulledState) sayBackfill() {
 	}
 	s.backfillSaid = time.Now()
 	s.log.Info("Backfilling the history of accounts taken by their chain heads",
-		"partition", s.partition, "backfilled", s.backfilled, "left", left, "executed", s.executed)
+		"partition", s.partition, "backfilled", s.backfilled, "left", left, "executed", s.checked.Load())
+}
+
+// isEntire is whether this node holds u whole (backfillOne).
+func (s *PulledState) isEntire(u *url.URL) bool {
+	s.backfillMu.Lock()
+	defer s.backfillMu.Unlock()
+	return s.entire[accountKey(u)]
 }
 
 // markHeadOnly records that u was taken by its chain heads alone: in memory,
@@ -206,6 +273,8 @@ func (s *PulledState) sayBackfill() {
 //
 // The accounts of one answer are recorded in one commit (#4461).
 func (s *PulledState) markHeadOnly(urls ...*url.URL) {
+	s.backfillMu.Lock()
+	defer s.backfillMu.Unlock()
 	var add []*url.URL
 	for _, u := range urls {
 		k := accountKey(u)
@@ -227,6 +296,14 @@ func (s *PulledState) markHeadOnly(urls ...*url.URL) {
 
 // unmarkHeadOnly records that the account keyed k is held whole.
 func (s *PulledState) unmarkHeadOnly(k [32]byte) {
+	s.backfillMu.Lock()
+	defer s.backfillMu.Unlock()
+	s.unmarkHeadOnlyLocked(k)
+	mBackfillLeft.WithLabelValues(s.label).Set(float64(len(s.headOnly)))
+}
+
+// unmarkHeadOnlyLocked is unmarkHeadOnly with backfillMu held.
+func (s *PulledState) unmarkHeadOnlyLocked(k [32]byte) {
 	u, ok := s.headOnly[k]
 	if !ok {
 		return
@@ -235,6 +312,8 @@ func (s *PulledState) unmarkHeadOnly(k [32]byte) {
 	s.writeHeadOnly(u, func(set values.Set[*url.URL]) error { return set.Remove(u) })
 }
 
+// writeHeadOnly is called with backfillMu held, so that the record and the
+// set in memory move together.
 func (s *PulledState) writeHeadOnly(u *url.URL, fn func(values.Set[*url.URL]) error) {
 	id, ok := protocol.ParsePartitionUrl(s.partition)
 	if !ok {
@@ -275,7 +354,8 @@ func (s *PulledState) loadHeadOnly() error {
 }
 
 // backfillOne backfills one account and reports whether it holds all of it
-// now (pull.Backfill).
+// now (pull.Backfill). An account that takes longer than a minute says how
+// far it has got, at most once a minute (#4472).
 func (s *PulledState) backfillOne(ctx context.Context, u *url.URL) bool {
 	srcs, _, err := s.sourcesFor(ctx, u)
 	if errors.Is(err, errNotThisPartition) {
@@ -285,16 +365,36 @@ func (s *PulledState) backfillOne(ctx context.Context, u *url.URL) bool {
 		return false
 	}
 	// Written to the database a page at a time (#4446).
-	err = pull.Backfill(ctx, srcs, s.db, u, 0)
+	err = pull.Backfill(ctx, srcs, s.db, u, 0, s.backfillProgress(u))
 	if err != nil {
 		s.log.Info("An account's entries could not be brought in yet", "account", u, "error", err)
 		return false
 	}
+	s.backfillMu.Lock()
+	defer s.backfillMu.Unlock()
 	if s.entire == nil {
 		s.entire = map[[32]byte]bool{}
 	}
 	s.entire[accountKey(u)] = true
 	return true
+}
+
+// backfillProgress is what one account's backfill says of itself: nothing in
+// its first minute, then the chain, the entries written and the chain's
+// height, at most once a minute.
+func (s *PulledState) backfillProgress(u *url.URL) func(chain string, done, total uint64) {
+	start := s.clock()
+	said := start
+	return func(chain string, done, total uint64) {
+		now := s.clock()
+		if now.Sub(said) < stallSayEvery {
+			return
+		}
+		said = now
+		s.log.Info("Backfilling a large account",
+			"partition", s.partition, "account", u, "chain", chain, "entries", done, "of", total,
+			"for", now.Sub(start).Round(time.Second))
+	}
 }
 
 // rootAfter is the root this node's state had after block n, from the bpt

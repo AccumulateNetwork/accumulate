@@ -96,8 +96,8 @@ The window is counted in commits, and a block is one commit only on a node
 that executes: a joining node commits once per account it pulls, so what its
 pull wrote is far older, by the window's count, than the block that wrote it
 on its peers. Nor is a joined node's executor the only writer while it
-executes: the join's root watch backfills between blocks, one commit an
-account, so a record the previous block wrote can already be past the
+executes: the join's backfill writes beside it (#4472), a commit a page of
+an account, so a record the previous block wrote can already be past the
 window. The executor's reads of its own queued local deliveries fall back to
 a deep read (#4405).
 

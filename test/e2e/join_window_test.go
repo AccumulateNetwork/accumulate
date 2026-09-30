@@ -96,7 +96,7 @@ func followerJoinsByItsWindow(t *testing.T, partition string) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		const maxRounds = 200
-		stepping := &steppingState{cancel: cancel, State: part.NodeJoinState(fresh), step: func(round int) {
+		stepping := &steppingState{cancel: cancel, State: part.NodeJoinState(fresh), leaveBackfill: true, step: func(round int) {
 			if round%5 == 0 {
 				send()
 			}
@@ -173,8 +173,7 @@ func followerJoinsByItsWindow(t *testing.T, partition string) {
 
 	// The watch's first check since: it compares each block executed since
 	// the handoff against its anchored root, from the ledger's bpt index
-	// chain as the window left it, before the backfill that ends the check
-	// brings the rest.
+	// chain as the window left it, before the backfill brings the rest.
 	_, diverged, err := watch.Diverged(context.Background())
 	require.NoError(t, err, "the restarted node could not compare its roots from what the window left it")
 	require.False(t, diverged)
@@ -188,11 +187,18 @@ func followerJoinsByItsWindow(t *testing.T, partition string) {
 		}
 		return true
 	}
+	// The backfill runs beside the watch, as join.Run runs it (#4472).
+	bctx, stopBackfill := context.WithCancel(context.Background())
+	backfilled := make(chan struct{})
+	go func() { defer close(backfilled); watch.Backfill(bctx) }()
 	for i := 0; i < 20 && !whole(); i++ {
 		sim.StepN(3)
 		_, _, err := watch.Diverged(context.Background())
 		require.NoError(t, err)
+		waitForBackfill(watch)
 	}
+	stopBackfill()
+	<-backfilled
 	require.True(t, whole(), "the backfill did not bring the history in")
 	agrees("after the backfill")
 

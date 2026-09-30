@@ -590,16 +590,28 @@ the next block.
 **Past the match, every account taken by its heads is brought in whole.** The
 walk and the records take an account by its chain heads and open mark set
 (§3), which reproduce its leaf and let the node append. Once the node is
-`ACTIVE`, the root watch backfills those accounts, 64 a check, while the node
-executes (`pull.Backfill`): the entries below each chain's open mark set, the
-mark points that close their sets, and the message behind every entry. It
+`ACTIVE`, the backfill brings those accounts in while the node executes
+(`pull.Backfill`): the entries below each chain's open mark set, the mark
+points that close their sets, and the message behind every entry. It
 writes nothing at or above a chain's head, so it does not race the blocks the
 node executes; the entries are held to the node's own head, replayed from the
 first, so a peer serving another chain is refused and the next is asked. It
 streams as the pull does, a page at a time, and holds the entries to the head
 once the last page is written (#4446). The
 node ends holding every account's chains and entries
-(`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`). The accounts
+(`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
+
+The backfill runs on a goroutine of its own, beside the root watch, never
+inside it: one account of the Directory -- its anchor pool, tens of thousands
+of entries a chain -- is minutes of pages, and a root watch that waited on it
+compared no executed block's root with its anchor for as long (#4472;
+`TestAnExecutedBlockThatDivergesIsCaughtWhileABackfillIsInFlight`). The join
+starts it after each handoff and ends it, and waits until it has ended,
+before the node is demoted and pulls again, and when the join itself ends: a
+pull or a repair rewrites the very accounts the backfill writes, so the two
+never run at once, and the backfill does nothing while the node is not
+`ACTIVE`. An account it cannot bring in is asked for again a few seconds
+later. The accounts
 left to backfill are recorded under `SystemData(partition).HeadOnly` as they
 are taken and cleared as they are backfilled, so a restart before the
 backfill ends still backfills them: the next join finds their leaves equal to
@@ -609,7 +621,9 @@ visible: `accumulate_join_backfill_accounts_left{partition}` counts the
 accounts not yet held whole, `Backfilling the history of accounts taken by
 their chain heads` says how far it has got at most once a minute, and `The
 backfill is done: every account is held whole` is said once when the last is
-brought in (#4471).
+brought in (#4471). An account that takes longer than a minute says so
+itself, at most once a minute: `Backfilling a large account` with the
+account, the chain, and the entries written of the chain's height (#4472).
 
 **A message is proven by its entry.** The leaf covers a chain's head, and the
 head covers its entries, but an entry of a transaction chain is the hash of a

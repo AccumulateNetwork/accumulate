@@ -139,6 +139,7 @@ type fakeState struct {
 func (s *fakeState) Promote(block uint64)    { s.promoted = append(s.promoted, block) }
 func (s *fakeState) Demote(block uint64)     { s.demoted = append(s.demoted, block) }
 func (*fakeState) Resumable() (uint64, bool) { return 0, false }
+func (*fakeState) Backfill(context.Context)  {}
 func (*fakeState) Executing(uint64) error    { return nil }
 
 func (s *fakeState) Pull(context.Context) error {
@@ -330,6 +331,7 @@ func (s *gapState) Pull(context.Context) error {
 func (s *gapState) Promote(uint64)          {}
 func (s *gapState) Demote(uint64)           {}
 func (*gapState) Resumable() (uint64, bool) { return 0, false }
+func (*gapState) Backfill(context.Context)  {}
 func (*gapState) Executing(uint64) error    { return nil }
 
 // Ready: this fake's state is never executed from before it matches.

@@ -108,8 +108,9 @@ func TestARestartBeforeTheBackfillEndsStillBackfills(t *testing.T) {
 
 // runJoin runs join.Run on node joiner of p, as the daemon runs it, stepping
 // the network with traffic every round. With atPromotion the join is stopped
-// the moment the node is promoted, before the backfill of that check;
-// otherwise it runs on for a number of root checks after the promotion.
+// the moment the node is promoted, before the backfill starts; otherwise it
+// runs on for a number of root checks after the promotion, and until the
+// backfill beside them is done (#4472).
 func runJoin(t *testing.T, sim *Sim, p *simulator.Partition, joiner int, traffic func(), atPromotion bool) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -122,7 +123,11 @@ func runJoin(t *testing.T, sim *Sim, p *simulator.Partition, joiner int, traffic
 		if state.Machine().State() == nodestate.StateActive {
 			active++
 		}
-		if round >= maxRounds || active > 20 {
+		if round >= maxRounds {
+			cancel()
+		}
+		if active > 20 {
+			waitForBackfill(state)
 			cancel()
 		}
 	}}

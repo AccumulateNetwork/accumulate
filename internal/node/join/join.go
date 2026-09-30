@@ -174,6 +174,15 @@ type State interface {
 	// that exit. It is ACTIVE on its own root: no peer had one to verify it
 	// against, and every one of them takes the same exit.
 	Executing(block uint64) error
+
+	// Backfill brings in whole, while the node executes, the accounts the
+	// join took by their chain heads alone, until every one is held whole or
+	// ctx ends (executor spec, "Past the match, every account taken by its
+	// heads is brought in whole"). Run calls it on a goroutine of its own
+	// once the node has handed off, beside the root watch and never inside
+	// it, and ends it -- and waits for it -- before the node is demoted and
+	// pulls again: the pull rewrites the accounts it writes (#4472).
+	Backfill(ctx context.Context)
 }
 
 // A Peers finds the partition's other validators and their private API.
@@ -298,7 +307,12 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		if h, ok := opts.State.(interface{ HandedOff(uint64) }); ok {
 			h.HandedOff(q)
 		}
+		stopBackfill := backfillBeside(ctx, opts.State)
 		n, err := watchRoots(ctx, watch, log, retry)
+		// Nothing of the backfill runs past here: the node is stopping, or
+		// it is demoted and pulls again, and the pull rewrites what the
+		// backfill writes.
+		stopBackfill()
 		if err != nil {
 			return Joined, errors.UnknownError.Wrap(err)
 		}
@@ -325,6 +339,22 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		if err != nil {
 			return Joined, errors.UnknownError.Wrap(err)
 		}
+	}
+}
+
+// backfillBeside runs the state's backfill on a goroutine of its own, so that
+// the root watch never waits on it (#4472). What it returns ends the backfill
+// and waits until it has.
+func backfillBeside(ctx context.Context, state State) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		state.Backfill(ctx)
+	}()
+	return func() {
+		cancel()
+		<-done
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -139,6 +140,11 @@ type PulledState struct {
 	// (RepairFrom; startRepair).
 	repairFrom uint64
 
+	// backfillMu guards headOnly, backfilled, backfillSaid and entire: the
+	// backfill runs on a goroutine of its own, beside the root watch and the
+	// pull (Backfill; #4472).
+	backfillMu sync.Mutex
+
 	// headOnly are the accounts taken by their chain heads alone, whose
 	// entries below the open mark set the node does not hold yet. Once the
 	// state has matched they are backfilled while the node executes
@@ -151,6 +157,10 @@ type PulledState struct {
 	// backfillSaid is when the backfill last said how far it had got (#4471).
 	backfilled   int
 	backfillSaid time.Time
+
+	// checked is executed, for the backfill's lines: the backfill reads it
+	// beside the root watch, which writes executed.
+	checked atomic.Uint64
 
 	// entire are the accounts this node holds whole, every entry of every
 	// chain with the message behind it (backfillOne). A whole pull of one
@@ -1062,7 +1072,7 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 			// A repair takes the account whole, entries included, now, while
 			// the node is not executing. An account already held entire needs
 			// only what was appended.
-			if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
+			if s.isEntire(u) || s.backfillOne(ctx, u) {
 				s.unmarkHeadOnly(accountKey(u))
 			} else {
 				headOnly = append(headOnly, u)
@@ -1398,7 +1408,7 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 			// The repair takes the account whole, entries included, now,
 			// while the node is not executing. An account already held
 			// entire needs only what the whole pull appended.
-			if s.entire[accountKey(u)] || s.backfillOne(ctx, u) {
+			if s.isEntire(u) || s.backfillOne(ctx, u) {
 				s.unmarkHeadOnly(accountKey(u))
 				return
 			}

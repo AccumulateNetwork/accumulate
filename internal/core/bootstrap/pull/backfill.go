@@ -39,7 +39,12 @@ import (
 // page and not by the chain. They are held to the head once the last is
 // written: a source refused there has written entries the next source
 // overwrites, position by position (docs/spec/DIFFERENCES.md).
-func Backfill(ctx context.Context, srcs []Source, store Store, u *url.URL, pageSize uint64) error {
+//
+// progress, when not nil, is told after every page how many of a chain's
+// entries have been written and how many the chain has (#4472): one account
+// of the Directory can take minutes, and a caller that says nothing for that
+// long cannot be told from one that is stuck.
+func Backfill(ctx context.Context, srcs []Source, store Store, u *url.URL, pageSize uint64, progress func(chain string, done, total uint64)) error {
 	if len(srcs) == 0 {
 		return errors.BadRequest.With("pull.Backfill: at least one source required")
 	}
@@ -57,7 +62,7 @@ func Backfill(ctx context.Context, srcs []Source, store Store, u *url.URL, pageS
 		var refusals []error
 		done := false
 		for i, src := range srcs {
-			err := backfillChain(ctx, src, store, u, h, pageSize)
+			err := backfillChain(ctx, src, store, u, h, pageSize, progress)
 			if err == nil {
 				done = true
 				break
@@ -122,7 +127,7 @@ func backfillHeads(store Store, u *url.URL) ([]*backfillHead, error) {
 
 // backfillChain writes the entries of one chain below its head, a page at a
 // time, and holds them to the head.
-func backfillChain(ctx context.Context, src Source, store Store, u *url.URL, h *backfillHead, pageSize uint64) error {
+func backfillChain(ctx context.Context, src Source, store Store, u *url.URL, h *backfillHead, pageSize uint64, progress func(chain string, done, total uint64)) error {
 	head, open, boundary, name := h.head, h.open, h.boundary, h.name
 
 	// Every entry the node's head counts, so the messages behind the open
@@ -141,7 +146,13 @@ func backfillChain(ctx context.Context, src Source, store Store, u *url.URL, h *
 		}
 		// The index of a hash names where it was last written; one the
 		// chain already indexes is left to what the node wrote since.
-		return c.Inner().PutBelow(st, h, true)
+		if err := c.Inner().PutBelow(st, h, true); err != nil {
+			return err
+		}
+		if n := index + 1; progress != nil && (n%pageSize == 0 || n == uint64(head.Count)) {
+			progress(name, n, uint64(head.Count))
+		}
+		return nil
 	})
 	if err != nil {
 		return err

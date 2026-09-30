@@ -311,12 +311,18 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 // executed block whose root matches its partition's signed anchor, or repaired
 // at a mismatch (executor spec, "Sync", "Two mismatches").
 // The watch runs for as long as the node does, so once the node is ACTIVE the
-// test's join ends there: cancel ends join.Run.
+// test's join ends there: cancel ends join.Run. The backfill runs beside the
+// watch (#4472); the join ends once it has brought in what it had to, or has
+// had backfillWait to.
 type steppingState struct {
 	join.State
 	round  int
 	step   func(round int)
 	cancel context.CancelFunc
+
+	// leaveBackfill ends the join at the first check after the promotion
+	// without waiting for the backfill beside it.
+	leaveBackfill bool
 }
 
 func (s *steppingState) Pull(ctx context.Context) error {
@@ -342,9 +348,30 @@ func (s *steppingState) Diverged(ctx context.Context) (uint64, bool, error) {
 	s.step(s.round)
 	n, diverged, err := w.Diverged(ctx)
 	if m, ok := s.State.(interface{ Machine() *nodestate.Machine }); ok && !diverged && m.Machine().State() == nodestate.StateActive {
+		if !s.leaveBackfill {
+			waitForBackfill(s.State)
+		}
 		s.stop()
 	}
 	return n, diverged, err
+}
+
+// backfillWait bounds how long a test waits for a joined node's backfill.
+const backfillWait = 30 * time.Second
+
+// waitForBackfill waits, without stepping the network, until state holds
+// every account it took by its chain heads alone whole, or backfillWait has
+// passed. The backfill runs on a goroutine of its own beside the root watch
+// (join.Run; #4472), and a test that ends the join at the first check after
+// the promotion would end it before the backfill had run.
+func waitForBackfill(state join.State) {
+	b, ok := state.(interface{ BackfillLeft() int })
+	if !ok {
+		return
+	}
+	for deadline := time.Now().Add(backfillWait); b.BackfillLeft() > 0 && time.Now().Before(deadline); {
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // stop ends the test's join. A steppingState built without a cancel cannot

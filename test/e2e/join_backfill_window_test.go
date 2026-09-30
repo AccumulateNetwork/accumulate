@@ -127,7 +127,7 @@ func TestAJoinedNodeKeepsPaceWhileItBackfills(t *testing.T) {
 	state := part.NodeJoinState(fresh)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stepping := &steppingState{cancel: cancel, State: state, step: func(round int) {
+	stepping := &steppingState{cancel: cancel, State: state, leaveBackfill: true, step: func(round int) {
 		submit()
 		sim.StepN(3)
 		if round >= 200 {
@@ -147,8 +147,9 @@ func TestAJoinedNodeKeepsPaceWhileItBackfills(t *testing.T) {
 	require.False(t, part.Joining(fresh), "the fresh node did not hand off")
 	require.Equal(t, nodestate.StateActive, state.Machine().State(), "the fresh node is not ACTIVE")
 
-	// Run on as the daemon does: a local delivery in every block, and the
-	// root watch -- which backfills -- between blocks.
+	// Run on as the daemon does: a local delivery in every block, the root
+	// watch between blocks, and the backfill beside them (#4472), a commit
+	// an account.
 	var watch join.RootWatch = state
 	joinedAt := partitionBlock(t, part.NodeDatabase(fresh), partUrl)
 	headOnly := func() int {
@@ -158,7 +159,12 @@ func TestAJoinedNodeKeepsPaceWhileItBackfills(t *testing.T) {
 		require.NoError(t, err)
 		return len(list)
 	}
-	require.Greater(t, headOnly(), 64, "precondition: the root watch has more than one check of backfilling left")
+	require.Greater(t, headOnly(), 64, "precondition: the backfill has many accounts left as the node runs on")
+	// The backfill runs beside the watch, as join.Run runs it (#4472).
+	bctx, stopBackfill := context.WithCancel(context.Background())
+	backfilled := make(chan struct{})
+	go func() { defer close(backfilled); state.Backfill(bctx) }()
+	defer func() { stopBackfill(); <-backfilled }()
 	for i := 0; i < 50; i++ {
 		submit()
 		sim.Step()
