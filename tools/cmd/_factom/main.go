@@ -61,7 +61,7 @@ func onInterrupt(fn func()) {
 func newLogger() logging.Logger {
 	logWriter, err := logging.NewConsoleWriter("plain")
 	check(err)
-	cmtLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flagConvert.LogLevel, false)
+	cmtLogger, err := logging.NewZerologLogger(zerolog.New(logWriter), flagConvert.LogLevel, false)
 	check(err)
 	return cmtLogger
 }

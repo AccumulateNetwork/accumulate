@@ -38,7 +38,7 @@ func (s *Session) UseSimulator(bvnCount int) {
 	if err != nil {
 		s.Abort(err)
 	}
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	logger, err := logging.NewZerologLogger(zerolog.New(writer), level, false)
 	if err != nil {
 		s.Abort(err)
 	}

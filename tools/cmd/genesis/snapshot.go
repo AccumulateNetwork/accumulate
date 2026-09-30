@@ -128,7 +128,7 @@ func addToSnapshot(filename string, files []string, process func(string, int, *d
 
 	logWriter, err := logging.NewConsoleWriter("plain")
 	check(err)
-	cmtLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), flags.LogLevel, false)
+	cmtLogger, err := logging.NewZerologLogger(zerolog.New(logWriter), flags.LogLevel, false)
 	check(err)
 	logger := cmtLogger
 

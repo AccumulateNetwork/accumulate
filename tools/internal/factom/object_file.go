@@ -24,7 +24,7 @@ func ReadObjectFile(buff []byte, logger logging.Logger, fn func(header *Header, 
 		if err != nil {
 			panic(err)
 		}
-		cmtLogger, err := logging.NewTendermintLogger(zerolog.New(logWriter), "info", false)
+		cmtLogger, err := logging.NewZerologLogger(zerolog.New(logWriter), "info", false)
 		if err != nil {
 			panic(err)
 		}

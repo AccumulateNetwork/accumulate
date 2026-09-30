@@ -670,7 +670,7 @@ func newLogger() logging.Logger {
 	check(err)
 	level, writer, err := logging.ParseLogLevel(levels, writer)
 	check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	logger, err := logging.NewZerologLogger(zerolog.New(writer), level, false)
 	check(err)
 	return logger
 }

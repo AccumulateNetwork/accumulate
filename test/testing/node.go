@@ -92,7 +92,7 @@ func NewTestLogger(t testing.TB) logging.Logger {
 	// 	},
 	// }
 
-	logger, err := logging.NewTendermintLogger(zerolog.New(w), level, false)
+	logger, err := logging.NewZerologLogger(zerolog.New(w), level, false)
 	require.NoError(t, err)
 	return logger
 }

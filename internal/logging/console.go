@@ -24,7 +24,7 @@ const (
 )
 
 // NewConsoleWriter parses the log format and creates an appropriate writer.
-// It is based on part of Tendermint's NewTendermintLogger.
+// It is based on part of Tendermint's NewZerologLogger.
 func NewConsoleWriter(format string) (io.Writer, error) {
 	return NewConsoleWriterWith(os.Stderr, format)
 }
@@ -43,7 +43,7 @@ func NewConsoleWriterWith(w io.Writer, format string) (io.Writer, error) {
 }
 
 // newConsoleWriter creates a zerolog console writer that formats log messages
-// as plain text for the console. It is based on part of Tendermint's NewTendermintLogger.
+// as plain text for the console. It is based on part of Tendermint's NewZerologLogger.
 func newConsoleWriter(w io.Writer) *zerolog.ConsoleWriter {
 	return &zerolog.ConsoleWriter{
 		Out: w,

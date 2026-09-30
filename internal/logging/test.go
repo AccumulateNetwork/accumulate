@@ -59,7 +59,7 @@ func NewTestLogger(t TB, format, level string, trace bool) Logger {
 	writer, _ := TestLogWriter(t)(format)
 	level, writer, err := ParseLogLevel(level, writer)
 	require.NoError(t, err)
-	logger, err := NewTendermintLogger(zerolog.New(writer), level, trace)
+	logger, err := NewZerologLogger(zerolog.New(writer), level, trace)
 	require.NoError(t, err)
 	return logger.With("test", t.Name())
 }
@@ -69,7 +69,7 @@ func ConsoleLoggerForTest(t TB, levels string) Logger {
 	require.NoError(t, err)
 	level, writer, err := ParseLogLevel(levels, w)
 	require.NoError(t, err)
-	logger, err := NewTendermintLogger(zerolog.New(writer), level, false)
+	logger, err := NewZerologLogger(zerolog.New(writer), level, false)
 	require.NoError(t, err)
 	return logger
 }

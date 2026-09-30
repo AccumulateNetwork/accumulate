@@ -170,7 +170,7 @@ func run(*cobra.Command, []string) {
 	check(err)
 	level, writer, err := logging.ParseLogLevel(flag.Log, logw)
 	checkf(err, "--log")
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	logger, err := logging.NewZerologLogger(zerolog.New(writer), level, false)
 	check(err)
 
 	opts = append(opts,

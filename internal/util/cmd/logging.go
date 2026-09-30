@@ -21,7 +21,7 @@ func NewConsoleLogger(levels string) logging.Logger {
 	Check(err)
 	ll, lw, err := logging.ParseLogLevel(levels, lw)
 	Check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(lw), ll, false)
+	logger, err := logging.NewZerologLogger(zerolog.New(lw), ll, false)
 	Check(err)
 	return logger
 }

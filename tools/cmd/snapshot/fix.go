@@ -63,7 +63,7 @@ func restoreSnapshot(filename, badgerPath, partitionID string) (uint64, []byte) 
 	check(err)
 	level, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, writer)
 	check(err)
-	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	logger, err := logging.NewZerologLogger(zerolog.New(writer), level, false)
 	check(err)
 
 	// Open snapshot
