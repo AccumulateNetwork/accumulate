@@ -9,7 +9,6 @@ package telemetry
 import (
 	"context"
 	"encoding/hex"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -23,8 +22,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-var reConsensus = regexp.MustCompile(`^(?:cometbft|consensus|tendermint)_([A-Za-z\d]+)(?:_(\d+))_((?:abci|blocksync|consensus|mempool|p2p|state)_.*)`)
 
 type OtelPromProducer struct {
 	Gatherer prometheus.Gatherer
@@ -66,26 +63,9 @@ func (p *OtelPromProducer) Produce(ctx context.Context) ([]metricdata.ScopeMetri
 		mOtel.Description = fProm.GetHelp()
 		mOtel.Unit = unitWordToUCUM(fProm.GetUnit())
 
-		// Transform cometbft_ and consensus_ to tendermint_ and remove the
-		// partition. For example:
-		//
-		// consensus_chico_consensus_total_txs ->
-		// tendermint_chico_consensus_total_txs ->
-		// tendermint_consensus_total_txs{partition="chico"}
-		var attrs []attribute.KeyValue
-		if m := reConsensus.FindStringSubmatch(mOtel.Name); m != nil {
-			attrs = append(attrs,
-				attribute.String("partition", m[1]))
-			if m[2] != "" {
-				attrs = append(attrs,
-					attribute.String("node", m[2]))
-			}
-			mOtel.Name = "tendermint_" + m[3]
-		}
-
 		for _, mProm := range fProm.Metric {
 			mOtel := mOtel
-			points := getDataPoints(mProm, attrs)
+			points := getDataPoints(mProm)
 
 			switch fProm.GetType() {
 			case dto.MetricType_COUNTER:
@@ -120,8 +100,8 @@ var notUsefulLabels = func() []string {
 	return s
 }()
 
-func getDataPoints(metric *dto.Metric, extraAttrs []attribute.KeyValue) []metricdata.DataPoint[float64] {
-	attributes := attribute.NewSet(append(attrsFromLabels(metric.Label), extraAttrs...)...)
+func getDataPoints(metric *dto.Metric) []metricdata.DataPoint[float64] {
+	attributes := attribute.NewSet(attrsFromLabels(metric.Label)...)
 	timestamp := timeFromMs(metric)
 	var startTime time.Time
 	switch {

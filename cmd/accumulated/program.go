@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -109,15 +108,8 @@ func (p *Program) Start() (err error) {
 		a := p.primary.Config.Instrumentation
 		b := p.secondary.Config.Instrumentation
 
-		// If both sub-nodes have the default instrumentation namespace,
-		// dynamically append the partition ID to it
-		if (a.Namespace == "tendermint" || a.Namespace == "cometbft") && (b.Namespace == "tendermint" || b.Namespace == "cometbft") {
-			a.Namespace += "_" + strings.ToLower(p.primary.Config.Accumulate.PartitionId)
-			b.Namespace += "_" + strings.ToLower(p.secondary.Config.Accumulate.PartitionId)
-		}
-
-		// If both sub-nodes still have the same instrumentation namespace,
-		// disable the second one to prevent conflicts
+		// If both sub-nodes have the same instrumentation namespace, disable
+		// the second one to prevent conflicts
 		if a.Namespace == b.Namespace {
 			b.Prometheus = false
 		}
