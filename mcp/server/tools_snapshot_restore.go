@@ -202,7 +202,6 @@ func restorePartition(snapshotPath, nodeDir, network, partitionID string,
 
 	// Configure ports
 	cfg.P2P.ListenAddress = fmt.Sprintf("tcp://0.0.0.0:%d", p2pPort)
-	cfg.RPC.ListenAddress = fmt.Sprintf("tcp://0.0.0.0:%d", listenPort)
 	cfg.Accumulate.API.ListenAddress = fmt.Sprintf("http://0.0.0.0:%d", apiPort)
 
 	// Configure bootstrap peers for network connectivity

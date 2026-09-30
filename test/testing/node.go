@@ -123,9 +123,6 @@ var DefaultLogLevels = config.LogLevel{}.
 
 func DefaultConfig(networkName string, net protocol.PartitionType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(networkName, net, node, netId) //
-	cfg.Mempool.MaxBatchBytes = 1048576                  //
-	cfg.Mempool.CacheSize = 1048576                      //
-	cfg.Mempool.Size = 50000                             //
 	cfg.Consensus.CreateEmptyBlocks = false              // Empty blocks are annoying to debug
 	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
 	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076

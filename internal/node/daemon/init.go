@@ -181,7 +181,6 @@ func BuildNodesConfig(network *NetworkInit, mkcfg MakeConfigFunc) [][][]*config.
 
 func ConfigureNodePorts(node *NodeInit, cfg *config.Config, part protocol.PartitionType) {
 	cfg.P2P.ListenAddress = node.Listen().Scheme("tcp").PartitionType(part).TendermintP2P().String()
-	cfg.RPC.ListenAddress = node.Listen().Scheme("tcp").PartitionType(part).TendermintRPC().String()
 
 	cfg.Instrumentation.PrometheusListenAddr = node.Listen().PartitionType(part).Prometheus().String()
 	cfg.Accumulate.P2P.Listen = []multiaddr.Multiaddr{

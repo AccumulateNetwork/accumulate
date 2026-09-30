@@ -126,7 +126,6 @@ func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId
 	c.TendermintConfig = *DefaultTendermintConfig()
 	c.LogLevel = DefaultLogLevels
 	c.Instrumentation.Prometheus = true
-	c.ProxyApp = ""
 	c.Accumulate.MaxEnvelopesPerBlock = 100
 	return c
 }
