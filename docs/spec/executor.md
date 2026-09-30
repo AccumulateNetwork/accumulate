@@ -1083,7 +1083,12 @@ consensus delivers from here. **It never seeds** (#4405): a node that restored
 no checkpoint does not know the round its state was produced at, and is
 refused and keeps collecting. The node is `ACTIVE` on its own root, since too
 few peers had a root to verify it against; from there every executed block is checked against its signed anchor as
-after any handoff, and a mismatch is repaired ("Two mismatches").
+after any handoff, and a mismatch is repaired ("Two mismatches"). The first block after
+the exit whose root its signed anchor proves is recorded (`AgreedAt`) and
+said once — `This node is executing in agreement; its own root matched its
+signed anchor after the whole-restart exit` — the one line that says a node
+which resumed is in agreement, since it was already `ACTIVE` and is never
+promoted (#4483).
 
 This is safe for the reason the join exists: a join takes a peer's state
 because the peers hold what this node lacks, and here no peer holds anything

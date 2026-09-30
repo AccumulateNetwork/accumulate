@@ -158,6 +158,12 @@ type PulledState struct {
 	backfilled   int
 	backfillSaid time.Time
 
+	// ownRoot is whether the node is ACTIVE on a root no anchor verified: it
+	// took the whole-restart exit (Executing). agreedAt is the first block
+	// after that whose root its signed anchor proved, said once (#4483).
+	ownRoot  bool
+	agreedAt atomic.Uint64
+
 	// checked is executed, for the backfill's lines: the backfill reads it
 	// beside the root watch, which writes executed.
 	checked atomic.Uint64
@@ -1797,8 +1803,14 @@ func (s *PulledState) Executing(block uint64) error {
 	if !s.machine.PromoteToActive(root, block) {
 		return errors.Conflict.WithFormat("%v is %v, not joining", s.partition, s.machine.State())
 	}
+	s.ownRoot = true
 	return nil
 }
+
+// AgreedAt is the first block, after the node took the whole-restart exit,
+// whose root its signed anchor proved; zero until then, and for a node that
+// joined, whose promotion is its agreement (#4483).
+func (s *PulledState) AgreedAt() uint64 { return s.agreedAt.Load() }
 
 // Promote implements [State]: the node handed off at block and is executing
 // from the block after it, so it is ACTIVE, with the anchored root it matched

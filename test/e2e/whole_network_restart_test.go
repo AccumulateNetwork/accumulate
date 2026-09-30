@@ -141,6 +141,26 @@ func TestAWholeNetworkRestartResumes(t *testing.T) {
 		"the network did not produce a block after the restart")
 	agree()
 
+	// A node that resumed is ACTIVE on a root nothing verified. Its root
+	// watch proves a later block against the signed anchor, and says so
+	// once (#4483).
+	for i, n := range all {
+		if !exits[i] {
+			continue
+		}
+		st := n.part.NodeJoinState(n.node)
+		for j := 0; j < 200 && st.AgreedAt() == 0; j++ {
+			_, diverged, err := st.Diverged(context.Background())
+			require.NoError(t, err)
+			require.False(t, diverged, "%s node %d diverged after resuming", n.name, n.node)
+			if st.AgreedAt() == 0 {
+				send()
+				sim.StepN(5)
+			}
+		}
+		require.NotZero(t, st.AgreedAt(), "%s node %d resumed and no signed anchor ever proved its root", n.name, n.node)
+	}
+
 	// One validator, alone: its peers are ACTIVE, so it joins from them.
 	alone := target{"BVN0", bvn0, 1}
 	exits = runJoins([]target{alone})
