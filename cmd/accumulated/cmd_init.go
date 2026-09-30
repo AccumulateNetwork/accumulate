@@ -409,13 +409,9 @@ outer:
 		partitionID = protocol.Directory
 
 	case protocol.PartitionTypeBlockValidator:
-		// Scan the node's list of services for a non-directory consensus node
-		// and use that.
-		for _, svc := range ni.Services {
-			if svc.Type != v3.ServiceTypeConsensus && !strings.EqualFold(svc.Argument, protocol.Directory) {
-				continue
-			}
-			partitionID = svc.Argument
+		// Use the node's non-directory consensus service.
+		if id, ok := bvnOf(ni.Services); ok {
+			partitionID = id
 			break outer
 		}
 
@@ -742,4 +738,16 @@ func versionCheck(version *api.VersionResponse, peer string) error {
 		}
 	}
 	return nil
+}
+
+// bvnOf names the BVN a node runs: the partition of its consensus service
+// that is not the Directory's, whatever order the services are listed in.
+func bvnOf(services []*v3.ServiceAddress) (string, bool) {
+	for _, svc := range services {
+		if svc.Type != v3.ServiceTypeConsensus || strings.EqualFold(svc.Argument, protocol.Directory) {
+			continue
+		}
+		return svc.Argument, true
+	}
+	return "", false
 }
