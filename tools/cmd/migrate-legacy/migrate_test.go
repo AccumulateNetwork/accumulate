@@ -6,10 +6,18 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/BurntSushi/toml"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
@@ -332,7 +340,42 @@ func testMigrateOld(t *testing.T, expect string, old ...applyFunc) {
 
 	b, err := cfg.Marshal(run.MarshalTOML)
 	require.NoError(t, err)
-	require.Equal(t, trim(expect), trim(string(b)))
+	require.Equal(t, trim(inlineKeys(expect)), trim(string(b)))
+
+	// What the migration writes loads in the node.
+	require.NoError(t, new(run.Config).Load(b, toml.Unmarshal))
+}
+
+// The expectations name each key by the CometBFT key file it came from, as
+// the node once referenced it; the migration writes the key itself. Each key
+// file the fixtures write holds testKey(path), so the expectation can be
+// rewritten to the inline form the migration must produce.
+var reCometKey = regexp.MustCompile(`path = "([^"]*)"\s*\n\s*type = "comet(?:PrivValFile|NodeKeyFile)"`)
+
+func inlineKeys(s string) string {
+	return reCometKey.ReplaceAllStringFunc(s, func(m string) string {
+		path := reCometKey.FindStringSubmatch(m)[1]
+		return fmt.Sprintf("address = %q\ntype = \"raw\"", address.FromED25519PrivateKey(testKey(path)).String())
+	})
+}
+
+// testKey is the key the fixture writes for the key file at path, relative to
+// the node directory.
+func testKey(path string) ed25519.PrivateKey {
+	seed := sha256.Sum256([]byte(filepath.Clean(path)))
+	return ed25519.NewKeyFromSeed(seed[:])
+}
+
+func writeCometKey(t *testing.T, root, path string) {
+	t.Helper()
+	file := filepath.Join(root, path)
+	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0700))
+	b, err := json.Marshal(map[string]any{"priv_key": map[string]any{
+		"type":  "tendermint/PrivKeyEd25519",
+		"value": []byte(testKey(path)),
+	}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(file, b, 0600))
 }
 
 func trim(s string) string {
@@ -350,14 +393,17 @@ type applyFunc = func(*run.Config, *run.CoreValidatorConfiguration)
 
 func applyOld(t *testing.T, dir, acc, tm string) applyFunc {
 	t.Helper()
-	tmp := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(tmp, "config"), 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(tmp, "config", "accumulate.toml"), []byte(acc), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(tmp, "config", "tendermint.toml"), []byte(tm), 0600))
-	old, err := loadLegacy(tmp)
+	root := t.TempDir()
+	part := filepath.Join(root, dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(part, "config"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(part, "config", "accumulate.toml"), []byte(acc), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(part, "config", "tendermint.toml"), []byte(tm), 0600))
+	old, err := loadLegacy(part)
 	require.NoError(t, err)
+	writeCometKey(t, root, filepath.Join(dir, old.NodeKey))
+	writeCometKey(t, root, filepath.Join(dir, old.PrivValidatorKey))
 	return func(cfg *run.Config, cvc *run.CoreValidatorConfiguration) {
 		t.Helper()
-		require.NoError(t, migrateCfg(cfg, cvc, dir, old))
+		require.NoError(t, migrateCfg(cfg, cvc, root, dir, old))
 	}
 }

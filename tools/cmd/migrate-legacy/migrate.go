@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	btoml "github.com/BurntSushi/toml"
 	"github.com/fatih/color"
 	"github.com/ipfs/go-cid"
 	"github.com/multiformats/go-multiaddr"
@@ -64,6 +66,16 @@ func migrate(_ *cobra.Command, args []string) {
 		flagMain.WorkDir = args[0]
 	}
 
+	// A node that main's `accumulated migrate` already converted has an
+	// accumulate.toml and no partition configurations; only its keys still
+	// name CometBFT key files.
+	if !fileExists(filepath.Join(flagMain.WorkDir, "dnn", "config", "accumulate.toml")) &&
+		!fileExists(filepath.Join(flagMain.WorkDir, "bvnn", "config", "accumulate.toml")) &&
+		fileExists(filepath.Join(flagMain.WorkDir, "accumulate.toml")) {
+		convertConfigFile(filepath.Join(flagMain.WorkDir, "accumulate.toml"))
+		return
+	}
+
 	cfg := new(run.Config)
 	cfg.P2P = new(run.P2P)
 	cfg.Logging = new(run.Logging)
@@ -89,12 +101,12 @@ func migrate(_ *cobra.Command, args []string) {
 	if bvnDir != "" {
 		bvn, err = loadLegacy(bvnDir)
 		check(err)
-		checkf(migrateCfg(cfg, cvc, "bvnn", bvn), "bvn")
+		checkf(migrateCfg(cfg, cvc, flagMain.WorkDir, "bvnn", bvn), "bvn")
 	}
 	if dnDir != "" {
 		dn, err = loadLegacy(dnDir)
 		check(err)
-		checkf(migrateCfg(cfg, cvc, "dnn", dn), "dn")
+		checkf(migrateCfg(cfg, cvc, flagMain.WorkDir, "dnn", dn), "dn")
 	}
 
 	inst, err := run.New(context.Background(), cfg)
@@ -161,12 +173,19 @@ func isDir(path string) string {
 	return path
 }
 
-func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string, old *legacyConfig) error {
+// migrateCfg merges one CometBFT-era partition directory, root/dir, into cfg.
+// The node and validator keys are read from their CometBFT key files and
+// written inline.
+func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, root, dir string, old *legacyConfig) error {
 	// Shared values
 	cfg.Network = old.Accumulate.Network.Id
 	cfg.P2P.Listen = addAddrs(cfg.P2P.Listen, old.Accumulate.P2P.Listen)
 	cfg.P2P.BootstrapPeers = addAddrs(cfg.P2P.BootstrapPeers, old.Accumulate.P2P.BootstrapPeers)
-	cfg.P2P.Key = &run.CometNodeKeyFile{Path: filepath.Join(dir, old.NodeKey)}
+	nodeKey, err := readCometKey(filepath.Join(root, dir, old.NodeKey))
+	if err != nil {
+		return fmt.Errorf("node key: %w", err)
+	}
+	cfg.P2P.Key = nodeKey
 	// old.Accumulate.Healing.Enable is deliberately dropped: healing is
 	// unconditional now — recovery is not something an operator can switch
 	// off (#4138).
@@ -177,12 +196,14 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string
 	}
 	cvc.Listen = urlToListen("{tendermint} [p2p].laddr", old.P2P.ListenAddress, offset)
 
-	if key := (&run.CometPrivValFile{
-		Path: filepath.Join(dir, old.PrivValidatorKey),
-	}); cvc.ValidatorKey == nil {
-		cvc.ValidatorKey = key
-	} else if other := cvc.ValidatorKey.(*run.CometPrivValFile); !other.Equal(key) {
-		return fmt.Errorf("DN and BVN nodes cannot use different validator keys (%v != %v)", other.Path, key.Path)
+	valKey, err := readCometKey(filepath.Join(root, dir, old.PrivValidatorKey))
+	if err != nil {
+		return fmt.Errorf("validator key: %w", err)
+	}
+	if cvc.ValidatorKey == nil {
+		cvc.ValidatorKey = valKey
+	} else if other := cvc.ValidatorKey.(*run.RawPrivateKey); !other.Equal(valKey) {
+		return fmt.Errorf("DN and BVN nodes cannot use different validator keys")
 	}
 
 	if old.Accumulate.DisableDirectDispatch {
@@ -409,4 +430,45 @@ func warnLegacySnapshotsConfig(dir string) (bool, error) {
 			"file an issue before upgrading.",
 		dir, enable, schedule, directory, retain))
 	return true, nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// convertConfigFile converts the CometBFT key-file references in a node
+// configuration written by main's `accumulated migrate` into inline keys,
+// keeping a copy of the original beside it, and checks that the result loads
+// as the node loads it.
+func convertConfigFile(file string) {
+	b, err := os.ReadFile(file)
+	check(err)
+	doc := map[string]any{}
+	check(btoml.Unmarshal(b, &doc))
+
+	changed, err := convertKeyRefs(doc, filepath.Dir(file))
+	checkf(err, "convert keys")
+	if !changed {
+		color.Green("%s names no CometBFT key file: nothing to convert", file)
+		return
+	}
+
+	out := new(bytes.Buffer)
+	check(btoml.NewEncoder(out).Encode(doc))
+	cfg := new(run.Config)
+	checkf(cfg.Load(out.Bytes(), btoml.Unmarshal), "the converted configuration does not load")
+
+	if flagMigrate.Pretend || flagMigrate.Verbose {
+		fmt.Println(out.String())
+	}
+	if flagMigrate.Pretend {
+		return
+	}
+
+	backup := filepath.Join(filepath.Dir(file), "backup")
+	check(os.MkdirAll(backup, 0700))
+	check(os.WriteFile(filepath.Join(backup, "accumulate.toml"), b, 0600))
+	check(os.WriteFile(file, out.Bytes(), 0600))
+	color.Green("Keys converted; the original is in %s", backup)
 }

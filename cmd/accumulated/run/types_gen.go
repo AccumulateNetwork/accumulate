@@ -98,60 +98,6 @@ func (v *BoltStorage) UnmarshalJSON(b []byte) error {
 	return sBoltStorage.UnmarshalJSON(b, v)
 }
 
-type CometNodeKeyFile struct {
-	Path string
-	key  address.Address
-}
-
-func (CometNodeKeyFile) Type() PrivateKeyType { return PrivateKeyTypeCometNodeKeyFile }
-
-// Copy returns a copy of the CometNodeKeyFile.
-func (v *CometNodeKeyFile) Copy() *CometNodeKeyFile {
-	return sCometNodeKeyFile.Copy(v)
-}
-
-// EqualCometNodeKeyFile returns true if V is equal to U.
-func (v *CometNodeKeyFile) Equal(u *CometNodeKeyFile) bool {
-	return sCometNodeKeyFile.Equal(v, u)
-}
-
-// MarshalBinary marshals the CometNodeKeyFile to JSON.
-func (v *CometNodeKeyFile) MarshalJSON() ([]byte, error) {
-	return sCometNodeKeyFile.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the CometNodeKeyFile from JSON.
-func (v *CometNodeKeyFile) UnmarshalJSON(b []byte) error {
-	return sCometNodeKeyFile.UnmarshalJSON(b, v)
-}
-
-type CometPrivValFile struct {
-	Path string
-	key  address.Address
-}
-
-func (CometPrivValFile) Type() PrivateKeyType { return PrivateKeyTypeCometPrivValFile }
-
-// Copy returns a copy of the CometPrivValFile.
-func (v *CometPrivValFile) Copy() *CometPrivValFile {
-	return sCometPrivValFile.Copy(v)
-}
-
-// EqualCometPrivValFile returns true if V is equal to U.
-func (v *CometPrivValFile) Equal(u *CometPrivValFile) bool {
-	return sCometPrivValFile.Equal(v, u)
-}
-
-// MarshalBinary marshals the CometPrivValFile to JSON.
-func (v *CometPrivValFile) MarshalJSON() ([]byte, error) {
-	return sCometPrivValFile.MarshalJSON(v)
-}
-
-// UnmarshalJSON unmarshals the CometPrivValFile from JSON.
-func (v *CometPrivValFile) UnmarshalJSON(b []byte) error {
-	return sCometPrivValFile.UnmarshalJSON(b, v)
-}
-
 type Config struct {
 	DotEnv          *bool
 	Network         string
@@ -1044,11 +990,9 @@ func (v *PrivateKeySeed) UnmarshalJSON(b []byte) error {
 type PrivateKeyType int64
 
 const (
-	PrivateKeyTypeCometNodeKeyFile PrivateKeyType = 5
-	PrivateKeyTypeCometPrivValFile PrivateKeyType = 4
-	PrivateKeyTypeRaw              PrivateKeyType = 1
-	PrivateKeyTypeSeed             PrivateKeyType = 3
-	PrivateKeyTypeTransient        PrivateKeyType = 2
+	PrivateKeyTypeRaw       PrivateKeyType = 1
+	PrivateKeyTypeSeed      PrivateKeyType = 3
+	PrivateKeyTypeTransient PrivateKeyType = 2
 )
 
 // SetByName looks up a PrivateKeyType by name.

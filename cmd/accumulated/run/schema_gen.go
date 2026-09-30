@@ -25,8 +25,6 @@ var (
 	sBadgerStorage              schema.Methods[*BadgerStorage, *BadgerStorage, *schema.CompositeType]
 	sBlockchainDBStorage        schema.Methods[*BlockchainDBStorage, *BlockchainDBStorage, *schema.CompositeType]
 	sBoltStorage                schema.Methods[*BoltStorage, *BoltStorage, *schema.CompositeType]
-	sCometNodeKeyFile           schema.Methods[*CometNodeKeyFile, *CometNodeKeyFile, *schema.CompositeType]
-	sCometPrivValFile           schema.Methods[*CometPrivValFile, *CometPrivValFile, *schema.CompositeType]
 	sConfig                     schema.Methods[*Config, *Config, *schema.CompositeType]
 	sConfiguration              schema.UnionMethods[Configuration, ConfigurationType]
 	sConfigurationType          schema.EnumMethods[ConfigurationType]
@@ -113,42 +111,6 @@ func init() {
 			{
 				Name: "Path",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-		},
-	}).SetGoType()
-
-	sCometNodeKeyFile = schema.WithMethods[*CometNodeKeyFile, *CometNodeKeyFile](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "CometNodeKeyFile",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Path",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-		},
-		Transients: []*schema.Field{
-			{
-				Name: "key",
-				Type: schema.TypeReferenceFor[address.Address](),
-			},
-		},
-	}).SetGoType()
-
-	sCometPrivValFile = schema.WithMethods[*CometPrivValFile, *CometPrivValFile](&schema.CompositeType{
-		TypeBase: schema.TypeBase{
-			Name: "CometPrivValFile",
-		},
-		Fields: []*schema.Field{
-			{
-				Name: "Path",
-				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
-			},
-		},
-		Transients: []*schema.Field{
-			{
-				Name: "key",
-				Type: schema.TypeReferenceFor[address.Address](),
 			},
 		},
 	}).SetGoType()
@@ -1247,20 +1209,6 @@ func init() {
 					}).
 						ResolveElemTo(&deferredTypes, "PrivateKeySeed"),
 				},
-				{
-					Discriminator: "cometPrivValFile",
-					Type: (&schema.PointerType{
-						TypeBase: schema.TypeBase{},
-					}).
-						ResolveElemTo(&deferredTypes, "CometPrivValFile"),
-				},
-				{
-					Discriminator: "cometNodeKeyFile",
-					Type: (&schema.PointerType{
-						TypeBase: schema.TypeBase{},
-					}).
-						ResolveElemTo(&deferredTypes, "CometNodeKeyFile"),
-				},
 			},
 		}).SetGoType()
 
@@ -1292,14 +1240,6 @@ func init() {
 			},
 			Underlying: &schema.SimpleType{Type: schema.SimpleTypeInt},
 			Values: map[string]*schema.EnumValue{
-				"CometNodeKeyFile": {
-					Name:  "CometNodeKeyFile",
-					Value: 5,
-				},
-				"CometPrivValFile": {
-					Name:  "CometPrivValFile",
-					Value: 4,
-				},
 				"Raw": {
 					Name:  "Raw",
 					Value: 1,
@@ -1735,8 +1675,6 @@ func init() {
 		sBadgerStorage.Type,
 		sBlockchainDBStorage.Type,
 		sBoltStorage.Type,
-		sCometNodeKeyFile.Type,
-		sCometPrivValFile.Type,
 		sConfig.Type,
 		sConfiguration.Type,
 		sConfigurationType.Type,

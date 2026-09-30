@@ -35,17 +35,9 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 		return errors.BadRequest.With("listen address must specify a port")
 	}
 
-	var nodeKey PrivateKey
-	if c.Mode == CoreValidatorModeBVN {
-		nodeKey = &CometNodeKeyFile{Path: filepath.Join("bvnn", "config", "node_key.json")}
-	} else {
-		nodeKey = &CometNodeKeyFile{Path: filepath.Join("dnn", "config", "node_key.json")}
-	}
-
 	// Set P2P defaults
 	setDefaultVal(&cfg.P2P, new(P2P))
 	setDefaultSlice(&cfg.P2P.BootstrapPeers, accumulate.BootstrapServers...) // Bootstrap servers
-	setDefaultVal(&cfg.P2P.Key, nodeKey)                                     // Key
 	setDefaultSlice(&cfg.P2P.Listen,                                         // Listen addresses
 		listen(c.Listen, "/ip4/0.0.0.0", portDir+portAccP2P, useTCP{}),
 		listen(c.Listen, "/ip4/0.0.0.0", portDir+portAccP2P, useQUIC{}),

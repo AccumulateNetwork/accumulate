@@ -76,6 +76,10 @@ func (c *Config) Load(b []byte, format func([]byte, any) error) error {
 	}
 
 	v = remap(v, kebab2camel, nil)
+	if typ, ok := findCometKeyType(v); ok {
+		return errors.BadRequest.WithFormat("the configuration names a %s key, a CometBFT key file, which the node no longer reads; "+
+			"convert the configuration with tools/cmd/migrate-legacy, which writes the key inline", typ)
+	}
 	b, err = json.Marshal(v)
 	if err != nil {
 		return err
@@ -279,4 +283,35 @@ func expandEnv(v reflect.Value, expand func(string) string) {
 			}
 		}
 	}
+}
+
+// findCometKeyType reports whether a decoded configuration names one of the
+// CometBFT key-file types the node read before #3910 (cometPrivValFile,
+// cometNodeKeyFile), so that loading one fails with a message that says what
+// to do rather than a decode error.
+func findCometKeyType(v any) (string, bool) {
+	switch v := v.(type) {
+	case map[string]any:
+		if t, ok := v["type"].(string); ok && (strings.EqualFold(t, "cometPrivValFile") || strings.EqualFold(t, "cometNodeKeyFile")) {
+			return t, true
+		}
+		for _, v := range v {
+			if t, ok := findCometKeyType(v); ok {
+				return t, true
+			}
+		}
+	case []any:
+		for _, v := range v {
+			if t, ok := findCometKeyType(v); ok {
+				return t, true
+			}
+		}
+	case []map[string]any:
+		for _, v := range v {
+			if t, ok := findCometKeyType(v); ok {
+				return t, true
+			}
+		}
+	}
+	return "", false
 }

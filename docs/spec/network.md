@@ -121,10 +121,9 @@ bootstrap peer, at `/ip4|dns/{host}/tcp/{base+2}/p2p/{id}`. `--genesis-doc`
 instead. `init` never overwrites an existing `accumulate.toml`; `--reset`
 removes it first.
 
-A node initialized for CometBFT (`dnn/` and `bvnn/`, each with
-`config/tendermint.toml`) is converted by the standalone
-`tools/cmd/migrate-legacy`, the only code that reads that layout. A node
-never reads it.
+A node initialized for CometBFT is converted by the standalone
+`tools/cmd/migrate-legacy` (see "Converting a mainnet node"). A node never
+reads that layout.
 
 **A genesis snapshot is state only**: the header, the records and the BPT.
 The validator set it starts from is the network definition among those
@@ -140,3 +139,34 @@ spine starts at a genesis pinned out of band.
 
 Message types 0x0F and 0x2F are this line's. Main assigns up to 0x0E and 0x2E,
 so they are free there today, and must not be assigned to anything else there.
+
+## Converting a mainnet node
+
+A mainnet node was initialized for CometBFT. Moving it to DAG-BFT is a
+conversion, done once, offline, by `tools/cmd/migrate-legacy`; the node itself
+reads only its own layout.
+
+**Configuration and keys (done).** The tool accepts either shape a mainnet
+node can be in:
+
+- the CometBFT layout — `dnn/` and `bvnn/`, each with `config/tendermint.toml`
+  and `config/accumulate.toml` — which it merges into one `accumulate.toml`
+  with a core-validator configuration;
+- an `accumulate.toml` that main's `accumulated migrate` already wrote, whose
+  keys still name CometBFT key files.
+
+Either way every key is written **inline**, as a raw private key — the form
+`accumulated init network` writes. The node and validator keys are read from
+CometBFT's JSON key files (`node_key.json`, `priv_validator_key.json`, type
+`tendermint/PrivKeyEd25519`): wherever `p2p.key` or a configuration's
+`validator-key` names one (`cometNodeKeyFile`, `cometPrivValFile`), and, for
+a core validator or follower with no `p2p.key`, from
+`{dnn|bvnn}/config/node_key.json`, which main's node defaulted to. The node
+knows neither key type (their numbers, 4 and 5, stay unassigned): a
+configuration that still names one fails to load with a message pointing at
+the tool.
+
+**The database (future work).** Converting a mainnet node's database to
+what a DAG-BFT node holds is not built. When it is, it belongs here and in
+the same tool: the key conversion is its first step, not a separate one.
+

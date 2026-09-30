@@ -665,10 +665,8 @@ PrivateKey:
           value: 2
         Seed:
           value: 3
-        CometPrivValFile:
-          value: 4
-        CometNodeKeyFile:
-          value: 5
+        # 4 and 5 were cometPrivValFile and cometNodeKeyFile, CometBFT's key
+        # files. tools/cmd/migrate-legacy converts them to raw keys (#3910).
 
   members:
     - name: RawPrivateKey
@@ -696,22 +694,3 @@ PrivateKey:
         - name: key
           type: address.Address
 
-    - name: CometPrivValFile
-      class: composite
-      pointer: true
-      fields:
-        - name: Path
-          type: string
-      transients:
-        - name: key
-          type: address.Address
-
-    - name: CometNodeKeyFile
-      class: composite
-      pointer: true
-      fields:
-        - name: Path
-          type: string
-      transients:
-        - name: key
-          type: address.Address
