@@ -149,13 +149,15 @@ func (p *Partition) SetSourceWrap(i int, wrap func([]pull.Source) []pull.Source)
 
 // movingSources is the join's QueryPeers with the node's pull hook called
 // before each account's peers are named. Everything else is QueryPeers's.
+// The backfill runs on a goroutine beside the join (join.Backfilling), and
+// the hook steps the network, so the backfill does not call it.
 type movingSources struct {
 	*join.QueryPeers
 	node *Node
 }
 
 func (m *movingSources) For(ctx context.Context, account *url.URL) ([]pull.Source, *url.URL, error) {
-	if h := m.node.pullHook; h != nil {
+	if h := m.node.pullHook; h != nil && !join.Backfilling(ctx) {
 		h()
 	}
 	srcs, partition, err := m.QueryPeers.For(ctx, account)

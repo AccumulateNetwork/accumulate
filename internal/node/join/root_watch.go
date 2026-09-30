@@ -170,6 +170,7 @@ const backfillPause = 2 * time.Second
 // writes, so the join ends it before it demotes and pulls, and starts it
 // again after the next handoff (Run).
 func (s *PulledState) Backfill(ctx context.Context) {
+	ctx = context.WithValue(ctx, backfillKey{}, true)
 	for ctx.Err() == nil {
 		if s.machine.State() != nodestate.StateActive {
 			if !pause(ctx, backfillPause) {
@@ -197,6 +198,16 @@ func (s *PulledState) Backfill(ctx context.Context) {
 			return
 		}
 	}
+}
+
+type backfillKey struct{}
+
+// Backfilling is whether ctx is the backfill's. The backfill runs beside the
+// join, not on its goroutine: what the join's sources do between two of the
+// join's own reads, such as the simulator's pull hook, must not run from it.
+func Backfilling(ctx context.Context) bool {
+	b, _ := ctx.Value(backfillKey{}).(bool)
+	return b
 }
 
 // pause waits d, and reports false if ctx ended first.
