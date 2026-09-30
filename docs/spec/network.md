@@ -126,6 +126,13 @@ A node initialized for CometBFT (`dnn/` and `bvnn/`, each with
 `tools/cmd/migrate-legacy`, the only code that reads that layout. A node
 never reads it.
 
+**A genesis snapshot is state only**: the header, the records and the BPT.
+The validator set it starts from is the network definition among those
+records. Until #3910 genesis also wrote a *consensus* section, a CometBFT
+genesis document (chain ID, consensus parameters, validator addresses). No
+node ever read it. Genesis no longer writes it; a file that has one still
+loads, and the section is ignored (section type 10 stays assigned for that).
+
 **A fetched genesis is a copy, not a trust root.** Nothing in the answer proves
 it is the network's genesis; the operator trusts the peer they named, which is
 why `init` warns. The proof service takes the same position: a walk of the

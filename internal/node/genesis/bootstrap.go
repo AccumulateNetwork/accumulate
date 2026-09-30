@@ -26,9 +26,7 @@ import (
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -44,9 +42,6 @@ type InitOpts struct {
 	GenesisTime    time.Time
 	GenesisGlobals *core.GlobalValues
 	OperatorKeys   [][]byte
-
-	// ConsensusParams go into the genesis snapshot's consensus section.
-	ConsensusParams *cometbft.ConsensusParams
 
 	// Preloaded data
 	FactomAddresses func() (io.Reader, error)
@@ -150,53 +145,10 @@ func Init(snapshotWriter io.WriteSeeker, opts InitOpts) error {
 	}
 
 	// Create the snapshot
-	_, err = b.db.Collect(snapshotWriter, b.partition.URL, &coredb.CollectOptions{
-		DidWriteHeader: func(w *snapshot.Writer) error {
-			// Convert the consensus parameters
-			doc := new(cometbft.GenesisDoc)
-			doc.ChainID = opts.NetworkID + "." + opts.PartitionId
-			if opts.ConsensusParams != nil {
-				doc.Params = opts.ConsensusParams.Copy()
-			}
-			for _, v := range opts.GenesisGlobals.Network.Validators {
-				if !v.IsActiveOn(opts.PartitionId) {
-					continue
-				}
-
-				var name string
-				if v.Operator == nil {
-					name = fmt.Sprintf("Validator-%x", v.PublicKeyHash[:4])
-				} else {
-					name = v.Operator.ShortString()
-				}
-
-				// Compute CometBFT-compatible address: sha256(pubkey)[:20]
-				keyHash := sha256.Sum256(v.PublicKey)
-				doc.Validators = append(doc.Validators, &cometbft.Validator{
-					Address: keyHash[:20],
-					PubKey:  v.PublicKey,
-					Type:    protocol.SignatureTypeED25519,
-					Power:   1,
-					Name:    name,
-				})
-			}
-
-			// Write it
-			b, err := doc.MarshalBinary()
-			if err != nil {
-				return err
-			}
-			sw, err := w.OpenRaw(snapshot.SectionTypeConsensus)
-			if err != nil {
-				return err
-			}
-			_, err = sw.Write(b)
-			if err != nil {
-				return err
-			}
-			return sw.Close()
-		},
-	})
+	// A genesis snapshot has no consensus section: the validator set is the
+	// network definition it records (network spec, "How a new node gets its
+	// genesis").
+	_, err = b.db.Collect(snapshotWriter, b.partition.URL, &coredb.CollectOptions{})
 	if err != nil {
 		return errors.UnknownError.WithFormat("collect: %w", err)
 	}

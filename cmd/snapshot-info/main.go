@@ -45,19 +45,12 @@ func main() {
 	}
 
 	fmt.Println("\nSections:")
-	hasConsensus := false
 	for _, s := range rd.Sections {
-		typeName := s.Type().String()
+		note := ""
 		if s.Type() == snapshot.SectionTypeConsensus {
-			hasConsensus = true
+			// Written by genesis before #3910; nothing reads it.
+			note = " (legacy, ignored)"
 		}
-		fmt.Printf("  - %s (offset: %d, size: %d)\n", typeName, s.Offset(), s.Size())
-	}
-
-	fmt.Println()
-	if hasConsensus {
-		fmt.Println("[OK] Snapshot has Consensus section - suitable for restore")
-	} else {
-		fmt.Println("[FAIL] Snapshot MISSING Consensus section - NOT suitable for restore")
+		fmt.Printf("  - %s (offset: %d, size: %d)%s\n", s.Type(), s.Offset(), s.Size(), note)
 	}
 }

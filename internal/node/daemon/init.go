@@ -20,7 +20,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -99,7 +98,6 @@ func BuildGenesisDocs(network *NetworkInit, globals *core.GlobalValues, time tim
 			OperatorKeys:    operators,
 			FactomAddresses: factomAddresses,
 			Snapshots:       snapshots,
-			ConsensusParams: cometbft.DefaultConsensusParams(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("init %s: %w", id, err)

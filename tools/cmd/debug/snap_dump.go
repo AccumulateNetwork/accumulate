@@ -8,7 +8,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -17,7 +16,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -79,11 +77,6 @@ func dumpSnapshot(_ *cobra.Command, args []string) {
 			if rootHash != [32]byte{} {
 				fmt.Printf("  State hash %x\n", rootHash)
 			}
-		},
-		Consensus: func(doc *cometbft.GenesisDoc) {
-			b, err := json.MarshalIndent(doc, "  ", "  ")
-			check(err)
-			fmt.Printf("  %s\n", b)
 		},
 		Record: func(value any) {
 			switch value := value.(type) {

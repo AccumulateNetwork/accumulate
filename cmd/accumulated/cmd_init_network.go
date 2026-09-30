@@ -338,15 +338,10 @@ func initGenesis(cmd *cobra.Command, args []string) {
 	// Generate genesis docs
 	genDocs := buildGenesis(network)
 
-	// Write documents, as binary and as JSON
+	// Write the genesis snapshots
 	check(os.MkdirAll(flagMain.WorkDir, 0755))
 	for part, snap := range genDocs {
 		check(os.WriteFile(filepath.Join(flagMain.WorkDir, part+".snap"), snap, 0600))
-		doc, err := genesis.ConvertSnapshotToJson(snap)
-		check(err)
-		snap, err = json.MarshalIndent(doc, "", "  ")
-		check(err)
-		check(os.WriteFile(filepath.Join(flagMain.WorkDir, part+".json"), snap, 0600))
 	}
 }
 

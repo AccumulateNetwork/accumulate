@@ -27,7 +27,7 @@ SectionType:
     description: contains the BPT, as raw (key hash, value) pairs
     value: 9
   Consensus:
-    description: contains consensus parameters
+    description: held a CometBFT genesis document, which genesis wrote before #3910. Nothing writes or reads it; the value stays so older genesis files still open
     value: 10
   BPT:
     description: contains the BPT, as records

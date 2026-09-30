@@ -19,7 +19,6 @@ import (
 	sv1 "gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	sv2 "gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/cometbft"
 )
 
 func openSnapshotFile(filename string) ioutil.SectionReader {
@@ -48,7 +47,6 @@ type snapshotScanArgs struct {
 	Section   func(index int, typ sv2.SectionType, size, offset int64) bool
 	Header    func(version, height uint64, timestamp time.Time, rootHash [32]byte)
 	Record    func(any)
-	Consensus func(*cometbft.GenesisDoc)
 }
 
 func scanSnapshot(f ioutil.SectionReader, args snapshotScanArgs) {
@@ -129,17 +127,6 @@ func scanSnapV2(f ioutil.SectionReader, args snapshotScanArgs) {
 				args.Record(e)
 			}
 
-		case sv2.SectionTypeConsensus:
-			if args.Consensus == nil {
-				break
-			}
-
-			rd, err := s.Open()
-			check(err)
-
-			doc := new(cometbft.GenesisDoc)
-			check(doc.UnmarshalBinaryFrom(rd))
-			args.Consensus(doc)
 		}
 	}
 }

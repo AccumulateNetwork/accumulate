@@ -265,14 +265,13 @@ func (d *NetSimConfiguration) buildGenesis(inst *Instance, cfg *Config, nodes []
 		defer f.Close()
 
 		err = genesis.Init(f, genesis.InitOpts{
-			NetworkID:       cfg.Network,
-			PartitionId:     part.ID,
-			NetworkType:     part.Type,
-			GenesisTime:     time.Now(),
-			Logger:          logging.NewSlogLogger(inst.logger).With("partition", part.ID),
-			GenesisGlobals:  v,
-			OperatorKeys:    [][]byte{mainPubKey},
-			ConsensusParams: nil, // Not needed for DAG-BFT
+			NetworkID:      cfg.Network,
+			PartitionId:    part.ID,
+			NetworkType:    part.Type,
+			GenesisTime:    time.Now(),
+			Logger:         logging.NewSlogLogger(inst.logger).With("partition", part.ID),
+			GenesisGlobals: v,
+			OperatorKeys:   [][]byte{mainPubKey},
 			Snapshots: []func(*core.GlobalValues) (ioutil.SectionReader, error){
 				func(*core.GlobalValues) (ioutil.SectionReader, error) { return ioutil.NewBuffer(faucetSnapshot), nil },
 			},

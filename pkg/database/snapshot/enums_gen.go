@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -41,7 +41,7 @@ const SectionTypeRecordIndex SectionType = 8
 // SectionTypeRawBPT contains the BPT, as raw (key hash, value) pairs.
 const SectionTypeRawBPT SectionType = 9
 
-// SectionTypeConsensus contains consensus parameters.
+// SectionTypeConsensus held a CometBFT genesis document, which genesis wrote before.
 const SectionTypeConsensus SectionType = 10
 
 // SectionTypeBPT contains the BPT, as records.
