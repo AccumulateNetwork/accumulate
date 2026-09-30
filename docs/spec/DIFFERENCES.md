@@ -819,8 +819,10 @@ still different, or not known:
   N: Message.….Main not found` while the store held them (run
   `20260925T020517Z`; `TestAFreshBVNNodeJoinsByPullOnBlockchainDB`). The
   same window hid a record the executor wrote itself one block earlier: after
-  the handoff the join's root watch backfills head-only accounts between
-  blocks, two commits an account and 64 accounts a check, so the local
+  the handoff the join backfills head-only accounts, two commits an account --
+  then from the root watch, 64 accounts a check between blocks; since #4472
+  on a goroutine of its own, committing beside the executor at any time, which
+  widens this exposure rather than closing it -- so the local
   delivery block N queued was absent to block N + 1's drain, which failed
   before clearing the queue -- every later block with it, and the follower
   stood at block 731 for ten minutes in the same run. **The drain falls back
