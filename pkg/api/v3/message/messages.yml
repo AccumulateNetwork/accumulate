@@ -51,6 +51,12 @@ AnchorReceiptRequest:
     - type: api.AnchorReceiptOptions
       marshal-as: reference
 
+GenesisRequest:
+  union: { type: message }
+  fields:
+    - type: api.GenesisOptions
+      marshal-as: reference
+
 MetricsRequest:
   union: { type: message }
   fields:
@@ -170,6 +176,12 @@ AnchorReceiptResponse:
       type: api.AnchorReceiptRecord
       marshal-as: reference
       pointer: true
+
+GenesisResponse:
+  union: { type: message }
+  fields:
+    - name: Value
+      type: bytes
 
 MetricsResponse:
   union: { type: message }

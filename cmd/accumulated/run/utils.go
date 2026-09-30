@@ -74,8 +74,8 @@ func getPrivateKey(key PrivateKey, inst *Instance) (ed25519.PrivateKey, error) {
 	return sk, nil
 }
 
-func registerRpcService(inst *Instance, addr *api.ServiceAddress, service message.Service) {
-	handler, err := message.NewHandler(service)
+func registerRpcService(inst *Instance, addr *api.ServiceAddress, services ...message.Service) {
+	handler, err := message.NewHandler(services...)
 	if err != nil {
 		panic(err)
 	}

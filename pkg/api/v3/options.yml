@@ -61,6 +61,15 @@ ConsensusStatusOptions:
       type: bytes
       optional: true
 
+GenesisOptions:
+  fields:
+    - name: NodeID
+      description: names the node to ask; empty asks any node serving the partition
+      type: string
+      optional: true
+    - name: Partition
+      type: string
+
 NetworkStatusOptions:
   fields:
     - name: Partition

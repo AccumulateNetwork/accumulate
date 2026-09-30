@@ -91,6 +91,22 @@ func (s ConsensusService) consensusStatus(ctx context.Context, params json.RawMe
 	return formatResponse(s.ConsensusService.ConsensusStatus(ctx, req.ConsensusStatusOptions))
 }
 
+type GenesisService struct{ api.GenesisService }
+
+func (s GenesisService) methods() jsonrpc2.MethodMap {
+	return jsonrpc2.MethodMap{
+		"genesis": s.genesis,
+	}
+}
+
+func (s GenesisService) genesis(ctx context.Context, params json.RawMessage) interface{} {
+	req, err := parseRequest[*message.GenesisRequest](params)
+	if err != nil {
+		return formatResponse(nil, err)
+	}
+	return formatResponse(s.GenesisService.Genesis(ctx, req.GenesisOptions))
+}
+
 type NetworkService struct{ api.NetworkService }
 
 func (s NetworkService) methods() jsonrpc2.MethodMap {

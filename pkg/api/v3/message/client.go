@@ -36,6 +36,7 @@ type Router interface {
 var _ api.NodeService = (*Client)(nil)
 var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
+var _ api.GenesisService = (*Client)(nil)
 var _ api.ProofService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
@@ -79,6 +80,11 @@ func (c *Client) FindService(ctx context.Context, opts api.FindServiceOptions) (
 // ConsensusStatus implements [api.NodeService.ConsensusStatus].
 func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	return c.ForAddress(nil).ConsensusStatus(ctx, opts)
+}
+
+// Genesis implements [api.GenesisService.Genesis].
+func (c *Client) Genesis(ctx context.Context, opts api.GenesisOptions) ([]byte, error) {
+	return c.ForAddress(nil).Genesis(ctx, opts)
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
@@ -145,6 +151,11 @@ func (c AddressedClient) ConsensusStatus(ctx context.Context, opts api.Consensus
 	// Wrap the request as a NodeStatusRequest and expect a NodeStatusResponse,
 	// which is unpacked into a ConsensusStatus
 	return typedRequest[*ConsensusStatusResponse, *api.ConsensusStatus](c, ctx, &ConsensusStatusRequest{ConsensusStatusOptions: opts})
+}
+
+// Genesis implements [api.GenesisService.Genesis].
+func (c AddressedClient) Genesis(ctx context.Context, opts api.GenesisOptions) ([]byte, error) {
+	return typedRequest[*GenesisResponse, []byte](c, ctx, &GenesisRequest{GenesisOptions: opts})
 }
 
 // NetworkStatus implements [api.NetworkService.NetworkStatus].
@@ -250,6 +261,7 @@ type response[T any] interface {
 func (r *NodeInfoResponse) rval() *api.NodeInfo               { return r.Value }             //nolint:unused
 func (r *FindServiceResponse) rval() []*api.FindServiceResult { return unNilArray(r.Value) } //nolint:unused
 func (r *ConsensusStatusResponse) rval() *api.ConsensusStatus { return r.Value }             //nolint:unused
+func (r *GenesisResponse) rval() []byte                       { return r.Value }             //nolint:unused
 func (r *NetworkStatusResponse) rval() *api.NetworkStatus     { return r.Value }             //nolint:unused
 func (r *MetricsResponse) rval() *api.Metrics                 { return r.Value }             //nolint:unused
 func (r *MinorRootRangeResponse) rval() *api.MinorRootRecord  { return r.Value }             //nolint:unused

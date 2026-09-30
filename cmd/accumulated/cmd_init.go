@@ -7,11 +7,8 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -24,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/multiformats/go-multiaddr"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate"
@@ -32,7 +30,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	cfg "gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/genesis"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	client "gitlab.com/accumulatenetwork/accumulate/pkg/client/api/v2"
@@ -117,7 +114,7 @@ func initInitFlags() {
 
 	cmdInitNode.ResetFlags()
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
-	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis snapshot for the partition, instead of fetching it from the peer (e.g. a <partition>.snap from 'init genesis')")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678, default will be http://0.0.0.0:basePort where base port is determined by seed or peer")
 	cmdInitNode.Flags().StringVarP(&flagInitNode.PublicIP, "public", "p", "", "public IP or URL")
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
@@ -241,7 +238,7 @@ func bootstrapReset(dir string) bool {
 	return !keep
 }
 
-func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, *genesis.GenesisDocJSON, error) {
+func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config, []byte, error) {
 	s := strings.Split(args[0], ".")
 	if len(s) != 2 {
 		fatalf("network must be in the form of <partition-name>.<network-name>, e.g. mainnet.bvn0")
@@ -279,39 +276,20 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 	config := cfg.Default(networkName, resp.Type, getNodeTypeFromFlag(), partitionName)
 	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir(resp.Type)))
 
-	var lastHealthyTmPeer *cometRPCClient
+	var lastHealthyV3Peer *jsonrpc.Client
 	var lastHealthyAccPeer *client.Client
 	for _, addr := range resp.Addresses {
-		//go build a list of healthy nodes
-		u, err := cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetTendermintRpc))
+		//need a healthy accumulate node to further verify the proxy
+		u, err := cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetAccumulateApi))
 		if err != nil {
 			return 0, nil, nil, fmt.Errorf("failed to parse url from network info %s, %v", addr, err)
-		}
-		//check the health of the peer
-		saddr := fmt.Sprintf("tcp://%s:%s", u.Hostname(), u.Port())
-		peerClient, err := newCometRPCClient(saddr)
-		if err != nil {
-			return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", u.String(), err)
-		}
-
-		// peerStatus, err := peerClient.Status(context.Background())
-		// if err != nil {
-		// 	warnf("ignoring peer: not healthy %s", u.String())
-		// 	continue
-		// }
-
-		lastHealthyTmPeer = peerClient
-
-		//need a healthy accumulate node to further verify the proxy
-		u, err = cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetAccumulateApi))
-		if err != nil {
-			return 0, nil, nil, err
 		}
 
 		lastHealthyAccPeer, err = client.New(fmt.Sprintf("http://%s:%s", u.Hostname(), u.Port()))
 		if err != nil {
 			return 0, nil, nil, fmt.Errorf("failed to create accumulate client for %s, %v", u.String(), err)
 		}
+		lastHealthyV3Peer = jsonrpc.NewClient(fmt.Sprintf("http://%s:%s/v3", u.Hostname(), u.Port()))
 
 		// //if we have a healthy node with a matching id, add it as a bootstrap peer
 		// if config.P2P.BootstrapPeers != "" {
@@ -324,11 +302,11 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 		// config.P2P.BootstrapPeers += peerStatus.NodeInfo.NodeID.AddressString(u.String())
 	}
 
-	if lastHealthyAccPeer == nil || lastHealthyTmPeer == nil {
+	if lastHealthyAccPeer == nil || lastHealthyV3Peer == nil {
 		return 0, nil, nil, fmt.Errorf("no healthy peers, cannot continue")
 	}
 
-	genDoc, err := getGenesis(args[0], lastHealthyTmPeer)
+	genDoc, err := getGenesis(cmd.Context(), args[0], lastHealthyV3Peer, v3.GenesisOptions{Partition: partitionName})
 	if err != nil {
 		return 0, nil, nil, err
 	}
@@ -390,18 +368,13 @@ func initNodeFromSeedProxy(cmd *cobra.Command, args []string) (int, *cfg.Config,
 // initNodeFromPeer builds a node configuration from an existing/peer node. If
 // partitionType is zero, initNodeFromPeer will ask the node what it's partition
 // type is.
-func initNodeFromPeer(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (int, *cfg.Config, *genesis.GenesisDocJSON, error) {
+func initNodeFromPeer(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (int, *cfg.Config, []byte, error) {
 	netAddr, netPort, err := resolveAddrWithPort(args[0])
 	if err != nil {
 		return 0, nil, nil, fmt.Errorf("invalid peer url %v", err)
 	}
 
 	accClient := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", netAddr, netPort+int(cfg.PortOffsetAccumulateApi)))
-	tmRPC := fmt.Sprintf("tcp://%s:%d", netAddr, netPort+int(cfg.PortOffsetTendermintRpc))
-	tmClient, err := newCometRPCClient(tmRPC)
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("failed to create Tendermint client for %s, %v", args[0], err)
-	}
 
 	ni, err := accClient.NodeInfo(cmd.Context(), v3.NodeInfoOptions{})
 	if err != nil {
@@ -452,23 +425,29 @@ outer:
 		return 0, nil, nil, fmt.Errorf("unsupported partition type %v", partitionType)
 	}
 
+	// The peer is this node's bootstrap peer, named by the libp2p identity its
+	// node info reports. The node's one libp2p host listens on its base port
+	// plus the P2P offset, whichever partition was asked for, so this
+	// is the port the peer was named by, before the BVN adjustment below.
+	peerAddr, err := peerMultiaddr(netAddr, netPort+int(cfg.PortOffsetAccumulateP2P), ni.PeerID.String())
+	if err != nil {
+		return 0, nil, nil, fmt.Errorf("bootstrap peer for %s: %v", args[0], err)
+	}
+
 	if partitionType == protocol.PartitionTypeBlockValidator {
 		netPort -= config.PortOffsetBlockValidator
 	}
 
-	genDoc, err := getGenesis(args[0], tmClient)
+	// Genesis comes from the peer's own consensus service for the partition
+	// (network spec, "How a new node gets its genesis").
+	genDoc, err := getGenesis(cmd.Context(), args[0], accClient, v3.GenesisOptions{NodeID: ni.PeerID.String(), Partition: partitionID})
 	if err != nil {
 		return 0, nil, nil, err
 	}
 
-	status, err := tmClient.Status(context.Background())
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("failed to get status of %s, %v", args[0], err)
-	}
-
 	config := cfg.Default(ni.Network, partitionType, getNodeTypeFromFlag(), partitionID)
 	config.SetRoot(filepath.Join(flagMain.WorkDir, netDir(partitionType)))
-	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.DefaultNodeID, netAddr, netPort+int(cfg.PortOffsetTendermintP2P))
+	config.Accumulate.P2P.BootstrapPeers = append(config.Accumulate.P2P.BootstrapPeers, peerAddr)
 
 	// //otherwise make the best out of what we have to establish our bootstrap peers
 	// netInfo, err := tmClient.NetInfo(context.Background())
@@ -511,49 +490,39 @@ outer:
 	return netPort, config, genDoc, nil
 }
 
-func getGenesis(server string, tmClient *cometRPCClient) (*genesis.GenesisDocJSON, error) {
+// getGenesis returns the genesis snapshot for the partition: the file named by
+// --genesis-doc if there is one, otherwise the peer's copy, asked for through
+// API v3's genesis method.
+func getGenesis(ctx context.Context, server string, peer v3.GenesisService, opts v3.GenesisOptions) ([]byte, error) {
 	if flagInitNode.GenesisDoc != "" {
-		genDoc, err := genesis.GenesisDocFromFile(flagInitNode.GenesisDoc)
+		b, err := os.ReadFile(flagInitNode.GenesisDoc)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load genesis doc %q, %v", flagInitNode.GenesisDoc, err)
 		}
-		return genDoc, nil
+		return b, nil
 	}
 
-	if tmClient == nil {
-		return nil, fmt.Errorf("no healthy tendermint peers, cannot fetch genesis document")
-	}
 	warnf("You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!", server)
+	b, err := peer.Genesis(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get genesis for %s from %s, %v", opts.Partition, server, err)
+	}
+	if len(b) == 0 {
+		return nil, fmt.Errorf("%s returned an empty genesis for %s", server, opts.Partition)
+	}
+	return b, nil
+}
 
-	buf := new(bytes.Buffer)
-	var total int
-	for i := uint(0); ; i++ {
-		if total == 0 {
-			fmt.Printf("Get genesis chunk %d/? from %s\n", i+1, server)
-		} else {
-			fmt.Printf("Get genesis chunk %d/%d from %s\n", i+1, total, server)
-		}
-		rgen, err := tmClient.GenesisChunked(context.Background(), i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get genesis chunk %d from %s, %v", i, server, err)
-		}
-		total = rgen.TotalChunks
-		b, err := base64.StdEncoding.DecodeString(rgen.Data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode genesis chunk %d from %s, %v", i, server, err)
-		}
-		_, _ = buf.Write(b)
-		if i+1 >= uint(rgen.TotalChunks) {
-			break
+// peerMultiaddr is /ip4|ip6|dns/{host}/tcp/{port}/p2p/{id}.
+func peerMultiaddr(host string, port int, id string) (multiaddr.Multiaddr, error) {
+	proto := "dns"
+	if ip := net.ParseIP(host); ip != nil {
+		proto = "ip6"
+		if ip.To4() != nil {
+			proto = "ip4"
 		}
 	}
-
-	doc := new(genesis.GenesisDocJSON)
-	if err := json.Unmarshal(buf.Bytes(), doc); err != nil {
-		return nil, fmt.Errorf("failed to decode genesis from %s, %v", server, err)
-	}
-
-	return doc, nil
+	return multiaddr.NewMultiaddr(fmt.Sprintf("/%s/%s/tcp/%d/p2p/%s", proto, host, port, id))
 }
 
 func initNode(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (string, error) {
@@ -562,7 +531,7 @@ func initNode(cmd *cobra.Command, args []string, partitionType protocol.Partitio
 	}
 
 	var config *cfg.Config
-	var genDoc *genesis.GenesisDocJSON
+	var genDoc []byte
 	var basePort int
 	var err error
 	if flagInitNode.SeedProxy != "" {
@@ -653,12 +622,10 @@ func initNode(cmd *cobra.Command, args []string, partitionType protocol.Partitio
 		return "", fmt.Errorf("load/generate node key files, %v", err)
 	}
 
-	// TODO If AppData contains a consensus section, convert to binary genesis
-	genDocBytes, err := json.MarshalIndent(genDoc, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("write node files, %v", err)
-	}
-	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDocBytes)
+	// The genesis is the partition's snapshot, which is what a DAG-BFT node
+	// loads into an empty database; migrate carries this path over.
+	config.Genesis = filepath.Join("config", "genesis.snap")
+	err = accumulated.WriteNodeFiles(config, privValKey, nodeKey, genDoc)
 	if err != nil {
 		return "", fmt.Errorf("write node files, %v", err)
 	}

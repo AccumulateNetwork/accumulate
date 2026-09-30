@@ -30,6 +30,7 @@ type Client struct {
 var _ api.NodeService = (*Client)(nil)
 var _ api.ConsensusService = (*Client)(nil)
 var _ api.NetworkService = (*Client)(nil)
+var _ api.GenesisService = (*Client)(nil)
 var _ api.MetricsService = (*Client)(nil)
 var _ api.ProofService = (*Client)(nil)
 var _ api.Querier = (*Client)(nil)
@@ -55,6 +56,10 @@ func (c *Client) FindService(ctx context.Context, opts api.FindServiceOptions) (
 
 func (c *Client) ConsensusStatus(ctx context.Context, opts api.ConsensusStatusOptions) (*api.ConsensusStatus, error) {
 	return sendRequestUnmarshalAs[*api.ConsensusStatus](c, ctx, "consensus-status", &message.ConsensusStatusRequest{ConsensusStatusOptions: opts})
+}
+
+func (c *Client) Genesis(ctx context.Context, opts api.GenesisOptions) ([]byte, error) {
+	return sendRequestUnmarshalAs[[]byte](c, ctx, "genesis", &message.GenesisRequest{GenesisOptions: opts})
 }
 
 func (c *Client) NetworkStatus(ctx context.Context, opts api.NetworkStatusOptions) (*api.NetworkStatus, error) {

@@ -718,7 +718,15 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	registerRpcService(inst, consensusSvc.Type().AddressFor(s.Partition.ID), message.ConsensusService{ConsensusService: consensusSvc})
+	// The consensus address also serves the genesis this partition started
+	// from, which is what `accumulated init node` fetches (#3932).
+	genesisSvc := genesisService{partition: s.Partition.ID}
+	if s.Genesis != "" {
+		genesisSvc.path = inst.path(s.Genesis)
+	}
+	registerRpcService(inst, consensusSvc.Type().AddressFor(s.Partition.ID),
+		message.ConsensusService{ConsensusService: consensusSvc},
+		message.GenesisService{GenesisService: genesisSvc})
 	err = dagbftProvidesService.Register(inst.services, s, consensusSvc)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register consensus service: %w", err)

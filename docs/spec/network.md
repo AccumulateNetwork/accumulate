@@ -92,3 +92,33 @@ when an anchor arrives, and by a joining node validating the spine
 key book (`dn.acme/operators`) authorizes. The operators' page is therefore
 the governance root and the definition is the authority read at run time;
 nothing counts anchor signatures against the operators' page itself (#4301).
+
+## How a new node gets its genesis
+
+A partition's genesis is the snapshot its nodes load into an empty database
+(`DAGBFTService.loadGenesisIfNeeded`). It is a property of the network, fixed
+at deployment, so a node added later must start from the same bytes.
+
+**Every node serves the genesis of each partition it runs**, on API v3, as the
+`genesis` method (`api.GenesisService`). The request is `GenesisRequest`
+(message type 0x0F) carrying `GenesisOptions{NodeID, Partition}`; the answer
+is `GenesisResponse` (0x2F) whose `Value` is the snapshot file, byte for byte.
+It is served on the partition's consensus service address
+(`/acc-svc/consensus:{partition}`); a `NodeID` routes the request to that
+node, and an empty one to any node serving the partition. Over JSON-RPC the
+method is `genesis` and the bytes are base64.
+
+`accumulated init node <peer>` uses it: it asks the peer's node info for its
+libp2p identity, fetches the partition's genesis from that node, writes it as
+the node's genesis file (`config/genesis.snap`, which `migrate` carries into
+the core-validator configuration), and names the peer as a bootstrap peer at
+`/ip4|dns/{host}/tcp/{base+2}/p2p/{id}`. `--genesis-doc` supplies the
+snapshot from a file instead.
+
+**A fetched genesis is a copy, not a trust root.** Nothing in the answer proves
+it is the network's genesis; the operator trusts the peer they named, which is
+why `init` warns. The proof service takes the same position: a walk of the
+spine starts at a genesis pinned out of band.
+
+Message types 0x0F and 0x2F are this line's. Main assigns up to 0x0E and 0x2E,
+so they are free there today, and must not be assigned to anything else there.

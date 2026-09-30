@@ -95,6 +95,18 @@ type FindServiceResponse struct {
 	extraData []byte
 }
 
+type GenesisRequest struct {
+	fieldsSet []bool
+	api.GenesisOptions
+	extraData []byte
+}
+
+type GenesisResponse struct {
+	fieldsSet []bool
+	Value     []byte `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+	extraData []byte
+}
+
 type MajorHeaderRangeRequest struct {
 	fieldsSet []bool
 	api.MajorHeaderRangeOptions
@@ -316,6 +328,10 @@ func (*FaucetResponse) Type() Type { return TypeFaucetResponse }
 func (*FindServiceRequest) Type() Type { return TypeFindServiceRequest }
 
 func (*FindServiceResponse) Type() Type { return TypeFindServiceResponse }
+
+func (*GenesisRequest) Type() Type { return TypeGenesisRequest }
+
+func (*GenesisResponse) Type() Type { return TypeGenesisResponse }
 
 func (*MajorHeaderRangeRequest) Type() Type { return TypeMajorHeaderRangeRequest }
 
@@ -558,6 +574,34 @@ func (v *FindServiceResponse) Copy() *FindServiceResponse {
 }
 
 func (v *FindServiceResponse) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GenesisRequest) Copy() *GenesisRequest {
+	u := new(GenesisRequest)
+
+	u.GenesisOptions = *v.GenesisOptions.Copy()
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *GenesisRequest) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GenesisResponse) Copy() *GenesisResponse {
+	u := new(GenesisResponse)
+
+	u.Value = encoding.BytesCopy(v.Value)
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *GenesisResponse) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *MajorHeaderRangeRequest) Copy() *MajorHeaderRangeRequest {
 	u := new(MajorHeaderRangeRequest)
@@ -1195,6 +1239,22 @@ func (v *FindServiceResponse) Equal(u *FindServiceResponse) bool {
 		if !((v.Value[i]).Equal(u.Value[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *GenesisRequest) Equal(u *GenesisRequest) bool {
+	if !v.GenesisOptions.Equal(&u.GenesisOptions) {
+		return false
+	}
+
+	return true
+}
+
+func (v *GenesisResponse) Equal(u *GenesisResponse) bool {
+	if !(bytes.Equal(v.Value, u.Value)) {
+		return false
 	}
 
 	return true
@@ -2200,6 +2260,110 @@ func (v *FindServiceResponse) IsValid() error {
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Value is missing")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_GenesisRequest = []string{
+	1: "Type",
+	2: "GenesisOptions",
+}
+
+func (v *GenesisRequest) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	writer.WriteValue(2, v.GenesisOptions.MarshalBinary)
+
+	_, _, err := writer.Reset(fieldNames_GenesisRequest)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *GenesisRequest) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if err := v.GenesisOptions.IsValid(); err != nil {
+		errs = append(errs, err.Error())
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_GenesisResponse = []string{
+	1: "Type",
+	2: "Value",
+}
+
+func (v *GenesisResponse) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(len(v.Value) == 0) {
+		writer.WriteBytes(2, v.Value)
+	}
+
+	_, _, err := writer.Reset(fieldNames_GenesisResponse)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *GenesisResponse) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Value is missing")
+	} else if len(v.Value) == 0 {
+		errs = append(errs, "field Value is not set")
 	}
 
 	switch len(errs) {
@@ -4357,6 +4521,74 @@ func (v *FindServiceResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error
 	return nil
 }
 
+func (v *GenesisRequest) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *GenesisRequest) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *GenesisRequest) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	reader.ReadValue(2, v.GenesisOptions.UnmarshalBinaryFrom)
+
+	seen, err := reader.Reset(fieldNames_GenesisRequest)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *GenesisResponse) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *GenesisResponse) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType Type
+	if x := new(Type); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *GenesisResponse) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadBytes(2); ok {
+		v.Value = x
+	}
+
+	seen, err := reader.Reset(fieldNames_GenesisResponse)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *MajorHeaderRangeRequest) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -5537,6 +5769,17 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("nodeID", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "GenesisRequest", "genesisRequest")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("value", "bytes"),
+	}, "GenesisResponse", "genesisResponse")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("partition", "string"),
 		encoding.NewTypeField("start", "uint64"),
 		encoding.NewTypeField("end", "uint64"),
@@ -5910,6 +6153,38 @@ func (v *FindServiceResponse) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Type = v.Type()
 	u.Value = v.Value
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *GenesisRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		NodeID    string  `json:"nodeID,omitempty"`
+		Partition string  `json:"partition,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.GenesisOptions.NodeID) == 0) {
+		u.NodeID = v.GenesisOptions.NodeID
+	}
+	if !(len(v.GenesisOptions.Partition) == 0) {
+		u.Partition = v.GenesisOptions.Partition
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *GenesisResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      Type    `json:"type"`
+		Value     *string `json:"value,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(len(v.Value) == 0) {
+		u.Value = encoding.BytesToJSON(v.Value)
+	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
@@ -6764,6 +7039,59 @@ func (v *FindServiceResponse) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
 	}
 	v.Value = u.Value
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *GenesisRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		NodeID    string  `json:"nodeID,omitempty"`
+		Partition string  `json:"partition,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.NodeID = v.GenesisOptions.NodeID
+	u.Partition = v.GenesisOptions.Partition
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.GenesisOptions.NodeID = u.NodeID
+	v.GenesisOptions.Partition = u.Partition
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *GenesisResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      Type    `json:"type"`
+		Value     *string `json:"value,omitempty"`
+		ExtraData *string `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.Value = encoding.BytesToJSON(v.Value)
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	if x, err := encoding.BytesFromJSON(u.Value); err != nil {
+		return fmt.Errorf("error decoding Value: %w", err)
+	} else {
+		v.Value = x
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

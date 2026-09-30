@@ -417,6 +417,14 @@ type FindServiceResult struct {
 	extraData []byte
 }
 
+type GenesisOptions struct {
+	fieldsSet []bool
+	// NodeID names the node to ask; empty asks any node serving the partition.
+	NodeID    string `json:"nodeID,omitempty" form:"nodeID" query:"nodeID"`
+	Partition string `json:"partition,omitempty" form:"partition" query:"partition" validate:"required"`
+	extraData []byte
+}
+
 type GlobalsEvent struct {
 	fieldsSet []bool
 	Old       *core.GlobalValues `json:"old,omitempty" form:"old" query:"old" validate:"required"`
@@ -1723,6 +1731,21 @@ func (v *FindServiceResult) Copy() *FindServiceResult {
 }
 
 func (v *FindServiceResult) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *GenesisOptions) Copy() *GenesisOptions {
+	u := new(GenesisOptions)
+
+	u.NodeID = v.NodeID
+	u.Partition = v.Partition
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *GenesisOptions) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *GlobalsEvent) Copy() *GlobalsEvent {
 	u := new(GlobalsEvent)
@@ -3525,6 +3548,17 @@ func (v *FindServiceResult) Equal(u *FindServiceResult) bool {
 		if !(p2p.EqualMultiaddr(v.Addresses[i], u.Addresses[i])) {
 			return false
 		}
+	}
+
+	return true
+}
+
+func (v *GenesisOptions) Equal(u *GenesisOptions) bool {
+	if !(v.NodeID == u.NodeID) {
+		return false
+	}
+	if !(v.Partition == u.Partition) {
+		return false
 	}
 
 	return true
@@ -7117,6 +7151,59 @@ func (v *FindServiceResult) IsValid() error {
 		errs = append(errs, "field Addresses is missing")
 	} else if len(v.Addresses) == 0 {
 		errs = append(errs, "field Addresses is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_GenesisOptions = []string{
+	1: "NodeID",
+	2: "Partition",
+}
+
+func (v *GenesisOptions) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(len(v.NodeID) == 0) {
+		writer.WriteString(1, v.NodeID)
+	}
+	if !(len(v.Partition) == 0) {
+		writer.WriteString(2, v.Partition)
+	}
+
+	_, _, err := writer.Reset(fieldNames_GenesisOptions)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *GenesisOptions) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Partition is missing")
+	} else if len(v.Partition) == 0 {
+		errs = append(errs, "field Partition is not set")
 	}
 
 	switch len(errs) {
@@ -11357,6 +11444,32 @@ func (v *FindServiceResult) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
+func (v *GenesisOptions) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *GenesisOptions) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadString(1); ok {
+		v.NodeID = x
+	}
+	if x, ok := reader.ReadString(2); ok {
+		v.Partition = x
+	}
+
+	seen, err := reader.Reset(fieldNames_GenesisOptions)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *GlobalsEvent) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -13088,6 +13201,11 @@ func init() {
 		encoding.NewTypeField("status", "string"),
 		encoding.NewTypeField("addresses", "p2p.Multiaddr[]"),
 	}, "FindServiceResult", "findServiceResult")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("nodeID", "string"),
+		encoding.NewTypeField("partition", "string"),
+	}, "GenesisOptions", "genesisOptions")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("eventType", "string"),

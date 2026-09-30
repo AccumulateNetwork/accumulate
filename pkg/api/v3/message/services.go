@@ -122,6 +122,25 @@ func (s ConsensusService) consensusStatus(c *call[*ConsensusStatusRequest]) {
 	c.Write(&ConsensusStatusResponse{Value: res})
 }
 
+// GenesisService forwards [GenesisRequest]s to a [api.GenesisService].
+type GenesisService struct {
+	api.GenesisService
+}
+
+func (s GenesisService) methods() serviceMethodMap {
+	typ, fn := makeServiceMethod(s.genesis)
+	return serviceMethodMap{typ: fn}
+}
+
+func (s GenesisService) genesis(c *call[*GenesisRequest]) {
+	res, err := s.GenesisService.Genesis(c.context, c.params.GenesisOptions)
+	if err != nil {
+		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
+		return
+	}
+	c.Write(&GenesisResponse{Value: res})
+}
+
 // NetworkService forwards [NetworkStatusRequest]s to a [api.NetworkService].
 type NetworkService struct {
 	api.NetworkService

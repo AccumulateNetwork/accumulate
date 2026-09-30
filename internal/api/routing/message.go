@@ -97,6 +97,27 @@ func (r MessageRouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 
 		return c1.Encapsulate(c2), nil
 
+	case *message.GenesisRequest:
+		// Served on the partition's consensus address, by every node that
+		// runs the partition (network spec, "How a new node gets its
+		// genesis").
+		service.Type = api.ServiceTypeConsensus
+		if msg.Partition == "" {
+			service.Argument = protocol.Directory
+		} else {
+			service.Argument = msg.Partition
+		}
+		if msg.NodeID == "" {
+			return service.Multiaddr(), nil
+		}
+
+		// Return /p2p/{id}/acc-svc/consensus:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID)
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		return c1.Encapsulate(service.Multiaddr()), nil
+
 	case *message.MetricsRequest:
 		service.Type = api.ServiceTypeMetrics
 

@@ -74,6 +74,15 @@ type ConsensusService interface {
 	ConsensusStatus(ctx context.Context, opts ConsensusStatusOptions) (*ConsensusStatus, error)
 }
 
+// GenesisService serves the genesis snapshot a partition started from, the
+// file a node loads into an empty database (network spec, "How a new node
+// gets its genesis"). A node serves it for each partition it runs, on that
+// partition's consensus service address. It is a copy from a peer, not a trust
+// root: the caller decides whether to trust the peer it asked.
+type GenesisService interface {
+	Genesis(ctx context.Context, opts GenesisOptions) ([]byte, error)
+}
+
 type NetworkService interface {
 	// NetworkService returns the status of the network.
 	NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*NetworkStatus, error)

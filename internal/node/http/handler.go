@@ -101,6 +101,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	v3, err := jsonrpc.NewHandler(
 		jsonrpc.NodeService{NodeService: selfClient},
 		jsonrpc.ConsensusService{ConsensusService: selfClient},
+		jsonrpc.GenesisService{GenesisService: selfClient},
 		jsonrpc.NetworkService{NetworkService: client},
 		jsonrpc.MetricsService{MetricsService: client},
 		jsonrpc.Querier{Querier: &api.Collator{Querier: client, Network: client}},
@@ -118,6 +119,7 @@ func NewHandler(opts Options) (*Handler, error) {
 	ws, err := websocket.NewHandler(
 		message.NodeService{NodeService: selfClient},
 		message.ConsensusService{ConsensusService: selfClient},
+		message.GenesisService{GenesisService: selfClient},
 		message.NetworkService{NetworkService: client},
 		message.MetricsService{MetricsService: client},
 		message.Querier{Querier: &api.Collator{Querier: client, Network: client}},
@@ -257,6 +259,22 @@ func (r unrouter) Route(msg message.Message) (multiaddr.Multiaddr, error) {
 		c2 := api.ServiceTypeConsensus.AddressFor(msg.Partition).Multiaddr()
 
 		return c1.Encapsulate(c2), nil
+
+	case *message.GenesisRequest:
+		service.Type = api.ServiceTypeConsensus
+		if msg.Partition != "" {
+			service.Argument = msg.Partition
+		}
+		if msg.NodeID == "" {
+			break
+		}
+
+		// Send the request to /p2p/{id}/acc-svc/consensus:{partition}
+		c1, err := multiaddr.NewComponent("p2p", msg.NodeID)
+		if err != nil {
+			return nil, errors.BadRequest.WithFormat("build multiaddr: %w", err)
+		}
+		return c1.Encapsulate(service.Multiaddr()), nil
 
 	case *message.NetworkStatusRequest:
 		service.Type = api.ServiceTypeNetwork
