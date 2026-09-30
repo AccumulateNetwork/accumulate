@@ -66,13 +66,6 @@ NetworkStatusOptions:
     - name: Partition
       type: string
 
-ListSnapshotsOptions:
-  fields:
-    - name: NodeID
-      type: string
-    - name: Partition
-      type: string
-
 MetricsOptions:
   fields:
     - name: Partition

@@ -2035,6 +2035,32 @@ The rules the implementation holds to, pending that part:
 **Size**: the API part is large and covers far more than proofs. This entry
 exists so the two calls are not mistaken for unspecified behaviour.
 
+## API v3 has no snapshot service, and main's nodes still advertise one
+
+*[#3921](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/3921)*
+
+The snapshot service was CometBFT state sync's, and no DAG-BFT node served it.
+This line removed it whole: `api.SnapshotService`, `ListSnapshotsOptions`,
+`SnapshotInfo`, the message types `ListSnapshotsRequest` (0x0B) and
+`ListSnapshotsResponse` (0x2B), the `list-snapshots` JSON-RPC method, and the
+service type `Snapshot` (10). Paul's decision (2026-09-30): remove, and accept
+the break below.
+
+**The break**: nodes built from main still register `/snapshot:<partition>`
+and list it in `NodeInfo.Services`. A service address decodes from binary by
+value, so the binary form is unaffected. The JSON form carries the type by
+name, and `ServiceAddress.UnmarshalJSON` accepts only a known name or a hex
+number, so a client built from this line fails to decode a main node's
+`node-info` (or any JSON listing that service) with `invalid Service Type
+"snapshot"`. The same holds for a JSON peer database that recorded such an
+address. Message types 0x0B and 0x2B are refused as unknown.
+
+**The rule it leaves**: 10, 0x0B and 0x2B stay unassigned. Main still uses
+them, and reusing them would misread main's nodes
+(`TestDI_ServiceTypeProofMatchesMain` pins the service type).
+
+**Removed when**: no deployed network runs main's snapshot service.
+
 ## A pulled account can only settle on a block the Directory anchored
 
 *Retired 2026-09-22 (#4362).* The repair the end of this section names is

@@ -25,3 +25,17 @@ func TestServiceAddressJSON(t *testing.T) {
 
 	require.True(t, a1.Equal(a2))
 }
+
+// Main's nodes still advertise the snapshot service (10), which this line
+// removed (#3921, DIFFERENCES.md). Its binary form still decodes, by value; its
+// JSON form, by name, does not. This pins the break Paul accepted, so a change
+// in either direction is noticed.
+func TestMainSnapshotServiceAddress(t *testing.T) {
+	var a api.ServiceAddress
+	require.Error(t, json.Unmarshal([]byte(`{"type":"snapshot","argument":"bvn1"}`), &a))
+
+	b, err := (&api.ServiceAddress{Type: 10, Argument: "bvn1"}).MarshalBinary()
+	require.NoError(t, err)
+	require.NoError(t, a.UnmarshalBinary(b))
+	require.Equal(t, api.ServiceType(10), a.Type)
+}

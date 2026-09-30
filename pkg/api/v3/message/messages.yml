@@ -33,12 +33,6 @@ NetworkStatusRequest:
     - type: api.NetworkStatusOptions
       marshal-as: reference
 
-ListSnapshotsRequest:
-  union: { type: message }
-  fields:
-    - type: api.ListSnapshotsOptions
-      marshal-as: reference
-
 MajorHeaderRangeRequest:
   union: { type: message }
   fields:
@@ -151,14 +145,6 @@ NetworkStatusResponse:
       marshal-as: reference
       pointer: true
 
-ListSnapshotsResponse:
-  union: { type: message }
-  fields:
-    - name: Value
-      type: api.SnapshotInfo
-      repeatable: true
-      pointer: true
-      marshal-as: reference
 
 MajorHeaderRangeResponse:
   union: { type: message }

@@ -141,25 +141,6 @@ func (s NetworkService) networkStatus(c *call[*NetworkStatusRequest]) {
 	c.Write(&NetworkStatusResponse{Value: res})
 }
 
-// SnapshotService forwards [ListSnapshotsRequest]s to a [api.SnapshotService].
-type SnapshotService struct {
-	api.SnapshotService
-}
-
-func (s SnapshotService) methods() serviceMethodMap {
-	typ, fn := makeServiceMethod(s.ListSnapshots)
-	return serviceMethodMap{typ: fn}
-}
-
-func (s SnapshotService) ListSnapshots(c *call[*ListSnapshotsRequest]) {
-	res, err := s.SnapshotService.ListSnapshots(c.context, c.params.ListSnapshotsOptions)
-	if err != nil {
-		c.Write(&ErrorResponse{Error: errors.UnknownError.Wrap(err).(*errors.Error)})
-		return
-	}
-	c.Write(&ListSnapshotsResponse{Value: res})
-}
-
 // ProofService forwards the proof requests to a [api.ProofService]. It is the
 // public face of the major-block spine (#4058) and of the second of the two
 // calls an account proof takes (#4274).

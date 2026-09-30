@@ -155,9 +155,6 @@ const ServiceTypeValidate ServiceType = 8
 // ServiceTypeFaucet is the type of [Faucet].
 const ServiceTypeFaucet ServiceType = 9
 
-// ServiceTypeSnapshot is the type of [SnapshotService].
-const ServiceTypeSnapshot ServiceType = 10
-
 // ServiceTypeProof is the type of [ProofService].
 const ServiceTypeProof ServiceType = 11
 
@@ -512,7 +509,7 @@ func (v ServiceType) GetEnumValue() uint64 { return uint64(v) }
 func (v *ServiceType) SetEnumValue(id uint64) bool {
 	u := ServiceType(id)
 	switch u {
-	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet, ServiceTypeSnapshot, ServiceTypeProof:
+	case ServiceTypeUnknown, ServiceTypeNode, ServiceTypeConsensus, ServiceTypeNetwork, ServiceTypeMetrics, ServiceTypeQuery, ServiceTypeEvent, ServiceTypeSubmit, ServiceTypeValidate, ServiceTypeFaucet, ServiceTypeProof:
 		*v = u
 		return true
 	}
@@ -542,8 +539,6 @@ func (v ServiceType) String() string {
 		return "validate"
 	case ServiceTypeFaucet:
 		return "faucet"
-	case ServiceTypeSnapshot:
-		return "snapshot"
 	case ServiceTypeProof:
 		return "proof"
 	}
@@ -573,8 +568,6 @@ func ServiceTypeByName(name string) (ServiceType, bool) {
 		return ServiceTypeValidate, true
 	case "faucet":
 		return ServiceTypeFaucet, true
-	case "snapshot":
-		return ServiceTypeSnapshot, true
 	case "proof":
 		return ServiceTypeProof, true
 	}

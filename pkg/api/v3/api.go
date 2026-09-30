@@ -79,10 +79,6 @@ type NetworkService interface {
 	NetworkStatus(ctx context.Context, opts NetworkStatusOptions) (*NetworkStatus, error)
 }
 
-type SnapshotService interface {
-	ListSnapshots(ctx context.Context, opts ListSnapshotsOptions) ([]*SnapshotInfo, error)
-}
-
 // ProofService serves the directory's major-block spine (#4058) so a third
 // party can derive the validator set by induction instead of being handed it:
 // each major block's closing anchor with its archived quorum, and the binding

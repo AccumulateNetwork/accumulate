@@ -30,8 +30,6 @@ Type:
     value: 0x09
   FaucetRequest:
     value: 0x0A
-  ListSnapshotsRequest:
-    value: 0x0B
   MajorHeaderRangeRequest:
     value: 0x0C
   MinorRootRangeRequest:
@@ -61,8 +59,6 @@ Type:
     value: 0x29
   FaucetResponse:
     value: 0x2A
-  ListSnapshotsResponse:
-    value: 0x2B
   MajorHeaderRangeResponse:
     value: 0x2C
   MinorRootRangeResponse:

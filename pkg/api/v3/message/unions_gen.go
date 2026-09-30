@@ -44,10 +44,6 @@ func New(typ Type) (Message, error) {
 		return new(FindServiceRequest), nil
 	case TypeFindServiceResponse:
 		return new(FindServiceResponse), nil
-	case TypeListSnapshotsRequest:
-		return new(ListSnapshotsRequest), nil
-	case TypeListSnapshotsResponse:
-		return new(ListSnapshotsResponse), nil
 	case TypeMajorHeaderRangeRequest:
 		return new(MajorHeaderRangeRequest), nil
 	case TypeMajorHeaderRangeResponse:
@@ -186,18 +182,6 @@ func Equal(a, b Message) bool {
 			return b == nil
 		}
 		b, ok := b.(*FindServiceResponse)
-		return ok && a.Equal(b)
-	case *ListSnapshotsRequest:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*ListSnapshotsRequest)
-		return ok && a.Equal(b)
-	case *ListSnapshotsResponse:
-		if a == nil {
-			return b == nil
-		}
-		b, ok := b.(*ListSnapshotsResponse)
 		return ok && a.Equal(b)
 	case *MajorHeaderRangeRequest:
 		if a == nil {
@@ -407,10 +391,6 @@ func Copy(v Message) Message {
 	case *FindServiceRequest:
 		return v.Copy()
 	case *FindServiceResponse:
-		return v.Copy()
-	case *ListSnapshotsRequest:
-		return v.Copy()
-	case *ListSnapshotsResponse:
 		return v.Copy()
 	case *MajorHeaderRangeRequest:
 		return v.Copy()

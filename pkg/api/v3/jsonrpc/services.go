@@ -107,22 +107,6 @@ func (s NetworkService) networkStatus(ctx context.Context, params json.RawMessag
 	return formatResponse(s.NetworkService.NetworkStatus(ctx, req.NetworkStatusOptions))
 }
 
-type SnapshotService struct{ api.SnapshotService }
-
-func (s SnapshotService) methods() jsonrpc2.MethodMap {
-	return jsonrpc2.MethodMap{
-		"list-snapshots": s.listSnapshots,
-	}
-}
-
-func (s SnapshotService) listSnapshots(ctx context.Context, params json.RawMessage) interface{} {
-	req, err := parseRequest[*message.ListSnapshotsRequest](params)
-	if err != nil {
-		return formatResponse(nil, err)
-	}
-	return formatResponse(s.SnapshotService.ListSnapshots(ctx, req.ListSnapshotsOptions))
-}
-
 // ProofService is the public JSON-RPC face of the major-block spine (#4058)
 // and of the second of the two calls an account proof takes (#4274).
 type ProofService struct{ api.ProofService }

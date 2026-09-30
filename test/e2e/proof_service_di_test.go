@@ -20,12 +20,13 @@ import (
 // tests it brought with it.
 
 // A service type is on the wire, so the two lines must agree on the value. Main
-// assigns 11; DI's highest was 10 (Snapshot), so 11 was free and must stay 11.
+// assigns 11. 10 was Snapshot, which DI removed (#3921) but main's nodes still
+// advertise, so 10 must stay unassigned: reusing it would misread them.
 func TestDI_ServiceTypeProofMatchesMain(t *testing.T) {
 	require.Equal(t, apiv3.ServiceType(11), apiv3.ServiceTypeProof,
 		"ServiceTypeProof must be 11, as it is on main — a service type is on the wire")
-	require.NotEqual(t, apiv3.ServiceTypeProof, apiv3.ServiceTypeSnapshot,
-		"11 must not collide with DI's Snapshot at 10")
+	require.False(t, new(apiv3.ServiceType).SetEnumValue(10),
+		"10 is main's Snapshot service type and must not be reassigned")
 }
 
 // The records moved from internal/api/private to pkg/api/v3, and private keeps
