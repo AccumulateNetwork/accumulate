@@ -963,8 +963,8 @@ What differs from the spec:
     (as with its handoff, E11 above).
 
 **Serve last (#4295, partly done)**: a node that is joining refuses the
-sequencer (`Sequence`, `SequenceRange`, `MajorHeaderRange`, `MinorRootRange`,
-`PartitionRootRange`, `SnapshotRange`) and the staging snapshot with
+sequencer (`Sequence`, `SequenceRange`, `MajorHeaderRange`, `MinorRootRange`)
+and the staging snapshot with
 `NotReady`, counted per call in `accumulate_node_not_serving_total`, and its
 state is a gauge (`accumulate_node_state`). The state is the node's own,
 handed to its services rather than looked up by partition: a process can run

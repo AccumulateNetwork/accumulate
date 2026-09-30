@@ -14,7 +14,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
-	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
+	spinewalk "gitlab.com/accumulatenetwork/accumulate/internal/spine"
 	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -45,7 +45,7 @@ func TestProofServiceMatchesPrivate(t *testing.T) {
 	ranger, ok := sim.S.Services().Private().(private.MajorHeaderRanger)
 	require.True(t, ok)
 
-	// The private path, as fast sync uses it
+	// The private path, node to node
 	viaPrivate, err := ranger.MajorHeaderRange(context.Background(), DnUrl(), 1, 2, private.SequenceOptions{})
 	require.NoError(t, err)
 	require.Len(t, viaPrivate, 2)
@@ -53,7 +53,7 @@ func TestProofServiceMatchesPrivate(t *testing.T) {
 	// The public path: identical records, reached through the service type an
 	// external verifier would use
 	// The public path: the same records, reached through the service an external
-	// verifier would use. It wraps the very ranger fast sync uses.
+	// verifier would use. It wraps the very same private ranger.
 	svc := &apiimpl.ProofService{Ranger: sim.S.Services().Private().(interface {
 		private.MajorHeaderRanger
 		private.MinorRootRanger
@@ -72,7 +72,7 @@ func TestProofServiceMatchesPrivate(t *testing.T) {
 	}
 
 	// And it is walkable: the whole point is that a verifier derives the set
-	spine, err := fastsync.NewSpine(genesis, 1)
+	spine, err := spinewalk.NewSpine(genesis, 1)
 	require.NoError(t, err)
 	for _, r := range viaPublic {
 		require.NoError(t, spine.Advance(r), "advance past major block %d", r.Index)

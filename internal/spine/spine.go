@@ -4,11 +4,11 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package fastsync implements the client side of fast validator deployment
-// (#4058): header-first sync that verifies the directory's major-block spine
-// forward from a trust anchor, then proves account states into the verified
-// roots. See docs/plans/fast-validator-deployment.md.
-package fastsync
+// Package spine is the client side of the proof service's spine (#4058): it
+// verifies the directory's major-block spine forward from a trust anchor, the
+// genesis, deriving the validator set by induction. It restores no state; the
+// only sync is the join (executor spec, "Sync").
+package spine
 
 import (
 	"bytes"

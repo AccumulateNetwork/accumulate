@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
-	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
+	spinewalk "gitlab.com/accumulatenetwork/accumulate/internal/spine"
 	apiv3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 )
 
@@ -55,13 +55,13 @@ func TestDI_KeptItsOwnGenesisRestore(t *testing.T) {
 	// If both definitions survived, the package would not compile; if the wrong
 	// one survived, FullRestore would be unreferenced. This asserts the shape
 	// the port is supposed to leave behind.
-	require.NotNil(t, fastsyncLoadGenesisGlobals,
+	require.NotNil(t, spineLoadGenesisGlobals,
 		"DI's LoadGenesisGlobals must still exist")
-	require.NotNil(t, fastsyncGenesisAnchorHash,
+	require.NotNil(t, spineGenesisAnchorHash,
 		"GenesisAnchorHash must have been ported")
 }
 
 var (
-	fastsyncLoadGenesisGlobals = fastsync.LoadGenesisGlobals
-	fastsyncGenesisAnchorHash  = fastsync.GenesisAnchorHash
+	spineLoadGenesisGlobals = spinewalk.LoadGenesisGlobals
+	spineGenesisAnchorHash  = spinewalk.GenesisAnchorHash
 )

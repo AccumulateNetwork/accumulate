@@ -57,27 +57,3 @@ type MinorRootRanger interface {
 	Sequencer
 	MinorRootRange(ctx context.Context, partition *url.URL, since, until uint64, opts SequenceOptions) (*MinorRootRecord, error)
 }
-
-// SnapshotRanger is an optional extension of [Sequencer] that streams a
-// pinned-epoch state snapshot (#4058). A request with epoch zero pins the
-// server's current state as the sync epoch — the returned chunk names the
-// epoch's block. Subsequent requests page through the snapshot by offset.
-// The client verifies the restored state by rebuilding the BPT and comparing
-// its root to the quorum-verified StateTreeAnchor of the epoch's anchor.
-type SnapshotRanger interface {
-	Sequencer
-	SnapshotRange(ctx context.Context, partition *url.URL, epoch, offset uint64, opts SequenceOptions) (*SnapshotChunk, error)
-}
-
-// PartitionRootRanger is an optional extension of [Sequencer] that proves a
-// BVN's state root into the directory (#4058 phase 3b). The directory records
-// every received partition anchor's StateTreeAnchor on a dedicated chain; the
-// server locates the given root on that chain and returns one receipt from it
-// to the root chain anchor of a quorum-anchored directory block. A BVN
-// fast-sync verifies the receipt against its directory spine walk instead of
-// collecting a BVN validator quorum (whose signatures live on the directory,
-// not the BVN). Only the directory serves this; partition names the BVN.
-type PartitionRootRanger interface {
-	Sequencer
-	PartitionRootRange(ctx context.Context, partition *url.URL, stateRoot [32]byte, opts SequenceOptions) (*PartitionRootRecord, error)
-}

@@ -87,7 +87,7 @@ func (s *Set) Size() int {
 // receipt that ends at a root a quorum signed and passes through the leaf
 // the pulled body hashes to, and hand the result here (Update). The new
 // definition inherits the anchor's quorum trust because it is bound to the
-// anchor's root — which is what internal/fastsync/spine.go does in its own
+// anchor's root — which is what internal/spine/spine.go does in its own
 // protocol.
 //
 // **Its limit, stated.** A change that turns over enough of the set that the

@@ -51,8 +51,6 @@ func TestSequencer_RefusesWhileJoining(t *testing.T) {
 		_, out["sequence-range"] = s.SequenceRange(ctx, src, dst, 1, 2, private.SequenceOptions{})
 		_, out["major-header-range"] = s.MajorHeaderRange(ctx, dst, 1, 2, private.SequenceOptions{})
 		_, out["minor-root-range"] = s.MinorRootRange(ctx, dst, 1, 2, private.SequenceOptions{})
-		_, out["partition-root-range"] = s.PartitionRootRange(ctx, dst, [32]byte{1}, private.SequenceOptions{})
-		_, out["snapshot-range"] = s.SnapshotRange(ctx, dst, 0, 0, private.SequenceOptions{})
 		return out
 	}
 
@@ -62,8 +60,8 @@ func TestSequencer_RefusesWhileJoining(t *testing.T) {
 	}
 
 	// Once the root has matched and the node executes, it answers for itself.
-	// (Some of these still refuse, for their own reasons — a node with no
-	// provable state cannot pin a snapshot — but never for joining.)
+	// (Some of these may still refuse, for their own reasons, but never for
+	// joining.)
 	require.True(t, machine.PromoteToActive([32]byte{1}, 42))
 	for call, err := range joining() {
 		if err != nil {

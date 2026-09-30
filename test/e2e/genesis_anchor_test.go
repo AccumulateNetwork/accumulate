@@ -13,8 +13,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/fastsync"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	spinewalk "gitlab.com/accumulatenetwork/accumulate/internal/spine"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
@@ -37,7 +37,7 @@ func TestGenesisAnchorFromSnapshot(t *testing.T) {
 
 	// What the walk would start from, read directly from the node
 	direct := loadDirectoryGlobals(t, sim)
-	wantHash, err := fastsync.GenesisAnchorHash(direct)
+	wantHash, err := spinewalk.GenesisAnchorHash(direct)
 	require.NoError(t, err)
 
 	// Collect a snapshot, as a node serving one would
@@ -48,19 +48,19 @@ func TestGenesisAnchorFromSnapshot(t *testing.T) {
 	}))
 
 	// A verifier extracts the anchor from the snapshot it was handed
-	fromSnap, err := fastsync.LoadGenesisGlobals(ioutil.NewBuffer(buf.Bytes()), config.NetworkUrl{URL: DnUrl()})
+	fromSnap, err := spinewalk.LoadGenesisGlobals(ioutil.NewBuffer(buf.Bytes()), config.NetworkUrl{URL: DnUrl()})
 	require.NoError(t, err)
 	require.NotNil(t, fromSnap.Network)
 	require.NotNil(t, fromSnap.Globals)
 
 	// and checks it against the pinned hash
-	gotHash, err := fastsync.GenesisAnchorHash(fromSnap)
+	gotHash, err := spinewalk.GenesisAnchorHash(fromSnap)
 	require.NoError(t, err)
 	require.Equal(t, wantHash, gotHash,
 		"the anchor extracted from the snapshot must hash to what a publisher pinned")
 
 	// The hash is reproducible, which is what makes pinning it meaningful
-	again, err := fastsync.GenesisAnchorHash(fromSnap)
+	again, err := spinewalk.GenesisAnchorHash(fromSnap)
 	require.NoError(t, err)
 	require.Equal(t, gotHash, again)
 
@@ -68,13 +68,13 @@ func TestGenesisAnchorFromSnapshot(t *testing.T) {
 	tampered := fromSnap.Copy()
 	require.NotEmpty(t, tampered.Network.Validators)
 	tampered.Network.Validators[0].PublicKey[0]++
-	badHash, err := fastsync.GenesisAnchorHash(tampered)
+	badHash, err := spinewalk.GenesisAnchorHash(tampered)
 	require.NoError(t, err)
 	require.NotEqual(t, wantHash, badHash,
 		"a forged validator set must not hash to the pinned anchor")
 
 	// And the anchor is usable: the walk starts from it
-	spine, err := fastsync.NewSpine(fromSnap, 1)
+	spine, err := spinewalk.NewSpine(fromSnap, 1)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), spine.NextMajor)
 }
