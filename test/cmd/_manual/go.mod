@@ -66,8 +66,6 @@ require (
 	github.com/chigopher/pathlib v0.19.1 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/ckaznocha/intrange v0.1.0 // indirect
-	github.com/cometbft/cometbft v0.38.0-rc3 // indirect
-	github.com/cometbft/cometbft-db v0.7.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/cosmos/gogoproto v1.4.11 // indirect
