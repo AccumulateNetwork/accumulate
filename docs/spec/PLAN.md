@@ -281,7 +281,8 @@ and are left as they were written; two of their premises no longer hold.
    a verified anchored root (`ACTIVE`) — executor.md step 6.*
 
    *Landed (#4295) with the departures in DIFFERENCES E11.* Every private
-   call the sequencer serves, and the staging snapshot, refuse while a node is
+   call the sequencer serves, and the staging snapshot (since removed, #4362),
+   refuse while a node is
    joining, counted per call, with the state as a gauge. A node that joined
    answers `NotReady` — not `NotFound`, which strands a stream — for the
    blocks it did not execute. Serving resumes when the node EXECUTES, not when

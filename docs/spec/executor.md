@@ -2073,8 +2073,8 @@ it.
 releases every stream it touched at that value, not only the streams it
 delivered into. Staging is memory: after a restart its own copy starts at
 zero while the ledger's does not, and a stage that said zero would report
-entries as held that the node executed blocks ago — which is exactly what a
-joining node would then take from it (healing.md, "Staging snapshot").
+entries as held that the node executed blocks ago. (No node takes staging
+from a peer any more; healing.md, "Staging is not served".)
 
 **The API serves `Received` as stored**, in the body. Until #4412 it was not
 stored: the API answered it from the serving node's staging, beside the body
