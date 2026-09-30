@@ -1479,7 +1479,6 @@ are seen, `Begin`:
   the anchor must not skip the synthetics;
 - resets the ledger's transient values and refuses to move backwards — a block
   index that does not increase is a panic, not an error;
-- records the previous block's votes and evidence, unless that block was empty;
 - **drains the delivery queues** — everything the previous block queued, local
   synthetics and locally produced messages, is delivered before any of this
   block's own. These are the delivery queues, not staged streams.
@@ -1691,8 +1690,9 @@ fresh-install rule (DIFFERENCES.md, E16).
 5. Loads the ledger and **panics** if the index does not increase.
 6. Resets transient ledger values: index, timestamp, pending updates, ACME
    burnt, anchor.
-7. Captures votes and evidence as data entries, unless the previous block was
-   empty.
+7. Records nothing in the `votes` and `evidence` data accounts: those held
+   CometBFT's commit info and misbehaviour, and a DAG-BFT block carries
+   neither (#3910). The accounts still exist, created by genesis.
 8. `drainDeliveryQueues` — delivers what the previous block queued (#4146).
 
 ### Entry from consensus
