@@ -22,7 +22,6 @@
 | NodeService | NodeInfo, FindService | Network node info & service discovery |
 | ConsensusService | ConsensusStatus | Consensus node status |
 | NetworkService | NetworkStatus | Network globals & routing |
-| SnapshotService | ListSnapshots | System snapshots |
 | MetricsService | Metrics | Network TPS metrics |
 | Querier | Query | Main read interface (11 query types) |
 | EventService | Subscribe | Event streaming (3 event types) |
@@ -113,7 +112,7 @@ LegacyED25519, ED25519, RCD1, BTC, BTCLegacy, ETH, Delegated, Authority
 - POST /v3
 
 ## JSON-RPC Methods (11)
-node-info, find-service, consensus-status, network-status, list-snapshots, metrics, query, submit, validate, faucet, private-sequence
+node-info, find-service, consensus-status, network-status, metrics, query, submit, validate, faucet, private-sequence
 
 ## Common Options
 

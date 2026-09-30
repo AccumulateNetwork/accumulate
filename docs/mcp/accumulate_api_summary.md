@@ -144,25 +144,6 @@ ServiceType values:
   - `MajorBlockHeight` (uint): Major block height
   - `BvnExecutorVersions` (array of protocol.PartitionExecutorVersion): Per-BVN executor versions
 
-### 5. SNAPSHOT SERVICE
-
-**Interface:** `api.SnapshotService`
-
-**Endpoints:**
-
-#### 5.1 list-snapshots
-- **Description:** Lists available snapshots
-- **JSON-RPC Method:** `list-snapshots`
-- **REST Endpoint:** `GET /list-snapshots` (implied)
-- **WebSocket:** Via binary message protocol
-- **Request:** `ListSnapshotsRequest`
-  - `ListSnapshotsOptions`:
-    - `NodeID` (string): Node identifier
-    - `Partition` (string): Partition name
-- **Response:** Array of `SnapshotInfo`
-  - `Header` (snapshot.Header, pointer): Snapshot header
-  - `ConsensusInfo` (cometbft.GenesisDoc, pointer): Consensus genesis info
-
 ### 6. METRICS SERVICE
 
 **Interface:** `api.MetricsService`

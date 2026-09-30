@@ -1234,27 +1234,6 @@ func (s *Service) StateConsistency() StateConsistencyStatus {
 	return status
 }
 
-// RequestStateSync initiates a state sync to recover from state divergence.
-// This should be called after the service has been halted due to divergence.
-// The caller should provide peers to sync from.
-func (s *Service) RequestStateSync(ctx context.Context, targetHeight uint64) error {
-	s.mu.Lock()
-	if !s.halted {
-		s.mu.Unlock()
-		return fmt.Errorf("cannot request state sync when not halted")
-	}
-	s.mu.Unlock()
-
-	s.logger.Info("Initiating state sync for recovery",
-		"targetHeight", targetHeight)
-
-	// State sync would be performed via the snapshot.StateSync component
-	// which handles discovering snapshots from peers, downloading, and restoring.
-	// The actual sync is coordinated externally by the node operator or automation.
-
-	return nil
-}
-
 // ResumeAfterSync resumes consensus after successful state sync.
 // This resets the halted state and allows block production to continue.
 func (s *Service) ResumeAfterSync(newHeight uint64, newStateHash types.StateHash) error {

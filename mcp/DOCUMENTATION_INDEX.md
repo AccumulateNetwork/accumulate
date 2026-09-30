@@ -83,17 +83,6 @@ Complete exploration of the Accumulate SDK v1.4.2 for MCP server implementation.
 - Project description
 - Basic setup information
 
-### 6. Snapshot Restore Documentation
-**Files**: `snapshot_restore_readme.md`
-**Purpose**: Snapshot-based follower deployment
-**Content**:
-- Architecture for rapid follower deployment
-- MCP tools: `accumulate_restore_from_snapshots`, `accumulate_validate_snapshot`
-- CLI commands: `validate-snapshot`, `restore-genesis`
-- Port configuration (offset vs explicit)
-- Integration with Accman
-
-**Best for**: Deploying followers from snapshots instead of syncing from genesis
 
 ## Implementation Path by Role
 
@@ -180,9 +169,6 @@ Key files referenced:
 - Subscribe, Event handling
 - Requires streaming
 
-### Tier 6: OPTIONAL (Snapshots)
-- ListSnapshots
-- Administrative feature
 
 ## Most Used APIs
 

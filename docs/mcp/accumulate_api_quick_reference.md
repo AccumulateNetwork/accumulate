@@ -13,7 +13,6 @@ node-info
 find-service
 consensus-status
 network-status
-list-snapshots
 metrics
 query
 submit
