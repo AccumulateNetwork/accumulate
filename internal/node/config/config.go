@@ -18,10 +18,7 @@ import (
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/pelletier/go-toml"
-	"github.com/spf13/viper"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/accumulate"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -31,12 +28,6 @@ import (
 const PortOffsetDirectory = 0
 const PortOffsetBlockValidator = 100
 const PortOffsetBlockSummary = 200
-
-const (
-	configDir     = "config"
-	tmConfigFile  = "tendermint.toml"
-	accConfigFile = "accumulate.toml"
-)
 
 const NetSim = "netsim" // OneNodeNetSim, formally known as devnet
 
@@ -107,33 +98,6 @@ var DefaultLogLevels = LogLevel{}.
 	SetModule("synthetic", "info").
 	SetModule("website", "info").
 	String()
-
-func Default(netName string, net protocol.PartitionType, _ NodeType, partitionId string) *Config {
-	c := new(Config)
-	c.Accumulate.Network.Id = netName
-	c.Accumulate.NetworkType = net
-	c.Accumulate.PartitionId = partitionId
-	c.Accumulate.API.TxMaxWaitTime = 10 * time.Minute
-	c.Accumulate.API.ConnectionLimit = 500
-	c.Accumulate.Storage.Type = BadgerStorage
-	c.Accumulate.Storage.Path = filepath.Join("data", "accumulate.db")
-	c.Accumulate.BPT.Sharding.Enabled = false // Disabled by default for backward compatibility
-	c.Accumulate.BPT.Sharding.Depth = 4       // 16 shards - optimal for 16-core systems
-	c.Accumulate.AnalysisLog.Directory = "analysis"
-	c.Accumulate.AnalysisLog.Enabled = false
-	c.Accumulate.API.ReadHeaderTimeout = 10 * time.Second
-	c.Accumulate.P2P.BootstrapPeers = accumulate.BootstrapServers
-	c.TendermintConfig = *DefaultTendermintConfig()
-	c.LogLevel = DefaultLogLevels
-	c.Instrumentation.Prometheus = true
-	c.Accumulate.MaxEnvelopesPerBlock = 100
-	return c
-}
-
-type Config struct {
-	TendermintConfig
-	Accumulate Accumulate
-}
 
 type Accumulate struct {
 	Describe              `toml:"describe" mapstructure:"describe"`
@@ -263,132 +227,6 @@ func OffsetPort(addr string, basePort int, offset int) (*url.URL, error) {
 
 	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), basePort+offset)
 	return u, nil
-}
-
-func Load(dir string) (*Config, error) {
-	return loadFile(dir, filepath.Join(dir, configDir, tmConfigFile), filepath.Join(dir, configDir, accConfigFile))
-}
-
-func LoadAcc(dir string) (*Accumulate, error) {
-	return loadAccumulate(dir, filepath.Join(dir, accConfigFile))
-}
-
-func loadFile(dir, tmFile, accFile string) (*Config, error) {
-	// Try to load Tendermint config, but it's optional for DAG-BFT nodes
-	tmCfg, err := loadTendermint(dir, tmFile)
-	if err != nil {
-		// If Tendermint config doesn't exist, use default and continue
-		// This allows DAG-BFT nodes to run without CometBFT configuration
-		tmCfg = DefaultTendermintConfig()
-		tmCfg.SetRoot(dir)
-	}
-
-	acc, err := loadAccumulate(dir, accFile)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Config{*tmCfg, *acc}, nil
-}
-
-func Store(config *Config) (err error) {
-	// TODO Submit an MR to CometBFT to fix their bull**** (calling os.Exit if
-	// the config file write fails)
-	defer func() {
-		r := recover()
-		if e, ok := r.(error); ok {
-			err = e
-		} else if r != nil {
-			err = fmt.Errorf("panicked: %v", r)
-		}
-	}()
-
-	WriteTendermintConfigFile(filepath.Join(config.RootDir, configDir, tmConfigFile), &config.TendermintConfig)
-
-	return StoreAcc(config, filepath.Join(config.RootDir, configDir))
-}
-
-func StoreAcc(config *Config, dir string) error {
-	return writeTomlFile(config.Accumulate, filepath.Join(dir, accConfigFile))
-}
-
-func writeTomlFile(v any, file string) error {
-	f, err := os.Create(file)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	return toml.NewEncoder(f).Encode(v)
-}
-
-func loadTendermint(dir, file string) (*TendermintConfig, error) {
-	config := DefaultTendermintConfig()
-
-	err := load(dir, file, config)
-	if err != nil {
-		return nil, err
-	}
-
-	config.SetRoot(dir)
-
-	EnsureRoot(config.RootDir)
-	if err := config.ValidateBasic(); err != nil {
-		return nil, fmt.Errorf("validate: %v", err)
-	}
-	return config, nil
-}
-
-func loadAccumulate(dir, file string) (*Accumulate, error) {
-	config := new(Accumulate)
-	err := load(dir, file, config)
-	if err != nil {
-		return nil, err
-	}
-
-	return config, nil
-}
-
-func load(dir, file string, c interface{}) error {
-	v := viper.New()
-	v.SetConfigFile(file)
-	v.AddConfigPath(dir)
-	err := v.ReadInConfig()
-	if err != nil {
-		// Check if the error is because we're trying to read a directory as a file
-		if strings.Contains(err.Error(), "is a directory") {
-			return fmt.Errorf("read config file %q: path is a directory, not a file.\n"+
-				"Expected structure:\n"+
-				"  work-dir/\n"+
-				"  ├── dnn/\n"+
-				"  │   └── config/\n"+
-				"  │       ├── config.toml\n"+
-				"  │       └── accumulate.toml\n"+
-				"  ├── bvnn/\n"+
-				"  │   └── config/\n"+
-				"  │       ├── config.toml\n"+
-				"  │       └── accumulate.toml\n"+
-				"  └── accumulate.toml (optional, for new-style config)\n"+
-				"\nIf you're using 'accumulated run-dual', make sure:\n"+
-				"  1. You provide node directory paths (dnn, bvnn) not file paths\n"+
-				"  2. Each directory has config/ subdirectory with configuration files\n"+
-				"  3. Use 'accumulated init dual' first to create the proper structure", file)
-		}
-		return fmt.Errorf("read config file %q: %v", file, err)
-	}
-
-	err = v.Unmarshal(c, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
-		mapstructure.StringToTimeDurationHookFunc(),
-		mapstructure.StringToSliceHookFunc(","),
-		StringToEnumHookFunc(),
-		StringToMultiaddrHookFunc(),
-	)))
-
-	if err != nil {
-		return fmt.Errorf("unmarshal: %v", err)
-	}
-
-	return nil
 }
 
 // MarshalTOML marshals the Node Type to Toml as a string.

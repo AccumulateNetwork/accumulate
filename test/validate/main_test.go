@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	noderun "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -41,7 +41,7 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-var validateNetwork = flag.String("test.validate.network", "", "Validate a network")
+var validateNetwork = flag.String("test.validate.network", "", "Validate a network: an address ending in /acc/<network>, or a node's accumulate.toml")
 
 func init() {
 	acctesting.EnableDebugFeatures()
@@ -132,24 +132,18 @@ func TestValidateNetwork(t *testing.T) {
 		require.NotNil(t, addr, "Address must end with the network")
 		bootstrap = append(bootstrap, addr)
 	} else {
-		if st, err := os.Stat(*validateNetwork); err != nil || !st.IsDir() {
-			t.Fatalf("%q is neither an address nor a node directory", *validateNetwork)
+		if st, err := os.Stat(*validateNetwork); err != nil || st.IsDir() {
+			t.Fatalf("%q is neither an address nor a node configuration file", *validateNetwork)
 		}
 
-		// Load the node and derive its listening address
-		node, err := accumulated.Load(*validateNetwork, nil)
-		require.NoError(t, err)
-		network = node.Config.Accumulate.Network.Id
-		key, err := accumulated.LoadNodeKey(node.Config.NodeKeyFile())
-		require.NoError(t, err)
-		ed := key.PrivKey
-		sk, _, err := crypto.KeyPairFromStdKey(&ed)
-		require.NoError(t, err)
-		id, err := peer.IDFromPrivateKey(sk)
+		// Load the node's configuration and derive its listening address
+		var id peer.ID
+		var listen []multiaddr.Multiaddr
+		network, id, listen, err = noderun.NodeIdentity(context.Background(), *validateNetwork)
 		require.NoError(t, err)
 		c, err := multiaddr.NewComponent("p2p", id.String())
 		require.NoError(t, err)
-		for _, addr := range node.Config.Accumulate.P2P.Listen {
+		for _, addr := range listen {
 			bootstrap = append(bootstrap, addr.Encapsulate(c))
 		}
 	}

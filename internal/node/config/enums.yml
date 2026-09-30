@@ -12,11 +12,9 @@ NodeType:
   Follower:
     value: 2
 
+# A node's ports are its base port plus these offsets. The base port itself
+# and base + 1 were CometBFT's (P2P and RPC); they are unassigned.
 PortOffset:
-  TendermintP2P:
-    value: 0
-  TendermintRpc:
-    value: 1
   AccumulateP2P:
     value: 2
   Prometheus:

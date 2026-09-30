@@ -20,12 +20,6 @@ const NodeTypeValidator NodeType = 1
 // NodeTypeFollower .
 const NodeTypeFollower NodeType = 2
 
-// PortOffsetTendermintP2P .
-const PortOffsetTendermintP2P PortOffset = 0
-
-// PortOffsetTendermintRpc .
-const PortOffsetTendermintRpc PortOffset = 1
-
 // PortOffsetAccumulateP2P .
 const PortOffsetAccumulateP2P PortOffset = 2
 
@@ -99,7 +93,7 @@ func (v PortOffset) GetEnumValue() uint64 { return uint64(v) }
 func (v *PortOffset) SetEnumValue(id uint64) bool {
 	u := PortOffset(id)
 	switch u {
-	case PortOffsetTendermintP2P, PortOffsetTendermintRpc, PortOffsetAccumulateP2P, PortOffsetPrometheus, PortOffsetAccumulateApi:
+	case PortOffsetAccumulateP2P, PortOffsetPrometheus, PortOffsetAccumulateApi:
 		*v = u
 		return true
 	}
@@ -109,10 +103,6 @@ func (v *PortOffset) SetEnumValue(id uint64) bool {
 // String returns the name of the Port Offset.
 func (v PortOffset) String() string {
 	switch v {
-	case PortOffsetTendermintP2P:
-		return "tendermintP2P"
-	case PortOffsetTendermintRpc:
-		return "tendermintRpc"
 	case PortOffsetAccumulateP2P:
 		return "accumulateP2P"
 	case PortOffsetPrometheus:
@@ -126,10 +116,6 @@ func (v PortOffset) String() string {
 // PortOffsetByName returns the named Port Offset.
 func PortOffsetByName(name string) (PortOffset, bool) {
 	switch strings.ToLower(name) {
-	case "tendermintp2p":
-		return PortOffsetTendermintP2P, true
-	case "tendermintrpc":
-		return PortOffsetTendermintRpc, true
 	case "accumulatep2p":
 		return PortOffsetAccumulateP2P, true
 	case "prometheus":

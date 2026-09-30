@@ -241,7 +241,7 @@ func initNetwork(cmd *cobra.Command, args []string) {
 			// Configure the validator
 			cvc := run.AddConfiguration(cfg, new(run.CoreValidatorConfiguration), nil)
 			cfg.Configurations = []run.Configuration{cvc}
-			cvc.Listen = node.Listen().Scheme("tcp").Directory().TendermintP2P().Multiaddr()
+			cvc.Listen = node.Listen().Scheme("tcp").Directory().Multiaddr()
 			cvc.BVN = bvn.Id
 
 			// Pin the storage backend in the generated config. The backend of

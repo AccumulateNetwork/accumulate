@@ -7,7 +7,6 @@
 package database
 
 import (
-	"fmt"
 	"io"
 	"sync/atomic"
 
@@ -110,23 +109,6 @@ func OpenLevelDB(filepath string, logger logging.Logger) (*Database, error) {
 		return nil, err
 	}
 	return New(store, logger), nil
-}
-
-// Open opens a key-value store and creates a new database with it.
-func Open(cfg *config.Config, logger logging.Logger) (*Database, error) {
-	switch cfg.Accumulate.Storage.Type {
-	case config.MemoryStorage:
-		return OpenInMemory(logger), nil
-
-	case config.BadgerStorage:
-		return OpenBadger(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
-
-	case config.LevelDBStorage:
-		return OpenLevelDB(config.MakeAbsolute(cfg.RootDir, cfg.Accumulate.Storage.Path), logger)
-
-	default:
-		return nil, fmt.Errorf("unknown storage format %q", cfg.Accumulate.Storage.Type)
-	}
 }
 
 // Store returns the underlying key-value store. Store may return an error in

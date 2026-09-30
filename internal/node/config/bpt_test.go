@@ -46,14 +46,3 @@ func TestBPTValidation(t *testing.T) {
 		})
 	}
 }
-
-func TestDefaultBPTConfig(t *testing.T) {
-	cfg := Default("test", 1, Validator, "test-partition")
-
-	// Verify BPT defaults
-	require.False(t, cfg.Accumulate.BPT.Sharding.Enabled, "sharding should be disabled by default")
-	require.Equal(t, int64(4), cfg.Accumulate.BPT.Sharding.Depth, "default depth should be 4")
-
-	// Validate should pass
-	require.NoError(t, cfg.Accumulate.BPT.Validate())
-}

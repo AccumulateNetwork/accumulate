@@ -108,12 +108,23 @@ It is served on the partition's consensus service address
 node, and an empty one to any node serving the partition. Over JSON-RPC the
 method is `genesis` and the bytes are base64.
 
-`accumulated init node <peer>` uses it: it asks the peer's node info for its
-libp2p identity, fetches the partition's genesis from that node, writes it as
-the node's genesis file (`config/genesis.snap`, which `migrate` carries into
-the core-validator configuration), and names the peer as a bootstrap peer at
-`/ip4|dns/{host}/tcp/{base+2}/p2p/{id}`. `--genesis-doc` supplies the
-snapshot from a file instead.
+`accumulated init node <peer>` and `accumulated init dual <peer>` use it.
+They ask the peer's node info (at the peer's base port, where its one API is)
+for its libp2p identity and partitions, fetch each partition's genesis from
+that node, and write the layout `init network` writes for a node: one
+`accumulate.toml` with a core-validator (or, with `--follow`, follower)
+configuration — `DN`, `BVN` or, for `init dual`, `Dual` — its node and
+validator keys inline, `join-running-network` set, and the genesis snapshots
+beside it (`directory-genesis.snap`, `{bvn}-genesis.snap`). The peer is the
+bootstrap peer, at `/ip4|dns/{host}/tcp/{base+2}/p2p/{id}`. `--genesis-doc`
+(`--dn-genesis-doc`, `--bvn-genesis-doc`) supplies a snapshot from a file
+instead. `init` never overwrites an existing `accumulate.toml`; `--reset`
+removes it first.
+
+A node initialized for CometBFT (`dnn/` and `bvnn/`, each with
+`config/tendermint.toml`) is converted by the standalone
+`tools/cmd/migrate-legacy`, the only code that reads that layout. A node
+never reads it.
 
 **A fetched genesis is a copy, not a trust root.** Nothing in the answer proves
 it is the network's genesis; the operator trusts the peer they named, which is

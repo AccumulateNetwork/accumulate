@@ -7,7 +7,6 @@
 package accumulated
 
 import (
-	"crypto/ed25519"
 	"net"
 	"strconv"
 
@@ -105,18 +104,6 @@ func (b AddressBuilder) BlockSummary() AddressBuilder {
 	return b
 }
 
-// TendermintP2P sets the service to [config.PortOffsetTendermintP2P].
-func (b AddressBuilder) TendermintP2P() AddressBuilder {
-	b.service = config.PortOffsetTendermintP2P
-	return b
-}
-
-// TendermintRPC sets the service to [config.PortOffsetTendermintRpc].
-func (b AddressBuilder) TendermintRPC() AddressBuilder {
-	b.service = config.PortOffsetTendermintRpc
-	return b
-}
-
 // AccumulateP2P sets the service to [config.PortOffsetAccumulateP2P].
 func (b AddressBuilder) AccumulateP2P() AddressBuilder {
 	b.service = config.PortOffsetAccumulateP2P
@@ -135,7 +122,8 @@ func (b AddressBuilder) Prometheus() AddressBuilder {
 	return b
 }
 
-// WithKey includes the node key in the address.
+// WithKey includes the node's libp2p identity in the multiaddr form of the
+// address.
 func (b AddressBuilder) WithKey() AddressBuilder {
 	b.withKey = true
 	return b
@@ -160,25 +148,6 @@ func (b AddressBuilder) String() string {
 			panic("invalid partition type")
 		}
 		addr += ":" + strconv.FormatUint(port, 10)
-	}
-
-	// Add the key
-	if b.withKey {
-		var sk []byte
-		switch b.partition {
-		case protocol.PartitionTypeDirectory:
-			sk = b.node.DnNodeKey
-		case protocol.PartitionTypeBlockValidator:
-			sk = b.node.BvnNodeKey
-		case protocol.PartitionTypeBlockSummary:
-			sk = b.node.BsnNodeKey
-		case protocol.PartitionTypeBootstrap:
-			sk = b.node.PrivValKey
-		default:
-			panic("invalid partition type")
-		}
-		nodeId := PubKeyToID(ed25519.PublicKey(sk[32:]))
-		addr = IDAddressString(nodeId, addr)
 	}
 
 	// Add the scheme
@@ -290,16 +259,6 @@ func (b AddressSliceBuilder) BlockSummary() AddressSliceBuilder {
 	return b.Do(AddressBuilder.BlockSummary)
 }
 
-// TendermintP2P sets the service to [config.PortOffsetTendermintP2P].
-func (b AddressSliceBuilder) TendermintP2P() AddressSliceBuilder {
-	return b.Do(AddressBuilder.TendermintP2P)
-}
-
-// TendermintRPC sets the service to [config.PortOffsetTendermintRpc].
-func (b AddressSliceBuilder) TendermintRPC() AddressSliceBuilder {
-	return b.Do(AddressBuilder.TendermintRPC)
-}
-
 // AccumulateP2P sets the service to [config.PortOffsetAccumulateP2P].
 func (b AddressSliceBuilder) AccumulateP2P() AddressSliceBuilder {
 	return b.Do(AddressBuilder.AccumulateP2P)
@@ -315,7 +274,8 @@ func (b AddressSliceBuilder) Prometheus() AddressSliceBuilder {
 	return b.Do(AddressBuilder.Prometheus)
 }
 
-// WithKey includes the node key in the address.
+// WithKey includes the node's libp2p identity in the multiaddr form of the
+// address.
 func (b AddressSliceBuilder) WithKey() AddressSliceBuilder {
 	return b.Do(AddressBuilder.WithKey)
 }

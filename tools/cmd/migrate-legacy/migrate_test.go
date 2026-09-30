@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"golang.org/x/exp/slices"
 )
 
@@ -355,7 +354,7 @@ func applyOld(t *testing.T, dir, acc, tm string) applyFunc {
 	require.NoError(t, os.Mkdir(filepath.Join(tmp, "config"), 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, "config", "accumulate.toml"), []byte(acc), 0600))
 	require.NoError(t, os.WriteFile(filepath.Join(tmp, "config", "tendermint.toml"), []byte(tm), 0600))
-	old, err := config.Load(tmp)
+	old, err := loadLegacy(tmp)
 	require.NoError(t, err)
 	return func(cfg *run.Config, cvc *run.CoreValidatorConfiguration) {
 		t.Helper()

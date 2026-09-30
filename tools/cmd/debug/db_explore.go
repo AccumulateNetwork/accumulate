@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,8 +18,8 @@ import (
 	"github.com/chzyer/readline"
 	"github.com/mattn/go-shellwords"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/snapshot"
 )
@@ -34,16 +35,18 @@ var cmdDbExplore = &cobra.Command{
 }
 
 var flagExplore = struct {
-	Node     string
-	Badger   string
-	Snapshot string
+	Node      string
+	Partition string
+	Badger    string
+	Snapshot  string
 }{}
 
 func init() {
-	cmdDbExplore.Flags().StringVar(&flagExplore.Node, "node", "", "Explore a node's database")
+	cmdDbExplore.Flags().StringVar(&flagExplore.Node, "node", "", "Explore a stopped node's database: the node's accumulate.toml")
+	cmdDbExplore.Flags().StringVar(&flagExplore.Partition, "partition", "Directory", "With --node, the partition whose database to explore")
 	cmdDbExplore.Flags().StringVar(&flagExplore.Badger, "badger", "", "Explore a Badger database")
 	cmdDbExplore.Flags().StringVar(&flagExplore.Snapshot, "snapshot", "", "Explore a snapshot (must be v2, must be indexed)")
-	_ = cmdDbExplore.MarkFlagDirname("node")
+	_ = cmdDbExplore.MarkFlagFilename("node")
 	_ = cmdDbExplore.MarkFlagDirname("badger")
 	_ = cmdDbExplore.MarkFlagFilename("snapshot")
 	cmdDbExplore.MarkFlagsMutuallyExclusive("node", "badger", "snapshot")
@@ -54,10 +57,9 @@ func explore(_ *cobra.Command, args []string) {
 	var err error
 	switch {
 	case flagExplore.Node != "":
-		daemon, err := accumulated.Load(flagExplore.Node, nil)
+		store, err := run.OpenStorage(context.Background(), flagExplore.Node, flagExplore.Partition)
 		check(err)
-		Db, err = database.Open(daemon.Config, nil)
-		check(err)
+		Db = database.New(store, nil)
 		defer safeClose(Db)
 
 	case flagExplore.Badger != "":

@@ -126,8 +126,8 @@ func (d *NetSimConfiguration) apply(inst *Instance, cfg *Config) error {
 	for bvn := range nodes {
 		for node := range nodes[bvn] {
 			n := nodes[bvn][node]
-			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir, portCmtP2P), n.PeerID))
-			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN, portCmtP2P), n.PeerID))
+			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir), n.PeerID))
+			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN), n.PeerID))
 		}
 	}
 

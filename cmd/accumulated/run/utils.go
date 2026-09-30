@@ -27,7 +27,6 @@ var (
 	portDir = portOffset(config.PortOffsetDirectory)
 	portBVN = portOffset(config.PortOffsetBlockValidator)
 
-	portCmtP2P = portOffset(config.PortOffsetTendermintP2P)
 	portAccAPI = portOffset(config.PortOffsetAccumulateApi)
 	portAccP2P = portOffset(config.PortOffsetAccumulateP2P)
 )

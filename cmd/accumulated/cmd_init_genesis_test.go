@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/multiformats/go-multiaddr"
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
@@ -28,51 +27,87 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// `accumulated init node <peer>` must get the partition's genesis from a
-// DAG-BFT node, which serves no CometBFT RPC (#3932). This runs a real netsim —
-// the daemon's own start path, its HTTP API, its libp2p routing to its own
-// consensus address — and calls init's own peer path against it, so nothing
-// between init and the file on the node's disk is done by the test. Both
-// partitions are asked at the node's base port: a DAG-BFT node has one API.
+// `accumulated init node <peer>` and `init dual <peer>` must get the
+// partitions' genesis from a DAG-BFT node, which serves no CometBFT RPC
+// (#3932), and write the layout `init network` writes (#3910). This runs a
+// real netsim — the daemon's own start path, its HTTP API, its libp2p routing
+// to its own consensus address — and runs init's own peer path and writer
+// against it, so nothing between init and the files on disk is done by the
+// test. Every partition is asked at the node's base port: a DAG-BFT node has
+// one API.
 func TestInitNodeTakesGenesisFromTheNodesAPI(t *testing.T) {
 	if testing.Short() {
 		t.Skip("starts a netsim")
 	}
 
 	rootDir, basePort := startGenesisNetsim(t)
+	peerURL := fmt.Sprintf("tcp://127.0.0.1:%d", basePort)
+	dnWant, err := os.ReadFile(filepath.Join(rootDir, "dn-genesis.snap"))
+	require.NoError(t, err)
+	bvnWant, err := os.ReadFile(filepath.Join(rootDir, "bvn1-genesis.snap"))
+	require.NoError(t, err)
 
-	flagMain.WorkDir = t.TempDir()
-	flagInitNode.GenesisDoc = ""
-	cmd := new(cobra.Command)
-	cmd.SetContext(context.Background())
+	// The bootstrap peer is the node, by the libp2p identity its node info
+	// reports, on its one P2P port.
+	ni, err := jsonrpc.NewClient(fmt.Sprintf("http://127.0.0.1:%d/v3", basePort+int(config.PortOffsetAccumulateApi))).
+		NodeInfo(context.Background(), v3.NodeInfoOptions{})
+	require.NoError(t, err)
+	peer := fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/p2p/%s", basePort+int(config.PortOffsetAccumulateP2P), ni.PeerID)
 
 	for _, c := range []struct {
-		name, file string
-		typ        protocol.PartitionType
-		port       int
+		name string
+		typ  protocol.PartitionType
+		dual bool
+		mode run.CoreValidatorMode
+		dn   []byte
+		bvn  []byte
 	}{
-		{"Directory", "dn-genesis.snap", protocol.PartitionTypeDirectory, basePort},
-		{"BVN", "bvn1-genesis.snap", protocol.PartitionTypeBlockValidator, basePort},
+		{"Directory", protocol.PartitionTypeDirectory, false, run.CoreValidatorModeDN, dnWant, nil},
+		{"BVN", protocol.PartitionTypeBlockValidator, false, run.CoreValidatorModeBVN, nil, bvnWant},
+		{"Dual", 0, true, run.CoreValidatorModeDual, dnWant, bvnWant},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			_, cfg, gen, err := initNodeFromPeer(cmd, []string{fmt.Sprintf("tcp://127.0.0.1:%d", c.port)}, c.typ)
+			j, err := joinFromPeer(context.Background(), peerURL, c.typ, c.dual, "", "")
 			require.NoError(t, err)
+			require.Equal(t, c.dn, j.dnGenesis, "init did not receive the Directory genesis the node started from")
+			require.Equal(t, c.bvn, j.bvnGenesis, "init did not receive the BVN genesis the node started from")
 
-			want, err := os.ReadFile(filepath.Join(rootDir, c.file))
-			require.NoError(t, err)
-			require.Equal(t, want, gen, "init did not receive the genesis the node started from")
+			dir := t.TempDir()
+			require.NoError(t, writeNodeConfig(dir, j, nodeInitOptions{Listen: "tcp://127.0.0.1:1"}))
 
-			// The bootstrap peer is the node, by the libp2p identity its node
-			// info reports, on its one P2P port.
-			ni, err := jsonrpc.NewClient(fmt.Sprintf("http://127.0.0.1:%d/v3", basePort+int(config.PortOffsetAccumulateApi))).
-				NodeInfo(context.Background(), v3.NodeInfoOptions{})
-			require.NoError(t, err)
-			peer := fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/p2p/%s", basePort+int(config.PortOffsetAccumulateP2P), ni.PeerID)
-			var found bool
-			for _, a := range cfg.Accumulate.P2P.BootstrapPeers {
-				found = found || a.String() == peer
+			// What init wrote is a node configuration of the current layout,
+			// and it loads: keys inline, genesis beside it, the peer as the
+			// bootstrap peer.
+			cfg := new(run.Config)
+			require.NoError(t, cfg.LoadFrom(filepath.Join(dir, "accumulate.toml")))
+			require.Equal(t, ni.Network, cfg.Network)
+			require.Len(t, cfg.P2P.BootstrapPeers, 1)
+			require.Equal(t, peer, cfg.P2P.BootstrapPeers[0].String())
+			require.IsType(t, (*run.RawPrivateKey)(nil), cfg.P2P.Key)
+			require.Len(t, cfg.Configurations, 1)
+			cvc, ok := cfg.Configurations[0].(*run.CoreValidatorConfiguration)
+			require.True(t, ok, "init wrote %T", cfg.Configurations[0])
+			require.Equal(t, c.mode, cvc.Mode)
+			require.IsType(t, (*run.RawPrivateKey)(nil), cvc.ValidatorKey)
+			require.True(t, cvc.JoinRunningNetwork != nil && *cvc.JoinRunningNetwork, "a node added to a running network must join it")
+			if c.dn != nil {
+				b, err := os.ReadFile(filepath.Join(dir, cvc.DnGenesis))
+				require.NoError(t, err)
+				require.Equal(t, c.dn, b)
 			}
-			require.True(t, found, "%s is not among the bootstrap peers %v", peer, cfg.Accumulate.P2P.BootstrapPeers)
+			if c.bvn != nil {
+				require.Equal(t, "BVN1", cvc.BVN)
+				b, err := os.ReadFile(filepath.Join(dir, cvc.BvnGenesis))
+				require.NoError(t, err)
+				require.Equal(t, c.bvn, b)
+			}
+
+			// The node's own keys load as a node would load them.
+			_, err = run.New(context.Background(), cfg)
+			require.NoError(t, err)
+
+			// A second init does not overwrite the first.
+			require.Error(t, writeNodeConfig(dir, j, nodeInitOptions{}))
 		})
 	}
 }

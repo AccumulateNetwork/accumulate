@@ -30,4 +30,4 @@ COPY --from=build /root/accumulated /root/snapshot /root/dbrepair /root/debug /r
 HEALTHCHECK CMD curl --fail --silent http://localhost:26660/status || exit 1
 
 ENTRYPOINT ["accumulated"]
-CMD ["run-dual", "/node/dnn", "/node/bvnn"]
+CMD ["/node/accumulate.toml"]

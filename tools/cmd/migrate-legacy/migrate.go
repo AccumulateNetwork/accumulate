@@ -28,12 +28,10 @@ import (
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {
-	cmdMain.AddCommand(cmdMigrate)
 	cmdMigrate.Flags().BoolVarP(&flagMigrate.Pretend, "pretend", "n", false, "Verify the migration process without touching any files")
 	cmdMigrate.Flags().BoolVarP(&flagMigrate.Verbose, "verbose", "v", false, "Output the generated configuration in verbose form")
 	cmdMigrate.Flags().BoolVar(&flagMigrate.Try, "try", false, "Launch the node using the migrated configuration without writing it to disk")
@@ -41,7 +39,7 @@ func init() {
 }
 
 var cmdMigrate = &cobra.Command{
-	Use:     "migrate [node]",
+	Use:     "migrate-legacy [node]",
 	Short:   "Migrate a node's configuration",
 	Args:    cobra.RangeArgs(0, 1),
 	PreRunE: preRunMigrate,
@@ -86,17 +84,17 @@ func migrate(_ *cobra.Command, args []string) {
 		fatalf("expected %v to contain bvnn and/or dnn")
 	}
 
-	var bvn, dn *accumulated.Daemon
+	var bvn, dn *legacyConfig
 	var err error
 	if bvnDir != "" {
-		bvn, err = accumulated.Load(bvnDir, nil)
+		bvn, err = loadLegacy(bvnDir)
 		check(err)
-		checkf(migrateCfg(cfg, cvc, "bvnn", bvn.Config), "bvn")
+		checkf(migrateCfg(cfg, cvc, "bvnn", bvn), "bvn")
 	}
 	if dnDir != "" {
-		dn, err = accumulated.Load(dnDir, nil)
+		dn, err = loadLegacy(dnDir)
 		check(err)
-		checkf(migrateCfg(cfg, cvc, "dnn", dn.Config), "dn")
+		checkf(migrateCfg(cfg, cvc, "dnn", dn), "dn")
 	}
 
 	inst, err := run.New(context.Background(), cfg)
@@ -119,7 +117,7 @@ func migrate(_ *cobra.Command, args []string) {
 
 	cfg.SetFilePath(filepath.Join(flagMain.WorkDir, "accumulate.toml"))
 	if flagMigrate.Try {
-		runCfg(cfg, nil)
+		runCfg(cfg)
 		return
 	}
 
@@ -163,7 +161,7 @@ func isDir(path string) string {
 	return path
 }
 
-func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string, old *config.Config) error {
+func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, dir string, old *legacyConfig) error {
 	// Shared values
 	cfg.Network = old.Accumulate.Network.Id
 	cfg.P2P.Listen = addAddrs(cfg.P2P.Listen, old.Accumulate.P2P.Listen)

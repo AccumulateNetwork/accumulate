@@ -7,14 +7,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
+	node "gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
-	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	cmdutil "gitlab.com/accumulatenetwork/accumulate/internal/util/cmd"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -27,9 +28,9 @@ func main() {
 }
 
 var cmd = &cobra.Command{
-	Use:   "repair-indices [node]",
+	Use:   "repair-indices <accumulate.toml> <partition>",
 	Short: "Repair Accumulate's indices",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.ExactArgs(2),
 	Run:   run,
 }
 
@@ -39,13 +40,13 @@ func init() {
 }
 
 func run(_ *cobra.Command, args []string) {
-	daemon, err := accumulated.Load(args[0], nil)
+	// The node must be stopped: this opens its store as the node would.
+	store, err := node.OpenStorage(context.Background(), args[0], args[1])
 	check(err)
+	db := database.New(store, nil)
+	defer db.Close()
 
-	db, err := database.Open(daemon.Config, daemon.Logger)
-	check(err)
-
-	err = rebuildIndices(db, config.NetworkUrl{URL: protocol.PartitionUrl(daemon.Config.Accumulate.PartitionId)})
+	err = rebuildIndices(db, config.NetworkUrl{URL: protocol.PartitionUrl(args[1])})
 	check(err)
 }
 
