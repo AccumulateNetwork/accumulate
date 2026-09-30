@@ -45,7 +45,7 @@ type InitOpts struct {
 	GenesisGlobals *core.GlobalValues
 	OperatorKeys   [][]byte
 
-	// For Tendermint
+	// ConsensusParams go into the genesis snapshot's consensus section.
 	ConsensusParams *cometbft.ConsensusParams
 
 	// Preloaded data

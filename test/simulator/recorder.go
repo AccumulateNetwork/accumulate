@@ -52,22 +52,13 @@ func (r *recorder) DidReceiveMessages(messages []consensus.Message) error {
 }
 
 func (r *recorder) DidCommitBlock(state execute.BlockState) error {
-	ci, err := json.Marshal(state.Params().CommitInfo)
-	if err != nil {
-		return errors.EncodingError.WithFormat("encode commit info: %w", err)
-	}
-	ev, err := json.Marshal(state.Params().Evidence)
-	if err != nil {
-		return errors.EncodingError.WithFormat("encode evidence: %w", err)
-	}
 	b := &recordBlock{
-		IsLeader:   state.Params().IsLeader,
-		Index:      state.Params().Index,
-		Time:       state.Params().Time,
-		CommitInfo: ci,
-		Evidence:   ev,
+		IsLeader: state.Params().IsLeader,
+		Index:    state.Params().Index,
+		Time:     state.Params().Time,
 	}
 
+	var err error
 	if !state.IsEmpty() {
 		err = state.ChangeSet().Walk(database.WalkOptions{
 			Values:        true,

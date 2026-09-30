@@ -131,24 +131,6 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 		return nil
 	}
 
-	// Discard specific consensus messages that do not specify a module
-	var discard bool
-	switch record.Message {
-	case "Version info":
-		record.Attrs(func(a slog.Attr) bool {
-			discard = a.Key == "tendermint_version"
-			return !discard
-		})
-
-	case "service start":
-		record.Attrs(func(a slog.Attr) bool {
-			discard = a.Key == "impl" && a.Value.String() == "Node"
-			return !discard
-		})
-	}
-	if discard {
-		return nil
-	}
 
 	record.Add(messageKey, record.Message)
 	record.Message = ""

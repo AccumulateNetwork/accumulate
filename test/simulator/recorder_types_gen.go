@@ -32,8 +32,6 @@ type recordBlock struct {
 	IsLeader    bool                  `json:"isLeader,omitempty" form:"isLeader" query:"isLeader" validate:"required"`
 	Index       uint64                `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	Time        time.Time             `json:"time,omitempty" form:"time" query:"time" validate:"required"`
-	CommitInfo  json.RawMessage       `json:"commitInfo,omitempty" form:"commitInfo" query:"commitInfo" validate:"required"`
-	Evidence    json.RawMessage       `json:"evidence,omitempty" form:"evidence" query:"evidence" validate:"required"`
 	Submissions []*messaging.Envelope `json:"submissions,omitempty" form:"submissions" query:"submissions" validate:"required"`
 	Changes     []*recordChange       `json:"changes,omitempty" form:"changes" query:"changes" validate:"required"`
 	extraData   []byte
@@ -66,8 +64,6 @@ func (v *recordBlock) Copy() *recordBlock {
 	u.IsLeader = v.IsLeader
 	u.Index = v.Index
 	u.Time = v.Time
-	u.CommitInfo = encoding.BytesCopy(v.CommitInfo)
-	u.Evidence = encoding.BytesCopy(v.Evidence)
 	u.Submissions = make([]*messaging.Envelope, len(v.Submissions))
 	for i, v := range v.Submissions {
 		v := v
@@ -159,12 +155,6 @@ func (v *recordBlock) Equal(u *recordBlock) bool {
 	if !((v.Time).Equal(u.Time)) {
 		return false
 	}
-	if !(bytes.Equal(v.CommitInfo, u.CommitInfo)) {
-		return false
-	}
-	if !(bytes.Equal(v.Evidence, u.Evidence)) {
-		return false
-	}
 	if len(v.Submissions) != len(u.Submissions) {
 		return false
 	}
@@ -242,8 +232,6 @@ var fieldNames_recordBlock = []string{
 	1: "IsLeader",
 	2: "Index",
 	3: "Time",
-	4: "CommitInfo",
-	5: "Evidence",
 	6: "Submissions",
 	7: "Changes",
 }
@@ -266,12 +254,6 @@ func (v *recordBlock) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.Time == (time.Time{})) {
 		writer.WriteTime(3, v.Time)
-	}
-	if !(len(v.CommitInfo) == 0) {
-		writer.WriteBytes(4, v.CommitInfo)
-	}
-	if !(len(v.Evidence) == 0) {
-		writer.WriteBytes(5, v.Evidence)
 	}
 	if !(len(v.Submissions) == 0) {
 		for _, v := range v.Submissions {
@@ -313,16 +295,6 @@ func (v *recordBlock) IsValid() error {
 		errs = append(errs, "field Time is missing")
 	} else if v.Time == (time.Time{}) {
 		errs = append(errs, "field Time is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field CommitInfo is missing")
-	} else if len(v.CommitInfo) == 0 {
-		errs = append(errs, "field CommitInfo is not set")
-	}
-	if len(v.fieldsSet) > 4 && !v.fieldsSet[4] {
-		errs = append(errs, "field Evidence is missing")
-	} else if len(v.Evidence) == 0 {
-		errs = append(errs, "field Evidence is not set")
 	}
 	if len(v.fieldsSet) > 5 && !v.fieldsSet[5] {
 		errs = append(errs, "field Submissions is missing")
@@ -537,12 +509,6 @@ func (v *recordBlock) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadTime(3); ok {
 		v.Time = x
 	}
-	if x, ok := reader.ReadBytes(4); ok {
-		v.CommitInfo = x
-	}
-	if x, ok := reader.ReadBytes(5); ok {
-		v.Evidence = x
-	}
 	for {
 		if x := new(messaging.Envelope); reader.ReadValue(6, x.UnmarshalBinaryFrom) {
 			v.Submissions = append(v.Submissions, x)
@@ -663,8 +629,6 @@ func init() {
 		encoding.NewTypeField("isLeader", "bool"),
 		encoding.NewTypeField("index", "uint64"),
 		encoding.NewTypeField("time", "string"),
-		encoding.NewTypeField("commitInfo", "string"),
-		encoding.NewTypeField("evidence", "string"),
 		encoding.NewTypeField("submissions", "messaging.Envelope[]"),
 		encoding.NewTypeField("changes", "recordChange[]"),
 	}, "recordBlock", "recordBlock")
@@ -691,8 +655,6 @@ func (v *recordBlock) MarshalJSON() ([]byte, error) {
 		IsLeader    bool                                   `json:"isLeader,omitempty"`
 		Index       uint64                                 `json:"index,omitempty"`
 		Time        time.Time                              `json:"time,omitempty"`
-		CommitInfo  json.RawMessage                        `json:"commitInfo,omitempty"`
-		Evidence    json.RawMessage                        `json:"evidence,omitempty"`
 		Submissions encoding.JsonList[*messaging.Envelope] `json:"submissions,omitempty"`
 		Changes     encoding.JsonList[*recordChange]       `json:"changes,omitempty"`
 		ExtraData   *string                                `json:"$epilogue,omitempty"`
@@ -705,12 +667,6 @@ func (v *recordBlock) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Time == (time.Time{})) {
 		u.Time = v.Time
-	}
-	if !(len(v.CommitInfo) == 0) {
-		u.CommitInfo = v.CommitInfo
-	}
-	if !(len(v.Evidence) == 0) {
-		u.Evidence = v.Evidence
 	}
 	if !(len(v.Submissions) == 0) {
 		u.Submissions = v.Submissions
@@ -755,8 +711,6 @@ func (v *recordBlock) UnmarshalJSON(data []byte) error {
 		IsLeader    bool                                   `json:"isLeader,omitempty"`
 		Index       uint64                                 `json:"index,omitempty"`
 		Time        time.Time                              `json:"time,omitempty"`
-		CommitInfo  json.RawMessage                        `json:"commitInfo,omitempty"`
-		Evidence    json.RawMessage                        `json:"evidence,omitempty"`
 		Submissions encoding.JsonList[*messaging.Envelope] `json:"submissions,omitempty"`
 		Changes     encoding.JsonList[*recordChange]       `json:"changes,omitempty"`
 		ExtraData   *string                                `json:"$epilogue,omitempty"`
@@ -764,8 +718,6 @@ func (v *recordBlock) UnmarshalJSON(data []byte) error {
 	u.IsLeader = v.IsLeader
 	u.Index = v.Index
 	u.Time = v.Time
-	u.CommitInfo = v.CommitInfo
-	u.Evidence = v.Evidence
 	u.Submissions = v.Submissions
 	u.Changes = v.Changes
 	err := json.Unmarshal(data, &u)
@@ -775,8 +727,6 @@ func (v *recordBlock) UnmarshalJSON(data []byte) error {
 	v.IsLeader = u.IsLeader
 	v.Index = u.Index
 	v.Time = u.Time
-	v.CommitInfo = u.CommitInfo
-	v.Evidence = u.Evidence
 	v.Submissions = u.Submissions
 	v.Changes = u.Changes
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)

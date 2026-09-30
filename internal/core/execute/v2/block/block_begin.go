@@ -8,16 +8,13 @@ package block
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/client/signing"
@@ -127,7 +124,6 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	default:
 		return nil, fmt.Errorf("cannot load ledger: %w", err)
 	}
-	lastBlockWasEmpty := ledgerState.Index < block.Index-1
 
 	// Reset transient values
 	ledgerState.Index = block.Index
@@ -151,21 +147,6 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		return nil, fmt.Errorf("cannot write ledger: %w", err)
 	}
 
-	if !lastBlockWasEmpty {
-		// Store votes from previous block, choosing to marshal as json to make it
-		// easily viewable by explorers
-		err = x.captureValueAsDataEntry(block.Batch, protocol.Votes, block.CommitInfo)
-		if err != nil {
-			x.logger.Error("Error processing internal vote transaction", "error", err)
-		}
-
-		// Capture evidence of maleficence if any occurred
-		err = x.captureValueAsDataEntry(block.Batch, protocol.Evidence, block.Evidence)
-		if err != nil {
-			x.logger.Error("Error processing internal vote transaction", "error", err)
-		}
-	}
-
 	// Deliver everything the previous block queued — local synthetics and
 	// locally produced messages — before any of this block's own (#4146).
 	err = block.drainDeliveryQueues()
@@ -174,66 +155,6 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	}
 
 	return block, nil
-}
-
-func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccountPath string, value interface{}) error {
-	if value == nil {
-		return nil
-	}
-
-	data, err := json.Marshal(value)
-	if err != nil {
-		return errors.UnknownError.WithFormat("cannot marshal value as json: %w", err)
-	}
-
-	wd := protocol.SystemWriteData{}
-	if x.globals().Active.ExecutorVersion.DoubleHashEntriesEnabled() {
-		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
-	} else {
-		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	}
-	dataAccountUrl := x.Describe.NodeUrl(internalAccountPath)
-
-	var signer protocol.Signer
-	signerUrl := x.Describe.OperatorsPage()
-	err = batch.Account(signerUrl).Main().GetAs(&signer)
-	if err != nil {
-		return err
-	}
-
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = x.Describe.NodeUrl()
-	txn.Body = &wd
-	txn.Header.Initiator = signerUrl.AccountID32()
-
-	var da *protocol.DataAccount
-	va := batch.Account(dataAccountUrl)
-	err = va.Main().GetAs(&da)
-	if err != nil {
-		return err
-	}
-
-	// Add data index entry
-	err = indexing.Data(batch, dataAccountUrl).Put(wd.Entry.Hash(), txn.GetHash())
-	if err != nil {
-		return fmt.Errorf("failed to add entry to data index of %q: %v", dataAccountUrl, err)
-	}
-
-	// Add TX to main chain
-	var st chain.ProcessTransactionState
-	err = st.ChainUpdates.AddChainEntry(batch, batch.Account(dataAccountUrl).MainChain(), txn.GetHash(), 0, 0)
-	if err != nil {
-		return err
-	}
-
-	err = putMessageWithStatus(batch,
-		&messaging.TransactionMessage{Transaction: txn},
-		&protocol.TransactionStatus{Code: errors.Delivered})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // finalizeBlock builds the block anchor and signs and sends synthetic

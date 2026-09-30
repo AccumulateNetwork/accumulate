@@ -26,11 +26,10 @@ recordBlock:
     type: uint
   - name: Time
     type: time
-  - name: CommitInfo
-    type: rawJson
-  - name: Evidence
-    type: rawJson
+  # Fields 4 and 5 were CometBFT's commit info and evidence; they are
+  # unassigned so older recordings still read.
   - name: Submissions
+    field-number: 6
     type: messaging.Envelope
     marshal-as: reference
     repeatable: true

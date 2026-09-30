@@ -54,8 +54,8 @@ func (c *FollowerConfiguration) apply(inst *Instance, cfg *Config) error {
 	)
 
 	// Create partition services
-	// CRITICAL: Use TransientPrivateKey for follower - it won't be in genesis
-	// so CometBFT will assign voting_power=0 (follower mode)
+	// A follower signs with a transient key: it is in no committee, so it
+	// never votes.
 	followerKey := &TransientPrivateKey{}
 
 	switch c.Mode {

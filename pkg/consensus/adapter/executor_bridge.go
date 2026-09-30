@@ -222,7 +222,6 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 	t := time.Now()
 
 	// Create executor block params
-	// Note: We don't have CometBFT CommitInfo/Evidence, so we leave them nil
 	execParams := execute.BlockParams{
 		Context:  ctx,
 		IsLeader: params.IsLeader,
@@ -231,7 +230,6 @@ func (b *ExecutorBridge) ProduceBlock(ctx context.Context, params BlockParams) (
 		// The system ledger records it from v2-kourou: it is how a joining
 		// node maps the groups it collected onto blocks (#4362).
 		LeaderRound: uint64(params.LeaderRound),
-		// CommitInfo and Evidence are CometBFT-specific, not needed for DAG-BFT
 	}
 
 	// Every batch must be in hand before a block is begun. CollectBatches

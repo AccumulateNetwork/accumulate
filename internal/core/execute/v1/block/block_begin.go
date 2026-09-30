@@ -9,12 +9,10 @@ package block
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/block/shared"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v1/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/smt/storage"
@@ -74,7 +72,6 @@ func (x *Executor) BeginBlock(block *Block) error {
 	default:
 		return fmt.Errorf("cannot load ledger: %w", err)
 	}
-	lastBlockWasEmpty := ledgerState.Index < block.Index-1
 
 	// Reset transient values
 	ledgerState.Index = block.Index
@@ -88,75 +85,7 @@ func (x *Executor) BeginBlock(block *Block) error {
 		return fmt.Errorf("cannot write ledger: %w", err)
 	}
 
-	if !lastBlockWasEmpty {
-		// Store votes from previous block, choosing to marshal as json to make it
-		// easily viewable by explorers
-		err = x.captureValueAsDataEntry(block.Batch, protocol.Votes, block.CommitInfo)
-		if err != nil {
-			x.logger.Error("Error processing internal vote transaction", "error", err)
-		}
-
-		// Capture evidence of maleficence if any occurred
-		err = x.captureValueAsDataEntry(block.Batch, protocol.Evidence, block.Evidence)
-		if err != nil {
-			x.logger.Error("Error processing internal vote transaction", "error", err)
-		}
-	}
-
 	return nil
-}
-
-func (x *Executor) captureValueAsDataEntry(batch *database.Batch, internalAccountPath string, value interface{}) error {
-	if value == nil {
-		return nil
-	}
-
-	data, err := json.Marshal(value)
-	if err != nil {
-		return errors.UnknownError.WithFormat("cannot marshal value as json: %w", err)
-	}
-
-	wd := protocol.SystemWriteData{}
-	if x.globals().Active.ExecutorVersion.DoubleHashEntriesEnabled() {
-		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
-	} else {
-		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	}
-	dataAccountUrl := x.Describe.NodeUrl(internalAccountPath)
-
-	var signer protocol.Signer
-	signerUrl := x.Describe.OperatorsPage()
-	err = batch.Account(signerUrl).Main().GetAs(&signer)
-	if err != nil {
-		return err
-	}
-
-	txn := new(protocol.Transaction)
-	txn.Header.Principal = x.Describe.NodeUrl()
-	txn.Body = &wd
-	txn.Header.Initiator = signerUrl.AccountID32()
-
-	st := chain.NewStateManager(x.Describe, &x.globals().Active, batch.Begin(true), nil, txn, x.logger)
-	defer st.Discard()
-
-	var da *protocol.DataAccount
-	va := batch.Account(dataAccountUrl)
-	err = va.Main().GetAs(&da)
-	if err != nil {
-		return err
-	}
-
-	st.UpdateData(da, wd.Entry.Hash(), wd.Entry)
-
-	err = putSyntheticTransaction(
-		batch, txn,
-		&protocol.TransactionStatus{Code: errors.Delivered})
-	if err != nil {
-		return err
-	}
-
-	_, err = st.Commit()
-	return err
 }
 
 // finalizeBlock builds the block anchor and signs and sends synthetic
