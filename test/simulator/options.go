@@ -457,11 +457,3 @@ func InitialAcmeSupply(v *big.Int) Option {
 		return nil
 	})
 }
-
-// UseABCI is a no-op. The CometBFT ABCI layer has been removed.
-// Use accumulated-dagbft for consensus.
-func UseABCI() Option {
-	return optionFunc(func(opts *simFactory) error {
-		return nil
-	})
-}

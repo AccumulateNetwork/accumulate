@@ -118,14 +118,13 @@ var DefaultLogLevels = config.LogLevel{}.
 	// SetModule("storage", "debug").
 	// SetModule("database", "debug").
 	// SetModule("fake-node", "debug").
-	// SetModule("fake-tendermint", "info").
 	String()
 
 func DefaultConfig(networkName string, net protocol.PartitionType, node config.NodeType, netId string) *config.Config {
-	cfg := config.Default(networkName, net, node, netId) //
-	cfg.Consensus.CreateEmptyBlocks = false              // Empty blocks are annoying to debug
-	cfg.Consensus.TimeoutCommit = time.Second / 5        // Increase block frequency
-	cfg.Instrumentation.Prometheus = false               // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	cfg := config.Default(networkName, net, node, netId)
+	cfg.Consensus.CreateEmptyBlocks = false       // Empty blocks are annoying to debug
+	cfg.Consensus.TimeoutCommit = time.Second / 5 // Increase block frequency
+	cfg.Instrumentation.Prometheus = false        // Test nodes share a host; do not bind metrics ports
 
 	cfg.LogLevel = DefaultLogLevels
 	return cfg
