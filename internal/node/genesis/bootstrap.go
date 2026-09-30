@@ -8,7 +8,6 @@ package genesis
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -232,14 +231,12 @@ func (b *bootstrap) Validate(st *chain.StateManager, tx *chain.Delivery) (protoc
 	b.createSyntheticLedger()
 	b.createAnchorPool()
 	b.createOperatorBook()
-	b.createEvidenceChain()
 	b.maybeCreateFaucet()
 	b.maybeCreateAcme()
 
-	err = b.createVoteScratchChain()
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
+	// No votes or evidence accounts: they held CometBFT's commit info and
+	// misbehaviour, and a DAG-BFT block has neither (#3910). Networks created
+	// before that keep theirs, empty.
 
 	// Persist accounts
 	err = st.Create(b.records...)
@@ -308,41 +305,6 @@ func (b *bootstrap) createAnchorPool() {
 	}
 
 	b.WriteRecords(anchorLedger)
-}
-
-func (b *bootstrap) createVoteScratchChain() error {
-	//create a vote scratch chain
-	wd := new(protocol.WriteData)
-	// Empty CommitInfo matching CometBFT ABCI types.CommitInfo JSON format
-	lci := struct {
-		Round int32      `json:"round,omitempty"`
-		Votes []struct{} `json:"votes"`
-	}{}
-	data, err := json.Marshal(&lci)
-	if err != nil {
-		return errors.InternalError.WithFormat("marshal last commit info: %w", err)
-	}
-	if b.GenesisGlobals.ExecutorVersion.DoubleHashEntriesEnabled() {
-		wd.Entry = &protocol.DoubleHashDataEntry{Data: [][]byte{data}}
-	} else {
-		wd.Entry = &protocol.AccumulateDataEntry{Data: [][]byte{data}}
-	}
-	wd.Scratch = true
-
-	da := new(protocol.DataAccount)
-	da.Url = b.partition.URL.JoinPath(protocol.Votes)
-	da.AddAuthority(b.localAuthority)
-	b.writeDataRecord(da, da.Url, DataRecord{da.Url, wd.Entry})
-	return nil
-}
-
-func (b *bootstrap) createEvidenceChain() {
-	//create an evidence chain
-	da := new(protocol.DataAccount)
-	da.Url = b.partition.JoinPath(protocol.Evidence)
-	da.AddAuthority(b.localAuthority)
-	b.WriteRecords(da)
-	b.urls = append(b.urls, da.Url)
 }
 
 func (b *bootstrap) maybeCreateAcme() {

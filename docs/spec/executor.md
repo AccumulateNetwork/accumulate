@@ -1692,7 +1692,11 @@ fresh-install rule (DIFFERENCES.md, E16).
    burnt, anchor.
 7. Records nothing in the `votes` and `evidence` data accounts: those held
    CometBFT's commit info and misbehaviour, and a DAG-BFT block carries
-   neither (#3910). The accounts still exist, created by genesis.
+   neither (#3910). Genesis no longer creates them, which changes the genesis
+   state root of every network created after #3910 — fresh installs only, and
+   ungated, since no running network re-creates its genesis. A network created
+   before keeps them, empty; the system-write guard in `network_accounts.go`
+   still refuses writes to them.
 8. `drainDeliveryQueues` — delivers what the previous block queued (#4146).
 
 ### Entry from consensus
