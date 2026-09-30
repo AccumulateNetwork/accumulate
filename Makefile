@@ -17,7 +17,7 @@ build:
 	go build -trimpath $(FLAGS) ./cmd/accumulated
 
 dagbft:
-	go build -trimpath $(BUILDFLAGS) -tags dagbft -ldflags $(LDFLAGS) ./cmd/accumulated-dagbft
+	go build -trimpath $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulated-dagbft
 
 docker:
 	docker build --build-arg "GIT_DESCRIBE=$(GIT_DESCRIBE)" --build-arg "GIT_COMMIT=$(GIT_COMMIT)" -t "$(IMAGE)" .

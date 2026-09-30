@@ -4,8 +4,6 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-//go:build !dagbft
-
 package run
 
 import (
@@ -19,8 +17,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// cometKeyJSON represents the JSON structure of CometBFT key files
-// (priv_validator_key.json and node_key.json)
+// cometKeyJSON is the JSON layout of priv_validator_key.json and node_key.json,
+// the key files in the format CometBFT defined, which `init node` writes and
+// nodes from before DAG-BFT hold.
+// They are read, never written, here.
 type cometKeyJSON struct {
 	PrivKey cometKeyData `json:"priv_key"`
 }
@@ -37,9 +37,9 @@ func (k *CometPrivValFile) get(inst *Instance) (address.Address, error) {
 
 	b, err := os.ReadFile(inst.path(k.Path))
 	if err != nil {
-		// CometBFT key files are optional for DAG-BFT nodes
-		// Generate a transient key instead
-		inst.logger.WarnContext(inst.context, "CometBFT validator key not found, generating transient key (OK for DAG-BFT)", "error", err)
+		// The key file is optional: without it the node runs with a
+		// transient key.
+		inst.logger.WarnContext(inst.context, "Validator key file not found, generating a transient key", "error", err)
 		pk, sk, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, err
@@ -70,9 +70,9 @@ func (k *CometNodeKeyFile) get(inst *Instance) (address.Address, error) {
 
 	b, err := os.ReadFile(inst.path(k.Path))
 	if err != nil {
-		// CometBFT key files are optional for DAG-BFT nodes
-		// Generate a transient key instead
-		inst.logger.WarnContext(inst.context, "CometBFT node key not found, generating transient key (OK for DAG-BFT)", "error", err)
+		// The key file is optional: without it the node runs with a
+		// transient key.
+		inst.logger.WarnContext(inst.context, "Node key file not found, generating a transient key", "error", err)
 		pk, sk, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, err
