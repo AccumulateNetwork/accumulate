@@ -46,7 +46,6 @@ type simFactory struct {
 	storeOpt      OpenDatabaseFunc
 	snapshot      SnapshotFunc
 	recordings    RecordingFunc
-	abci          abciFunc
 	initialSupply *big.Int
 
 	dropDispatchedMessages      bool
@@ -516,9 +515,8 @@ func (f *nodeFactory) registerSvc(typ api.ServiceType, svc message.Service) {
 	f.getServices().RegisterService(f.getPeerID(), sa, h.Handle)
 }
 
-type abciFunc = func(*nodeFactory, execute.Executor, consensus.RestoreFunc) consensus.App
-
-func noABCI(node *nodeFactory, exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
+// newApp wraps the node's executor as the consensus application.
+func (node *nodeFactory) newApp(exec execute.Executor, restore consensus.RestoreFunc) consensus.App {
 	node.join.exec = exec
 	app := &consensus.ExecutorApp{
 		Executor: exec,
@@ -544,12 +542,12 @@ func (f *nodeFactory) makeSummaryApp() *consensus.Node {
 	}
 
 	// Create the app interface
-	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
+	app := f.newApp(exec, func(file ioutil.SectionReader) error {
 		return bsn.LoadSnapshot(file, f.getStore(), f.getLogger())
 	})
 
 	// Create the consensus node
-	return f.makeConsensusNode(abci)
+	return f.makeConsensusNode(app)
 }
 
 // getStaging is the node's staging, shared by its executor and its querier
@@ -721,12 +719,12 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	f.executor = exec
 
 	// Create the app interface
-	abci := f.abci(f, exec, func(file ioutil.SectionReader) error {
+	app := f.newApp(exec, func(file ioutil.SectionReader) error {
 		return snapshot.FullRestore(execOpts.Database, file, f.getLogger(), execOpts.Describe.PartitionUrl())
 	})
 
 	// Create the consensus node
-	return f.makeConsensusNode(abci)
+	return f.makeConsensusNode(app)
 }
 
 func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {

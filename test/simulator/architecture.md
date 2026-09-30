@@ -437,7 +437,6 @@ type simFactory struct {
     storeOpt      OpenDatabaseFunc
     snapshot      SnapshotFunc
     recordings    RecordingFunc
-    abci          abciFunc
     initialSupply *big.Int
 
     // Behavior flags
@@ -592,7 +591,6 @@ Standard Accumulate API interfaces implemented by services.
 | `IgnoreCommitResults()` | Ignore commit hash mismatches |
 | `Genesis(time)` | Create genesis snapshot |
 | `InitialAcmeSupply(v)` | Set initial ACME supply |
-| `UseABCI()` | Use ABCI app wrapper |
 
 ---
 

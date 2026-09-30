@@ -16,16 +16,14 @@ import (
 // TendermintConfig is a local replacement for CometBFT's config.Config.
 // It contains only the fields actually used by Accumulate, with the same
 // mapstructure/toml tags so existing TOML config files are read correctly.
+// Sections an older tendermint.toml carries that are not listed here ([rpc],
+// [mempool], [statesync], [blocksync], [tx_index], proxy_app) are ignored on
+// load, since the decoder does not reject unused keys.
 type TendermintConfig struct {
 	BaseConfig      `mapstructure:",squash"`
-	RPC             *RPCConfig             `mapstructure:"rpc" toml:"rpc"`
 	P2P             *P2PConfig             `mapstructure:"p2p" toml:"p2p"`
-	Mempool         *MempoolConfig         `mapstructure:"mempool" toml:"mempool"`
-	StateSync       *StateSyncConfig       `mapstructure:"statesync" toml:"statesync"`
-	BlockSync       *BlockSyncConfig       `mapstructure:"blocksync" toml:"blocksync"`
 	Consensus       *ConsensusConfig       `mapstructure:"consensus" toml:"consensus"`
 	Storage         *TmStorageConfig       `mapstructure:"storage" toml:"storage"`
-	TxIndex         *TxIndexConfig         `mapstructure:"tx_index" toml:"tx_index"`
 	Instrumentation *InstrumentationConfig `mapstructure:"instrumentation" toml:"instrumentation"`
 }
 
@@ -33,7 +31,6 @@ type TendermintConfig struct {
 // BaseConfig mapstructure tags for TOML compatibility.
 type BaseConfig struct {
 	RootDir                 string `mapstructure:"home" toml:"home,omitempty"`
-	ProxyApp                string `mapstructure:"proxy_app" toml:"proxy_app"`
 	Moniker                 string `mapstructure:"moniker" toml:"moniker"`
 	DBBackend               string `mapstructure:"db_backend" toml:"db_backend"`
 	DBPath                  string `mapstructure:"db_dir" toml:"db_dir"`
@@ -48,12 +45,6 @@ type BaseConfig struct {
 	FilterPeers             bool   `mapstructure:"filter_peers" toml:"filter_peers"`
 }
 
-// RPCConfig holds RPC server configuration.
-type RPCConfig struct {
-	ListenAddress      string `mapstructure:"laddr" toml:"laddr"`
-	MaxOpenConnections int    `mapstructure:"max_open_connections" toml:"max_open_connections"`
-}
-
 // P2PConfig holds P2P network configuration.
 type P2PConfig struct {
 	ListenAddress    string `mapstructure:"laddr" toml:"laddr"`
@@ -62,24 +53,6 @@ type P2PConfig struct {
 	PersistentPeers  string `mapstructure:"persistent_peers" toml:"persistent_peers"`
 	AddrBookStrict   bool   `mapstructure:"addr_book_strict" toml:"addr_book_strict"`
 	AllowDuplicateIP bool   `mapstructure:"allow_duplicate_ip" toml:"allow_duplicate_ip"`
-}
-
-// MempoolConfig holds mempool configuration.
-type MempoolConfig struct {
-	Size          int   `mapstructure:"size" toml:"size"`
-	MaxBatchBytes int64 `mapstructure:"max_batch_bytes" toml:"max_batch_bytes"`
-	CacheSize     int   `mapstructure:"cache_size" toml:"cache_size"`
-}
-
-// StateSyncConfig holds state sync configuration.
-type StateSyncConfig struct {
-	Enable     bool     `mapstructure:"enable" toml:"enable"`
-	RPCServers []string `mapstructure:"rpc_servers" toml:"rpc_servers"`
-}
-
-// BlockSyncConfig holds block sync configuration.
-type BlockSyncConfig struct {
-	Version string `mapstructure:"version" toml:"version"`
 }
 
 // ConsensusConfig holds consensus configuration.
@@ -92,11 +65,6 @@ type ConsensusConfig struct {
 // TmStorageConfig holds CometBFT storage configuration.
 type TmStorageConfig struct {
 	DiscardABCIResponses bool `mapstructure:"discard_abci_responses" toml:"discard_abci_responses"`
-}
-
-// TxIndexConfig holds transaction indexer configuration.
-type TxIndexConfig struct {
-	Indexer string `mapstructure:"indexer" toml:"indexer"`
 }
 
 // InstrumentationConfig holds metrics/instrumentation configuration.
@@ -115,7 +83,6 @@ type InstrumentationConfig struct {
 func DefaultTendermintConfig() *TendermintConfig {
 	return &TendermintConfig{
 		BaseConfig: BaseConfig{
-			ProxyApp:           "tcp://127.0.0.1:26658",
 			Moniker:            "",
 			DBBackend:          "goleveldb",
 			DBPath:             "data",
@@ -128,26 +95,15 @@ func DefaultTendermintConfig() *TendermintConfig {
 			ABCI:               "socket",
 			FilterPeers:        false,
 		},
-		RPC: &RPCConfig{
-			ListenAddress:      "tcp://127.0.0.1:26657",
-			MaxOpenConnections: 900, // CometBFT v0.38 default
-		},
 		P2P: &P2PConfig{
 			ListenAddress:    "tcp://0.0.0.0:26656",
 			AddrBookStrict:   true,  // CometBFT v0.38 default
 			AllowDuplicateIP: false, // CometBFT v0.38 default
 		},
-		Mempool: &MempoolConfig{
-			Size:      5000,
-			CacheSize: 10000, // CometBFT v0.38 default
-		},
-		StateSync: &StateSyncConfig{},
-		BlockSync: &BlockSyncConfig{Version: "v0"},
 		Consensus: &ConsensusConfig{
 			WalPath:       "data/cs.wal/wal",
 			TimeoutCommit: time.Second, // CometBFT v0.38 default
 		},
-		TxIndex:         &TxIndexConfig{Indexer: "kv"},
 		Instrumentation: &InstrumentationConfig{Namespace: "cometbft"},
 	}
 }
