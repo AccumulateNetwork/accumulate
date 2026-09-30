@@ -32,12 +32,9 @@ SectionType:
   BPT:
     description: contains the BPT, as records
     value: 11
-  CometStateDB:
-    description: contains archived CometBFT state.db
-    value: 12
-  CometBlockstoreDB:
-    description: contains archived CometBFT blockstore.db
-    value: 13
+  # 12 and 13 held archived CometBFT state.db and blockstore.db, written only
+  # by the removed follower snapshot tools (#3909). They are unassigned; a file
+  # with either section no longer opens.
   AccumulateDB:
     description: contains archived Accumulate database
     value: 14
