@@ -29,8 +29,7 @@ type DidCommitBlock struct {
 	Major uint64
 
 	// Round and Epoch are the DAG-BFT leader round and committee epoch that
-	// committed this block. Zero under CometBFT, which has no such concepts.
-	// Recorded for the node's own bookkeeping.
+	// committed this block, recorded for the node's own bookkeeping.
 	Round uint64
 	Epoch uint64
 }

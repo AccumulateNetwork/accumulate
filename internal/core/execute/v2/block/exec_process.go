@@ -137,7 +137,7 @@ func (b *Block) processEnvelope(batch *database.Batch, messages []messaging.Mess
 		return nil, nil, errors.UnknownError.Wrap(err)
 	}
 
-	// These results are only visible through Tendermint. The recommended way to
+	// These results are not served by any API. The recommended way to
 	// check the status of a transaction is through Accumulate's API, which
 	// reads the status from the database. So it's unlikely anyone is reading
 	// these results out of the database. And since different results across

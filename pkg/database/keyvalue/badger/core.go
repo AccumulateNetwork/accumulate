@@ -296,7 +296,7 @@ func (d *DB[Db, Txn, Item, Wb]) gc() {
 // prevents race conditions between Get/Put and Close, which can cause panics.
 //
 // This logic was built via trial and error and lots and lots of pain. The
-// shutdown process of a Tendermint node is fairly non-deterministic, which lead
+// shutdown process of a node is fairly non-deterministic, which lead
 // to a lot of hard-to-reproduce issues showing up in CI tests. Weeks of
 // guesswork lead to this solution.
 func (d *DB[Db, Txn, Item, Wb]) lock(closing bool) (sync.Locker, error) {

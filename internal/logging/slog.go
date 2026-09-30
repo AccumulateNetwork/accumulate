@@ -131,7 +131,6 @@ func (h *logHandler) Handle(ctx context.Context, record slog.Record) error {
 		return nil
 	}
 
-
 	record.Add(messageKey, record.Message)
 	record.Message = ""
 	return h.handler.Handle(ctx, record)

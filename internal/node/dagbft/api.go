@@ -180,8 +180,7 @@ func (s *ConsensusAPIService) ConsensusStatus(ctx context.Context, opts api.Cons
 		return res, nil
 	}
 
-	// DAG-BFT doesn't have the same peer concept as CometBFT
-	// Return empty peer list for now
+	// Consensus peers are not reported: the list is empty.
 	res.Peers = []*api.ConsensusPeerInfo{}
 
 	return res, nil
@@ -469,7 +468,7 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 
 	s.logger.Debug("TRACE-SUBMIT: submission successful, creating result WITHOUT Status field (BUG!)")
 
-	// Return success - DAG-BFT doesn't have synchronous result like CometBFT
+	// The submission is accepted, not executed: there is no result yet.
 	result := []*api.Submission{{
 		Success: true,
 		Message: "Transaction submitted to DAG-BFT consensus",

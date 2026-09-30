@@ -227,8 +227,7 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.config.DataDir != "" && nodeConfig.StateDir == "" {
 		nodeConfig.StateDir = filepath.Join(s.config.DataDir, consensusStateDir)
 	}
-	// Set up pre-batch transaction validation using the adapter
-	// This is equivalent to CometBFT's CheckTx
+	// Validate each transaction through the adapter before it is batched
 	nodeConfig.WorkerConfig.Validator = s.adapter
 	s.node, err = consensus.NewNode(nodeConfig, committee, s.config.Host, s.config.PubSub)
 	if err != nil {

@@ -45,9 +45,7 @@ func (i *Instrumentation) start(inst *Instance) error {
 }
 
 func (i *Instrumentation) listen(inst *Instance) error {
-	// If there's no listening address, there's nothing to do. Someone else
-	// (e.g. Tendermint) may be setting up a listener but we're not so we're
-	// done.
+	// If there's no listening address, there's nothing to do.
 	//
 	// TODO Consider adding a default listening address.
 	if i == nil || len(i.Listen) == 0 {

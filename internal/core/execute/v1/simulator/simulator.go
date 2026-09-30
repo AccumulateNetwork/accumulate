@@ -621,7 +621,7 @@ func (x *ExecEntry) SetObserver(observer database.Observer)      { x.Database.Se
 // Submit adds the envelopes to the next block's queue.
 //
 // By adding transactions to the next block and swaping queues when a block is
-// executed, we roughly simulate the process Tendermint uses to build blocks.
+// executed, we roughly simulate how a consensus engine builds blocks.
 func (x *ExecEntry) Submit(pretend bool, envelopes ...*messaging.Envelope) []*chain.Delivery {
 	var deliveries []*chain.Delivery
 	for _, env := range envelopes {

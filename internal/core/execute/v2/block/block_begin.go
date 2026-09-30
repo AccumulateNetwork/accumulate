@@ -170,8 +170,8 @@ func (x *Executor) finalizeBlock(block *Block) error {
 	// Anchor the last non-empty block if it has not been anchored yet. This
 	// used to require the non-empty block to be the IMMEDIATELY previous
 	// block (ledger.Index == block.Index-1), which assumes the anchor is
-	// always recorded on the very next block. Under CometBFT at one block
-	// per second that nearly always holds, but DAG-BFT produces a block per
+	// always recorded on the very next block. At one block per second that
+	// nearly always holds, but DAG-BFT produces a block per
 	// committed certificate — dozens per second — and if the one-block
 	// window is missed the anchor is never recorded and the anchor sequence
 	// stalls (#4054: 4 anchors recorded out of 55 anchored blocks). The new

@@ -17,14 +17,13 @@ import (
 )
 
 const (
-	// LogFormatPlain is the plain text log format (matches CometBFT's config value).
+	// LogFormatPlain is the plain text log format.
 	LogFormatPlain = "plain"
-	// LogFormatJSON is the JSON log format (matches CometBFT's config value).
+	// LogFormatJSON is the JSON log format.
 	LogFormatJSON = "json"
 )
 
 // NewConsoleWriter parses the log format and creates an appropriate writer.
-// It is based on part of Tendermint's NewZerologLogger.
 func NewConsoleWriter(format string) (io.Writer, error) {
 	return NewConsoleWriterWith(os.Stderr, format)
 }
@@ -43,7 +42,7 @@ func NewConsoleWriterWith(w io.Writer, format string) (io.Writer, error) {
 }
 
 // newConsoleWriter creates a zerolog console writer that formats log messages
-// as plain text for the console. It is based on part of Tendermint's NewZerologLogger.
+// as plain text for the console.
 func newConsoleWriter(w io.Writer) *zerolog.ConsoleWriter {
 	return &zerolog.ConsoleWriter{
 		Out: w,

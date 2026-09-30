@@ -11,9 +11,7 @@ import (
 	"log/slog"
 )
 
-// Logger is a CometBFT-free logging interface. This allows packages to use
-// logging without depending on CometBFT. Use CometBFTLogger() to convert to
-// cometbft/libs/log.Logger when needed for compatibility.
+// Logger is the key-value logging interface packages log through.
 type Logger interface {
 	Debug(msg string, keyvals ...interface{})
 	Info(msg string, keyvals ...interface{})

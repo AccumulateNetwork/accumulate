@@ -9,7 +9,7 @@
 
 // These tests start real DevNet instances and test the halt functionality
 // end-to-end. They are excluded from CI builds due to Prometheus metrics
-// conflicts when running multiple CometBFT instances in the same process.
+// conflicts when running several networks in the same process.
 //
 // Run these tests individually:
 //   go test -run TestHaltDevNetIntegration -v

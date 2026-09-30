@@ -86,8 +86,8 @@ func (c *Certificate) HasStateHash() bool {
 	return !c.StateHash.IsZero()
 }
 
-// Header was changed from a value to *Header in the CometBFT-removal MR
-// (to avoid copying Header's internal RWMutex). The accessors below all
+// Header is a *Header, so that copying a Certificate does not copy Header's
+// internal RWMutex. The accessors below all
 // dereference Header — guard each one so that a zero-value Certificate{}
 // returns the zero value of the field type instead of panicking. Callers
 // performing real consensus work must construct Certificate via

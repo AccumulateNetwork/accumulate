@@ -42,7 +42,7 @@ type Executor interface {
 	// Validate validates a set of messages.
 	Validate(envelope *messaging.Envelope, recheck bool) ([]*protocol.TransactionStatus, error)
 
-	// Begin begins a Tendermint block.
+	// Begin begins a block.
 	Begin(BlockParams) (Block, error)
 }
 
@@ -116,10 +116,10 @@ type Dispatcher interface {
 
 // BlockParams are the parameters for a new [Block].
 type BlockParams struct {
-	Context    context.Context
-	IsLeader   bool
-	Index      uint64
-	Time       time.Time
+	Context  context.Context
+	IsLeader bool
+	Index    uint64
+	Time     time.Time
 
 	// LeaderRound is the consensus round of the leader that committed the
 	// block. From v2-kourou the system ledger records it, so a joining node

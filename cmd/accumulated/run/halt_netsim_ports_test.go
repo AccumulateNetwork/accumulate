@@ -68,10 +68,8 @@ func freeDevnetBase(t *testing.T, bvns int) int {
 // netsim claims them, so a determined race can still lose. That window is
 // microseconds, against the certainty of a fixed number colliding.
 func devnetBlockFree(base, bvns int) bool {
-	// Probe every offset from the Tendermint-P2P base through the Accumulate
-	// API port. The offsets are named individually on main; this branch has
-	// dropped the CometBFT-specific ones, so the span is walked numerically
-	// rather than by name — it is the range that matters, not the labels.
+	// Probe every port from the base through the Accumulate API port, walked
+	// numerically: it is the range a node binds that matters, not the labels.
 	for part := 0; part <= bvns; part++ {
 		partBase := base + part*int(portBVN)
 		for off := 0; off <= int(portAccAPI); off++ {

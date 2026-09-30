@@ -4,8 +4,7 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-// Package dispatcher provides inter-partition message routing for DAG-BFT consensus.
-// It replaces CometBFT-based dispatching with libp2p-based communication.
+// Package dispatcher routes messages between partitions over libp2p.
 package dispatcher
 
 import (

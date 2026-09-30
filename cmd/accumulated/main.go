@@ -182,7 +182,6 @@ func warnf(format string, args ...interface{}) {
 }
 
 // generateEd25519Key generates a random ed25519 private key.
-// Replaces tmed25519.GenPrivKey() without importing CometBFT.
 func generateEd25519Key() []byte {
 	_, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {

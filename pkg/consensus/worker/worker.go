@@ -90,8 +90,9 @@ var ErrStoreFull = errors.New("worker store full: own uncommitted batches fill t
 // into batches nothing will propose.
 var ErrExecutionLagging = errors.New("worker refusing user submissions: execution is lagging consensus")
 
-// TransactionValidator validates transactions before they are added to a batch.
-// This is equivalent to CometBFT's CheckTx.
+// TransactionValidator validates transactions before they are added to a
+// batch, so a batch carries only transactions that pass the executor's
+// validation at the time they arrive.
 type TransactionValidator interface {
 	// ValidateTransaction validates a transaction before batching.
 	// Returns nil if valid, or an error describing why the transaction is invalid.

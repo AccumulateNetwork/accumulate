@@ -24,8 +24,7 @@ import (
 )
 
 // NodeStatusResult contains the subset of node status fields used by
-// NetworkService for staleness detection. This replaces the CometBFT
-// coretypes.ResultStatus dependency.
+// NetworkService for staleness detection.
 type NodeStatusResult struct {
 	LatestBlockTime time.Time
 	CatchingUp      bool

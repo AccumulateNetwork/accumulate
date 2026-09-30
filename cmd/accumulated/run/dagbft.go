@@ -203,9 +203,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 
 	// Create and register the halt controller for this partition.
 	//
-	// This registration lived in the CometBFT consensus path and was not
-	// carried over here, so `POST /admin/halt` was accepted and did nothing:
-	// RequestHaltAll iterates registered controllers, and there were none.
+	// Without this registration `POST /admin/halt` is accepted and does
+	// nothing: RequestHaltAll iterates registered controllers, and there are
+	// none.
 	// The unit tests in halt_test.go construct a controller directly and so
 	// kept passing while the feature was unwired — which is how it stayed
 	// unnoticed (#4097).
