@@ -44,9 +44,9 @@ func openSnapshotFile(filename string) ioutil.SectionReader {
 }
 
 type snapshotScanArgs struct {
-	Section   func(index int, typ sv2.SectionType, size, offset int64) bool
-	Header    func(version, height uint64, timestamp time.Time, rootHash [32]byte)
-	Record    func(any)
+	Section func(index int, typ sv2.SectionType, size, offset int64) bool
+	Header  func(version, height uint64, timestamp time.Time, rootHash [32]byte)
+	Record  func(any)
 }
 
 func scanSnapshot(f ioutil.SectionReader, args snapshotScanArgs) {
