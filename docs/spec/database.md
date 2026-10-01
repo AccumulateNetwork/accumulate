@@ -305,6 +305,8 @@ account's records against it:
   load commits with the block or is discarded with it and no account the load
   wrote is an account the block changed. The section leaves the set when the
   batch commits.
+- **A batch a validation reads loads it too**, and keeps what it loaded in
+  the read-only batch's own overlay, discarded with it.
 - **Every other batch is refused** with `NotReady`.
 - **The join's own batches pass**: they are what writes the sections.
 

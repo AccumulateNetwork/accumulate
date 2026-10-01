@@ -816,7 +816,8 @@ walk page of 256 accounts took 24 s, and the records 2.5 minutes, of a BVN
 join at ~6,000 blocks (Docker `20260928T194436Z`), while the peer's answers
 were 1–2 % of that time. At 3,000 accounts both stores BlockchainDB, the walk
 went from 4 m 12 s to 1.3 s and the records of 1,000 blocks from 2 m 29 s to
-0.28 s (`TestMeasureTheWalkAndTheRecords`); a join's calls and commits grow
+0.28 s (`TestMeasureTheWalkAndTheRecords`, since #4485
+`TestMeasureTheTopAndTheRecords`); a join's calls and commits grow
 with its pages, not its accounts or records
 (`TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord`).
 
@@ -1040,8 +1041,14 @@ a test partition of a few thousand accounts has about one account a section.
 block under every position of it that is a branch — at most 257 calls. Each
 block must hash to its position in the block above (`HashSlots`), and the
 root's block to the root the answer names; a leaf position above depth 16 is
-the one account under it, and its hash is its section's. Before the match the
-top is a peer's word like every other answer, and the match proves it.
+the one account under it, and its hash is its section's. The root's block is
+asked for as of the peer's current tree, which answers stamped with the
+peer's block T; the blocks under it as of T, and a peer answers its own block
+from its current tree (#4485: before, the newest block was `NotReady`
+because its root is recorded one block late). T must be at or after `L`, and
+it is a block a reply was read at. Before the match the top is a peer's word
+like every other answer, and the match proves it. At most 257 calls is the
+top's cost at mainnet scale; a batch call for it is not built.
 
 **A section not loaded is one leaf.** The node's tree holds, for each section
 it has not loaded, a **marker**: a leaf under the section's prefix whose value
@@ -1082,9 +1089,12 @@ that an account does not exist.
   asked. Nothing executed touched the section since the match — a touch
   loads it — so the marker's value is the section's hash at H.
 
-**Execution loads what it reads.** Only the batch a block executes in loads;
-every other reader of the store is refused an account in a section not loaded
-(below). The store checks each account read against the set: a read of an
+**Execution loads what it reads.** The batch a block executes in loads, and
+so does the batch a validation reads (the builder's decision on #4485: a
+validation judges a transaction against the state the next block executes on,
+and the simulator's nodes must agree on it); a validation's load is held in
+its read-only batch and discarded with it. Every other reader of the store is
+refused an account in a section not loaded (below). The store checks each account read against the set: a read of an
 account in a section not loaded loads the section before it returns. The
 section is written into the block's batch beneath the account records, so the
 loaded accounts are not accounts the block changed — the block ledger does
@@ -1111,9 +1121,16 @@ has got is visible: `accumulate_join_sections_not_loaded{partition}`, `Loading
 the sections not loaded` at most once a minute, and `Every section is loaded`
 once.
 
+The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
+`TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt`,
+`TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchanged`,
+`TestTheFillLoadsEverySectionAndTheRootMatchesThroughout`,
+`TestARestartMidFillResumes` (test/e2e), `TestAForgedSectionIsRefused`
+(internal/node/join), and the store's contract in internal/database
+(`TestAReadOfASectionNotLoadedIsRefusedNotNotFound` and its neighbours).
+
 **What is not loaded is not served.** An account read in a section not
-loaded is refused with `NotReady` — a query, a validation, an `AccountStates`
-answer, which serves it with no body so the asker asks the next peer; a BPT
+loaded is refused with `NotReady` — a query, an `AccountStates` answer, which serves it with no body so the asker asks the next peer; a BPT
 page that would carry a marker is refused with `NotReady`. A stored block
 (`BptBlockQuery`) is served: its hashes are the tree's, markers included.
 Forwarding a refused read to a peer is not built.
