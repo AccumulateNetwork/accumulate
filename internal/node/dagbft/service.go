@@ -498,7 +498,9 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 // block is the executor's last block is the position to resume; when both are
 // above it, because the executor keeps no empty block and the node's last
 // blocks carried nothing, the older one is, and the node resumes after its
-// block (persist.ResumeFrom, #4448). A node with state but no such checkpoint
+// block (persist.ResumeFrom, #4448) — unless the executor is at genesis, when
+// the checkpoint is a replaced store's and nothing is restored (#4484). A
+// node with state but no such checkpoint
 // starts at round zero and cannot catch a live network (DIFFERENCES E11).
 func (s *Service) seedFromCheckpoint() bool {
 	if s.config.DataDir == "" || s.lastBlockIndex == 0 {
@@ -508,6 +510,19 @@ func (s *Service) seedFromCheckpoint() bool {
 	if cp == nil {
 		slog.Warn("No consensus checkpoint matches the executor's last block; starting at round zero",
 			"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex)
+		return false
+	}
+	if cp.BlockIndex != s.lastBlockIndex && s.lastBlockIndex <= protocol.GenesisBlock {
+		// A store at genesis has executed no block of its own, so the blocks
+		// below the checkpoint are not empty blocks it kept nothing of: they
+		// are blocks this store never had. Its store was replaced (wiped, or
+		// a fresh one beside an old consensus/ directory), and the checkpoint
+		// is the old store's position. Resumed, it numbers the next block
+		// after the checkpoint's and lets the whole-restart exit execute that
+		// block on the genesis state (#4484). It is not restored: a joining
+		// node orders nothing until its join names a round (#4405).
+		slog.Info("This node's store has executed no block of its own; its consensus checkpoint is of a store it no longer has, and is not resumed",
+			"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex, "checkpointBlock", cp.BlockIndex)
 		return false
 	}
 	if cp.BlockIndex != s.lastBlockIndex {

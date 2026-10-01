@@ -384,6 +384,25 @@ produced block being durable once production returns, which the exact match
 already assumes; a store that loses a non-empty block that was produced is
 resumed past it (DIFFERENCES, C10).
 
+**A store at genesis resumes from no checkpoint** (#4484). The empty-blocks
+resume reads the blocks between the executor's last block and the checkpoint
+as blocks this store kept nothing of. A store at the genesis block has kept
+no block of its own, so the blocks below a checkpoint above it are blocks it
+never had: its store was replaced — wiped, or created fresh beside an old
+`consensus/` directory — and the checkpoint is the old store's position
+(Docker run `20260929T152146Z`, three followers with `lastBlock=1` resumed
+after block 107048). Resumed, the node would number its next block after the
+checkpoint's, and the whole-restart exit (`Service.Resume`, #4447), which
+refuses only a node with no restored position, would execute that block on
+the genesis state. So `seedFromCheckpoint` restores nothing when the
+executor's last block is at or below `GenesisBlock` and no checkpoint is for
+that block, and says so: the node is in the position of one that has no
+checkpoint. A joining node orders nothing until its join names a round (below);
+one that does not join starts at round zero, as the first node of a network
+does (executor.md, "Sync", step 5). A store restored from a backup older than
+the checkpoint is not told apart from a run of empty blocks (DIFFERENCES,
+C11).
+
 The position is the one **of the block being produced**, not Bullshark's
 position now (`Node.CheckpointAt(leaderRound)`): groups Bullshark has ordered
 since are still in the executor's queue, so the checkpoint's last commit is

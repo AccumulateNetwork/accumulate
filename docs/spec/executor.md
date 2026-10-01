@@ -523,6 +523,20 @@ is a **stall**, and it is said: the join reports the anchor's sequence number
 on `accumulate_join_spine_stalled_entry` (−1 when not held) and logs it, with
 the validators asked, once a minute (#4419).
 
+**A join that stays on one step says so** (#4484). Every step before the pull
+logs only when it fails, so a call that is slow, or that a peer never
+answers, was silent: two of three followers' Directory joins of Docker run
+`20260929T152146Z` logged nothing for about six minutes before `Pulling the
+state`, and nothing could say which call they were in. The join names its
+step before each call that asks a peer — finding the validators, reading the
+signed anchors (with the anchor number and the validator asked), asking the
+peers which block the partition is at (with the peer asked), proving the
+state, pulling it, handing off — and a step held for a minute is said, once a
+minute: `The join is waiting` with the step, how long, how many questions it
+has asked on it, and the one it is asking now. Many slow answers and one
+that never comes are told apart by that count. When a step that was said
+ends, `The join is no longer waiting` says after how long.
+
 #### 2. Nothing is proven before the match, and the match is the proof
 
 **The accounts a peer serves to a join are as of a block** (decided after

@@ -1772,6 +1772,20 @@ exact match rests on the same durability, but fails safe. A check needs the
 executor to record the last block it produced, empty or not, or the
 checkpoint to record whether its block carried anything.
 
+### C11. A store older than its checkpoint is read as a run of empty blocks
+
+*[#4484](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4484)*
+
+consensus.md, "Restart": a store at genesis resumes from no checkpoint. A
+store above genesis and below its checkpoints — restored from a backup, or
+copied from another node, beside a `consensus/` directory it did not write —
+is resumed past the blocks between, as C10 does for a lost block, and its
+next block is numbered after the checkpoint's on a state that is not that
+block's. Nothing records which store a checkpoint was written beside. The
+same record C10 needs closes it: the checkpoint carrying the executor's last
+kept block when it was written, so that the empty-blocks resume takes only a
+store whose last block is that one.
+
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
