@@ -55,10 +55,12 @@ the height — runs behind, at the merge watermark (`MergeLag`, 20 blocks) or
 later if the disk is slow. Three consequences the rest of the system relies
 on:
 
-- **A restart replays.** On open the store holds every sealed block and
-  whatever of the unsealed tail reached disk; the node re-executes from the
-  last sealed height through the committed log to the log's head. Execution
-  is deterministic, so the state it rebuilds is the state it lost.
+- **A restart does not replay.** On open the store holds every sealed block
+  and whatever of the unsealed tail reached disk. The node does not re-execute
+  the committed log from there: a restart is a join (executor.md, "Sync") —
+  it syncs to the signed anchor and then backfills the entries of the accounts
+  that changed (Paul, 2026-10-01; supersedes the replay clause of E13,
+  2026-09-06).
 - **The gap is bounded by refusal, not by a constant.** How far the seal may
   lag is an operational bound: past it the node refuses user work, because a
   store that cannot keep up with the network is the condition back-pressure
@@ -303,7 +305,10 @@ not the same cache:
 Hash-to-URL mappings live in the **dynamic** layer: they are read constantly and
 churn with the working set. Synthetic and anchor entries are persisted to the
 **permanent** layer through execution and never change, so their cache is a hot
-front for entries in play and a miss falls through to permanent storage, counted.
+front for entries in play. A miss is never served from storage (healing.md):
+an `ACTIVE` node holds every entry in play, so a miss means the request belongs
+to another `ACTIVE` node, and is relayed there (Paul, 2026-10-01; not built —
+DIFFERENCES, "A cache miss is refused, not relayed").
 Sizing either cache is decided from measurement, not here.
 
 ## 2. Specification — how it is implemented

@@ -1027,8 +1027,8 @@ names are unchanged, so a consumer that sums a node's series reads what it
 read before, but one that took a maximum across nodes must take it per
 partition (`test/docker/soak/soakmon.py`, `life_from`).
 
-A node that HAS joined holds nothing of the blocks it did not execute, and
-never will — there is no backfill on this line — so a request for one of them
+A node that HAS joined holds nothing of the blocks it did not execute until
+its backfill brings their entries in (executor.md §2, #4452), so a request for one of them
 is answered `NotReady` naming the block it joined at, not `NotFound`. The
 difference matters: the requester counts `NotFound` as a miss and a run of
 misses strands a stream for good (healing.md, "Stranded streams"), while
@@ -2145,3 +2145,17 @@ question. It is not a large change; it is a change that must not be guessed at.
 **Size**: medium. `pull.Verify` and `pull.DirectoryAnchors` on one side, the
 proof client and the trust anchor on the other; `tracker` unchanged if the
 final root match stays as it is.
+
+### A cache miss is refused, not relayed
+
+The spec (database.md, "Caches"; Paul, 2026-10-01) has a synthetic or anchor
+cache miss relayed to another `ACTIVE` node, which holds every entry in play.
+The code refuses the request (healing.md, "Never served from storage", R3);
+no relay exists. Not built.
+
+### E13's replay clause is superseded
+
+E13 (PLAN.md, 2026-09-06) had a restart re-execute the committed log from the
+last sealed height. Paul, 2026-10-01: a restart does not replay; it syncs to
+the signed anchor and backfills the changed accounts' entries. database.md says
+so now; the committed log's role as the durability point is unchanged.
