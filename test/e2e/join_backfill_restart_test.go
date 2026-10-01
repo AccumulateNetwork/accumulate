@@ -93,7 +93,7 @@ func TestARestartBeforeTheBackfillEndsStillBackfills(t *testing.T) {
 	p.RestartNode(joiner)
 	runJoin(t, sim, p, joiner, traffic, true)
 	require.False(t, p.Joining(joiner), "precondition: the node did not hand off")
-	View(t, p.NodeDatabase(joiner), func(batch *database.Batch) {
+	View(t, p.NodeDatabase(joiner).Ungated(), func(batch *database.Batch) {
 		c, err := batch.Account(dave.JoinPath("tokens")).ChainByName("main")
 		require.NoError(t, err)
 		_, err = c.Inner().Entry(0)
@@ -127,6 +127,14 @@ func runJoin(t *testing.T, sim *Sim, p *simulator.Partition, joiner int, traffic
 			cancel()
 		}
 		if active > 20 {
+			// The sections the node has not loaded are loaded by the
+			// fill beside the root watch, and written by the blocks the
+			// traffic makes; then the backfill brings in whole what
+			// they took by its heads.
+			for i := 0; i < 400 && state.SectionsNotLoaded() > 0; i++ {
+				traffic()
+				time.Sleep(time.Millisecond)
+			}
 			waitForBackfill(state)
 			cancel()
 		}
@@ -154,8 +162,15 @@ func runJoin(t *testing.T, sim *Sim, p *simulator.Partition, joiner int, traffic
 }
 
 // watchingState is a steppingState whose root watch runs on past the
-// promotion until the test's step ends it.
+// promotion until the test's step ends it, and whose fill runs beside it, as
+// join.Run runs it.
 type watchingState struct{ *steppingState }
+
+func (w *watchingState) Fill(ctx context.Context) {
+	if f, ok := w.State.(join.Filler); ok {
+		f.Fill(ctx)
+	}
+}
 
 func (w *watchingState) Diverged(ctx context.Context) (uint64, bool, error) {
 	w.round++

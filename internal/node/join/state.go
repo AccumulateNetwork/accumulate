@@ -437,7 +437,16 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	// against: a block that reads one loads it, and every other reader is
 	// refused (executor spec, "Sync", §3a; #4485).
 	s.secs = newSections(opts.Partition, label, s.db, s.log)
-	s.secs.peers = s.partitionSources
+	// The partition's peers, as the join finds them, but not through its
+	// order: a block's load and the fill ask from goroutines of their own,
+	// and the order is the join's.
+	s.secs.peers = func(ctx context.Context) []pull.Source {
+		srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
+		if err != nil {
+			return nil
+		}
+		return srcs
+	}
 	s.secs.loaded = func(urls []*url.URL) { s.markHeadOnly(urls...) }
 	if err := s.secs.read(); err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -635,6 +644,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		s.startRepair(ctx)
 	}
 	if s.sync == nil {
+		s.secs.forgetOpening()
 		s.sync = newSyncing()
 		s.sync.start, s.sync.last = peer.block, peer.block
 		s.log.Info("Pulling the state: the top of the BPT, and every block-ledger record from here on",

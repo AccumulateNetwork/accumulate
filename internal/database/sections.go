@@ -37,8 +37,9 @@ type SectionGate interface {
 	// Load loads the section into the batch a block executes in: the
 	// accounts beneath the batch's records (WriteBeneath) and the marker
 	// swapped for the leaves in the batch's tree. It may take as long as
-	// asking the peers takes. An error holds the block.
-	Load(batch *Batch, section bpt.Section) error
+	// asking the peers takes. An error holds the block. executing is false
+	// for a validation's batch, which is discarded.
+	Load(batch *Batch, section bpt.Section, executing bool) error
 
 	// Committed says a batch that loaded the sections committed: they are
 	// loaded.
@@ -125,7 +126,8 @@ type gatedChangeSet struct {
 
 	// batch is the batch this change set is the store of, when it loads;
 	// nil refuses.
-	batch *Batch
+	batch     *Batch
+	executing bool
 
 	// writable is whether the change set can take what a load writes; a
 	// read-only one (a validation's) holds it in overlay instead, and it is
@@ -200,7 +202,7 @@ func (c *gatedChangeSet) ensure(s bpt.Section, u *url.URL) error {
 	case failed != nil:
 		return failed
 	}
-	err := c.gate.Load(c.batch, s)
+	err := c.gate.Load(c.batch, s, c.executing)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err != nil {

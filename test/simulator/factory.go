@@ -131,16 +131,24 @@ func (f *simFactory) Build() *Simulator {
 	}
 
 	// A harness read that names no peer goes to a node that can answer for its
-	// state, never to one that is joining (services.Network.HarnessClient).
-	serving := map[peer.ID]*nodeState{}
+	// state, never to one that is joining (services.Network.HarnessClient),
+	// nor to one that joined and has not loaded every section of its state
+	// tree: it refuses what it has not loaded (executor spec, "Sync", §3a).
+	serving := map[peer.ID]*Node{}
 	for _, p := range s.partitions {
 		for _, n := range p.nodes {
-			serving[n.peerID] = n.nodeState
+			serving[n.peerID] = n
 		}
 	}
 	s.services.Serving = func(id peer.ID) bool {
-		st, ok := serving[id]
-		return !ok || st.CanServeCurrent()
+		n, ok := serving[id]
+		if !ok {
+			return true
+		}
+		if !n.nodeState.CanServeCurrent() {
+			return false
+		}
+		return n.joinState == nil || n.joinState.SectionsNotLoaded() == 0
 	}
 	return s
 }

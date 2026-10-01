@@ -54,6 +54,9 @@ func newRepairFixture(t *testing.T) *repairFixture {
 		simulator.Genesis(GenesisTime),
 		simulator.IgnoreDeliverResults(),
 		simulator.IgnoreCommitResults(),
+		// As the daemon defaults: a peer serves a section as of a block it
+		// has moved past (executor spec, "Sync", §3a).
+		simulator.BPTHistoryDepth(1024),
 	)
 	sim.SetRoute(alice, "BVN0")
 	sim.SetRoute(bob, "BVN1")

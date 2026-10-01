@@ -225,11 +225,16 @@ func joinAgainstABentBody(t *testing.T, bend bool) {
 	})
 	require.NoError(t, err)
 
+	// The top of the tree is proven by the anchor of the block it is taken
+	// as of, and alice's section is not loaded until something names her
+	// (executor spec, "Sync", §3a): each round takes the records of the
+	// blocks just stepped, which name her, before the root is compared.
 	var matched bool
 	for round := 0; round < 30 && !matched; round++ {
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
 		step()
 		step()
+		require.NoError(t, state.Pull(ctx), "pull round %d, the records", round)
 		_, matched, err = state.Matched(ctx)
 		require.NoError(t, err)
 	}

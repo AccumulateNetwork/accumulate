@@ -50,9 +50,15 @@ type sections struct {
 	timeout time.Duration
 
 	notLoaded [bpt.Sections]atomic.Bool
+	turn      atomic.Uint64
 
-	mu      sync.Mutex
-	hash    map[bpt.Section][32]byte
+	mu   sync.Mutex
+	hash map[bpt.Section][32]byte
+
+	// opening is the sections the join has opened and not loaded yet: no
+	// marker holds them and the store does not hold them whole, so they are
+	// not loaded either (opened, pulled).
+	opening map[bpt.Section]bool
 	pending map[bpt.Section][]*url.URL
 	ready   map[bpt.Section]*loadedSection
 	said    time.Time
@@ -114,6 +120,7 @@ func (x *sections) read() error {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	x.hash = hash
+	x.opening = map[bpt.Section]bool{}
 	for i := range x.notLoaded {
 		_, ok := hash[bpt.Section(i)]
 		x.notLoaded[i].Store(ok)
@@ -157,8 +164,37 @@ func (x *sections) opened(s bpt.Section) {
 	defer x.mu.Unlock()
 	delete(x.hash, s)
 	delete(x.ready, s)
-	x.notLoaded[s].Store(false)
+	if x.opening == nil {
+		x.opening = map[bpt.Section]bool{}
+	}
+	x.opening[s] = true
 	mSectionsNotLoaded.WithLabelValues(x.label).Set(float64(len(x.hash)))
+}
+
+// pulled says the join has loaded a section it opened.
+func (x *sections) pulled(s bpt.Section) {
+	if x == nil {
+		return
+	}
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	delete(x.opening, s)
+	_, marked := x.hash[s]
+	x.notLoaded[s].Store(marked)
+}
+
+// forgetOpening forgets what an abandoned pull opened.
+func (x *sections) forgetOpening() {
+	if x == nil {
+		return
+	}
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	for s := range x.opening {
+		_, marked := x.hash[s]
+		x.notLoaded[s].Store(marked)
+	}
+	x.opening = map[bpt.Section]bool{}
 }
 
 // committed block is the block the node last committed: what a load inside
@@ -181,9 +217,18 @@ type loadedSection struct {
 // block the node last committed, checked against its marker, and written
 // into the block's batch. It asks every peer until one answers or the time is
 // up, and then holds the block.
-func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
+func (x *sections) Load(batch *database.Batch, s bpt.Section, executing bool) error {
+	if !executing {
+		return x.loadForCheck(batch, s)
+	}
 	want, ok := x.expected(s)
 	if !ok {
+		x.mu.Lock()
+		opening := x.opening[s]
+		x.mu.Unlock()
+		if opening {
+			return errors.NotReady.WithFormat("section %d is being loaded by the join", s)
+		}
 		return nil
 	}
 	if err := checkMarker(batch, s, want); err != nil {
@@ -193,7 +238,8 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 	if err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), x.timeout)
+	// Beside the join, not on its goroutine: a block is executing.
+	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), backfillKey{}, true), x.timeout)
 	defer cancel()
 	var last error
 	for ctx.Err() == nil {
@@ -209,6 +255,28 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 	x.log.Warn("A section of the state tree a block reads could not be loaded; the block is held",
 		"partition", x.partition, "section", s, "block", h+1, "error", last)
 	return errors.NotReady.WithFormat("section %d as of block %d: %w", s, h, last)
+}
+
+// checkTimeout is how long a validation's load asks the peers.
+const checkTimeout = 5 * time.Second
+
+// loadForCheck loads a section into a validation's batch, from a peer's
+// current state, which the validators judge the transaction against too. It
+// is not checked against the marker -- the section may have changed since
+// the block this node last committed -- and it is discarded with the batch:
+// it decides no block (executor spec, "Sync", §3a).
+func (x *sections) loadForCheck(batch *database.Batch, s bpt.Section) error {
+	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), backfillKey{}, true), checkTimeout)
+	defer cancel()
+	var last error = errors.NotFound.With("no peer to load from")
+	for _, src := range x.peers(ctx) {
+		ld, err := x.fetchAt(ctx, src, s, 0, nil)
+		if err == nil {
+			return x.write(batch, ld)
+		}
+		last = err
+	}
+	return errors.NotReady.WithFormat("section %d for a validation: %w", s, last)
 }
 
 // checkMarker is whether the batch's tree still holds the section's marker
@@ -228,6 +296,22 @@ func checkMarker(batch *database.Batch, s bpt.Section, want [32]byte) error {
 // accounts beneath its records, and the marker swapped for the leaves in its
 // tree. The root does not move: the leaves hash to the marker's value.
 func (x *sections) apply(batch *database.Batch, ld *loadedSection) error {
+	if err := x.write(batch, ld); err != nil {
+		return err
+	}
+	urls := make([]*url.URL, len(ld.states))
+	for i, st := range ld.states {
+		urls[i] = st.Url
+	}
+	x.mu.Lock()
+	x.pending[ld.section] = urls
+	x.mu.Unlock()
+	return nil
+}
+
+// write writes a loaded section into a batch: the accounts beneath its
+// records, and the marker swapped for the leaves in its tree.
+func (x *sections) write(batch *database.Batch, ld *loadedSection) error {
 	err := batch.WriteBeneath(func(c *database.Batch) error {
 		return pull.WriteStates(c, ld.states)
 	})
@@ -238,17 +322,12 @@ func (x *sections) apply(batch *database.Batch, ld *loadedSection) error {
 	if err := tree.Delete(ld.section.MarkerKey()); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}
-	urls := make([]*url.URL, len(ld.states))
-	for i, st := range ld.states {
-		urls[i] = st.Url
+	for _, st := range ld.states {
 		h := st.LeafHash
 		if err := tree.Insert(keys.NewKey("Account", st.Url), h[:]); err != nil {
 			return errors.UnknownError.Wrap(err)
 		}
 	}
-	x.mu.Lock()
-	x.pending[ld.section] = urls
-	x.mu.Unlock()
 	return nil
 }
 
@@ -328,7 +407,13 @@ func (x *sections) dropReady() {
 // tree's rule, and each account's state to its leaf.
 func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]byte) (*loadedSection, error) {
 	var last error = errors.NotFound.With("no peer to load from")
-	for _, src := range x.peers(ctx) {
+	srcs := x.peers(ctx)
+	// Each load starts at the next peer, so no one peer answers every load.
+	if n := len(srcs); n > 1 {
+		turn := int(x.turn.Add(1) % uint64(n))
+		srcs = append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...)
+	}
+	for _, src := range srcs {
 		ld, err := x.fetchFrom(ctx, src, s, h, want)
 		if err == nil {
 			return ld, nil
@@ -339,12 +424,31 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 }
 
 func (x *sections) fetchFrom(ctx context.Context, src pull.Source, s bpt.Section, h uint64, want [32]byte) (*loadedSection, error) {
+	ld, err := x.fetchAt(ctx, src, s, h, &want)
+	if err == nil {
+		return ld, nil
+	}
+	// A peer that retains no state as of h, or has moved on past it, may
+	// still hold the section as it was at h: a section no block after h
+	// changed. Its current state is checked against the same hash, so it is
+	// taken only if it is h's.
+	cur, err2 := x.fetchAt(ctx, src, s, 0, &want)
+	if err2 == nil {
+		cur.block = h
+		return cur, nil
+	}
+	return nil, err
+}
+
+// fetchAt loads a section from one peer as of block h, zero being its current
+// state, checked against want unless it is nil.
+func (x *sections) fetchAt(ctx context.Context, src pull.Source, s bpt.Section, h uint64, want *[32]byte) (*loadedSection, error) {
 	leaves, urls, err := sectionLeaves(ctx, src, x.partition, s, h)
 	if err != nil {
 		return nil, err
 	}
 	got, ok := bpt.SectionHash(leaves)
-	if !ok || got != want {
+	if want != nil && (!ok || got != *want) {
 		return nil, errors.Conflict.WithFormat("the leaves of section %d as of %d hash to %x, not to its marker %x", s, h, got[:8], want[:8])
 	}
 	states, err := statesAt(ctx, src, x.partition, urls, h)
@@ -359,7 +463,7 @@ func (x *sections) fetchFrom(ctx context.Context, src pull.Source, s bpt.Section
 			return nil, errors.Conflict.WithFormat("%v: the state hashes to leaf %x, the section's leaf is %x", st.Url, st.LeafHash[:8], leaves[i].Hash[:8])
 		}
 	}
-	return &loadedSection{section: s, block: h, hash: want, leaves: leaves, states: states}, nil
+	return &loadedSection{section: s, block: h, hash: got, leaves: leaves, states: states}, nil
 }
 
 // sectionPage is how many leaves one page of a section asks for.
@@ -488,6 +592,7 @@ func statesAt(ctx context.Context, src pull.Source, partition *url.URL, urls []*
 // goroutine of its own, and ends when every section is loaded or ctx ends
 // (executor spec, "Sync", §3a, "The fill").
 func (x *sections) fill(ctx context.Context, active func() bool) {
+	ctx = context.WithValue(ctx, backfillKey{}, true)
 	if x == nil {
 		return
 	}

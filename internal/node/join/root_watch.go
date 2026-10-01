@@ -216,9 +216,10 @@ func (s *PulledState) Backfill(ctx context.Context) {
 
 type backfillKey struct{}
 
-// Backfilling is whether ctx is the backfill's. The backfill runs beside the
-// join, not on its goroutine: what the join's sources do between two of the
-// join's own reads, such as the simulator's pull hook, must not run from it.
+// Backfilling is whether ctx is the backfill's, the fill's, or a load inside a
+// block (sections). They run beside the join, not on its goroutine: what the
+// join's sources do between two of the join's own reads, such as the
+// simulator's pull hook, must not run from them.
 func Backfilling(ctx context.Context) bool {
 	b, _ := ctx.Value(backfillKey{}).(bool)
 	return b

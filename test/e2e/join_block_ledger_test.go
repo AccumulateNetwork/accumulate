@@ -97,11 +97,11 @@ func (q *pagelessQuerier) Query(ctx context.Context, scope *url.URL, query api.Q
 // TestJoinKeepsUpFromTheBlockLedgerAlone is the guard on the #4306 fix that had
 // none (#4317): THE ACCOUNTS A BLOCK CHANGED ARE NAMED BY THE BLOCK LEDGER.
 //
-// The join walks the peer's whole BPT once and processes every block-ledger
-// record from the start of its pull, in order (executor spec, "Sync", "The
-// algorithm", steps 1-2; #4438). Once the walk has covered the tree, a block's
-// changes reach the node only through that block's record. So this test runs
-// the join in two phases. The first lets the walk cover the tree. The second
+// The join takes the top of the peer's BPT once and processes every
+// block-ledger record from the start of its pull, in order (executor spec,
+// "Sync", "The algorithm", steps 1-2; #4438, #4485). Once the top is taken, a
+// block's changes reach the node only through that block's record. So this
+// test runs the join in two phases. The first takes the top. The second
 // takes the peers' BPT pages away, has the network create an account the node
 // has never heard of, and requires the node to pull it: only the record of the
 // block that created it can name it.
@@ -165,14 +165,15 @@ func TestJoinKeepsUpFromTheBlockLedgerAlone(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Phase one: the walk covers the tree. The partition is small, so one
-	// round's pages do; a few more rounds let the records run on.
+	// Phase one: the join takes the top of the tree and loads the sections
+	// it writes into; a few more rounds let the records run on.
 	for round := 0; round < 5; round++ {
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
 		sim.StepN(3)
 	}
-	require.NotZero(t, sources.served.Load(), "the walk was never served a page in phase one")
-	require.NotNil(t, balanceOf(t, local, tokens), "the join did not pull %v at all", tokens)
+	require.NotZero(t, sources.served.Load(), "no section was ever served a page in phase one")
+	require.Positive(t, state.SectionsNotLoaded(), "the join did not take the top of the tree")
+	_ = tokens
 
 	// Phase two: no peer will page its BPT from here on, and the network
 	// creates an account this node has never heard of.
@@ -269,13 +270,14 @@ func TestJoinFollowsTheRecordsAcrossAnyNumberOfBlocks(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Phase one: the walk covers the tree.
+	// Phase one: the join takes the top of the tree.
 	for round := 0; round < 5; round++ {
 		require.NoError(t, state.Pull(ctx), "pull round %d", round)
 		sim.StepN(3)
 	}
-	require.NotZero(t, sources.served.Load(), "the walk was never served a page in phase one")
-	require.NotNil(t, balanceOf(t, local, tokens), "the join did not pull %v at all", tokens)
+	require.NotZero(t, sources.served.Load(), "no section was ever served a page in phase one")
+	require.Positive(t, state.SectionsNotLoaded(), "the join did not take the top of the tree")
+	_ = tokens
 
 	// The join pauses while the network runs on well past what the old
 	// span allowed.

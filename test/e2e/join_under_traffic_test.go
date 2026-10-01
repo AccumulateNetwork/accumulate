@@ -175,6 +175,9 @@ func TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock(t *testing.T) {
 	// every account it did not take whole that way -- and past the match the
 	// node brings in its entries: it holds the whole chain, entry by entry
 	// (executor spec, "Sync", "Two mismatches").
+	// What the node holds by its hash alone it loads beside execution, and
+	// what it loads by the chain heads the backfill brings in whole.
+	holdWhole(t, p.NodeJoinState(joiner), traffic)
 	requireSameChains(t, p.NodeDatabase(joiner), p.NodeDatabase(0), alice.JoinPath("tokens"))
 	require.Greater(t, chainHeight(t, p.NodeDatabase(0), dave.JoinPath("tokens"), "main"), int64(256),
 		"precondition: dave's chain is not past its first mark set")

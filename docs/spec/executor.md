@@ -1068,7 +1068,12 @@ whose local hash equals the top's, with no marker in it, is loaded: a node
 that restarts takes nothing of what it already holds. A section whose marker
 already holds the top's hash stays not loaded. Every other section is made not
 loaded: the node's own leaves in it are forgotten (`ForgetAccount`) and the
-marker is written in their place. A section empty in the top is emptied.
+marker is written in their place. A section empty in the top is emptied. The
+sections of the partition's own system accounts — the spine and the synthetic
+ledger, which the node's services read while it joins — are not forgotten:
+they are left as the node holds them and loaded by the pull over it. A
+section the pull has opened and not yet loaded is not loaded to every reader,
+as a section under a marker is.
 
 **Loading a section** pages the section's leaves from a peer (`BptPage` from
 the section's highest key, until the keys leave the section) and asks for the
@@ -1087,13 +1092,18 @@ that an account does not exist.
   The leaves must hash to the marker's value by the tree's rule, and each
   account's state to its leaf, or the answer is refused and the next peer
   asked. Nothing executed touched the section since the match — a touch
-  loads it — so the marker's value is the section's hash at H.
+  loads it — so the marker's value is the section's hash at H. A peer that
+  cannot answer as of H (it retains no history, or not this account's) is
+  asked for its current state, checked against the same hash: a section no
+  block after H changed is taken that way, and one that changed is refused.
 
 **Execution loads what it reads.** The batch a block executes in loads, and
 so does the batch a validation reads (the builder's decision on #4485: a
-validation judges a transaction against the state the next block executes on,
-and the simulator's nodes must agree on it); a validation's load is held in
-its read-only batch and discarded with it. Every other reader of the store is
+validation judges a transaction against the latest state, and the
+simulator's nodes must agree on it). A validation's load is a peer's current
+state, not checked against the marker — the section may have moved since the
+node's last block — and it is held in the read-only batch and discarded with
+it: it decides no block. Every other reader of the store is
 refused an account in a section not loaded (below). The store checks each account read against the set: a read of an
 account in a section not loaded loads the section before it returns. The
 section is written into the block's batch beneath the account records, so the

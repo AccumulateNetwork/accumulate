@@ -144,18 +144,26 @@ func TestJoinPullsFromPeersAndPromotes(t *testing.T) {
 	require.Equal(t, bptRoot(t, local), state.Machine().Get().VerifiedAnchor,
 		"the verified anchor is the root the match found")
 
-	// And the state it holds is the partition's, not a subset: the accounts a
-	// block changed as a side effect and the system accounts no envelope names.
-	View(t, local, func(batch *database.Batch) {
+	// And the state it holds is the partition's, not a subset: the system
+	// accounts no envelope names are held, and every other account is held
+	// or in a section the node holds by its hash, which the anchored root
+	// covers (executor spec, "Sync", §3a).
+	View(t, local.Ungated(), func(batch *database.Batch) {
 		for _, u := range []*url.URL{
 			part.JoinPath(Ledger),
 			part.JoinPath(Synthetic),
 			part.JoinPath(AnchorPool),
-			alice.JoinPath("tokens"),
-			bob.JoinPath("tokens"),
 		} {
 			_, err := batch.Account(u).Main().Get()
 			require.NoError(t, err, "the join did not pull %v", u)
+		}
+		for _, u := range []*url.URL{alice.JoinPath("tokens"), bob.JoinPath("tokens")} {
+			_, err := batch.Account(u).Main().Get()
+			if err == nil {
+				continue
+			}
+			_, err = batch.BPT().Get(database.SectionOfAccount(u).MarkerKey())
+			require.NoError(t, err, "the join neither pulled %v nor holds its section by its hash", u)
 		}
 	})
 }

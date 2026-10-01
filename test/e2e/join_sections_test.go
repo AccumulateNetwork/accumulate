@@ -208,6 +208,38 @@ func (j *sectionsJoin) agree(why string) {
 	require.Equal(t, vr, fr, "%s: the fresh node's root at block %d is not the validator's", why, fb)
 }
 
+// fillAll runs a joined node's fill beside the network, calling step between
+// checks, until the node has loaded every section of its state tree: what it
+// loads is written by the blocks step executes.
+func fillAll(t *testing.T, state *join.PulledState, step func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); state.Fill(ctx) }()
+	defer func() { cancel(); <-done }()
+	for i := 0; i < 400 && state.SectionsNotLoaded() > 0; i++ {
+		step()
+		time.Sleep(time.Millisecond)
+	}
+	require.Zero(t, state.SectionsNotLoaded(), "the fill did not load every section")
+}
+
+// holdWhole loads every section a joined node has not loaded, then backfills
+// every account it took by its chain heads, calling step between checks.
+func holdWhole(t *testing.T, state *join.PulledState, step func()) {
+	t.Helper()
+	fillAll(t, state, step)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); state.Backfill(ctx) }()
+	defer func() { cancel(); <-done }()
+	for i := 0; i < 400 && state.BackfillLeft() > 0; i++ {
+		step()
+		time.Sleep(time.Millisecond)
+	}
+	require.Zero(t, state.BackfillLeft(), "the backfill did not finish")
+}
+
 // TestAJoinerExecutesBeforeEverySectionIsLoaded — #4485. The node hands off
 // holding most sections by their hash alone, and executes from there in
 // agreement with the validators.

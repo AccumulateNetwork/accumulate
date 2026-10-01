@@ -270,7 +270,10 @@ func (n *Node) execute(params execute.BlockParams, envelopes []*messaging.Envelo
 func (n *Node) commit(block any) ([]byte, error) {
 	// Commit (let the app handle empty blocks and notifications)
 	res, err := n.app.Commit(&CommitRequest{Block: block})
-	return res.Hash[:], errors.UnknownError.Wrap(err)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	return res.Hash[:], nil
 }
 
 func (n *Node) applyValUp(valUp []*execute.ValidatorUpdate) {

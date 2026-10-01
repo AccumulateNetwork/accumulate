@@ -36,7 +36,7 @@ type peerGate struct {
 
 func (g *peerGate) NotLoaded(s bpt.Section) bool { _, ok := g.notLoaded[s]; return ok }
 
-func (g *peerGate) Load(batch *Batch, s bpt.Section) error {
+func (g *peerGate) Load(batch *Batch, s bpt.Section, _ bool) error {
 	g.loads++
 	if g.fail {
 		return errors.NotFound.With("no peer answers")

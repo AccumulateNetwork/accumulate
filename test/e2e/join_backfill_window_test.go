@@ -159,6 +159,10 @@ func TestAJoinedNodeKeepsPaceWhileItBackfills(t *testing.T) {
 		require.NoError(t, err)
 		return len(list)
 	}
+	// The accounts the network changed before the node joined are in
+	// sections it has not loaded; the fill loads them, each by its chain
+	// heads, and they are the backfill's (executor spec, "Sync", §3a).
+	fillAll(t, state, func() { submit(); sim.Step() })
 	require.Greater(t, headOnly(), 64, "precondition: the backfill has many accounts left as the node runs on")
 	// The backfill runs beside the watch, as join.Run runs it (#4472).
 	bctx, stopBackfill := context.WithCancel(context.Background())

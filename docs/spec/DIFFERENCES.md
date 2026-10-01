@@ -507,8 +507,9 @@ window, the state before the change as well.
 **Code**: (a) is not built. A peer serves an account as of H from the states
 it retained when the account changed (`indexing.retainedAccountAt`); an
 account whose last change is older than the peer's window and that changed
-after H is refused (`IncompleteChain`) by every peer. The section loader asks
-every peer for 30 s and then holds the block (`NotReady` at commit), and the
+after H is refused (`IncompleteChain`) by every peer, and its current state
+does not hash to the section's marker either. The section loader asks every
+peer for 30 s and then holds the block (`NotReady` at commit), and the
 node pulls again: the pull's records name that account and load its section
 from the peers' current state, and the match proves it. A simulated network
 retains from genesis and never meets this; a long-running network meets it on

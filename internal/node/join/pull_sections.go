@@ -243,6 +243,7 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 		}
 		for _, sec := range todo[:n] {
 			p.opened[sec] = true
+			s.secs.pulled(sec)
 		}
 		return n, true
 	}
@@ -296,7 +297,7 @@ func leavesOf(tree *bpt.BPT, sec sectionID) (map[[32]byte]localLeaf, error) {
 func (s *PulledState) takeTop(ctx context.Context, p *syncing) error {
 	var last error = errors.NotFound.With("no peer to take the top of the tree from")
 	for _, src := range s.partitionSources(ctx) {
-		top, at, root, err := fetchTop(ctx, src, s.partition)
+		top, at, _, err := fetchTop(ctx, src, s.partition)
 		if err != nil {
 			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
 			continue
@@ -305,9 +306,19 @@ func (s *PulledState) takeTop(ctx context.Context, p *syncing) error {
 			last = errors.Conflict.WithFormat("%s: the top is of block %d, before the records' %d", sourceKey(src), at, p.last)
 			continue
 		}
-		n, err := s.install(top, root)
+		// The node's own system accounts are not forgotten: its services
+		// read them while it joins. Their sections are loaded by the pull,
+		// over what the node holds.
+		keep := map[sectionID]bool{}
+		for _, u := range systemAccounts(s.partition) {
+			keep[database.SectionOfAccount(u)] = true
+		}
+		n, differ, err := s.install(top, keep)
 		if err != nil {
 			return err
+		}
+		for _, sec := range differ {
+			p.opened[sec] = false
 		}
 		p.topTaken, p.topAt = true, at
 		p.highest = max(p.highest, at)
@@ -388,29 +399,35 @@ func localTop(tree *bpt.BPT) (*bpt.SectionHashes, [32]byte, error) {
 // install makes this node's tree the top's: a section whose hash the node
 // already holds stays as it is -- loaded, or not loaded under a marker of the
 // same hash -- and every other has the node's leaves in it forgotten and,
-// unless the top has it empty, a marker in their place. The root is then the
-// top's. It returns how many sections it replaced.
-func (s *PulledState) install(top *bpt.SectionHashes, root [32]byte) (int, error) {
+// unless the top has it empty, a marker in their place. A section in keep is
+// left as the node holds it and returned among differ, for the pull to load
+// over it. It returns how many sections it replaced.
+func (s *PulledState) install(top *bpt.SectionHashes, keep map[sectionID]bool) (int, []sectionID, error) {
 	read := s.db.Begin(false)
 	local, _, err := localTop(read.BPT())
 	if err != nil {
 		read.Discard()
-		return 0, errors.UnknownError.WithFormat("read this node's own top: %w", err)
+		return 0, nil, errors.UnknownError.WithFormat("read this node's own top: %w", err)
 	}
 	type change struct {
 		sec    sectionID
 		leaves map[[32]byte]localLeaf
 	}
 	var changes []change
+	var differ []sectionID
 	for i := 0; i < bpt.Sections; i++ {
 		if local.Present[i] == top.Present[i] && local.Hash[i] == top.Hash[i] {
 			continue
 		}
 		sec := sectionID(i)
+		if keep[sec] {
+			differ = append(differ, sec)
+			continue
+		}
 		leaves, err := leavesOf(read.BPT(), sec)
 		if err != nil {
 			read.Discard()
-			return 0, errors.UnknownError.Wrap(err)
+			return 0, nil, errors.UnknownError.Wrap(err)
 		}
 		changes = append(changes, change{sec, leaves})
 	}
@@ -422,35 +439,38 @@ func (s *PulledState) install(top *bpt.SectionHashes, root [32]byte) (int, error
 		for k, l := range c.leaves {
 			if bpt.IsSectionMarker(k) || l.url == nil {
 				if err := batch.BPT().Delete(keys.KeyFromHash(k)); err != nil {
-					return 0, errors.UnknownError.Wrap(err)
+					return 0, nil, errors.UnknownError.Wrap(err)
 				}
 				continue
 			}
 			if err := batch.ForgetAccount(l.url); err != nil {
-				return 0, errors.UnknownError.WithFormat("forget %v: %w", l.url, err)
+				return 0, nil, errors.UnknownError.WithFormat("forget %v: %w", l.url, err)
 			}
 		}
 		if top.Present[c.sec] {
 			h := top.Hash[c.sec]
 			if err := batch.BPT().Insert(c.sec.MarkerKey(), h[:]); err != nil {
-				return 0, errors.UnknownError.Wrap(err)
+				return 0, nil, errors.UnknownError.Wrap(err)
 			}
 		}
 	}
 	if err := batch.Commit(); err != nil {
-		return 0, errors.UnknownError.WithFormat("write the top: %w", err)
+		return 0, nil, errors.UnknownError.WithFormat("write the top: %w", err)
 	}
 
+	// Every section but those kept is now the top's.
 	check := s.db.Begin(false)
-	got, err := check.GetBptRootHash()
+	got, _, err := localTop(check.BPT())
 	check.Discard()
 	if err != nil {
-		return 0, errors.UnknownError.Wrap(err)
+		return 0, nil, errors.UnknownError.Wrap(err)
 	}
-	if got != root {
-		return 0, errors.InternalError.WithFormat("the tree with the top installed has root %x, not the top's %x", got[:8], root[:8])
+	for i := 0; i < bpt.Sections; i++ {
+		if !keep[sectionID(i)] && (got.Present[i] != top.Present[i] || got.Hash[i] != top.Hash[i]) {
+			return 0, nil, errors.InternalError.WithFormat("section %d with the top installed is not the top's", i)
+		}
 	}
-	return len(changes), errors.UnknownError.Wrap(s.secs.read())
+	return len(changes), differ, errors.UnknownError.Wrap(s.secs.read())
 }
 
 // Fill loads every section the node has not loaded while it executes, on a

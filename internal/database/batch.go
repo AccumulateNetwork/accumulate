@@ -76,6 +76,7 @@ func (d *Database) begin(writable bool, mode gateMode) *Batch {
 		g.batch = b
 	}
 	if mode == gateExecutes {
+		g.executing = true
 		gate.Opened(b)
 	}
 	return b
