@@ -226,26 +226,34 @@ holds.
 This is the rule; the numbered sections below say how each part is done, and
 where they disagree with it, this wins.
 
-1. **Pull every account the state tree holds, and every block-ledger record
-   from the start of the pull to the present, in order.** The pull starts at
-   S, the lowest block the partition's peers name, not counting a peer that
-   names a block before the newest one this node has verified a signed anchor
-   for (§3). The node walks the whole BPT, page by page, and pulls
-   every account its leaves name; alongside it, it takes the block-ledger
-   record of every block after S, in block order, and pulls again every
-   account each record names (invariant 14). The walk may take many blocks;
-   that does not matter. An account pulled during the walk is either
-   unchanged since, or named by a later record and pulled again, so once the
-   walk is done and the records are processed through the present, every
-   account is current and the local BPT is the partition's. **The walk never
-   overwrites a value the records wrote:** an account a block-ledger record
-   has already brought current is skipped when the walk reaches it, because
-   the walk's page may be older than that record. The other direction needs
-   no rule: when the walk's page is newer than the records processed so far,
-   the account it wrote was changed by a block the records have not reached
-   yet, and that block's record names it, so it is pulled again when the
-   records get there. Either way every account ends at the state of the last
-   record processed.
+1. **Take the top of the state tree, and every block-ledger record from the
+   start of the pull to the present, in order** (Paul, 2026-10-01, #4485;
+   this replaces "pull every account the state tree holds", whose walk was the
+   whole cost of a join: 1–3 min for a one-page Directory and 3.5–5.5 min for
+   a 49-page BVN on Docker run 20260929T152146Z, cycle 6, against 6–25 s for
+   everything after it). The pull starts at S, the lowest block the
+   partition's peers name, not counting a peer that names a block before the
+   newest one this node has verified a signed anchor for (§3). The node takes
+   the BPT's interior down to the section depth as of S — every section's
+   hash (§3a) — and holds every section it does not already hold whole as
+   **not loaded**; alongside it, it takes the block-ledger record of every
+   block after S, in block order, and pulls every account each record names
+   (invariant 14). **An account the pull writes loads its section first**:
+   the section's leaves are paged from the peer and every account they name
+   that the records have not brought current is pulled, so a section is
+   either not loaded — its hash as of S, untouched since — or loaded whole.
+   A section loaded during the pull is either unchanged since, or its changed
+   accounts are named by a later record and pulled again, so once the records
+   are processed through the present every loaded section is current, and
+   every section not loaded holds S's hash, which is the present's because no
+   record after S named anything in it. **A section's load never overwrites
+   a value the records wrote:** an account a block-ledger record has already
+   brought current is skipped, because the section's page may be older than
+   that record. The other direction needs no rule: when the page is newer than
+   the records processed so far, the account it wrote was changed by a block
+   the records have not reached yet, and that block's record names it, so it
+   is pulled again when the records get there. Either way every account
+   ends at the state of the last record processed.
 2. **Keep processing the records.** Until the match, every new block's record
    is processed as it comes, in order, so the local tree stays current.
 3. **The match is the proof.** Only when every account is present and current
@@ -290,7 +298,13 @@ where they disagree with it, this wins.
 
    **No block executes before the state it runs on is complete and proven**
    (Paul, 2026-09-28: "You can't execute any txs at height n until we have
-   processed all blockledger accounts and have the complete BPT for n-1.").
+   processed all blockledger accounts and have the complete BPT for n-1.";
+   restated 2026-10-01, #4485): executing block n needs **n − 1's interior
+   nodes verified against the signed anchor, plus every section block n reads
+   or writes** — not the complete BPT. A section block n reads or writes and
+   the node has not loaded is loaded before the read returns, verified against
+   its hash in the proven tree (§3a), and a section it cannot load holds the
+   block.
    The node hands off at V only on the match, and V + 1 executes from the
    consensus buffer. There is no unproven handoff. **The staging the state
    implies is part of it** (Paul, 2026-09-28, step 6): before executing
@@ -329,13 +343,15 @@ where they disagree with it, this wins.
 failure, and the join treats them apart:
 
 1. **The BPT root does not match: re-pull.** Until the pull is proven, the
-   node executes nothing. It walks and processes block-ledger records (steps
-   1–2) and compares the root it built with the partition's own signed anchor
+   node executes nothing. It takes the top, loads the sections the pull
+   writes, and processes block-ledger records (steps 1–2), and compares the root it built with the partition's own signed anchor
    at every block that sent one; an idle partition's next anchor is its
    heartbeat, and the records carry the tree there. A root that does not
    match means the pull is wrong, and the only thing that fixes a wrong pull
-   is to pull again: the whole walk, every leaf, while records keep being
-   processed. The BPT has every leaf; no pull skips one.
+   is to pull again: the top again, and every section whose hash differs from
+   the node's not loaded, while records keep being processed. The BPT has
+   every leaf; no pull skips one — a section not loaded is one leaf of the
+   node's tree whose value is the section's hash (§3a).
 
    **Every block is checked, and a miss is located, not re-pulled whole**
    (Paul). After the records of a block are applied, the node's root should
@@ -353,7 +369,8 @@ failure, and the join treats them apart:
    asked for a cut a few levels above the leaves; this is the cut the
    storage makes exact). It names each account that differs, with its own
    leaf and the peer's, and pulls again only those accounts, then compares
-   at the next V. A location that names nothing walks the tree again. **It deletes nothing on this comparison:** a
+   at the next V; a difference inside a section the node has not loaded loads
+   that section. A location that names nothing takes the top again. **It deletes nothing on this comparison:** a
    root that is not a signed anchor's is a peer's word, so a leaf the peer's
    branch lacks is marked, and removed only when the comparison was at a
    signed block and the match that follows confirms it. **A record is taken
@@ -380,9 +397,10 @@ failure, and the join treats them apart:
    (#4440). No node's staging has to be exact for the network to stay
    correct.
 
-Past the match, every account the walk took by its chain heads alone is
-filled in whole the same way, so the node ends holding every account's chains
-and entries, not only a root that matches.
+Past the match, every section not loaded is loaded while the node executes
+(§3a, "The fill"), and every account the pull took by its chain heads alone
+is filled in whole the same way, so the node ends holding every account's
+chains and entries, not only a root that matches.
 
 Invariants 13–15 are what make steps 2 and 3 sound: no leaf exists for an
 account that holds nothing, the record names every account a block changes,
@@ -687,13 +705,16 @@ transaction whose sets are not empty still does not hash to the peer's leaf
 message at the next block, so the pull also fetches each queued message and
 keeps it only if its hash is the queued ID.
 
-**BPT pages are read, never written.** A leaf enters the local tree only as
-the hash of state this node holds, because the local root is what the node
-matches against a signed root; a leaf taken from a peer's page would make that
-root the peer's and the match would say nothing. Pages name accounts and say
-what the peer's leaves are; the difference from the node's own is what the
-walk pulls. A page carries no proof, so a peer can omit a leaf, and the root
-failing to match is the only detector (#4301).
+**BPT pages are read, never written.** An account's leaf enters the local
+tree only as the hash of state this node holds, because the local root is what
+the node matches against a signed root; a leaf taken from a peer's page would
+make that root the peer's and the match would say nothing. Pages name accounts
+and say what the peer's leaves are; the difference from the node's own is what
+a section's load pulls. A page carries no proof, so a peer can omit a leaf, and
+the root failing to match is the only detector (#4301). The one leaf a peer's
+word puts in the tree is a section's marker (§3a), and before the match it is
+proven with everything else by the match; after it, a section's leaves are
+checked against the marker before they replace it.
 
 #### 3. The state pull
 
@@ -716,11 +737,11 @@ A node runs the Directory alongside its BVN, and the Directory's own join
 pulls the Directory's spine into the Directory's store, where those accounts
 belong.
 
-**The pull is the whole tree and every record from its start, in order**
-(the algorithm, steps 1–2; #4438). The pull starts at `S`, the block the
-peers' ledgers name when the join starts, and keeps two cursors: the walk's
-place in the peer's BPT, and `L`, the last block whose block-ledger record has
-been processed, which starts at `S`.
+**The pull is the top of the tree and every record from its start, in order**
+(the algorithm, steps 1–2; #4438, #4485). The pull starts at `S`, the block
+the top of the tree is taken as of (§3a), and keeps `L`, the last block whose
+block-ledger record has been processed, which starts at `S`, and the sections
+it has opened and not yet loaded.
 
 **The target is the lowest block any peer names, floored at the newest signed
 anchor.** `S`, and each round's target for the records, is the lowest block
@@ -806,7 +827,7 @@ account is asked of the next peer. It is not a proof — the peer states both �
 but it refuses a torn or inconsistent reply on arrival instead of leaving it
 for the match to find.
 
-**A walk page is of a block at or after `S`, or it is asked again.** The page
+**A section's page is of a block at or after `S`, or it is asked again.** The page
 is read in the same view as the block it names, so the block is the page's, not
 a separate answer. A page of a block before `S` shows leaves that a change at
 or before `S` may have moved and that no record after `S` names, so it is not
@@ -821,20 +842,19 @@ Each round, in this order:
    next round asks again from `L`.
 2. **What is owed.** An account a batch did not answer whole, or whose reply
    was refused, is asked for again, once a round, whoever named it.
-3. **The walk.** The next pages of the peer's BPT, eight pages of 256 leaves
-   a round. An account a record has named is skipped: the page may be older
-   than that record, and **the walk never overwrites a value the records
-   wrote**. Every other leaf this node does not hold, or holds and does not
-   agree with, is asked for in one `AccountStates` call per page and written.
-   A page newer than the records wrote an account a later block changed, and
-   that block's record names it, so every account ends at the state of the
-   last record processed (`TestTheWalkNeverOverwritesWhatARecordWrote`,
-   `TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord`).
+3. **The sections opened.** Every section an account written in steps 1–2
+   fell in, and the spine's, is loaded (§3a): its leaves paged from the peer,
+   and in one `AccountStates` call per page every leaf this node does not
+   hold, or holds and does not agree with, unless a record has named it: the
+   page may be older than that record, and **a section's load never
+   overwrites a value the records wrote**. A page newer than the records wrote
+   an account a later block changed, and that block's record names it, so
+   every account ends at the state of the last record processed.
 
-**The state is complete** when the walk has covered the tree, nothing is
-owed, and `L` is at or above the highest `B` any reply was read at: every
-account is then as of `L` — the node holds every account's state and the state
-of every block-ledger update through `L`. Only then does the node compare its
+**The state is complete** when the top is taken, every section opened is
+loaded, nothing is owed, and `L` is at or above the highest `B` any reply was
+read at: every loaded section is then as of `L`, and every section not loaded
+holds the hash it had at `S`, which no record after `S` changed. Only then does the node compare its
 root with the partition's signed anchor at every block that sent one, and it
 executes only from a root that matched (§2, "Two mismatches", 1). The set of
 accounts is the block
@@ -995,6 +1015,132 @@ validator signatures, payments, votes, signatures — must be pulled with it or
 the account's hash cannot be computed to match. An account with a non-empty
 pending list that is pulled without it diverges, and the node never converges
 (#3999, #4298).
+
+#### 3a. Sections: the top of the tree is taken, and a section is loaded when it is needed
+
+*(Paul, 2026-10-01, #4485: "The BPT store has all the nodes in the BPT. When
+we get an account that isn't in the BPT, that tells us we have to load that
+section. There isn't much risk in this, but we do have to flag all sections as
+'not loaded' so a background task can load them while we execute.")*
+
+**A section is the subtree under one 12-bit prefix of the key hash.** The BPT
+is a binary Patricia tree over SHA-256 key hashes, so N accounts spread evenly
+and the leaves sit about log₂ N levels down. Cut at depth D = 12 the tree has
+4,096 sections holding N / 4,096 accounts each: about 25 at 10⁵ accounts and
+250 at 10⁶ — tens to low hundreds at the scale a mainnet partition is taken to
+have (an assumption; no mainnet count is measured here). That is k = log₂ N −
+12 levels above the leaves: five at 10⁵, eight at 10⁶. The top — 4,096
+hashes, 128 KiB — is small beside one page of accounts. D is not a multiple of
+the eight levels the tree is stored in: a section's hash is computed from the
+stored blocks at depth 16 under it by the tree's rule (`bpt.HashSlots`), and
+a test partition of a few thousand accounts has about one account a section.
+
+**The top is the section hashes, checked block by block.** It is taken with
+`BptBlockQuery` as of the block the pull starts at: the root's block, and the
+block under every position of it that is a branch — at most 257 calls. Each
+block must hash to its position in the block above (`HashSlots`), and the
+root's block to the root the answer names; a leaf position above depth 16 is
+the one account under it, and its hash is its section's. Before the match the
+top is a peer's word like every other answer, and the match proves it.
+
+**A section not loaded is one leaf.** The node's tree holds, for each section
+it has not loaded, a **marker**: a leaf under the section's prefix whose value
+is the section's hash. A branch with one non-empty child passes that child's
+hash up unchanged, so the root with the marker is the root with the section's
+leaves, and every receipt through a sibling of the section is unchanged. The
+marker's key is a bare key hash — the section's twelve bits, zeros, and the
+tag `bptsect` with the depth in its last eight bytes — which no account's key
+hash can be. **The markers are the flags:** they are written in the commit
+that writes the rest of the tree, so a restart finds exactly the sections the
+node had not loaded and resumes loading them, and the node keeps the set in
+memory, read back from the tree (4,096 point reads) at start and at each
+handoff. An empty section has no marker and is loaded: there is nothing in it.
+
+**Taking the top** compares each section with what the node holds. A section
+whose local hash equals the top's, with no marker in it, is loaded: a node
+that restarts takes nothing of what it already holds. A section whose marker
+already holds the top's hash stays not loaded. Every other section is made not
+loaded: the node's own leaves in it are forgotten (`ForgetAccount`) and the
+marker is written in their place. A section empty in the top is emptied.
+
+**Loading a section** pages the section's leaves from a peer (`BptPage` from
+the section's highest key, until the keys leave the section) and asks for the
+accounts behind them (`AccountStates`), then writes the accounts, deletes the
+marker and inserts the leaves. An account absent from a loaded section does
+not exist; **an account absent from a section not loaded is not yet known**:
+the section is loaded and the account looked for again. Only execution decides
+that an account does not exist.
+
+- *During the pull* a section is loaded as the pull loads any account: from
+  the peer's current view, stamped with its block, the accounts the records
+  brought current skipped (§3). Nothing is checked against the section's hash
+  there: the records move the section on from `S`, and the match is the proof.
+- *Once the root has matched* a section is loaded **as of H**, the block the
+  node last committed: `BptPage` and `AccountStates` with `ForHeight = H`.
+  The leaves must hash to the marker's value by the tree's rule, and each
+  account's state to its leaf, or the answer is refused and the next peer
+  asked. Nothing executed touched the section since the match — a touch
+  loads it — so the marker's value is the section's hash at H.
+
+**Execution loads what it reads.** Only the batch a block executes in loads;
+every other reader of the store is refused an account in a section not loaded
+(below). The store checks each account read against the set: a read of an
+account in a section not loaded loads the section before it returns. The
+section is written into the block's batch beneath the account records, so the
+loaded accounts are not accounts the block changed — the block ledger does
+not name them and the root chain anchors nothing of them — and the marker's
+deletion and the leaves' insertion are made in the block's own tree, so the
+root after the block is the root the block's changes make. The load commits
+with the block, or is discarded with it, and the set in memory forgets the
+section only when the block commits. A section that cannot be loaded — no peer
+answers it as of H in 30 s of asking every peer — **holds the block**: the
+read fails and the block's batch refuses to commit (`NotReady`), so the block
+is not produced and the node is sent back to syncing as a handoff that cannot
+be performed is (§5).
+
+**The fill.** A goroutine of its own, beside the backfill and with its
+lifecycle (#4472): started after each handoff, stopped — and waited for —
+before the node is demoted and pulls again, and when the join ends. It loads
+the sections still not loaded, in key order, as of H, checked as execution's
+loads are, and **hands each to the next block's batch to write**; it never
+commits itself, because a commit beside the block's would write tree nodes
+the block's batch also holds, and the later commit would put back the earlier
+one's marker. A loaded section waiting for a block is written only if its
+marker is still there: a block that touched it loaded it itself. How far it
+has got is visible: `accumulate_join_sections_not_loaded{partition}`, `Loading
+the sections not loaded` at most once a minute, and `Every section is loaded`
+once.
+
+**What is not loaded is not served.** An account read in a section not
+loaded is refused with `NotReady` — a query, a validation, an `AccountStates`
+answer, which serves it with no body so the asker asks the next peer; a BPT
+page that would carry a marker is refused with `NotReady`. A stored block
+(`BptBlockQuery`) is served: its hashes are the tree's, markers included.
+Forwarding a refused read to a peer is not built.
+
+**With the rest of the join.** The records are unchanged by sections: a
+record names every account its block changed, and the pull loads the section
+of each before it writes it. Before the match, a location (Two mismatches, 1)
+that finds a difference under a marker loads that section; a location that
+names nothing takes the top again. After the match, a repair (Two mismatches,
+2) runs with the fill stopped, and loads the section of every account it
+takes before it writes it. An account a section load takes is taken by its
+chain heads and open mark set, like every account the pull takes, and is
+recorded for the history backfill (§2).
+
+**Open (#4485), and what is built meanwhile: a peer cannot always answer a
+section as of H.** A peer serves an account as of a block from what it
+retained when the account changed (`retainedAccountAt`). An account whose
+last change is older than the peer's retention window and that changed again
+after H has no state retained at H, and the peer refuses it
+(`IncompleteChain`); no peer ever will. A cold account written by block
+H + 1 is exactly that once the peers have executed H + 1. The options:
+(a) on an account's first change inside the window, retain the state before
+the change as well, at the window's start — a write per cold account changed,
+on every node; (b) leave it, so the load holds the block and the node pulls
+again, the pull's records naming that account and loading its section.
+**Recommended: (a).** Built meanwhile: (b) (DIFFERENCES E24). A simulated
+network retains from genesis and never meets it.
 
 #### 4. Staging is what was collected, minus what the state says executed
 

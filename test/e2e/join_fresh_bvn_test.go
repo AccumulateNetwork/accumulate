@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -187,7 +188,15 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	const maxRounds = 200
+	// How long the join took to make the node ACTIVE, and in how many rounds:
+	// the measure of a join's cost (#4485).
+	joinStart := time.Now()
+	var activeAfter time.Duration
+	activeRound := -1
 	stepping := &steppingState{cancel: cancel, State: part.NodeJoinState(fresh), step: func(round int) {
+		if activeRound < 0 && part.NodeJoinState(fresh).Machine().State() == nodestate.StateActive {
+			activeAfter, activeRound = time.Since(joinStart), round
+		}
 		if round%5 == 0 {
 			send()
 		}
@@ -212,6 +221,7 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 	// the store has, not what a shallow read reaches.
 	missing := entriesWithNoMessage(t, part.NodeDatabase(fresh).Deep(), partition)
 	require.NoError(t, err, "a fresh %s node did not join within %d pull rounds", partition, maxRounds)
+	t.Logf("join start to ACTIVE: %v, %d rounds", activeAfter.Round(time.Millisecond), activeRound)
 	// Every peer is honest: no answer of the records is refused (#4461).
 	require.Zero(t, part.NodeJoinState(fresh).RefusedRecordAnswers(),
 		"a fresh %s node refused an honest peer's answer of the block-ledger records", partition)

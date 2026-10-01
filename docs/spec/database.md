@@ -290,6 +290,28 @@ blocks of `Power` levels, so a proof reads one block per `Power` levels rather
 than one record per level, and the blocks it reads already contain every
 sibling the upward walk needs.
 
+### A section not loaded is refused or loaded, never not found
+
+A node that joined holds the state tree's interior and, for each section of
+it it has not loaded, one marker leaf whose value is the section's hash
+(executor.md, "Sync", §3a; #4485). The accounts behind such a section are not
+in the store, and reporting them not-found is invariant 6's consensus fault:
+it says an account does not exist that does. So the database holds the set of
+sections not loaded, and every outermost batch checks each read of an
+account's records against it:
+
+- **A batch a block executes in loads the section** before the read returns,
+  writing it into the batch's change set beneath the account records, so the
+  load commits with the block or is discarded with it and no account the load
+  wrote is an account the block changed. The section leaves the set when the
+  batch commits.
+- **Every other batch is refused** with `NotReady`.
+- **The join's own batches pass**: they are what writes the sections.
+
+A marker is a BPT leaf whose key is a bare key hash with no account behind it.
+An iteration of the tree's accounts meets it, and a page of leaves that would
+carry one is refused rather than served.
+
 ### Caches
 
 Two caches sit in front of the store, for two different readers, and they are
