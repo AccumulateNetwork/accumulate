@@ -105,11 +105,12 @@ func putManyTokens(t *testing.T, db *database.Database, n int, balance int64) []
 	return out
 }
 
-// TestMeasureTheWalkAndTheRecords — #4461, measurement. A join at a realistic
-// size, both stores BlockchainDB: the walk of a few thousand accounts, page by
-// page, then the records of many blocks naming them. It logs the calls and
-// where the time goes: in the peer's answers, or in the joining node's writes.
-func TestMeasureTheWalkAndTheRecords(t *testing.T) {
+// TestMeasureTheTopAndTheRecords — #4461, #4485, measurement. A join at a
+// realistic size, both stores BlockchainDB: the top of a tree of a few
+// thousand accounts, then the records of many blocks naming them, and the
+// sections they are in. It logs the calls and where the time goes: in the
+// peer's answers, or in the joining node's writes.
+func TestMeasureTheTopAndTheRecords(t *testing.T) {
 	const U, K = 3000, 1000
 	here := protocol.PartitionUrl("BVN0")
 	peerDB := bcdbStore(t, "peer")
@@ -124,20 +125,19 @@ func TestMeasureTheWalkAndTheRecords(t *testing.T) {
 	require.NoError(t, err)
 	ctx := context.Background()
 
-	for round := 0; round == 0 || !s.sync.walked; round++ {
+	for round := 0; round == 0 || !s.sync.covered(); round++ {
 		timed.reset()
 		pages := 0
 		if s.sync != nil {
-			pages = s.sync.pages
+			pages = s.sync.sectionPages
 		}
 		start := time.Now()
 		require.NoError(t, s.Pull(ctx))
 		n, spent := timed.total()
-		t.Logf("walk round %d: %d pages, %d calls, %v total, %v in the peer's answers:%v",
-			round, s.sync.pages-pages, n, time.Since(start).Round(time.Millisecond), spent.Round(time.Millisecond), timed)
+		t.Logf("top round %d: %d section pages, %d calls, %v total, %v in the peer's answers:%v",
+			round, s.sync.sectionPages-pages, n, time.Since(start).Round(time.Millisecond), spent.Round(time.Millisecond), timed)
 		require.Less(t, round, 100)
 	}
-	require.Equal(t, int64(5), balanceIn(t, db, accounts[U-1]))
 
 	// K blocks, each naming three accounts.
 	b := peerDB.Begin(true)
@@ -206,13 +206,12 @@ func catchUpCost(t *testing.T, u, k int) (walkCalls, walkCommits, recordCalls, r
 	ctx := context.Background()
 
 	commits = 0
-	for round := 0; round == 0 || !s.sync.walked; round++ {
+	for round := 0; round == 0 || !s.sync.covered(); round++ {
 		require.NoError(t, s.Pull(ctx))
 		require.Less(t, round, 100)
 	}
 	walkCalls, _ = timed.total()
 	walkCommits = commits
-	require.Equal(t, int64(5), balanceIn(t, db, accounts[u-1]), "precondition: the walk took the accounts")
 
 	b := peerDB.Begin(true)
 	ledger := b.Account(here.JoinPath(protocol.Ledger))
@@ -263,8 +262,10 @@ func TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord(t *testing.T
 	require.Less(t, wm2, 2000/10,
 		"the walk made %d commits for 2,000 accounts: its commits grow with the accounts, not the pages", wm2)
 
-	// The records: one answer, whatever the blocks and accounts.
-	require.Equal(t, rc1, rc2,
+	// The records: one answer, whatever the blocks and accounts, and a page
+	// per 256 leaves of the sections their accounts are in (executor spec,
+	// "Sync", §3a): calls that grow with pages, not accounts.
+	require.LessOrEqual(t, rc2, rc1+2000/256+1,
 		"the records round asked %d calls for 100 blocks naming 200 accounts and %d for 1,000 blocks naming 2,000", rc1, rc2)
 	require.Equal(t, rm1, rm2,
 		"the records round made %d commits for 200 accounts and %d for 2,000", rm1, rm2)
@@ -317,10 +318,7 @@ func TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused(t *testing.T) {
 	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: q, block: 10}, ExecutedBlock: 1})
 	require.NoError(t, err)
 	ctx := context.Background()
-	for round := 0; round == 0 || !s.sync.walked; round++ {
-		require.NoError(t, s.Pull(ctx))
-		require.Less(t, round, 10)
-	}
+	loadSectionOf(t, s, alice, bob)
 
 	// Block 11 changes alice and bob.
 	putTokens(t, peerDB, alice, 11)
@@ -380,10 +378,7 @@ func TestAnAnswerStrippedOfItsRecordsIsRefused(t *testing.T) {
 	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: q, block: 10}, ExecutedBlock: 1})
 	require.NoError(t, err)
 	ctx := context.Background()
-	for round := 0; round == 0 || !s.sync.walked; round++ {
-		require.NoError(t, s.Pull(ctx))
-		require.Less(t, round, 10)
-	}
+	loadSectionOf(t, s, alice)
 
 	putTokens(t, peerDB, alice, 11)
 	b := peerDB.Begin(true)

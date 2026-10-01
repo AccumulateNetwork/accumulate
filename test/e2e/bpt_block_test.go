@@ -138,14 +138,18 @@ func TestBptBlock_LocatesAChangedAccountOverTheWire(t *testing.T) {
 	t.Logf("%d accounts on the partition; %d answers asked, %d blocks descended, %d leaves and %d branches named", len(page.Entries), asked, branches, len(located), wholes)
 }
 
-// THE NEWEST BLOCK'S ROOT IS NOT SERVABLE YET, AND THE ANSWER SAYS SO.
+// THE NEWEST BLOCK IS ANSWERED FROM THE CURRENT TREE, AND SAYS SO.
 //
 // The ledger records a block's BPT root when the next state-changing block
-// commits, so the newest indexed block has no recorded root. A request for it
-// is NotReady -- retry -- not IncompleteChain, which a requester reads as a
-// capability this peer does not have. Once the next block commits, the same
-// request is answered.
-func TestBptBlock_TheNewestBlockIsNotReadyYet(t *testing.T) {
+// commits, so the newest indexed block has no recorded root -- but the current
+// tree is that block's tree, read in the same view as the ledger that names
+// it. A node taking the top of the tree takes it as of a peer's block, and a
+// node loading a section asks as of the block it last committed, which is
+// usually the peer's newest (executor.md, "Sync", §3a; #4485). Asked for the
+// newest block, a peer answers from its current tree, stamped with the block.
+// A block before it is answered from history, and a node that retains none
+// says so.
+func TestBptBlock_TheNewestBlockIsTheCurrentTree(t *testing.T) {
 	liteKey := acctesting.GenerateKey(t.Name(), "lite")
 	lite := acctesting.AcmeLiteAddressStdPriv(liteKey).RootIdentity().JoinPath(ACME)
 
@@ -167,29 +171,26 @@ func TestBptBlock_TheNewestBlockIsNotReadyYet(t *testing.T) {
 
 	newest := ledgerIndexOf(t, c, partition)
 	r, err := c.QueryBptBlock(ctx, part, &api.BptBlockQuery{ForHeight: newest})
-	require.Error(t, err, "block %d's root is not recorded yet and was answered", newest)
-	require.Nil(t, r)
-	require.Equalf(t, errors.NotReady, errors.Code(err), "the newest block must be NotReady, not %v: %v", errors.Code(err), err)
-
-	st := sim.BuildAndSubmitTxnSuccessfully(
-		build.Transaction().For(lite).
-			AddCredits().Spend(1).To(lite.RootIdentity()).WithOracle(InitialAcmeOracle).
-			SignWith(lite.RootIdentity()).Version(1).Timestamp(1).PrivateKey(liteKey))
-	sim.StepUntil(Txn(st.TxID).Succeeds())
-	sim.StepN(3)
-
-	r, err = c.QueryBptBlock(ctx, part, &api.BptBlockQuery{ForHeight: newest})
-	require.NoError(t, err, "block %d is recorded now and was still refused", newest)
+	require.NoError(t, err, "the newest block %d was not answered from the current tree", newest)
+	require.Equal(t, newest, r.Block, "the answer does not say the block it is of")
 	require.Equal(t, r.BptRoot, foldSlots(r.Slots))
+	cur, err := c.QueryBptBlock(ctx, part, &api.BptBlockQuery{})
+	require.NoError(t, err)
+	require.Equal(t, newest, cur.Block, "the current tree's answer does not say its block")
+	require.Equal(t, cur.BptRoot, r.BptRoot)
 
-	// A node that retains nothing is told so, not asked to retry.
+	// A node that retains nothing answers its newest block, and is told so
+	// for any other.
 	sim2 := NewSim(t,
 		simulator.SimpleNetwork(t.Name()+"2", 1, 1),
 		simulator.Genesis(GenesisTime),
 	)
 	sim2.StepN(10)
 	c2 := realClient(t, sim2)
-	_, err = c2.QueryBptBlock(ctx, part, &api.BptBlockQuery{ForHeight: ledgerIndexOf(t, c2, partition)})
+	newest2 := ledgerIndexOf(t, c2, partition)
+	_, err = c2.QueryBptBlock(ctx, part, &api.BptBlockQuery{ForHeight: newest2})
+	require.NoError(t, err)
+	_, err = c2.QueryBptBlock(ctx, part, &api.BptBlockQuery{ForHeight: newest2 - 1})
 	require.Error(t, err)
 	require.Equalf(t, errors.IncompleteChain, errors.Code(err), "%v", err)
 }

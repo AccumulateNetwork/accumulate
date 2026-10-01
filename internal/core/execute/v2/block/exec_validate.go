@@ -21,9 +21,17 @@ import (
 // committed and every commit paid a store read per dynamic entry for an
 // isolation nobody needed (#4237, database spec "Windowed stores"). On any
 // other store this is an ordinary read batch.
+//
+// A section of the state tree a joined node has not loaded yet is loaded into
+// it, as into a block's batch, and discarded with it: a validation judges a
+// transaction against the state the next block executes on (executor spec,
+// "Sync", §3a; #4485).
 func (x *Executor) beginValidation() *database.Batch {
 	if u, ok := x.db.(interface{ Unisolated() *database.Database }); ok {
-		return u.Unisolated().Begin(false)
+		return u.Unisolated().BeginLoading(false)
+	}
+	if d, ok := x.db.(interface{ BeginLoading(bool) *database.Batch }); ok {
+		return d.BeginLoading(false)
 	}
 	return x.db.Begin(false)
 }

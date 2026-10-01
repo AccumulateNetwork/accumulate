@@ -28,6 +28,10 @@ type Database struct {
 	logger      logging.Logger
 	nextBatchId int64
 	observer    Observer
+
+	// gates is the section gate this database and its views share
+	// (sections.go; #4485).
+	gates *sectionGates
 }
 
 // New creates a new database using the given key-value store.
@@ -35,6 +39,7 @@ func New(store keyvalue.Beginner, logger logging.Logger) *Database {
 	d := new(Database)
 	d.store = store
 	d.observer = NewDatabaseObserver()
+	d.gates = new(sectionGates)
 
 	if logger != nil {
 		d.logger = logger.With("module", "database")
@@ -87,6 +92,7 @@ func (d *Database) view(store keyvalue.Beginner) *Database {
 		logger:      d.logger,
 		nextBatchId: atomic.LoadInt64(&d.nextBatchId),
 		observer:    d.observer,
+		gates:       d.gates,
 	}
 }
 

@@ -21,7 +21,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/enumerate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
@@ -42,26 +41,18 @@ import (
 // it for every partition it runs, joining or not. The join reports its own
 // transitions through the same door.
 
-// walkPagesPerRound is how many pages of the peer's BPT one round walks. The
-// walk and the block-ledger records share a round, the records first, so a
-// round is bounded by what the walk takes of it and the records keep up with
-// the partition however large its tree is (executor spec, "Sync", "The
-// algorithm", steps 1 and 2).
-const walkPagesPerRound = 8
-
-// walkPageSize is how many leaves one page asks for.
-const walkPageSize = 256
-
 // PulledState is the join's state half (#4293). It follows the algorithm of
 // the executor spec, "Sync", "The algorithm", steps 1-3:
 //
-//  1. The pull starts at the peer's block S. It walks the peer's whole BPT,
-//     page by page, and pulls every account whose leaf this node does not
-//     hold or holds differently; alongside it, it takes the block-ledger
-//     record of every block after S, in block order, and pulls every account
-//     each record names. The walk never overwrites a value the records
-//     wrote: an account a record has brought current is skipped when the walk
-//     reaches it, because the walk's page may be older than that record.
+//  1. The pull takes the top of the peer's tree as of its block S, every
+//     section's hash, and holds every section it does not already hold whole
+//     as not loaded: one marker leaf whose value is the section's hash
+//     (sections; executor spec, "Sync", §3a). Alongside it, it takes the
+//     block-ledger record of every block after S, in block order, and pulls
+//     every account each record names; an account it writes loads its
+//     section first. A section's load never overwrites a value the records
+//     wrote: an account a record has brought current is skipped, because the
+//     section's page may be older than that record.
 //  2. Until the match, every new block's record is processed as it comes.
 //  3. The match is the proof: the local root equal to the StateTreeAnchor of
 //     an anchor a quorum of this partition's validators signed (tracker,
@@ -76,8 +67,17 @@ type PulledState struct {
 	refusedAnswers int
 
 	partition *url.URL
-	db        *database.Database
 	sources   Sources
+
+	// db is this node's store, read and written past the section gate: the
+	// join is what writes the sections. gated is the store the executor and
+	// the node's services read, which the gate is set on (sections).
+	db    *database.Database
+	gated *database.Database
+
+	// secs is the sections of the state tree this node has not loaded, and
+	// the gate that loads one when a block reads it (#4485).
+	secs *sections
 
 	// anchors is where this partition's verified roots come from: its own
 	// anchors, collected from its validators (anchorsrc.Collector).
@@ -228,18 +228,23 @@ type syncing struct {
 	// processed. It starts at S.
 	last uint64
 
-	// cursor is where the next page of the walk starts, and walked says the
-	// walk has covered the whole tree.
-	cursor [32]byte
-	walked bool
-	pages  int
+	// topTaken is whether the top of the tree has been taken for this pull
+	// (takeTop), and topAt the block it was taken as of.
+	topTaken bool
+	topAt    uint64
 
-	// current is every account a processed record named. The walk skips
-	// them: its page may be older than the record (step 1).
+	// opened is every section this pull wrote into while it was not loaded,
+	// and whether its load is done (loadOpened); sectionPages counts the
+	// pages of sections it read.
+	opened       map[sectionID]bool
+	sectionPages int
+
+	// current is every account a processed record named. A section's load
+	// skips them: its page may be older than the record (step 1).
 	current map[[32]byte]bool
 
 	// retry is what a pull could not take and must take again: an account
-	// a record named, or a leaf the walk found stale, that no peer served
+	// a record named, or a leaf a section's page showed stale, that no peer served
 	// this time. It is asked for again every round until it is taken or
 	// every peer says it has no leaf for it.
 	retry map[[32]byte]*url.URL
@@ -252,7 +257,7 @@ type syncing struct {
 	repair bool
 
 	// highest is the highest block any reply this pull took was read at: a
-	// page of the records, a walk page, an AccountStates answer. The state
+	// page of the records, the top, a section's page, an AccountStates answer. The state
 	// is complete only once L has reached it, for until then an account read
 	// at it may have changed at a block whose record is not yet processed
 	// (executor spec, "Sync", §3).
@@ -260,10 +265,6 @@ type syncing struct {
 
 	// part is an account being answered in parts, over pages of one answer.
 	part *statePart
-
-	// named are the leaves the walk's pages have named, by key hash; a leaf
-	// the node holds that none named is dropped when the walk completes.
-	named map[[32]byte]bool
 
 	// servedBy names the peers whose answers this pull took.
 	servedBy map[string]bool
@@ -273,7 +274,7 @@ type syncing struct {
 	chainsTaken map[[32]byte]bool
 
 	// ready is whether the last round left the state complete at last, V:
-	// the walk has covered the tree, nothing is owed, and every record
+	// the top is taken, every section opened is loaded, nothing is owed, and every record
 	// through V is applied with nothing read after V left standing. The root
 	// is compared with V's signed anchor then, and only then (Matched).
 	ready bool
@@ -287,7 +288,7 @@ type syncing struct {
 }
 
 func newSyncing() *syncing {
-	return &syncing{current: map[[32]byte]bool{}, retry: map[[32]byte]*url.URL{}, named: map[[32]byte]bool{}, servedBy: map[string]bool{}, chainsTaken: map[[32]byte]bool{}}
+	return &syncing{current: map[[32]byte]bool{}, retry: map[[32]byte]*url.URL{}, opened: map[sectionID]bool{}, servedBy: map[string]bool{}, chainsTaken: map[[32]byte]bool{}}
 }
 
 func accountKey(u *url.URL) [32]byte { return u.AccountID32() }
@@ -342,7 +343,8 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	}
 	s := &PulledState{
 		partition:  opts.Partition,
-		db:         opts.Database,
+		db:         opts.Database.Ungated(),
+		gated:      opts.Database,
 		sources:    opts.Sources,
 		machine:    machine,
 		tracker:    track,
@@ -429,6 +431,19 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		label = id
 	}
 	s.label = label
+
+	// The sections this node has not loaded, read from the markers its tree
+	// holds, and the gate every batch of the node's store is checked
+	// against: a block that reads one loads it, and every other reader is
+	// refused (executor spec, "Sync", §3a; #4485).
+	s.secs = newSections(opts.Partition, label, s.db, s.log)
+	s.secs.peers = s.partitionSources
+	s.secs.loaded = func(urls []*url.URL) { s.markHeadOnly(urls...) }
+	if err := s.secs.read(); err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	opts.Database.SetSectionGate(s.secs)
+
 	mSpineStalled.WithLabelValues(label).Set(-1)
 	nodestate.Report(label, machine.State())
 	machine.OnChange(func(ad nodestate.Advertisement) {
@@ -622,11 +637,22 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	if s.sync == nil {
 		s.sync = newSyncing()
 		s.sync.start, s.sync.last = peer.block, peer.block
-		s.log.Info("Pulling the state: the whole BPT, and every block-ledger record from here on",
+		s.log.Info("Pulling the state: the top of the BPT, and every block-ledger record from here on",
 			"partition", s.partition, "start", peer.block, "executed", s.executed)
 	}
 	p := s.sync
 	p.ready = false
+
+	// The top of the tree first: every section's hash as of a peer's block
+	// at or after L, and every section the node does not hold whole not
+	// loaded (executor spec, "Sync", §3a). What the pull writes after it
+	// loads its section first.
+	if !p.topTaken {
+		if err := s.takeTop(ctx, p); err != nil {
+			s.log.Info("The top of the peer's BPT could not be taken this round", "partition", s.partition, "error", err)
+			return nil
+		}
+	}
 
 	// The spine, whole, once: this partition's anchors, ledger, operators and
 	// network definition, with their chains and the messages behind them
@@ -634,6 +660,9 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	// again whatever of it a later block changed.
 	if !p.spine {
 		ok := true
+		// The sections the node's own services read outside a block, so
+		// none of them is refused once the node hands off.
+		s.openFor(p, systemAccounts(s.partition)...)
 		for _, u := range pull.SpineAccounts(s.partition) {
 			if p.current[accountKey(u)] {
 				continue
@@ -668,19 +697,17 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		s.takeAccounts(ctx, p, s.partitionSources(ctx), list)
 	}
 
-	// 3. The walk: the next pages of the peer's BPT.
-	if !p.walked {
-		s.walk(ctx, p)
-	}
+	// 3. The sections opened: each one's leaves, and every account they name
+	// the records have not brought current.
+	s.loadOpened(ctx, p)
 
-	// With the walk done, nothing owed and L at or above the highest block
-	// any reply was read at, every account is as of L, V, if the pull is
-	// right: the walk never wrote over what a record wrote, and every record
-	// through V is applied. The root is compared with V's signed anchor
-	// (Matched), and nothing is executed before it matches (executor spec,
-	// "Sync", "The algorithm": no block n executes until the tree is
-	// complete and every record through n - 1 is applied).
-	p.ready = p.walked && len(p.retry) == 0 && p.last >= p.highest
+	// With the top taken, every section opened loaded, nothing owed and L at
+	// or above the highest block any reply was read at, every loaded section
+	// is as of L, V, and every section not loaded holds the hash it had when
+	// the top was taken, which no record after it changed. The root is
+	// compared with V's signed anchor (Matched), and nothing is executed
+	// before it matches (executor spec, "Sync", "The algorithm").
+	p.ready = p.topTaken && openedLoaded(p) && len(p.retry) == 0 && p.last >= p.highest
 	return nil
 }
 
@@ -699,20 +726,20 @@ func (s *PulledState) startRepair(ctx context.Context) {
 	s.repairFrom = 0
 	p := newSyncing()
 	p.start, p.last = from, from
-	p.walked, p.spine, p.repair = true, true, true
+	p.topTaken, p.spine, p.repair = true, true, true
 	s.sync = p
 
 	// A repair from the block ledger that did not bring a match is followed
-	// by one that pulls the accounts again: the walk, against the peers,
-	// taking whole every account whose leaf differs and dropping the leaves
-	// no peer holds (Paul, 2026-09-25: "If the pull of accounts doesn't
+	// by one that pulls the accounts again: the top of the tree taken again,
+	// every section whose hash differs from the peers' not loaded, and loaded
+	// again as it is needed (Paul, 2026-09-25: "If the pull of accounts doesn't
 	// create a matching BPT root, then the joining node has to pull the
 	// accounts again. I don't see what else it can do."). An account the
 	// walk took wrongly, that no later block names, is beyond any record.
 	s.repairs++
 	if s.repairs > 1 {
-		p.walked = false
-		s.log.Info("A repair from the block ledger did not bring a match; walking the tree again",
+		p.topTaken = false
+		s.log.Info("A repair from the block ledger did not bring a match; taking the top of the tree again",
 			"partition", s.partition, "repairs", s.repairs)
 	}
 
@@ -886,6 +913,11 @@ func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Sour
 	}
 
 	p.highest = max(p.highest, highest)
+	opening := make([]*url.URL, 0, len(named))
+	for _, u := range named {
+		opening = append(opening, u)
+	}
+	s.openFor(p, opening...)
 	for k, u := range named {
 		p.current[k] = true
 		if !answered[k] {
@@ -1007,6 +1039,13 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 		whole, windowed bool
 	}
 	var keep []keeping
+	opening := make([]*url.URL, 0, len(states))
+	for _, st := range states {
+		if st.Url != nil {
+			opening = append(opening, st.Url)
+		}
+	}
+	s.openFor(p, opening...)
 	for i, st := range states {
 		block := blocks[i]
 		u := st.Url
@@ -1210,102 +1249,6 @@ func (s *PulledState) partitionSources(ctx context.Context) []pull.Source {
 	return s.order(srcs)
 }
 
-// walk takes the next pages of the peer's BPT, and every account a page shows
-// this node does not hold, or holds and does not agree with, in one
-// AccountStates call per page -- unless a record has already brought it
-// current: the page may be older than that record, and the walk never
-// overwrites what a record wrote (step 3). A page newer than the records needs
-// no rule: the account it wrote was changed by a block the records have not
-// reached, and that block's record takes it again.
-//
-// A page carries the block of the view it was read from. A page of a block
-// before S shows leaves that a change at or before S may have moved and that
-// no record after S names, so it is not taken: it is asked again, of the next
-// peer. The records are never read back before S (executor spec, "Sync", §3).
-//
-// Once the walk has covered the tree, every leaf the node holds that no page
-// named, and that no record brought current, is an account no peer holds: it
-// is deleted (Paul: "It must also drop leaves it holds that no peer holds").
-func (s *PulledState) walk(ctx context.Context, p *syncing) {
-	srcs := s.partitionSources(ctx)
-	if len(srcs) == 0 {
-		return
-	}
-	for i := 0; i < walkPagesPerRound && !p.walked && ctx.Err() == nil; i++ {
-		turn := s.pageTurn % len(srcs)
-		s.pageTurn++
-		src := srcs[turn]
-		batch := s.db.Begin(false)
-		page, err := enumerate.ReadPage(ctx, src, s.partition, batch, p.cursor, walkPageSize)
-		batch.Discard()
-		if err != nil {
-			s.log.Info("The peer's BPT could not be paged this round; the walk goes on from here next round",
-				"partition", s.partition, "peer", sourceKey(src), "pages", p.pages, "error", err)
-			return
-		}
-		if page.Record.Block < p.start {
-			s.log.Info("A walk page was of a block before the pull's start; it is asked again",
-				"partition", s.partition, "peer", sourceKey(src), "page-block", page.Record.Block, "start", p.start)
-			continue
-		}
-		p.pages++
-		p.highest = max(p.highest, page.Record.Block)
-
-		for _, e := range page.Record.Entries {
-			if e != nil {
-				p.named[e.KeyHash] = true
-			}
-		}
-		var stale []*url.URL
-		for _, u := range page.Stale {
-			if !p.current[accountKey(u)] {
-				stale = append(stale, u)
-			}
-		}
-		// The page's own peer first.
-		s.takeAccounts(ctx, p, append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...), stale)
-
-		if page.Record.Done {
-			p.walked = true
-			s.log.Info("The walk has covered the peer's whole BPT", "partition", s.partition,
-				"pages", p.pages, "records-through", p.last, "start", p.start)
-			s.dropUnnamed(ctx, p)
-			return
-		}
-		p.cursor = page.Record.NextStart
-	}
-}
-
-// dropUnnamed asks the peers for every account the node holds a leaf for that
-// no page of the walk named and no record brought current. Nothing is deleted
-// on the pages' word, which is a peer's: an account every peer answers
-// NotFound for is deleted (pullOne, forget), and one some peer serves is
-// taken (executor spec, "Sync", "Two mismatches", 1: "It deletes nothing on
-// this comparison").
-func (s *PulledState) dropUnnamed(ctx context.Context, p *syncing) {
-	var unnamed []*url.URL
-	batch := s.db.Begin(false)
-	err := batch.ForEachAccount(func(a *database.Account, _ [32]byte) error {
-		u := a.Url()
-		if p.named[bpt.NewKey("Account", u).Hash()] || p.current[accountKey(u)] {
-			return nil
-		}
-		unnamed = append(unnamed, u)
-		return nil
-	})
-	batch.Discard()
-	if err != nil {
-		s.log.Info("This node's leaves could not be listed after the walk", "partition", s.partition, "error", err)
-		return
-	}
-	for _, u := range unnamed {
-		if ctx.Err() != nil {
-			return
-		}
-		s.pullOne(ctx, p, u)
-	}
-}
-
 // An outcome is what became of one account's pull.
 type outcome int
 
@@ -1428,6 +1371,7 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		// answered that its tree holds no leaf for the name. Asking again
 		// changes nothing, and a record names it again if a block ever
 		// gives it one.
+		s.openFor(p, u)
 		s.forget(u)
 		return dropped
 	default:
@@ -1435,6 +1379,8 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		p.retry[accountKey(u)] = u
 		return owed
 	}
+
+	s.openFor(p, u)
 
 	// Keep updates the BPT, then commits: Batch.Commit commits the BPT store
 	// and never calls Account.putBpt, so a perfectly pulled account left the
@@ -1847,6 +1793,7 @@ func (s *PulledState) Promote(block uint64) {
 // again, and the gauge says so through the machine's OnChange (#4385). The
 // tracker's streak starts again, so the next match takes as many as the first.
 func (s *PulledState) Demote(block uint64) {
+	s.secs.dropReady()
 	if !s.machine.Demote(block) {
 		return
 	}
@@ -1944,29 +1891,30 @@ func (s *PulledState) Mismatches() (uint64, []LeafDiff) {
 
 // locate walks the peer's BPT as of v against the local tree (#4441), names
 // every account whose leaf differs, with both leaves, and owes each to the
-// next round, which takes it again. A location that cannot be made, or that
-// finds nothing, walks the tree again.
+// next round, which takes it again; a difference inside a section the node has
+// not loaded loads that section. A location that cannot be made, or that finds
+// nothing, takes the top of the tree again.
 func (s *PulledState) locate(ctx context.Context, p *syncing, v uint64) {
 	batch := s.db.Begin(false)
 	diffs, peer, err := locateAt(ctx, s.partition, s.partitionSources(ctx), batch.BPT(), v)
 	batch.Discard()
 	s.mismatchAt, s.mismatches = v, diffs
 	if err != nil || len(diffs) == 0 {
-		s.log.Warn("The accounts that differ at a block could not be located; walking the tree again",
+		s.log.Warn("The accounts that differ at a block could not be located; taking the top of the tree again",
 			"partition", s.partition, "block", v, "error", err)
-		p.walked, p.cursor, p.named = false, [32]byte{}, map[[32]byte]bool{}
+		p.topTaken = false
 		return
 	}
 	named := 0
 	for _, d := range diffs {
-		if d.Account != nil {
+		if d.Account != nil || s.openDiff(p, d.KeyHash) {
 			named++
 		}
 	}
 	if named == 0 {
-		s.log.Warn("The accounts that differ at a block could not be named; walking the tree again",
+		s.log.Warn("The accounts that differ at a block could not be named; taking the top of the tree again",
 			"partition", s.partition, "block", v, "differ", len(diffs))
-		p.walked, p.cursor, p.named = false, [32]byte{}, map[[32]byte]bool{}
+		p.topTaken = false
 	}
 	for _, d := range diffs {
 		s.log.Warn("An account differs from the peer's as of the block the state is complete at",

@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -123,6 +124,24 @@ func (s *Querier) queryAccountStates(batch *database.Batch, scope *url.URL, quer
 	if err != nil {
 		return nil, errors.BadRequest.Wrap(err)
 	}
+	if query.ForHeight != 0 && query.ForHeight != block {
+		// As of a block: each state is the one the node retained for the
+		// block (executor.md, "Sync", §3a; #4485). The block is the one the
+		// height resolves to, as a BPT page's is.
+		_, at, err := s.retainedRootAt(batch, query.ForHeight)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		r, err := s.statesPageWith(query.Accounts, cur, func(u *url.URL) *api.AccountState {
+			return s.accountStateAt(batch, u, at)
+		})
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		r.Block = at
+		return r, nil
+	}
+	// As of this view's own block, the current state is the block's.
 	r, err := s.statesPage(batch, query.Accounts, cur)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -235,11 +254,16 @@ func (c *namedCache) get(after, through uint64, read func() (*recordSpan, error)
 // budget. An account that does not fit a page of its own is answered in
 // parts, one part a page, and a page that carries a part carries nothing else.
 func (s *Querier) statesPage(batch *database.Batch, accounts []*url.URL, cur statesCursor) (*api.AccountStatesRecord, error) {
+	return s.statesPageWith(accounts, cur, func(u *url.URL) *api.AccountState { return s.accountState(batch, u) })
+}
+
+// statesPageWith is statesPage with the state of each account read by read.
+func (s *Querier) statesPageWith(accounts []*url.URL, cur statesCursor, read func(*url.URL) *api.AccountState) (*api.AccountStatesRecord, error) {
 	r := new(api.AccountStatesRecord)
 	budget := accountStatesBudget
 	used := 0
 	for i := cur.index; i < uint64(len(accounts)); i++ {
-		st := s.accountState(batch, accounts[i])
+		st := read(accounts[i])
 		data, err := st.MarshalBinary()
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("marshal the state of %v: %w", accounts[i], err)
@@ -364,6 +388,93 @@ func (s *Querier) readAccountState(batch *database.Batch, u *url.URL) (*api.Acco
 		v, err := pendingSets(p)
 		if err != nil {
 			return st, errors.UnknownError.Wrap(err)
+		}
+		l.BookPending = append(l.BookPending, v)
+	}
+	st.Leaf = l
+	return st, nil
+}
+
+// accountStateAt is one account's sync state as this node retained it for
+// block at (executor.md, "Sync", §3a; #4485): the body and the rest of the
+// leaf retained when the account last changed at or before the block
+// (indexing.HistoricalAccountStateProof), the leaf hash from the tree's
+// history, and each chain's open mark set as of the head retained -- the
+// entries below a head never change, so the chain as it stands now holds
+// them. An account that did not exist at the block is served with NoLeaf;
+// one the node cannot answer as of the block -- a state it did not retain,
+// or a partition ledger, whose scheduled events are not retained -- with no
+// body, which the asker refuses and asks the next peer for.
+func (s *Querier) accountStateAt(batch *database.Batch, u *url.URL, at uint64) *api.AccountState {
+	st, err := s.readAccountStateAt(batch, u, at)
+	if err == nil {
+		return st
+	}
+	s.logger.Info("An account's sync state as of a block could not be read; it is served without its body", "account", u, "block", at, "error", err)
+	return &api.AccountState{Url: u}
+}
+
+func (s *Querier) readAccountStateAt(batch *database.Batch, u *url.URL, at uint64) (*api.AccountState, error) {
+	st := &api.AccountState{Url: u}
+	if u.Equal(s.partition.Ledger()) {
+		return nil, errors.IncompleteChain.WithFormat("the scheduled events of %v are not retained by block", u)
+	}
+	record := batch.Account(u)
+	root, _, err := indexing.BPTRootAt(s.partition, batch, at)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	full, err := batch.BPT().GetReceiptAt(record.Key(), at, root)
+	switch {
+	case err == nil:
+	case errors.Is(err, errors.NotFound):
+		st.NoLeaf = true
+		return st, nil
+	default:
+		return nil, errors.UnknownError.WithFormat("the leaf as of %d: %w", at, err)
+	}
+	if len(full.Start) != 32 {
+		return nil, errors.InternalError.WithFormat("the leaf is %d bytes", len(full.Start))
+	}
+	st.LeafHash = [32]byte(full.Start)
+
+	proof, err := indexing.HistoricalAccountStateProof(s.partition, batch, record, at)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if proof.Leaf == nil {
+		return nil, errors.IncompleteChain.WithFormat("%v: the rest of the leaf as of %d is not retained", u, at)
+	}
+	st.Main = proof.State
+	st.Directory = proof.Leaf.Directory
+
+	l := new(api.AccountLeaf)
+	l.EventsRoot = proof.Leaf.EventsRoot
+	l.LocalDeliveryQueue = proof.Leaf.LocalDeliveryQueue
+	l.CascadeDeliveryQueue = proof.Leaf.CascadeDeliveryQueue
+	for _, c := range proof.Leaf.Chains {
+		chain, err := record.ChainByName(c.Name)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("get chain %s: %w", c.Name, err)
+		}
+		l.Chains = append(l.Chains, &api.ChainRecord{Name: c.Name, Type: chain.Type(), Count: c.Count, State: c.Pending})
+		open, err := chain.Inner().OpenSet(&merkle.State{Count: int64(c.Count), Pending: c.Pending})
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("load the open mark set of chain %s as of %d: %w", c.Name, at, err)
+		}
+		st.OpenEntries = append(st.OpenEntries, &api.ChainOpenEntries{Name: c.Name, Entries: open})
+	}
+	for _, p := range proof.Leaf.Pending {
+		v, err := pendingSets(p)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+		l.Pending = append(l.Pending, v)
+	}
+	for _, p := range proof.Leaf.BookPending {
+		v, err := pendingSets(p)
+		if err != nil {
+			return nil, errors.UnknownError.Wrap(err)
 		}
 		l.BookPending = append(l.BookPending, v)
 	}

@@ -113,12 +113,15 @@ func TestAWalkPageBelowTheStartIsAskedAgain(t *testing.T) {
 	peer := &scriptedPeer{partition: here, block: 10, records: map[uint64][]*url.URL{10: {alice}}, state: after,
 		page:  []*api.BptLeafSummary{&current},
 		pages: map[uint64][]*api.BptLeafSummary{9: {&old}}}
-	peer.pageBlocks = []uint64{9} // then 10
 	s, db := joiningAt(t, peer)
 	putTokens(t, db, alice, 5) // the restarted node's own
 
+	// The top first; then the section alice is in, whose first page is of
+	// block 9.
 	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "the walk did not go on past the page it refused")
+	peer.pageBlocks = []uint64{9} // then 10
+	loadSectionOf(t, s, alice)
+	require.True(t, s.sync.covered(), "the section's load did not go on past the page it refused")
 	require.Equal(t, int64(7), balanceIn(t, db, alice),
 		"alice changed at block 10 and the page taken was of block 9: the walk skipped her and no record names her")
 	require.Equal(t, uint64(10), peer.minAfter, "the records were read back before S")
@@ -144,8 +147,8 @@ func TestARepairThatDoesNotMatchWalksAgain(t *testing.T) {
 		page: []*api.BptLeafSummary{&leaf}}
 	s, db := joiningAt(t, peer)
 	ctx := context.Background()
-	require.NoError(t, s.Pull(ctx))
-	require.Equal(t, int64(12), balanceIn(t, db, bob), "precondition: the walk took bob wrong")
+	loadSectionOf(t, s, bob)
+	require.Equal(t, int64(12), balanceIn(t, db, bob), "precondition: the section's load took bob wrong")
 
 	// Every peer is honest from here.
 	peer.state = truth
@@ -155,7 +158,11 @@ func TestARepairThatDoesNotMatchWalksAgain(t *testing.T) {
 			require.NoError(t, s.Pull(ctx))
 		}
 	}
-	require.Equal(t, int64(5), balanceIn(t, db, bob), "two repairs brought no match and nothing pulled bob again")
+	// The second repair took the top of the tree again: bob's section is
+	// not the peers', and is not loaded until something reads it.
+	require.True(t, s.secs.NotLoaded(database.SectionOfAccount(bob)), "two repairs brought no match and bob's wrong section stands")
+	loadSectionOf(t, s, bob)
+	require.Equal(t, int64(5), balanceIn(t, db, bob), "bob's section, loaded again, is not the peers'")
 }
 
 // TestTheWalkDropsLeavesNoPeerHolds — Paul: the node "must also drop leaves it
@@ -175,7 +182,7 @@ func TestTheWalkDropsLeavesNoPeerHolds(t *testing.T) {
 	putTokens(t, db, ghost, 3)
 
 	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
+	require.True(t, s.sync.covered(), "precondition: the walk covered the tree")
 	View(db, func(batch *database.Batch) {
 		_, err := batch.BPT().Get(bptkey.NewKey("Account", ghost))
 		require.ErrorIs(t, err, errors.NotFound, "the node still holds a leaf no peer holds")
@@ -241,7 +248,7 @@ func TestALeafAPageOmitsIsNotDeletedOnThePagesWord(t *testing.T) {
 	putTokens(t, db, carol, 9)
 
 	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
+	require.True(t, s.sync.covered(), "precondition: the walk covered the tree")
 	require.Equal(t, int64(9), balanceIn(t, db, carol), "a page's omission deleted an account the peers hold")
 }
 

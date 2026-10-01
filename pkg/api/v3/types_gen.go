@@ -94,7 +94,9 @@ type AccountStatesQuery struct {
 	fieldsSet []bool
 	Accounts  []*url.URL `json:"accounts,omitempty" form:"accounts" query:"accounts" validate:"required"`
 	// Cursor continues the answer where the previous page stopped; omitted starts it.
-	Cursor    []byte `json:"cursor,omitempty" form:"cursor" query:"cursor"`
+	Cursor []byte `json:"cursor,omitempty" form:"cursor" query:"cursor"`
+	// ForHeight asks for the states as of a named minor block rather than the server's current one, for a node loading a section of the state tree (executor.md, "Sync", §3a;.
+	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
 	extraData []byte
 }
 
@@ -195,7 +197,7 @@ type BptBlockQuery struct {
 	fieldsSet []bool
 	// Prefix is the key bytes above the block; omitted is the root's block. Each further block is asked for under the prefix of the one above it plus the index of a position that answer named as a branch.
 	Prefix []byte `json:"prefix,omitempty" form:"prefix" query:"prefix"`
-	// ForHeight asks for the block as of a named minor block, resolving backward to the last state-changing block at or before it. Zero, the default, is the current tree. A block the server retains no BPT history for is refused (IncompleteChain), and a block whose root the ledger has not recorded yet is NotReady, never answered with another tree.
+	// ForHeight asks for the block as of a named minor block, resolving backward to the last state-changing block at or before it. Zero, the default, is the current tree, and so is the server's own block (#4485). A block the server retains no BPT history for is refused (IncompleteChain), and any other block whose root the ledger has not recorded yet is NotReady, never answered with another tree.
 	ForHeight uint64 `json:"forHeight,omitempty" form:"forHeight" query:"forHeight"`
 	extraData []byte
 }
@@ -204,7 +206,7 @@ type BptBlockQuery struct {
 type BptBlockRecord struct {
 	fieldsSet []bool
 	Prefix    []byte `json:"prefix,omitempty" form:"prefix" query:"prefix" validate:"required"`
-	// Block is the minor block the answer is as of, after resolution; zero for the current tree.
+	// Block is the minor block the answer is as of, after resolution; for the current tree, the block of the view it was read from (#4485).
 	Block uint64 `json:"block,omitempty" form:"block" query:"block" validate:"required"`
 	// BptRoot is the root of the tree the block belongs to.
 	BptRoot [32]byte `json:"bptRoot,omitempty" form:"bptRoot" query:"bptRoot" validate:"required"`
@@ -1027,6 +1029,7 @@ func (v *AccountStatesQuery) Copy() *AccountStatesQuery {
 		}
 	}
 	u.Cursor = encoding.BytesCopy(v.Cursor)
+	u.ForHeight = v.ForHeight
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2835,6 +2838,9 @@ func (v *AccountStatesQuery) Equal(u *AccountStatesQuery) bool {
 		}
 	}
 	if !(bytes.Equal(v.Cursor, u.Cursor)) {
+		return false
+	}
+	if !(v.ForHeight == u.ForHeight) {
 		return false
 	}
 
@@ -4885,6 +4891,7 @@ var fieldNames_AccountStatesQuery = []string{
 	1: "QueryType",
 	2: "Accounts",
 	3: "Cursor",
+	4: "ForHeight",
 }
 
 func (v *AccountStatesQuery) MarshalBinary() ([]byte, error) {
@@ -4905,6 +4912,9 @@ func (v *AccountStatesQuery) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Cursor) == 0) {
 		writer.WriteBytes(3, v.Cursor)
+	}
+	if !(v.ForHeight == 0) {
+		writer.WriteUint(4, v.ForHeight)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountStatesQuery)
@@ -10168,6 +10178,9 @@ func (v *AccountStatesQuery) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	if x, ok := reader.ReadBytes(3); ok {
 		v.Cursor = x
 	}
+	if x, ok := reader.ReadUint(4); ok {
+		v.ForHeight = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AccountStatesQuery)
 	if err != nil {
@@ -12972,6 +12985,7 @@ func init() {
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("accounts", "string[]"),
 		encoding.NewTypeField("cursor", "bytes"),
+		encoding.NewTypeField("forHeight", "uint64"),
 	}, "AccountStatesQuery", "accountStatesQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -13615,6 +13629,7 @@ func (v *AccountStatesQuery) MarshalJSON() ([]byte, error) {
 		QueryType QueryType                   `json:"queryType"`
 		Accounts  encoding.JsonList[*url.URL] `json:"accounts,omitempty"`
 		Cursor    *string                     `json:"cursor,omitempty"`
+		ForHeight uint64                      `json:"forHeight,omitempty"`
 		ExtraData *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
@@ -13623,6 +13638,9 @@ func (v *AccountStatesQuery) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Cursor) == 0) {
 		u.Cursor = encoding.BytesToJSON(v.Cursor)
+	}
+	if !(v.ForHeight == 0) {
+		u.ForHeight = v.ForHeight
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -15144,11 +15162,13 @@ func (v *AccountStatesQuery) UnmarshalJSON(data []byte) error {
 		QueryType QueryType                   `json:"queryType"`
 		Accounts  encoding.JsonList[*url.URL] `json:"accounts,omitempty"`
 		Cursor    *string                     `json:"cursor,omitempty"`
+		ForHeight uint64                      `json:"forHeight,omitempty"`
 		ExtraData *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	u.Accounts = v.Accounts
 	u.Cursor = encoding.BytesToJSON(v.Cursor)
+	u.ForHeight = v.ForHeight
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -15162,6 +15182,7 @@ func (v *AccountStatesQuery) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cursor = x
 	}
+	v.ForHeight = u.ForHeight
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

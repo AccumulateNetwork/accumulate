@@ -308,10 +308,12 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 			h.HandedOff(q)
 		}
 		stopBackfill := backfillBeside(ctx, opts.State)
+		stopFill := fillBeside(ctx, opts.State)
 		n, err := watchRoots(ctx, watch, log, retry)
-		// Nothing of the backfill runs past here: the node is stopping, or
-		// it is demoted and pulls again, and the pull rewrites what the
-		// backfill writes.
+		// Nothing of the backfill or the fill runs past here: the node is
+		// stopping, or it is demoted and pulls again, and the pull rewrites
+		// what they write.
+		stopFill()
 		stopBackfill()
 		if err != nil {
 			return Joined, errors.UnknownError.Wrap(err)
@@ -351,6 +353,32 @@ func backfillBeside(ctx context.Context, state State) func() {
 	go func() {
 		defer close(done)
 		state.Backfill(ctx)
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+// A Filler is a State that loads the sections of the state tree it has not
+// loaded while the node executes (executor spec, "Sync", §3a, "The fill").
+type Filler interface {
+	Fill(ctx context.Context)
+}
+
+// fillBeside runs the state's fill on a goroutine of its own, with the
+// backfill's lifecycle (#4472). What it returns ends the fill and waits until
+// it has.
+func fillBeside(ctx context.Context, state State) func() {
+	f, ok := state.(Filler)
+	if !ok {
+		return func() {}
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		f.Fill(ctx)
 	}()
 	return func() {
 		cancel()

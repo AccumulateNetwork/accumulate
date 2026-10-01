@@ -91,15 +91,15 @@ func TestAnAccountWhosePartsDoNotHashToItsLeafIsRefused(t *testing.T) {
 
 	// a alone: refused, owed, nothing written.
 	s, db := joining(bent)
-	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
+	loadSectionOf(t, s, alice)
+	require.True(t, s.sync.covered(), "precondition: the section alice is in was paged")
 	require.False(t, has(db), "alice was written from a reply whose parts do not hash to its leaf")
 	require.Contains(t, s.sync.retry, accountKey(alice), "alice was not owed after the only peer's reply was refused")
 
 	// a, then b: taken from b, as b serves her.
 	asked = 0
 	s, db = joining(bent, honest)
-	require.NoError(t, s.Pull(context.Background()))
+	loadSectionOf(t, s, alice)
 	require.NotZero(t, asked, "precondition: peer a was asked for alice")
 	require.True(t, has(db), "alice was not asked of the next peer")
 	require.Equal(t, int64(5), balanceIn(t, db, alice), "alice was taken from the peer whose reply does not hash to its leaf")
@@ -208,8 +208,8 @@ func TestTheStateIsNotReadyBelowTheHighestBlockAReplyWasReadAt(t *testing.T) {
 	require.True(t, s.sync.ready, "precondition: with every reply at the records' block the state is ready")
 
 	s, db := joiningOne(t, peerDB, func(q api.Querier) api.Querier { return &restamping{Querier: q, page: 12, states: 12} })
-	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
+	loadSectionOf(t, s, alice)
+	require.True(t, s.sync.covered(), "precondition: the section alice is in was paged")
 	require.Empty(t, s.sync.retry, "precondition: nothing is owed")
 	require.Equal(t, int64(5), balanceIn(t, db, alice), "precondition: alice was taken")
 	require.Equal(t, uint64(10), s.sync.last)
@@ -229,8 +229,8 @@ func TestAnAccountStatesAnswerBelowTheStartIsRefused(t *testing.T) {
 	putTokens(t, peerDB, alice, 5)
 
 	s, db := joiningOne(t, peerDB, func(q api.Querier) api.Querier { return &restamping{Querier: q, states: 9} })
-	require.NoError(t, s.Pull(context.Background()))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
+	loadSectionOf(t, s, alice)
+	require.True(t, s.sync.covered(), "precondition: the section alice is in was paged")
 	b := db.Begin(false)
 	defer b.Discard()
 	_, err := b.Account(alice).Main().Get()

@@ -345,7 +345,7 @@ BptBlockRecord:
     - name: Prefix
       type: bytes
     - name: Block
-      description: is the minor block the answer is as of, after resolution; zero for the current tree
+      description: is the minor block the answer is as of, after resolution; for the current tree, the block of the view it was read from (#4485)
       type: uint
     - name: BptRoot
       description: is the root of the tree the block belongs to

@@ -46,6 +46,11 @@ func (s *PulledState) HandedOff(q uint64) {
 	}
 	s.sync = nil
 	s.repairFrom = 0
+	// The sections not loaded are the markers the matched tree holds.
+	s.secs.dropReady()
+	if err := s.secs.read(); err != nil {
+		s.log.Info("The sections not loaded could not be read", "partition", s.partition, "error", err)
+	}
 }
 
 // Diverged compares the root this node computed after each block it executed

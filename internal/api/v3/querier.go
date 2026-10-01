@@ -431,16 +431,19 @@ func (s *Querier) queryBptPage(batch *database.Batch, scope *url.URL, query *api
 		startKey = bptproof.FullScanStart()
 	}
 
-	if query.ForHeight != 0 {
-		return s.queryBptPageAt(batch, startKey, count, query.ForHeight)
-	}
-
 	// The page carries the block of the view it was read from, so a node
 	// walking the tree knows what the page is of without asking the ledger
 	// separately (executor.md, "Sync", §3; #4453).
 	block, err := s.viewBlock(batch)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
+	}
+
+	// As of this view's own block the current tree is the block's: a node
+	// loading a section as of the block it last committed asks a peer that
+	// stands there too (executor.md, "Sync", §3a; #4485).
+	if query.ForHeight != 0 && query.ForHeight != block {
+		return s.queryBptPageAt(batch, startKey, count, query.ForHeight)
 	}
 	r, err := bptPageRecord(bptproof.GetPage(bptproof.Current(batch), startKey, count))
 	if r != nil {
@@ -465,6 +468,11 @@ func bptPageRecord(page *bptproof.Page, err error) (*api.BptPageRecord, error) {
 		Entries:   make([]*api.BptLeafSummary, len(page.Entries)),
 	}
 	for i, e := range page.Entries {
+		if bpt.IsSectionMarker(e.KeyHash) {
+			// A section this node has not loaded: the page would name
+			// none of its accounts (executor.md, "Sync", §3a; #4485).
+			return nil, errors.NotReady.WithFormat("section %d of this node's state tree is not loaded yet", bpt.SectionOf(e.KeyHash))
+		}
 		out.Entries[i] = &api.BptLeafSummary{
 			KeyHash:   e.KeyHash,
 			ValueHash: e.ValueHash,
@@ -534,12 +542,19 @@ func (s *Querier) queryBptBlock(batch *database.Batch, scope *url.URL, query *ap
 	}
 
 	tree := batch.BPT()
-	if query.ForHeight == 0 {
+	// The current tree is the tree of this view's block, and says so: a node
+	// taking the top of the tree takes it as of that block (executor.md,
+	// "Sync", §3a; #4485).
+	block, err := s.viewBlock(batch)
+	if err != nil {
+		return nil, errors.UnknownError.Wrap(err)
+	}
+	if query.ForHeight == 0 || query.ForHeight == block {
 		root, err := tree.GetRootHash()
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
-		return bptBlockRecord(0, root)(tree.GetStoredBlock(query.Prefix))
+		return bptBlockRecord(block, root)(tree.GetStoredBlock(query.Prefix))
 	}
 
 	root, block, err := s.retainedRootAt(batch, query.ForHeight)

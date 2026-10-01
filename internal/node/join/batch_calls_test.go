@@ -88,9 +88,13 @@ func TestARoundCostsCallsPerPageNotPerBlockOrAccount(t *testing.T) {
 	require.NoError(t, err)
 	ctx := context.Background()
 
-	// Round one: the pull starts at 10 and walks the tree.
+	// Round one: the pull starts at 10 and takes the top of the tree. It
+	// takes no account nothing names (executor spec, "Sync", §3a).
 	require.NoError(t, s.Pull(ctx))
-	require.Equal(t, int64(5), balanceIn(t, db, accounts[U-1]), "precondition: the walk took the accounts")
+	none := db.Begin(false)
+	_, err = none.Account(accounts[U-1]).Main().Get()
+	none.Discard()
+	require.Error(t, err, "the top of the tree took an account nothing named")
 
 	// Blocks 11 through 10+K: each names three accounts, and every account
 	// ends at a new balance.
@@ -207,7 +211,7 @@ func TestAnAccountIsNotTakenTorn(t *testing.T) {
 	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: tearing, block: 10}, ExecutedBlock: 1})
 	require.NoError(t, err)
 
-	require.NoError(t, s.Pull(context.Background()))
+	loadSectionOf(t, s, alice)
 	require.True(t, tearing.done, "precondition: alice was read, and changed after the read")
 	after := leafIn(t, peerDB, alice)
 	require.NotEqual(t, before.ValueHash, after.ValueHash)

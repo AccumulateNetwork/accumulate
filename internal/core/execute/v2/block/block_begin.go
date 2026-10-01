@@ -31,7 +31,14 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	block.positions = new(positionCache)
 	block.BlockParams = params
 	block.Executor = x
-	block.Batch = x.Database.Begin(true)
+	// The batch a block executes in loads, on its first read, a section of
+	// the state tree a joined node has not loaded yet (executor spec, "Sync",
+	// §3a; #4485).
+	if d, ok := x.Database.(interface{ BeginExecuting(bool) *database.Batch }); ok {
+		block.Batch = d.BeginExecuting(true)
+	} else {
+		block.Batch = x.Database.Begin(true)
+	}
 	block.cache = x.synthCache().Begin(params.Index)
 	block.staging = x.staging().Begin()
 	// Staging is published with the index of the block that published it, so

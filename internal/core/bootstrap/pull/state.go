@@ -235,6 +235,29 @@ func KeepStates(store Store, states []*api.AccountState) []error {
 	return errs
 }
 
+// WriteStates writes checked account states into the batch, each in a batch
+// nested in it, and updates no tree: a section's load writes its accounts
+// beneath the batch a block executes in, and swaps the section's marker for
+// the leaves itself (executor.md, "Sync", §3a; #4485). The first state that
+// cannot be written is the error, and nothing of it is written.
+func WriteStates(batch *database.Batch, states []*api.AccountState) error {
+	for _, st := range states {
+		if err := CheckState(st); err != nil {
+			return err
+		}
+		one := batch.Begin(true)
+		err := writeState(one, st)
+		if err == nil {
+			err = one.Commit()
+		}
+		one.Discard()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // writeState writes one checked account state into the batch.
 func writeState(batch *database.Batch, st *api.AccountState) error {
 	leaf, err := retainedLeaf(st)

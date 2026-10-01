@@ -52,10 +52,32 @@ func (b *Batch) SetObserver(observer Observer) {
 
 // Begin starts a new batch.
 func (d *Database) Begin(writable bool) *Batch {
+	return d.begin(writable, gateRefuses)
+}
+
+// begin begins an outermost batch. While a section gate is set, its change
+// set checks every read of an account's records against the sections not
+// loaded: a batch a block executes in loads them, and any other is refused
+// (sections.go).
+func (d *Database) begin(writable bool, mode gateMode) *Batch {
 	id := atomic.AddInt64(&d.nextBatchId, 1)
 
-	b := NewBatch(fmt.Sprint(id), d.store.Begin(nil, writable), writable, d.logger)
+	cs := d.store.Begin(nil, writable)
+	gate := d.gate()
+	if gate == nil {
+		b := NewBatch(fmt.Sprint(id), cs, writable, d.logger)
+		b.observer = d.observer
+		return b
+	}
+	g := &gatedChangeSet{ChangeSet: cs, gate: gate, writable: writable}
+	b := NewBatch(fmt.Sprint(id), g, writable, d.logger)
 	b.observer = d.observer
+	if mode != gateRefuses {
+		g.batch = b
+	}
+	if mode == gateExecutes {
+		gate.Opened(b)
+	}
 	return b
 }
 

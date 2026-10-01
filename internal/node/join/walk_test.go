@@ -92,6 +92,20 @@ func (s scriptedSource) QueryAccount(ctx context.Context, u *url.URL, q *api.Def
 
 func (s scriptedSource) String() string { return "peer " + s.peer.name }
 
+// QueryBptBlock serves the peer's tree as it is now, as of the peer's
+// scripted block: the store has no ledger to say which block it is.
+func (s scriptedSource) QueryBptBlock(ctx context.Context, scope *url.URL, q *api.BptBlockQuery) (*api.BptBlockRecord, error) {
+	if q.ForHeight != 0 && q.ForHeight != s.peer.block {
+		return nil, errors.IncompleteChain.WithFormat("the scripted peer holds its tree at block %d only", s.peer.block)
+	}
+	r, err := s.peer.served().QueryBptBlock(ctx, scope, &api.BptBlockQuery{Prefix: q.Prefix})
+	if err != nil {
+		return nil, err
+	}
+	r.Block = s.peer.block
+	return r, nil
+}
+
 func (s scriptedSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api.BptPageQuery) (*api.BptPageRecord, error) {
 	return api.Querier2{Querier: s.peer}.QueryBptPage(ctx, scope, q)
 }
@@ -284,7 +298,7 @@ func TestTheWalkNeverOverwritesWhatARecordWrote(t *testing.T) {
 	peer.onPage = func() { peer.state = behind }
 	require.NoError(t, s.Pull(ctx))
 
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
+	require.True(t, s.sync.covered(), "precondition: the walk covered the tree")
 	require.Equal(t, uint64(11), s.sync.last, "precondition: block 11's record was processed")
 	require.Equal(t, int64(7), balanceIn(t, db, alice),
 		"the walk wrote an older page's value over the value block 11's record brought current")
@@ -319,12 +333,12 @@ func TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord(t *testing.T) {
 	ctx := context.Background()
 
 	// Round one: the pull starts at 10, no record after it has been read,
-	// and the walk reads a page from a peer already at block 11.
-	require.NoError(t, s.Pull(ctx))
-	require.True(t, s.sync.walked, "precondition: the walk covered the tree")
+	// and the section alice is in is paged from a peer already at block 11.
+	loadSectionOf(t, s, alice)
+	require.True(t, s.sync.covered(), "precondition: the section alice is in was paged")
 	require.Equal(t, uint64(10), s.sync.last)
 	require.Equal(t, int64(9), balanceIn(t, db, alice),
-		"the walk did not write what its page named: a page newer than the records is written, with no block compared")
+		"the section's load did not write what its page named: a page newer than the records is written, with no block compared")
 
 	// Round two: blocks 11 and 12, and both records name alice. What the
 	// peer holds of her now is block 12's.
@@ -336,7 +350,7 @@ func TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord(t *testing.T) {
 
 	require.Equal(t, uint64(12), s.sync.last, "precondition: the records reached block 12")
 	require.Equal(t, int64(11), balanceIn(t, db, alice),
-		"the record did not write over what the walk wrote: an account ends at the state of the last record processed")
+		"the record did not write over what the section's load wrote: an account ends at the state of the last record processed")
 }
 
 // TestARoundsRecordsDoNotChaseAMovingPartition — #4442, Docker run
@@ -352,5 +366,5 @@ func TestARoundsRecordsDoNotChaseAMovingPartition(t *testing.T) {
 	s, _ := joiningAt(t, peer)
 	require.NoError(t, s.Pull(context.Background()))
 	require.Equal(t, 1, peer.blockReads, "one round asked for the records %d times, chasing the partition", peer.blockReads)
-	require.True(t, s.sync.walked, "the round never reached the walk")
+	require.True(t, s.sync.covered(), "the round never reached the walk")
 }

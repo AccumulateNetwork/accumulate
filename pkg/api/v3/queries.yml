@@ -123,7 +123,7 @@ BptBlockQuery:
       type: bytes
       optional: true
     - name: ForHeight
-      description: asks for the block as of a named minor block, resolving backward to the last state-changing block at or before it. Zero, the default, is the current tree. A block the server retains no BPT history for is refused (IncompleteChain), and a block whose root the ledger has not recorded yet is NotReady, never answered with another tree
+      description: asks for the block as of a named minor block, resolving backward to the last state-changing block at or before it. Zero, the default, is the current tree, and so is the server's own block (#4485). A block the server retains no BPT history for is refused (IncompleteChain), and any other block whose root the ledger has not recorded yet is NotReady, never answered with another tree
       type: uint
       optional: true
 
@@ -151,6 +151,10 @@ AccountStatesQuery:
     - name: Cursor
       description: continues the answer where the previous page stopped; omitted starts it
       type: bytes
+      optional: true
+    - name: ForHeight
+      description: asks for the states as of a named minor block rather than the server's current one, for a node loading a section of the state tree (executor.md, "Sync", §3a; #4485). An account the server retains no state for at that block is served with no body; zero, the default, is the current state
+      type: uint
       optional: true
 
 AnchorSearchQuery:
