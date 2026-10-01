@@ -8,6 +8,7 @@ package anchorsrc
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -327,4 +328,27 @@ func (a answeringFrom) Sequence(_ context.Context, _, _ *url.URL, n uint64, _ pr
 		return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", n)
 	}
 	return a.f.signedBy(a.t, n, root(byte(n)), a.signer), nil
+}
+
+// TestTheCollectorSaysWhoItAsks: a read asks one validator after another and
+// logs nothing that answers, so OnAsk is the one way to say which question a
+// read that lasts is on (#4484): the peer asked for the newest number, then
+// each validator, by name, for each number.
+func TestTheCollectorSaysWhoItAsks(t *testing.T) {
+	f := newNet(t, 4, 1)
+	var vals validatorList
+	for i, name := range []string{"v0", "v1", "v2"} {
+		vals = append(vals, Validator{Name: name, Sequencer: answering{answers: map[uint64]*api.MessageRecord[messaging.Message]{
+			7: f.signedBy(t, 7, root(7), i),
+		}}})
+	}
+	c, got := collectorOver(t, f, vals, 7)
+	var asked []string
+	c.OnAsk = func(n uint64, who string) { asked = append(asked, fmt.Sprint(n, " ", who)) }
+	require.NoError(t, c.Read(context.Background()))
+	require.Equal(t, observed{7: root(7)}, got)
+	require.GreaterOrEqual(t, len(asked), 4)
+	require.Regexp(t, `^0 `, asked[0], "the newest number was asked of no one named")
+	require.Equal(t, []string{"1 v0", "1 v1", "1 v2"}, asked[1:4], "each validator is named as it is asked")
+	require.Contains(t, asked, "7 v2")
 }

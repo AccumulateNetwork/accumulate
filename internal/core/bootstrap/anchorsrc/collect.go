@@ -84,6 +84,13 @@ type Collector struct {
 	// entry of this partition's chains ends at.
 	OnRootChain func(block, rootIndex uint64, rootAnchor [32]byte)
 
+	// OnAsk is called before each question a read asks a peer: the anchor
+	// number and the validator asked, or zero and the peer asked for the
+	// newest number. A read asks one validator after another and logs
+	// nothing that answers, so this is the one way to say which question a
+	// read that lasts is on (#4484).
+	OnAsk func(anchor uint64, who string)
+
 	mu     sync.Mutex
 	next   uint64 // the next sequence number to collect; zero until positioned
 	newest uint64 // the newest number the ledger named when the read was positioned
@@ -230,6 +237,9 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 	produced := false
 	for _, v := range vals {
 		asked = append(asked, v.Name)
+		if c.OnAsk != nil {
+			c.OnAsk(n, v.Name)
+		}
 		ans, err := v.Sequencer.Sequence(ctx, src, dst, n, private.SequenceOptions{})
 		if err != nil {
 			if ctx.Err() != nil {
@@ -371,6 +381,9 @@ func (c *Collector) lastProduced(ctx context.Context) (uint64, error) {
 	var found bool
 	var last error
 	for _, p := range peers {
+		if c.OnAsk != nil {
+			c.OnAsk(0, fmt.Sprint(p))
+		}
 		rec, err := p.QueryAccount(ctx, u, nil)
 		if err != nil {
 			last = err
