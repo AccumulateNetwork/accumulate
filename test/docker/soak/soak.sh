@@ -881,7 +881,10 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   add_follower() {
     local k c d clear="" join=""
     for d in "${fol_dirs[@]}"; do
-      clear+=" /root/.accumulate/$d/dnn/data/accumulate.db /root/.accumulate/$d/bvnn/data/accumulate.db"
+      # consensus/ too: a checkpoint left beside a cleared store resumes
+      # consensus where the old follower stopped, so the add is not a fresh
+      # join (#4484).
+      clear+=" /root/.accumulate/$d/dnn/data/accumulate.db /root/.accumulate/$d/bvnn/data/accumulate.db /root/.accumulate/$d/consensus"
       join+=" /root/.accumulate/$d/accumulate.toml"
     done
     # One throwaway container for all of them: the directories share one
