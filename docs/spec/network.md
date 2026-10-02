@@ -133,6 +133,24 @@ partition the peer does not run is refused at `init`, naming it. `init dual`
 is the default case that insists on both. With `--seed`, the seed proxy's
 `<partition>.<network>` names the partition unless `--partition` does (#4489).
 
+**The node key is the node's identity.** A node's libp2p peer ID is its
+node key (`p2p.key`); `init` writes it inline, so it is the same at every
+start. A configuration that names no node key does not silently start under a
+new one (#4490):
+
+- a **core validator refuses to start**, naming the file: its peer ID is bound
+  in its committee and named in its peers' bootstrap lists, so a new identity
+  would strand both, and a generated key would hide the operator's mistake
+  rather than fix it;
+- a **follower is given one**: the node generates a key, appends it to its
+  TOML configuration as an inline raw key (the operator's text is kept as it
+  was), and logs that it did, so every later start has that identity. Nothing
+  is bound to a follower's identity until it first runs, so making it is safe;
+  a follower with no TOML file to write to refuses, as a validator does;
+- any other configuration (a gateway, a devnet) keeps the transient key it
+  always had, which warns when it is made. An explicit `type = "transient"`
+  key is the operator's choice and is honoured.
+
 A node initialized for CometBFT is converted by the standalone
 `tools/cmd/migrate-legacy` (see "Converting a mainnet node"). A node never
 reads that layout.

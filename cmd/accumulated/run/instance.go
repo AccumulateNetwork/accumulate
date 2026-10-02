@@ -84,7 +84,12 @@ func New(ctx context.Context, cfg *Config) (*Instance, error) {
 
 	// Set the ID
 	setDefaultVal(&cfg.P2P, new(P2P))
-	setDefaultVal[PrivateKey](&cfg.P2P.Key, new(TransientPrivateKey))
+	if cfg.P2P.Key == nil {
+		err = defaultNodeKey(cfg, inst)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if key, err := getPrivateKey(cfg.P2P.Key, inst); err != nil {
 		return nil, errors.UnknownError.WithFormat("load key: %w", err)
 	} else {
