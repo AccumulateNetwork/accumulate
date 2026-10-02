@@ -92,6 +92,19 @@
       type: state
       dataType: uint
 
+    # Not account state: hashState hashes none of it, so it is in no leaf,
+    # no root and no receipt. The backfill alone writes it; execution never
+    # does (executor spec, "Past the match"; #4493).
+    - name: SyncedEntries
+      description: is how much of the named chain the backfill holds, outside the hashed state
+      type: state
+      parameters:
+      - name: Chain
+        type: string
+      dataType: SyncedEntries
+      pointer: true
+      emptyIfMissing: true
+
     - name: Events
       description: tracks scheduled events. Should only be used on the system ledger
       type: entity

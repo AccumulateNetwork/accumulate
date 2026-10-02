@@ -664,8 +664,14 @@ hashed and not part of the persisted, hashed state; updating the account does
 not update it** (Paul, 2026-10-02). The backfill alone writes it, as it works
 back from the head, and reads it to resume; execution never touches it, so it
 is in no leaf, no root and no anchor, and a node's agreement does not depend
-on how much history it holds (#4493; until built, a retry restarts a chain
-from its first entry — DIFFERENCES). The
+on how much history it holds. It is the account's `SyncedEntries` record, one
+per chain (internal/database model.yml): `Synced`, the max synced entry as a
+count -- every entry below it is held, with the message behind it, and was
+held to a head -- and the span of the walk under way. No account hash reads
+it (`TestTheMaxSyncedEntryIsNotState`: written and committed through the BPT
+update it changes no leaf, root or receipt, and an executed block leaves it
+as it was) (#4493; until the backfill uses it, a retry restarts a chain from
+its first entry — DIFFERENCES). The
 node ends holding every account's chains and entries
 (`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
 

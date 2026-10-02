@@ -170,3 +170,19 @@ RetainedPendingTransaction:
       marshal-as: reference
       pointer: true
       repeatable: true
+
+SyncedEntries:
+  description: is how much of one chain the backfill holds (executor spec, "Past the match"; #4493). It is not account state -- no leaf, root or receipt hashes it -- and execution never writes it
+  fields:
+    - name: Synced
+      description: is the max synced entry, as a count -- every entry below it is held, with the message behind it, and was held to a head
+      type: uint
+    - name: Top
+      description: is the head count the walk under way started from; zero when none is
+      type: uint
+    - name: Low
+      description: is how far down the walk under way has got -- it holds every entry from Low up to Top
+      type: uint
+    - name: Refetch
+      description: is set when the entries a walk brought in did not reproduce the head -- the next walk asks for every entry below the head again rather than trusting what is held
+      type: bool

@@ -302,6 +302,7 @@ type Account struct {
 	cascadeDeliveryQueue       values.List[*url.TxID]
 	directory                  values.Set[*url.URL]
 	directoryAnchorBlock       values.Value[uint64]
+	syncedEntries              map[accountSyncedEntriesMapKey]values.Value[*SyncedEntries]
 	events                     *AccountEvents
 	blockLedger                map[accountBlockLedgerMapKey]values.Value[*BlockLedger]
 	blockLedgerChain           *Chain2
@@ -338,6 +339,18 @@ type accountSyntheticForAnchorMapKey struct {
 
 func (k accountSyntheticForAnchorKey) ForMap() accountSyntheticForAnchorMapKey {
 	return accountSyntheticForAnchorMapKey{k.Anchor}
+}
+
+type accountSyncedEntriesKey struct {
+	Chain string
+}
+
+type accountSyncedEntriesMapKey struct {
+	Chain string
+}
+
+func (k accountSyncedEntriesKey) ForMap() accountSyncedEntriesMapKey {
+	return accountSyncedEntriesMapKey{k.Chain}
 }
 
 type accountBlockLedgerKey struct {
@@ -498,6 +511,14 @@ func (c *Account) DirectoryAnchorBlock() values.Value[uint64] {
 
 func (c *Account) newDirectoryAnchorBlock() values.Value[uint64] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("DirectoryAnchorBlock"), false, values.Wrapped(values.UintWrapper))
+}
+
+func (c *Account) SyncedEntries(chain string) values.Value[*SyncedEntries] {
+	return values.GetOrCreateMap(c, &c.syncedEntries, accountSyncedEntriesKey{chain}, (*Account).newSyncedEntries)
+}
+
+func (c *Account) newSyncedEntries(k accountSyncedEntriesKey) values.Value[*SyncedEntries] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("SyncedEntries", k.Chain), true, values.Struct[SyncedEntries]())
 }
 
 func (c *Account) Events() *AccountEvents {
@@ -726,15 +747,25 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.Directory(), key.SliceI(1), nil
 	case "DirectoryAnchorBlock":
 		return c.DirectoryAnchorBlock(), key.SliceI(1), nil
+	case "SyncedEntries":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (4)")
+		}
+		chain, okChain := key.Get(1).(string)
+		if !okChain {
+			return nil, nil, errors.InternalError.With("bad key for account (5)")
+		}
+		v := c.SyncedEntries(chain)
+		return v, key.SliceI(2), nil
 	case "Events":
 		return c.Events(), key.SliceI(1), nil
 	case "BlockLedger":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (4)")
+			return nil, nil, errors.InternalError.With("bad key for account (6)")
 		}
 		index, okIndex := key.Get(1).(uint64)
 		if !okIndex {
-			return nil, nil, errors.InternalError.With("bad key for account (5)")
+			return nil, nil, errors.InternalError.With("bad key for account (7)")
 		}
 		v := c.BlockLedger(index)
 		return v, key.SliceI(2), nil
@@ -742,27 +773,15 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.BlockLedgerChain(), key.SliceI(1), nil
 	case "Transaction":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (6)")
+			return nil, nil, errors.InternalError.With("bad key for account (8)")
 		}
 		hash, okHash := key.Get(1).([32]byte)
 		if !okHash {
-			return nil, nil, errors.InternalError.With("bad key for account (7)")
+			return nil, nil, errors.InternalError.With("bad key for account (9)")
 		}
 		v := c.Transaction(hash)
 		return v, key.SliceI(2), nil
 	case "RetainedStateReceipt":
-		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (8)")
-		}
-		block, okBlock := key.Get(1).(uint64)
-		if !okBlock {
-			return nil, nil, errors.InternalError.With("bad key for account (9)")
-		}
-		v := c.RetainedStateReceipt(block)
-		return v, key.SliceI(2), nil
-	case "RetainedStateReceiptBlocks":
-		return c.RetainedStateReceiptBlocks(), key.SliceI(1), nil
-	case "RetainedMainState":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (10)")
 		}
@@ -770,15 +789,27 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		if !okBlock {
 			return nil, nil, errors.InternalError.With("bad key for account (11)")
 		}
-		v := c.RetainedMainState(block)
+		v := c.RetainedStateReceipt(block)
 		return v, key.SliceI(2), nil
-	case "RetainedLeaf":
+	case "RetainedStateReceiptBlocks":
+		return c.RetainedStateReceiptBlocks(), key.SliceI(1), nil
+	case "RetainedMainState":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (12)")
 		}
 		block, okBlock := key.Get(1).(uint64)
 		if !okBlock {
 			return nil, nil, errors.InternalError.With("bad key for account (13)")
+		}
+		v := c.RetainedMainState(block)
+		return v, key.SliceI(2), nil
+	case "RetainedLeaf":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (14)")
+		}
+		block, okBlock := key.Get(1).(uint64)
+		if !okBlock {
+			return nil, nil, errors.InternalError.With("bad key for account (15)")
 		}
 		v := c.RetainedLeaf(block)
 		return v, key.SliceI(2), nil
@@ -798,31 +829,31 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		return c.MajorBlockChain(), key.SliceI(1), nil
 	case "SyntheticSequenceChain":
 		if key.Len() < 2 {
-			return nil, nil, errors.InternalError.With("bad key for account (14)")
-		}
-		partition, okPartition := key.Get(1).(string)
-		if !okPartition {
-			return nil, nil, errors.InternalError.With("bad key for account (15)")
-		}
-		v := c.getSyntheticSequenceChain(partition)
-		return v, key.SliceI(2), nil
-	case "SyntheticChain":
-		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (16)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (17)")
 		}
-		v := c.getSyntheticChain(partition)
+		v := c.getSyntheticSequenceChain(partition)
 		return v, key.SliceI(2), nil
-	case "AnchorChain":
+	case "SyntheticChain":
 		if key.Len() < 2 {
 			return nil, nil, errors.InternalError.With("bad key for account (18)")
 		}
 		partition, okPartition := key.Get(1).(string)
 		if !okPartition {
 			return nil, nil, errors.InternalError.With("bad key for account (19)")
+		}
+		v := c.getSyntheticChain(partition)
+		return v, key.SliceI(2), nil
+	case "AnchorChain":
+		if key.Len() < 2 {
+			return nil, nil, errors.InternalError.With("bad key for account (20)")
+		}
+		partition, okPartition := key.Get(1).(string)
+		if !okPartition {
+			return nil, nil, errors.InternalError.With("bad key for account (21)")
 		}
 		v := c.getAnchorChain(partition)
 		return v, key.SliceI(2), nil
@@ -835,7 +866,7 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 	case "Data":
 		return c.Data(), key.SliceI(1), nil
 	default:
-		return nil, nil, errors.InternalError.With("bad key for account (20)")
+		return nil, nil, errors.InternalError.With("bad key for account (22)")
 	}
 }
 
@@ -869,6 +900,11 @@ func (c *Account) IsDirty() bool {
 	}
 	if values.IsDirty(c.directoryAnchorBlock) {
 		return true
+	}
+	for _, v := range c.syncedEntries {
+		if v.IsDirty() {
+			return true
+		}
 	}
 	if values.IsDirty(c.events) {
 		return true
@@ -1001,6 +1037,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.cascadeDeliveryQueue, c.newCascadeDeliveryQueue, opts, fn)
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
 	values.WalkField(&err, c.directoryAnchorBlock, c.newDirectoryAnchorBlock, opts, fn)
+	values.WalkMap(&err, c.syncedEntries, c.newSyncedEntries, nil, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, c.getBlockLedgerKeys, opts, fn)
 	values.WalkField(&err, c.blockLedgerChain, c.newBlockLedgerChain, opts, fn)
@@ -1048,6 +1085,9 @@ func (c *Account) baseCommit() error {
 	values.Commit(&err, c.cascadeDeliveryQueue)
 	values.Commit(&err, c.directory)
 	values.Commit(&err, c.directoryAnchorBlock)
+	for _, v := range c.syncedEntries {
+		values.Commit(&err, v)
+	}
 	values.Commit(&err, c.events)
 	for _, v := range c.blockLedger {
 		values.Commit(&err, v)
