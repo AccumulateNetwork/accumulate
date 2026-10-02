@@ -32,7 +32,180 @@ H3 #4192                                              when measurement says proo
 Phase 1 (Paul, 2026-09-19): #4365 (PASSED 2026-09-19, run 20260919T191634Z) ─▶ #4367 (MERGED 775ce23a6) ─▶ { #4366 (MERGED a09ff3e0a; the F1 channel binding a follow-up) ∥ #4301 (MERGED 1ea77143d; statement (c) at step 3) ∥ #4361 (MERGED b0ec6e0fd) } ─▶ gate-0 rerun (RAN 20260919T231856Z: heals 0 → 0, stranded 0, roots 679/679 — run-analyst #4365 note_3876639043; historian's gate review pending) ─▶ #4368 (what "fully synced" is — gates reads, not the relay; spec at ce4f9e8cf, code is #4295) ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order (Paul, 2026-09-19: "Why are we not assigning work to do for our goal for bootstrapping?" — the join runs in parallel with the relay from 21:57Z, not behind it); E11's second pass below is its text
 ```
 
+Restart, torn stores and quorum loss (2026-10-02): R0 ─▶ R1 ─▶ R2 ─▶ R3 ─▶ R4 (Paul: B/C) ─▶ R5; R6 and R7 parallel — see the section of that name below.
+
 Each item is its own issue branch from the previous item's tip.
+
+## Restart, torn stores and quorum loss (2026-10-02)
+
+What two whole-network restarts taught (runs 20261002T090546Z and
+20261002T145702Z; `docs/reviews/restart-redo-2026-10-02.md`), as work. Each
+item: the spec it implements, the test that fails first, what "done" means.
+Decisions marked **Paul** block the item they sit on and nothing else.
+
+```
+R0 land the fixes ─▶ R1 a torn store is detected, never resumed onto ─▶ R2 the join never loops ─▶ R3 the Directory bounds a below-quorum partition
+                                                                                                                  └─▶ R4 revival after quorum loss (Paul: B or C) ─▶ R5 #4501 resume from the highest validated state
+R6 memory margin and the restart procedure (harness)                                     parallel, before the next soak
+R7 the review's smaller items (#4509, #4511, #4504, the cache-boundary noise)             parallel
+```
+
+### R0 — land what is fixed
+
+Branch `issue-restart-authored-batches` (lead a6893d6ed + f7350a956 diagnostics,
+#4502 3dadf560a, #4503 c452a9c44, #4505 ae94c647b, #4506 dafbf946a+3cc65e9b2,
+#4507 082935148, evidence and review).
+
+- Full gate on the branch (all Go suites, consim restart tests except #4504,
+  harness 474). Merge to the lead. Rebuild soak images.
+- **Done:** gate green; merged; `DIFFERENCES` C9 note that the checkpoint keeps
+  the authored header's batches.
+
+### R1 — a torn store is detected at resume and never resumed onto (#4507, node side; DIFFERENCES C13)
+
+Spec: consensus.md "Restart", executor.md "Sync" — "the node's store is its own
+execution" gains "and its chains are whole".
+
+- At start, before the whole-restart exit or a resume, verify the store the
+  node stands on: for the chains the block path writes (the system ledger's
+  root, BPT-index and block-ledger chains; the anchor pool's main and anchor
+  chains), the head's count is backed by its elements and every Tail chunk is
+  complete. Positional reads are history reads (#4507), so the check costs a
+  few hundred records.
+- A store that fails is **torn**: the node does not resume. It logs the
+  chain, the record and the kill it implies, sets node state `BOOTING` with
+  reason `torn store`, exposes `accumulate_node_store_torn{partition}`, and
+  joins from its peers if they can prove a state (R2 says what happens when
+  they cannot).
+- Tests first: a bcdb store with one Tail chunk shortened and one element
+  removed (the diag tool's shape) → the check names both; a clean store → no
+  finding; the daemon on a torn store joins instead of resuming (dagbft
+  service test with a prepared store).
+- **Done:** on Docker, kill a validator after writing a Tail chunk short into
+  its store (a harness disturbance `tear-store`), it comes back joining, the
+  partition keeps 3 of 4 signers, the join completes.
+
+### R2 — the join never loops; a joiner facing a below-quorum partition says so (#4508; DIFFERENCES C14)
+
+Spec: executor.md "A partition that restarts as a whole": the exit requires an
+own block.
+
+- `converge`: the whole-restart branch is taken only when `Resumable()` reports
+  an own block; otherwise the node keeps collecting and logs, once a minute,
+  "this partition has fewer validators serving than sign an anchor; no state
+  can be proven to this node" with the counts, and `nodestate` reason
+  `partition below quorum`.
+- Tests first: join unit test — fewer serving than the threshold, no own
+  block → no exit, the wait line, collecting stays on.
+- **Done:** the 17:18Z shape (two recreated validators of a two-signer
+  partition) waits and says why; the partition's two voters are unaffected
+  (the recreated nodes keep their consensus checkpoints — the harness's
+  `add-validator` clears the store, never `consensus/`).
+
+### R3 — the Directory bounds what it holds for a below-quorum partition and names it degraded (#4510 part 2)
+
+Spec: executor.md "Anchor staging" / network.md: a partition whose anchors
+have carried fewer than the threshold's signatures for N blocks is
+**degraded**: the Directory holds at most K of its anchors (K = the staging
+proof budget, bytes), refuses the rest with a reason, exposes
+`accumulate_directory_partition_degraded{partition}`, and the dashboard shows
+it as a state of the partition, not as "stalled by delivery" everywhere else.
+Cross-partition streams from a degraded partition are refused with the same
+reason so producers stop filling caches for it.
+
+- Tests first: staging unit test — anchors below quorum accumulate to K then
+  are refused with the reason; the gauge flips at N; a quorum anchor clears it.
+- **Done:** on Docker, a partition held at two signers for an hour leaves
+  every other node's heap flat (mem.csv) and the Directory producing.
+
+### R4 — revival after losing a quorum (#4512; **Paul: B or C, or C now and B as the design**)
+
+The situation: a partition's remaining validators are below its signing
+threshold; their blocks are committed by consensus and executed by them, but
+no anchor validates and no joiner can be proven a state. Three ways, one not
+possible:
+
+- **A — re-execute from the last validated state.** The committed log past
+  the rescue window is collected; not possible without a durable log (E13).
+- **B — quorum loss is a committee change (protocol).** The operators remove
+  the lost validators from the partition's set on the Directory (network
+  definition version +1; the same transaction that promotes a validator today,
+  "DAG-BFT promotion is on-chain"). The anchor check is already against "the
+  set at network version V", so the survivors' anchors validate under the new
+  version; the Directory re-evaluates what it held under the old one; the
+  BVN's consensus quorum follows the set (2 of 2 while reduced); joiners can
+  now prove the survivors' state; the lost validators return as new members
+  by the same change once synced (a follower first, promoted after). Work:
+  (1) the Directory re-checks held anchors on a set change; (2) the BVN's
+  committee follows a set that shrank (today's `Membership` follows globals;
+  verify the DAG committee does too, including the restored nodes'); (3) an
+  operator procedure and a harness disturbance `remove-validator` /
+  `add-validator`; (4) spec text in network.md and executor.md.
+  Safety: the operators assert, by the committee change, that the survivors'
+  state is the partition's. That is the same trust the network puts in them
+  for every committee change.
+- **C — operational state copy (stopgap, works today by hand).** Stop every
+  validator of the partition; copy a survivor's store and `consensus/` to the
+  lost nodes (stop before copying — a live copy is trash); start all; the
+  whole-restart exit resumes them on the copied block and they sign from
+  there. Open question to test: whether the copied nodes re-sign the anchors
+  the Directory already holds (the conductor re-sends what the newest anchor
+  receipted; older held anchors may need the Directory to ask). Work: a
+  harness `revive-partition.sh`, the spec paragraph, the Docker test of the
+  exact 16:09Z shape (tear two of four, revive, held anchors clear).
+- Tests first, either way: a simulator/e2e test that tears two of four stores,
+  observes the below-quorum state (R3), applies the revival, and ends with four
+  signers and the Directory's held anchors delivered.
+- **Done:** the 20261002T145702Z shape on Docker ends with BVN2 at four signers
+  and the network healthy, and the operator steps are written down.
+
+### R5 — a whole restart resumes from the highest signed, validated state (#4501)
+
+Spec: executor.md, decided 2026-10-02. Each node states its highest validated
+block; the holder of the highest resumes and serves; the rest take its state
+as a join does and route to it until synced. With R1 (a torn node knows it is
+torn) and R4-B (the set can shrink), this is the general form: the torn nodes
+hold a lower validated state and take the survivors'. Tests first in consim
+(whole restart with one node two blocks behind → it takes the others' state,
+not its own). **Done:** the Docker whole restart with a deliberately lagging
+validator ends with all four at one state.
+
+### R6 — memory margin and the restart procedure (harness; #4510 part 1)
+
+- Measure non-heap RSS per node under load and under a stall storm; set
+  `GOMEMLIMIT` from `mem_limit` minus that plus a storm allowance (today 1700
+  of 2048 MiB left three validators dead at 1.77–1.90 GiB RSS with ~300 MB
+  live). Alarm in the dashboard when RSS is within 10% of `mem_limit`.
+- The whole-restart test uses a **graceful stop** (`docker stop`, drain) as
+  its normal form; `rm -f` (SIGKILL) becomes a named chaos case, run on
+  purpose, with the torn-store check (R1) as its pass criterion.
+- **Done:** the next soak's manifest names both; no node within 10% of its
+  limit in 12 h.
+
+### R7 — the review's smaller items (parallel)
+
+- **#4509** (**Paul**): a lazily loaded section is taken as of the peer's
+  block, one ahead, so every BVN handoff repairs its first block. Either load
+  as of the node's block, or write the repair into the spec as the design.
+- **#4511**: why the two recreated validators' Directory nodes restored their
+  consensus position and did not vote (debugger pass on the live capture's
+  shape; the stall line has the round state).
+- **#4504**: `TestRestartOneNode` — a validator restarted alone stops
+  executing.
+- The root watch asks for the newest *delivered* anchor; the reseeded cache
+  holds from delivered+1 (`no validator answers anchor N` for hours after any
+  restart). Ask for delivered+1, or seed one back.
+- #4503 follow-up: fetch several missing batches per request, or cap
+  concurrent fetches.
+- BlockchainDB#99 (store team): both layers at one commit after SIGKILL.
+
+### Decisions this plan waits on
+
+1. **R4: B, C, or C now and B as the design.** My recommendation: C now (it
+   is what we can do tomorrow and it tests R1–R3 on Docker), B as the design
+   the spec commits to.
+2. **R7 #4509**: section as of the node's block, or the repair as the design.
+3. **R6**: the graceful stop as the whole-restart test's normal form.
 
 ## The critical path
 
