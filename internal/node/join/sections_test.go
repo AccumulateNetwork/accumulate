@@ -116,21 +116,37 @@ func gateOver(t *testing.T, node *database.Database, srcs ...pull.Source) *secti
 	return x
 }
 
+// consistentForger is a peer whose own tree holds alice with another
+// balance: its pages, its states and their leaves all agree, so every check of
+// an account against its leaf passes, and only the section's hash -- against
+// the marker the node holds from the signed top -- tells it from the truth
+// (#4485 review, finding 2).
+func consistentForger(t *testing.T, alice *url.URL) named {
+	here := protocol.PartitionUrl("BVN0")
+	liar := peerStore(t)
+	putLedger(t, liar, here, 10)
+	putTokens(t, liar, alice, 1000)
+	putTokens(t, liar, protocol.AccountUrl("bob", "tokens"), 6)
+	return named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: liar, Partition: "BVN0"})}, name: "consistent forger"}
+}
+
 // TestAForgedSectionIsRefused — #4485, executor spec, "Sync", §3a: once the
 // root has matched, a section is loaded as of the block the node last
 // committed, its leaves must hash to the marker's value, and each account's
 // state to its leaf, or the answer is refused and the next peer asked. A peer
-// that serves another leaf, and one that serves another body with a leaf
-// rebuilt to match it, are both refused; with no other peer the block is
-// held, and nothing of what they served is written.
+// that serves another leaf, one that serves another body with a leaf rebuilt
+// to match it, and one whose pages, states and leaves are all consistent with
+// a tree that is not the network's are all refused; with no other peer the
+// block is held, and nothing of what they served is written.
 func TestAForgedSectionIsRefused(t *testing.T) {
 	peer, node, alice := sectionNotLoaded(t)
 	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}, name: "honest"}
 	pageForger := forgedPage{Source: honest.Source, name: "forged page"}
 	stateForger := forgedState{Source: honest.Source, name: "forged state"}
+	liar := consistentForger(t, alice)
 	before := rootIn(t, node)
 
-	for _, forger := range []pull.Source{pageForger, stateForger} {
+	for _, forger := range []pull.Source{pageForger, stateForger, liar} {
 		x := gateOver(t, node, forger)
 		require.True(t, x.NotLoaded(database.SectionOfAccount(alice)))
 
@@ -150,7 +166,7 @@ func TestAForgedSectionIsRefused(t *testing.T) {
 	}
 
 	// A forger, then an honest peer: the section is the honest peer's.
-	x := gateOver(t, node, pageForger, stateForger, honest)
+	x := gateOver(t, node, pageForger, stateForger, liar, honest)
 	b := node.BeginExecuting(true)
 	defer b.Discard()
 	var acct *protocol.TokenAccount
