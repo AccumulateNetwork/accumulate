@@ -8,6 +8,7 @@ package database_test
 
 import (
 	"math/big"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,7 @@ type peerGate struct {
 }
 
 func (g *peerGate) NotLoaded(s bpt.Section) bool { _, ok := g.notLoaded[s]; return ok }
+func (g *peerGate) AnyNotLoaded() bool           { return len(g.notLoaded) > 0 }
 
 func (g *peerGate) Load(batch *Batch, s bpt.Section, _ bool) error {
 	g.loads++
@@ -239,4 +241,67 @@ func TestAValidationLoadsWhatItReadsAndKeepsNothing(t *testing.T) {
 	defer r.Discard()
 	_, err := r.Account(alice).Main().Get()
 	require.ErrorIs(t, err, errors.NotFound, "a validation's load was kept")
+}
+
+// countingGate is a gate with no section not loaded that counts how often a
+// read asked it about one.
+type countingGate struct{ asked atomic.Int64 }
+
+func (g *countingGate) NotLoaded(bpt.Section) bool         { g.asked.Add(1); return false }
+func (*countingGate) AnyNotLoaded() bool                   { return false }
+func (*countingGate) Load(*Batch, bpt.Section, bool) error { return nil }
+func (*countingGate) Committed([]bpt.Section)              {}
+func (*countingGate) Opened(*Batch)                        {}
+
+// TestTheGateCostsNothingWhenNoSectionIsNotLoaded — #4485 review, finding 6.
+// Every node past genesis runs with a gate for the life of its process, and
+// almost all of that life no section is not loaded. Then a read of an account
+// must not hash its key or ask the gate: the gate is a no-op.
+func TestTheGateCostsNothingWhenNoSectionIsNotLoaded(t *testing.T) {
+	db := OpenInMemory(nil)
+	db.SetObserver(NewDatabaseObserver())
+	alice := protocol.AccountUrl("alice", "tokens")
+	putToken(t, db, alice, 5)
+	gate := new(countingGate)
+	db.SetSectionGate(gate)
+
+	for _, b := range []*Batch{db.Begin(false), db.BeginExecuting(true), db.BeginLoading(false)} {
+		var a *protocol.TokenAccount
+		require.NoError(t, b.Account(alice).Main().GetAs(&a))
+		_, err := b.Account(protocol.AccountUrl("nobody", "x")).Main().Get()
+		require.ErrorIs(t, err, errors.NotFound)
+		b.Discard()
+	}
+	require.Zero(t, gate.asked.Load(), "a read asked the gate about a section with no section not loaded")
+}
+
+// BenchmarkAnAccountReadWithNoSectionNotLoaded is what the gate costs a read
+// on a node that has loaded every section, against a node with no gate.
+func BenchmarkAnAccountReadWithNoSectionNotLoaded(b *testing.B) {
+	alice := protocol.AccountUrl("alice", "tokens")
+	for _, gated := range []bool{false, true} {
+		name := "ungated"
+		if gated {
+			name = "gated"
+		}
+		b.Run(name, func(b *testing.B) {
+			db := OpenInMemory(nil)
+			db.SetObserver(NewDatabaseObserver())
+			putToken(&testing.T{}, db, alice, 5)
+			if gated {
+				db.SetSectionGate(new(countingGate))
+			}
+			batch := db.BeginExecuting(false)
+			defer batch.Discard()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				// A fresh child batch, so the read reaches the store.
+				c := batch.Begin(false)
+				if _, err := c.Account(alice).Main().Get(); err != nil {
+					b.Fatal(err)
+				}
+				c.Discard()
+			}
+		})
+	}
 }

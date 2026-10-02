@@ -30,8 +30,15 @@ import (
 
 // A SectionGate knows which sections the node has not loaded, and loads one.
 type SectionGate interface {
+	// AnyNotLoaded reports whether any section is not loaded. It is called
+	// on every read of an account's records, and must be an atomic load:
+	// when it is false the read is not checked further, so a node that has
+	// loaded every section pays nothing per read (#4485 review, finding 6).
+	AnyNotLoaded() bool
+
 	// NotLoaded reports whether the section is not loaded. It is called on
-	// every read of an account's records, and must be cheap.
+	// every read of an account's records while any section is not loaded,
+	// and must be cheap.
 	NotLoaded(bpt.Section) bool
 
 	// Load loads the section into the batch a block executes in: the
@@ -132,9 +139,10 @@ type gatedChangeSet struct {
 	// writable is whether the change set can take what a load writes; a
 	// read-only one (a validation's) holds it in overlay instead, and it is
 	// discarded with the batch.
-	writable bool
-	ovMu     sync.Mutex
-	overlay  map[[32]byte]memory.Entry
+	writable   bool
+	ovMu       sync.Mutex
+	overlay    map[[32]byte]memory.Entry
+	hasOverlay atomic.Bool
 
 	// loading serializes loads; mu guards loaded and failed, and is not
 	// held while a load reads through this change set.
@@ -146,7 +154,7 @@ type gatedChangeSet struct {
 }
 
 func (c *gatedChangeSet) Get(key *record.Key) ([]byte, error) {
-	if key.Len() >= 2 && key.Get(0) == "Account" {
+	if c.gate.AnyNotLoaded() && key.Len() >= 2 && key.Get(0) == "Account" {
 		if u, ok := key.Get(1).(*url.URL); ok {
 			s := bpt.SectionOf(key.SliceJ(2).Hash())
 			if c.gate.NotLoaded(s) {
@@ -163,6 +171,9 @@ func (c *gatedChangeSet) Get(key *record.Key) ([]byte, error) {
 // raw reads past the gate: what a load wrote into a read-only change set,
 // then the change set.
 func (c *gatedChangeSet) raw(key *record.Key) ([]byte, error) {
+	if !c.hasOverlay.Load() {
+		return c.ChangeSet.Get(key)
+	}
 	c.ovMu.Lock()
 	e, ok := c.overlay[key.Hash()]
 	c.ovMu.Unlock()
@@ -184,6 +195,7 @@ func (c *gatedChangeSet) putOverlay(entries map[[32]byte]memory.Entry) error {
 	for k, e := range entries {
 		c.overlay[k] = e
 	}
+	c.hasOverlay.Store(len(c.overlay) > 0)
 	return nil
 }
 

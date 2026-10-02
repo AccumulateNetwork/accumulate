@@ -313,6 +313,12 @@ account's records against it:
 - **Every other batch is refused** with `NotReady`.
 - **The join's own batches pass**: they are what writes the sections.
 
+The check costs nothing when no section is not loaded, which is every node's
+state once its fill is done and the whole life of a node that never joined: a
+read first asks one atomic count, and only while it is not zero is the
+account's key hashed and its section looked up
+(`TestTheGateCostsNothingWhenNoSectionIsNotLoaded`).
+
 A marker is a BPT leaf whose key is a bare key hash with no account behind it.
 An iteration of the tree's accounts meets it, and a page of leaves that would
 carry one is refused rather than served.

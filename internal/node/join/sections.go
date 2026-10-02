@@ -49,8 +49,9 @@ type sections struct {
 	// holds the block.
 	timeout time.Duration
 
-	notLoaded [bpt.Sections]atomic.Bool
-	turn      atomic.Uint64
+	notLoaded  [bpt.Sections]atomic.Bool
+	nNotLoaded atomic.Int64 // how many of notLoaded are set
+	turn       atomic.Uint64
 
 	mu   sync.Mutex
 	hash map[bpt.Section][32]byte
@@ -123,7 +124,7 @@ func (x *sections) read() error {
 	x.opening = map[bpt.Section]bool{}
 	for i := range x.notLoaded {
 		_, ok := hash[bpt.Section(i)]
-		x.notLoaded[i].Store(ok)
+		x.setNotLoaded(bpt.Section(i), ok)
 	}
 	x.done = len(hash) == 0
 	mSectionsNotLoaded.WithLabelValues(x.label).Set(float64(len(hash)))
@@ -133,6 +134,23 @@ func (x *sections) read() error {
 // NotLoaded implements [database.SectionGate].
 func (x *sections) NotLoaded(s bpt.Section) bool {
 	return x != nil && x.notLoaded[s].Load()
+}
+
+// AnyNotLoaded implements [database.SectionGate].
+func (x *sections) AnyNotLoaded() bool {
+	return x != nil && x.nNotLoaded.Load() > 0
+}
+
+// setNotLoaded sets whether a section is not loaded, and the count with it.
+func (x *sections) setNotLoaded(s bpt.Section, v bool) {
+	if x.notLoaded[s].Swap(v) == v {
+		return
+	}
+	if v {
+		x.nNotLoaded.Add(1)
+	} else {
+		x.nNotLoaded.Add(-1)
+	}
 }
 
 // count is how many sections are not loaded.
@@ -180,7 +198,7 @@ func (x *sections) pulled(s bpt.Section) {
 	defer x.mu.Unlock()
 	delete(x.opening, s)
 	_, marked := x.hash[s]
-	x.notLoaded[s].Store(marked)
+	x.setNotLoaded(s, marked)
 }
 
 // forgetOpening forgets what an abandoned pull opened.
@@ -192,7 +210,7 @@ func (x *sections) forgetOpening() {
 	defer x.mu.Unlock()
 	for s := range x.opening {
 		_, marked := x.hash[s]
-		x.notLoaded[s].Store(marked)
+		x.setNotLoaded(s, marked)
 	}
 	x.opening = map[bpt.Section]bool{}
 }
@@ -338,7 +356,7 @@ func (x *sections) Committed(list []bpt.Section) {
 	for _, s := range list {
 		delete(x.hash, s)
 		delete(x.ready, s)
-		x.notLoaded[s].Store(false)
+		x.setNotLoaded(s, false)
 		urls = append(urls, x.pending[s]...)
 		delete(x.pending, s)
 	}
