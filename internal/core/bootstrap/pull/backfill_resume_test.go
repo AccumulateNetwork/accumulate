@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -238,4 +239,81 @@ func TestAnUnfinishedWalkBelowExecutedEntriesIsStillFinished(t *testing.T) {
 		}
 	}
 	requireWhole(t, src, dst, u)
+}
+
+// mixedSource serves another chain's entries below below and the node's own
+// from there up: a peer whose open set is right and whose history is not.
+type mixedSource struct {
+	*pagedSource
+	other *dbSource
+	below uint64
+}
+
+func (s *mixedSource) QueryChainEntries(ctx context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+	good, err := s.pagedSource.QueryChainEntries(ctx, u, q)
+	if err != nil {
+		return nil, err
+	}
+	bad, err := s.other.QueryChainEntries(ctx, u, q)
+	if err != nil {
+		return nil, err
+	}
+	for i, r := range good.Records {
+		if r.Index < s.below {
+			good.Records[i] = bad.Records[i]
+		}
+	}
+	return good, nil
+}
+
+// TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain — #4493. A peer serves
+// another chain below the node's open set: the entries replayed do not
+// reproduce the head, and the walk fails. What it wrote is not trusted: the
+// next walk asks for every entry again -- and when that walk is interrupted
+// in turn, the one after asks only for what the refetch had not reached.
+func TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain(t *testing.T) {
+	const n = 2000
+	u := protocol.DnUrl().JoinPath("anchors")
+	src := newObservedDB(t)
+	buildChain(t, src, u, n, 0x48)
+	other := newObservedDB(t)
+	buildChain(t, other, u, n, 0x49)
+	dst := newObservedDB(t)
+	takeHeads(t, src, dst, u)
+
+	liar := &mixedSource{pagedSource: newPagedSource(src), other: &dbSource{db: other}, below: n &^ 255}
+	err := Backfill(context.Background(), []Source{liar}, dst, u, 256, nil)
+	if err == nil {
+		t.Fatal("entries that do not reproduce the head were kept")
+	}
+	if !syncedOf(t, dst, u).Refetch {
+		t.Fatal("the record does not say what is held is not trusted")
+	}
+
+	s := newPagedSource(src)
+	s.before = func(page int, _, _ uint64) error {
+		if page == 4 {
+			return errInterrupted
+		}
+		return nil
+	}
+	if err := Backfill(context.Background(), []Source{s}, dst, u, 256, nil); err == nil {
+		t.Fatal("the interruption did not interrupt")
+	}
+	s.mu.Lock()
+	s.before = nil
+	s.mu.Unlock()
+	if err := Backfill(context.Background(), []Source{s}, dst, u, 256, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, twice := s.count(); twice != 0 {
+		t.Fatalf("the refetch asked for %d entries twice", twice)
+	}
+	if len(s.asked) != n {
+		t.Fatalf("the refetch asked for %d entries of %d", len(s.asked), n)
+	}
+	requireWhole(t, src, dst, u)
+	if got := syncedOf(t, dst, u); got.Refetch || got.Synced != n {
+		t.Fatalf("the record of a chain held whole is %+v", got)
+	}
 }

@@ -196,13 +196,12 @@ func (w *chainWalk) load(store Store) error {
 		return errors.UnknownError.WithFormat("load the synced entries of %s: %w", w.h.name, err)
 	}
 	w.rec = rec.Copy()
-	if w.rec.Refetch {
-		// What was held did not reproduce the head: trust none of it.
-		w.rec.Spans = nil
-		w.floor = 0
-		return nil
-	}
 	w.floor = min(w.rec.Synced, w.top)
+	if w.rec.Refetch {
+		// What was held did not reproduce the head: trust none of it but
+		// the spans walks have brought in since.
+		w.floor = 0
+	}
 	var spans []*database.SyncedSpan
 	for _, s := range w.rec.Spans {
 		if s.Low < s.Top && s.Top <= w.top && s.Low >= w.floor {

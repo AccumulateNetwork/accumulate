@@ -658,7 +658,9 @@ from the last mark point at or below where it stopped, they and the node's
 open set must reproduce the head, and the replay writes the mark points and
 intermediates the elements alone do not. Entries that do not reproduce it are
 not trusted again: the record says so, and the next walk asks for every entry
-below the head, overwriting position by position. **The backfill
+below the head, overwriting position by position; what that walk brings in
+is trusted, so a refetch interrupted in turn resumes like any walk
+(`TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain`). **The backfill
 runs from the newest entry to the oldest, and never asks for an entry the
 database already holds; a resync stops at the first entry that exists**
 (Paul, 2026-10-02): a retry after a failure, or a restart, resumes with what
