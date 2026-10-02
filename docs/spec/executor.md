@@ -1405,7 +1405,11 @@ account (or chain) and block: `A block left an account other than its record;
 the record's state stands` (block, account, local and record leaf, peer, and
 why when it is not the plain case) or `A block changed a chain other than its
 record; the record stands`. An account the record wrote is taken by its chain
-heads and backfilled (§2).
+heads and backfilled (§2), and the message behind each entry of its open mark
+sets that it does not hold is taken with it (`pull.KeepChainMessages`; one it
+cannot take is the backfill's): an entry the record brought in is one this
+node did not execute. A test of the root watch's repair turns the overlap off
+(`SetOverlapBlocks(0)`), since the overlap settles what the repair would.
 
 *K and the clean run.* The overlap ends after **eight** blocks in a row with no
 difference (`join.OverlapBlocks`): a handoff executes the groups it collected
