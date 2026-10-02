@@ -528,7 +528,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// never joined.
 	membership := dagbft.NewMembership(s.Partition.ID, validatorKey[32:])
 	membership.SetGlobals(globals)
-	watching := !joining && !membership.CanPropose()
+	watching := watchesFromGenesis(joining, membership)
 	if !joining {
 		// Said out loud, because it is the one condition under which a node
 		// executes without asking anyone (executor spec, "Sync", step 2), and
@@ -689,6 +689,17 @@ func joinOptions(partition string, joinState *join.PulledState, buffer join.Buff
 		Peers:     peers,
 		Logger:    slog.Default(),
 	}
+}
+
+// watchesFromGenesis reports whether a node that executes from genesis is
+// watched rather than trusted (join.Watch; #4506): one that is not joining
+// and is known NOT to be a validator of its partition. A node whose
+// committee is not known -- the globals did not arrive in time -- is left
+// alone: a validator mistaken for a follower would be demoted and stop
+// producing on the first mismatch, and nothing checks a validator against
+// anchors it signs itself.
+func watchesFromGenesis(joining bool, m *dagbft.Membership) bool {
+	return !joining && m.Known() && !m.CanPropose()
 }
 
 // nodeStateOf is the node state a node's services are handed: the join's own
