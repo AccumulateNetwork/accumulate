@@ -869,6 +869,11 @@ func (s *DAGBFTService) loadGenesisIfNeeded(db *database.Database, genesisPath s
 var (
 	_ Service    = (*DAGBFTService)(nil)
 	_ prestarter = (*DAGBFTService)(nil)
+
+	// The join's buffer is the DAG service, and the join learns of a block
+	// the service held past its bound only through HeldBuffer (#4485).
+	_ join.Buffer     = (*dagbft.Service)(nil)
+	_ join.HeldBuffer = (*dagbft.Service)(nil)
 )
 
 // nodeMustJoin reports whether this node must take a running validator's
