@@ -51,6 +51,31 @@ func (s *Sim) checkpoint(sn *simNode, node *consensus.Node, group []*types.Certi
 	}
 }
 
+// checkpointNow writes the node's consensus position as it stands, for the
+// block its executor is at, keeping the previous checkpoint.
+func (s *Sim) checkpointNow(sn *simNode) {
+	if s.cfg.StateDir == "" || sn.cpCur == nil {
+		return
+	}
+	cp := sn.n().CheckpointAt(0)
+	cp.BlockIndex = sn.height.Load()
+	if sn.lastSaved != nil {
+		_ = sn.cpPrev.Save(sn.lastSaved)
+	}
+	if err := sn.cpCur.Save(cp); err == nil {
+		sn.lastSaved = cp
+	}
+}
+
+func contains(set []*simNode, sn *simNode) bool {
+	for _, x := range set {
+		if x == sn {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Sim) startConsume(ctx context.Context, sn *simNode) {
 	cctx, cancel := context.WithCancel(ctx)
 	sn.stopConsume = cancel
@@ -92,18 +117,50 @@ func (s *Sim) targets(part string, vals []int) []*simNode {
 }
 
 func (s *Sim) restart(nodes []*simNode, executorFirst time.Duration) error {
+	return s.restartStaggered(nodes, nil, 0, executorFirst)
+}
+
+// restartStaggered is restart with the nodes in first stopped gap before the
+// rest, as a network whose containers stop over a second loses two of a
+// partition's four validators while the other two run on: those two author
+// the next round, no vote certifies it, and their executors checkpoint the
+// blocks already ordered (run 20261002T090546Z, BVN3 at round 25839).
+func (s *Sim) restartStaggered(nodes, first []*simNode, gap, executorFirst time.Duration) error {
 	if s.cfg.StateDir == "" {
 		return fmt.Errorf("restart needs Config.StateDir")
 	}
-	for _, sn := range nodes {
-		sn.stopConsume()
-		<-sn.consumeDone
+	stop := func(set []*simNode) {
+		for _, sn := range set {
+			sn.stopConsume()
+			<-sn.consumeDone
+		}
+		time.Sleep(executorFirst)
+		for _, sn := range set {
+			old := sn.n()
+			old.Stop()
+			sn.stoppedEquiv += old.DAG().Equivocations()
+		}
 	}
-	time.Sleep(executorFirst)
-	for _, sn := range nodes {
-		old := sn.n()
-		old.Stop()
-		sn.stoppedEquiv += old.DAG().Equivocations()
+	if len(first) > 0 {
+		stop(first)
+		time.Sleep(gap)
+		// The survivors' executors checkpoint the block they stand at, as
+		// the service does per block: a header authored since the last
+		// certified round is now on disk ahead of a checkpoint.
+		for _, sn := range nodes {
+			if !contains(first, sn) {
+				s.checkpointNow(sn)
+			}
+		}
+		var rest []*simNode
+		for _, sn := range nodes {
+			if !contains(first, sn) {
+				rest = append(rest, sn)
+			}
+		}
+		stop(rest)
+	} else {
+		stop(nodes)
 	}
 	for _, sn := range nodes {
 		node, err := consensus.NewNode(sn.cfg, sn.committee, s.hosts[sn.val], sn.ps)

@@ -8,6 +8,7 @@ package consim
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -21,10 +22,22 @@ import (
 // stall, on nodes that executed different blocks, and on any equivocation.
 func runRestart(t *testing.T, executorFirst time.Duration, vals ...int) {
 	t.Helper()
+	runRestartOf(t, Restart{Part: "BVN1", Vals: vals, AtHeight: 40, ExecutorFirst: executorFirst}, nil)
+}
+
+// runRestartOf is runRestart with the restart given whole, and the
+// configuration adjusted by tweak.
+func runRestartOf(t *testing.T, r Restart, tweak func(*Config)) {
+	t.Helper()
+	vals := r.Vals
 	if testing.Short() {
 		t.Skip("runs the full consensus stack for tens of seconds")
 	}
-	sim, err := New(Config{
+	if os.Getenv("CONSIM_DEBUG") != "" {
+		// The vote gates say why a header is not voted only at Debug.
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	}
+	cfg := Config{
 		BVNs:             1,
 		ValidatorsPerBVN: 4,
 		TPS:              20,
@@ -35,9 +48,13 @@ func runRestart(t *testing.T, executorFirst time.Duration, vals ...int) {
 		Duration:         3 * time.Minute,
 		StallAfter:       20 * time.Second,
 		StateDir:         t.TempDir(),
-		Restarts:         []Restart{{Part: "BVN1", Vals: vals, AtHeight: 40, ExecutorFirst: executorFirst}},
+		Restarts:         []Restart{r},
 		Out:              os.Stdout,
-	})
+	}
+	if tweak != nil {
+		tweak(&cfg)
+	}
+	sim, err := New(cfg)
 	if err != nil {
 		t.Fatalf("build sim: %v", err)
 	}
@@ -94,6 +111,28 @@ func TestRestartOneNode(t *testing.T) {
 // (#4159 stall 3, #4448).
 func TestRestartDoesNotReauthorARound(t *testing.T) {
 	runRestart(t, 300*time.Millisecond, 0, 1, 3)
+}
+
+// TestRestartAfterTwoNodesStopFirst stops two of BVN1's four validators,
+// lets the other two run on for a moment, then stops them too and restarts
+// all four from their checkpoints. The survivors author the round after
+// the last certified one, with batches, and no vote can certify it; the
+// blocks already ordered are still executed and checkpointed, and before
+// the fix each checkpoint's Retain removed every batch no certificate
+// named -- the restored header came back without its payload, no peer
+// could vote for it, its author could not author the round again, and the
+// partition held at two certificates of the three it needed (run
+// 20261002T090546Z, BVN3 at round 25839, block 12920).
+func TestRestartAfterTwoNodesStopFirst(t *testing.T) {
+	runRestartOf(t,
+		Restart{Part: "BVN1", Vals: []int{0, 1, 2, 3}, AtHeight: 40, StopFirst: []int{2, 3}, StopFirstFor: 500 * time.Millisecond},
+		func(c *Config) {
+			// Rounds slow enough, under load enough, that a header carries
+			// a batch: at 5 ms rounds and 20 tx/s almost every header is
+			// empty, and an empty header needs no batch to be voted.
+			c.TPS = 200
+			c.MinRoundInterval = 20 * time.Millisecond
+		})
 }
 
 // runNetworkRestart restarts every validator of every partition together, as

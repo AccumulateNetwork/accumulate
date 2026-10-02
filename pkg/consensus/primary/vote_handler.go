@@ -414,29 +414,41 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// batches arrive via gossip and the author rebroadcasts the header until
 	// it reaches quorum, so we vote on a later rebroadcast once we have them —
 	// the same defer-until-available shape as the missing-parent gate above.
+	var missingBatches []types.BatchDigest
 	for _, entry := range header.Payload {
 		if !p.haveBatch(entry.Digest) {
-			// Pin every batch this header names -- including the ones we
-			// already hold. Those are the ones eviction takes while we wait
-			// for this one, which is what turned a deferred vote into a
-			// livelock (#4165).
-			p.pinHeaderBatches(headerDigest, header)
-
-			slog.Debug("Missing batch for header — deferring vote and fetching",
-				"partition", p.config.Partition,
-				"headerDigest", headerDigest.String(),
-				"batch", entry.Digest.String(),
-				"round", header.Round)
-			// Deferring alone is not enough: batch bytes are broadcast once
-			// at creation and (before #4159) NOTHING re-sent them — the
-			// author's 1s header rebroadcast re-tests a condition that
-			// could never become true, and the header could never reach
-			// quorum. Actively pull the batch (the author certainly holds
-			// it — own batches are un-evictable); the next rebroadcast
-			// then finds it present and the vote goes out.
-			p.requestMissingBatch(entry.Digest)
-			return // missing batch — do not certify data we do not have
+			missingBatches = append(missingBatches, entry.Digest)
 		}
+	}
+	if len(missingBatches) > 0 {
+		// Pin every batch this header names -- including the ones we
+		// already hold. Those are the ones eviction takes while we wait
+		// for this one, which is what turned a deferred vote into a
+		// livelock (#4165).
+		p.pinHeaderBatches(headerDigest, header)
+
+		slog.Debug("Missing batches for header — deferring vote and fetching",
+			"partition", p.config.Partition,
+			"headerDigest", headerDigest.String(),
+			"missing", len(missingBatches),
+			"of", len(header.Payload),
+			"round", header.Round)
+		// Deferring alone is not enough: batch bytes are broadcast once
+		// at creation and (before #4159) NOTHING re-sent them — the
+		// author's 1s header rebroadcast re-tests a condition that
+		// could never become true, and the header could never reach
+		// quorum. Actively pull the batches (the author certainly holds
+		// them — own batches are un-evictable); the next rebroadcast
+		// then finds them present and the vote goes out. Every missing
+		// batch, not the first: a header authored after a restart
+		// re-proposes every batch its node accumulated while it was down,
+		// hundreds of them, and one fetch per rebroadcast made certifying
+		// it a matter of minutes (run 20261002T090546Z's shape in
+		// TestRestartAfterTwoNodesStopFirst).
+		for _, d := range missingBatches {
+			p.requestMissingBatch(d)
+		}
+		return // missing batches — do not certify data we do not have
 	}
 
 	// Every batch is here, so nothing is waiting on them any more.

@@ -162,7 +162,12 @@ type Restart struct {
 	Vals          []int
 	AtHeight      uint64
 	ExecutorFirst time.Duration
-	done          bool
+	// StopFirst names the nodes of Vals stopped StopFirstFor before the
+	// rest: the survivors run on without a quorum, author rounds no vote
+	// can certify, and checkpoint the blocks already ordered.
+	StopFirst    []int
+	StopFirstFor time.Duration
+	done         bool
 }
 
 // execCost reports the per-transaction execution cost for one partition.
