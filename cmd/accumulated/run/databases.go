@@ -7,6 +7,7 @@
 package run
 
 import (
+	"fmt"
 	"reflect"
 	"sync"
 
@@ -43,7 +44,14 @@ func (inst *Instance) database(store keyvalue.Beginner, logger logging.Logger) *
 	d := &root.databases
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if reflect.TypeOf(store).Comparable() {
+	if !reflect.TypeOf(store).Comparable() {
+		// Every caller over this store must share one database, or the section
+		// gate the join installs covers only one of them (#4497); a store that
+		// cannot be compared cannot be shared, so it is refused loudly rather
+		// than given a second, ungated database.
+		panic(fmt.Sprintf("storage %T cannot be shared across the node's services", store))
+	}
+	{
 		for _, o := range d.dbs {
 			if reflect.TypeOf(o.store) == reflect.TypeOf(store) && o.store == store {
 				return o.db

@@ -111,6 +111,16 @@ var mOverlapDifferences = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help:      "Accounts and chains a block executed during the overlap after a join left other than the partition's block-ledger record, which then stood",
 }, []string{"partition"})
 
+// mOverlapReturns counts the blocks at which an overlap sent the node back to
+// the block ledger: a node that returns on every block and never reaches its
+// clean run is a difference no record repairs, and shows here.
+var mOverlapReturns = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "overlap_returns_total",
+	Help:      "Blocks at which the overlap after a join found execution differing from the block-ledger record and sent the node back to the block ledger",
+}, []string{"partition"})
+
 // start begins the overlap for the blocks after block, the block the state
 // was proven at. A match that hands off is followed by them; one that does
 // not is followed by another match, which begins it again.
@@ -665,6 +675,7 @@ func (o *overlap) takeMismatch() (uint64, bool) {
 	o.mismatch = 0
 	o.active = false
 	o.returns = append(o.returns, n)
+	mOverlapReturns.WithLabelValues(o.label).Inc()
 	return n, true
 }
 
