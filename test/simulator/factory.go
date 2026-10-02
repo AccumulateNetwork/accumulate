@@ -96,6 +96,9 @@ type nodeFactory struct {
 	id      int
 	network *accumulated.NodeInit
 
+	// partition is the partition the node is built into.
+	partition *Partition
+
 	// State
 	logger     logging.Logger
 	_nodeKey   []byte
@@ -180,6 +183,7 @@ func (f *networkFactory) Build(s *Simulator) *Partition {
 }
 
 func (f *nodeFactory) Build(p *Partition) *Node {
+	f.partition = p
 	n := new(Node)
 	n.id = f.id
 	n.network = f.network
@@ -531,6 +535,12 @@ func (node *nodeFactory) newApp(exec execute.Executor, restore consensus.Restore
 		EventBus: node.getEventBus(),
 		Restore:  restore,
 		Join:     &node.join,
+	}
+	if p := node.partition; p != nil {
+		self := node.id
+		app.Redirect = func(env *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+			return p.redirectCheck(self, env)
+		}
 	}
 	node.join.produce = app.Produce
 	return app

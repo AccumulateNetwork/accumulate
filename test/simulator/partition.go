@@ -132,6 +132,35 @@ func (p *Partition) RestartNode(i int) {
 	n.nodeState.machine.Store(state.Machine())
 }
 
+// redirectCheck is the submit service's redirect (#4485): node self's check
+// was refused NotReady. If self has sections of its state tree not loaded,
+// the envelope is validated at a node that holds every section and is not
+// joining, and that node's answer is self's; that node validates locally,
+// so the redirect is one hop. A node with every section loaded, or a
+// submission no node can validate, is refused.
+func (p *Partition) redirectCheck(self int, env *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+	refused := errors.NotReady.WithFormat("no node of %s that holds every section can validate this", p.ID)
+	if js := p.nodes[self].joinState; js == nil || js.SectionsNotLoaded() == 0 {
+		return nil, refused
+	}
+	for i, n := range p.nodes {
+		if i == self || n.stopped || n.executor == nil || n.join.Joining() {
+			continue
+		}
+		if n.joinState != nil && n.joinState.SectionsNotLoaded() > 0 {
+			continue
+		}
+		res, err := n.executor.Validate(env.Copy(), false)
+		if err == nil {
+			return res, nil
+		}
+		if errors.Code(err) != errors.NotReady {
+			return nil, err
+		}
+	}
+	return nil, refused
+}
+
 // ReinstallNode stands node i where a new install stands: its store is
 // emptied -- every key deleted -- and the partition's genesis snapshot loaded
 // into it, as the daemon does for an empty database (loadGenesisIfNeeded,

@@ -246,11 +246,12 @@ func TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge(t *testing.T) {
 			r := read()
 			handedOff = &r
 			provenAfter = buf.handedOff
-			helpers.Update(t, p.NodeDatabase(joiner), func(batch *database.Batch) {
-				var tokens *protocol.TokenAccount
-				require.NoError(t, batch.Account(bob.JoinPath("tokens")).Main().GetAs(&tokens))
-				tokens.Balance.Add(&tokens.Balance, big.NewInt(7))
-				require.NoError(t, batch.Account(bob.JoinPath("tokens")).Main().Put(tokens))
+			// The damage is an account no peer holds, written past the
+			// gate: an account that exists may be in a section the node
+			// still holds by its hash alone (#4485).
+			helpers.Update(t, p.NodeDatabase(joiner).Ungated(), func(batch *database.Batch) {
+				u := protocol.AccountUrl("damage", "tokens")
+				require.NoError(t, batch.Account(u).Main().Put(&protocol.TokenAccount{Url: u, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(7)}))
 				require.NoError(t, batch.UpdateBPT())
 			})
 		case handedOff != nil && buf.handedOff > provenAfter && rejoined == nil && machine.State() == nodestate.StateActive:

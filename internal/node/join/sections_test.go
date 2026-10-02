@@ -150,7 +150,7 @@ func TestAForgedSectionIsRefused(t *testing.T) {
 		x := gateOver(t, node, forger)
 		require.True(t, x.NotLoaded(database.SectionOfAccount(alice)))
 
-		b := node.BeginExecuting(true)
+		b := node.BeginExecuting()
 		_, err := b.Account(alice).Main().Get()
 		require.Error(t, err, "%v: a forged section was loaded", forger)
 		require.True(t, errors.Is(err, errors.NotReady), "%v: a section no peer served honestly read as %v", forger, err)
@@ -167,7 +167,7 @@ func TestAForgedSectionIsRefused(t *testing.T) {
 
 	// A forger, then an honest peer: the section is the honest peer's.
 	x := gateOver(t, node, pageForger, stateForger, liar, honest)
-	b := node.BeginExecuting(true)
+	b := node.BeginExecuting()
 	defer b.Discard()
 	var acct *protocol.TokenAccount
 	require.NoError(t, b.Account(alice).Main().GetAs(&acct))
@@ -187,7 +187,7 @@ func TestABlockDiscardedAfterALoadLeavesNothingPending(t *testing.T) {
 	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}, name: "honest"}
 	x := gateOver(t, node, honest)
 
-	b := node.BeginExecuting(true)
+	b := node.BeginExecuting()
 	_, err := b.Account(alice).Main().Get()
 	require.NoError(t, err)
 	b.Discard()
@@ -210,7 +210,7 @@ func TestALoadOfASectionCommittedSinceTheBatchBeganIsNotTakenAsLoaded(t *testing
 	x := gateOver(t, node, honest)
 	s := database.SectionOfAccount(alice)
 
-	b := node.BeginExecuting(true)
+	b := node.BeginExecuting()
 	h, err := b.BPT().Get(s.MarkerKey())
 	require.NoError(t, err)
 	_, err = b.Account(alice).Main().Get()
@@ -222,16 +222,16 @@ func TestALoadOfASectionCommittedSinceTheBatchBeganIsNotTakenAsLoaded(t *testing
 	// A view from before the commit: the in-memory store is not isolated,
 	// so the batch holds the marker in its own tree, as an isolated store's
 	// older view does.
-	stale := node.BeginExecuting(true)
+	stale := node.BeginExecuting()
 	defer stale.Discard()
 	require.NoError(t, stale.BPT().Insert(s.MarkerKey(), h))
 
-	err = x.Load(stale, s, true)
+	err = x.Load(stale, s)
 	require.Error(t, err, "a batch whose view holds the marker took the section as loaded")
 	require.ErrorIs(t, err, errors.NotReady)
 
 	// A batch begun after the commit holds the section: loaded.
-	fresh := node.BeginExecuting(true)
+	fresh := node.BeginExecuting()
 	defer fresh.Discard()
-	require.NoError(t, x.Load(fresh, s, true))
+	require.NoError(t, x.Load(fresh, s))
 }

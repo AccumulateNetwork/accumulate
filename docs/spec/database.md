@@ -310,10 +310,9 @@ account's records against it:
   section the set no longer holds is loaded for a batch only if the batch's
   own tree holds no marker for it: a view older than the commit that loaded
   it is refused (`NotReady`), not read as holding it.
-- **A batch a validation reads loads it too**, from a peer's current state,
-  and keeps what it loaded in the read-only batch's own overlay, discarded
-  with it.
-- **Every other batch is refused** with `NotReady`.
+- **Every other batch is refused** with `NotReady` — a validation's
+  included: validation does not load, and the submission it refuses is
+  redirected (executor.md, "Sync", §3a; Paul, 2026-10-02).
 - **The join's own batches pass**: they are what writes the sections.
 
 The check costs nothing when no section is not loaded, which is every node's

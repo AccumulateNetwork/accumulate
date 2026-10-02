@@ -48,6 +48,11 @@ type submitterParams struct {
 	// the one fact bounding a relay to a single hop (#4366).
 	NodeState nodestate.Serving
 
+	// Sections is the join's sections not loaded, or nil for a node that
+	// holds them all: a submission whose validation needs one is redirected
+	// (#4485).
+	Sections dagbft.Sections
+
 	// ValidatorKey is the full private key. Its public half must be
 	// AuthorKey; it answers a relay's challenge (#4366 F1).
 	ValidatorKey ed25519.PrivateKey
@@ -120,6 +125,7 @@ func newSubmitterService(p submitterParams) (*dagbft.SubmitterService, error) {
 		NodeState:  p.NodeState,
 		Membership: membership,
 		Relay:      relay,
+		Sections:   p.Sections,
 	}), nil
 }
 

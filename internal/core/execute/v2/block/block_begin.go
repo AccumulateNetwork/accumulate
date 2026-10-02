@@ -34,8 +34,8 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	// The batch a block executes in loads, on its first read, a section of
 	// the state tree a joined node has not loaded yet (executor spec, "Sync",
 	// §3a; #4485).
-	if d, ok := x.Database.(interface{ BeginExecuting(bool) *database.Batch }); ok {
-		block.Batch = d.BeginExecuting(true)
+	if d, ok := x.Database.(interface{ BeginExecuting() *database.Batch }); ok {
+		block.Batch = d.BeginExecuting()
 	} else {
 		block.Batch = x.Database.Begin(true)
 	}

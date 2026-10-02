@@ -80,6 +80,10 @@ on its account ([database.md](database.md), "Isolation has a price").
 A message that reaches execution is validated again on the path above, by the
 gates that can only be evaluated with block state in hand.
 
+Validation loads nothing a joined node has not loaded: a read in a section of
+the state tree it holds by its hash alone is refused `NotReady`, and the
+submission is redirected to a node that holds it ("Sync", §3a).
+
 ### Draining
 
 A stream's messages arrive out of order. One that is not next cannot execute, so
@@ -574,8 +578,8 @@ served them. There is no as-of-H load and no retention of pre-change state:
 a section loaded while the node executes is the peer's current state, and a
 root that then differs from its anchor is repaired from the block ledger
 ("Two mismatches"); the entries an account is missing are found from its
-chains once it has caught up (DIFFERENCES E25–E26; E24, the as-of-H load, is
-built).
+chains once it has caught up (DIFFERENCES E26; E24, the as-of-H load, and E25,
+validation loading, are built).
 
 #### 2. Nothing is proven before the match, and the match is the proof
 
@@ -1160,13 +1164,22 @@ that an account does not exist.
   The fill takes only an answer that hashes to the marker: a section a block
   after H changed is loaded by the block that touches it.
 
-**Execution loads what it reads.** The batch a block executes in loads, and
-so does the batch a validation reads (the builder's decision on #4485: a
-validation judges a transaction against the latest state, and the
-simulator's nodes must agree on it). A validation's load is a peer's current
-state, not checked against the marker — the section may have moved since the
-node's last block — and it is held in the read-only batch and discarded with
-it: it decides no block. Every other reader of the store is
+**Execution loads what it reads; validation does not.** Only the batch a
+block executes in loads. A validation (the submission-time check) that reads
+an account in a section not loaded is refused `NotReady` and asks no peer
+for anything (Paul, 2026-10-02: "once synced, a node can give it a try, then
+redirect on a failure (data not loaded)"): the submit service sees the
+refusal and **redirects** the submission through the relay (#4366) to a node
+of the partition that holds every section, and answers with that node's
+answer. A node that has not loaded every section reports itself catching up
+in its consensus status, so no relay chooses it; the node a redirect reaches
+holds every section, validates locally and never redirects, so a redirect is
+one hop, and a submission no node can validate — every validator still
+filling — is refused by the relay (`NotReady`), not passed round
+(`TestASubmissionNeedingASectionNotLoadedIsRedirected`,
+`TestAValidationThatNeedsASectionNotLoadedIsRefusedAndLoadsNothing`). A
+validate-only call refused that way answers `NotReady`, and the caller asks
+another node. Every other reader of the store is
 refused an account in a section not loaded (below). The store checks each account read against the set: a read of an
 account in a section not loaded loads the section before it returns. The
 section is written into the block's batch beneath the account records, so the

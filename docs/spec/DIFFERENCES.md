@@ -494,24 +494,6 @@ rebuilt together.
 condition below it in `shouldSendAnchor`, if the assumption ever stops
 holding.
 
-### E25. Open (#4485): validation loads a peer's current state, unchecked
-
-executor.md §3a says a validation (submission-time check) loads a section it
-needs from a peer's current state, unchecked, and discards it. That sentence
-is the first builder's decision (624669231), not Paul's design, which says
-nothing about validation. It is not a consensus-safety question — validation
-decides only admission — but it downloads a whole section per check with no
-cache, and admission is then at a peer's mercy (review 2026-10-02, finding 5).
-Options for Paul: (a) refuse at submission until the fill loads the section;
-(b) load through the gate, verified and kept. The code does neither yet; it
-loads unchecked (`sections.loadForCheck`, `beginValidation`).
-
-**Decided (Paul, 2026-10-02): validation does not load.** A submission that
-needs a section the node has not loaded is redirected to another node while
-the node is loading; "once synced, a node can give it a try, then redirect on
-a failure (data not loaded)." Option (a) with redirection, not (b). To be
-built (#4485, with the redirection of #4487).
-
 ### E26. Open (#4485): a section not loaded propagates between joiners
 
 A joiner takes the top of the tree from one peer. A peer that still holds
