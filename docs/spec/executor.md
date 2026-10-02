@@ -651,10 +651,14 @@ walk and the records take an account by its chain heads and open mark set
 (`pull.Backfill`): the entries below each chain's open mark set, the mark
 points that close their sets, and the message behind every entry. It
 writes nothing at or above a chain's head, so it does not race the blocks the
-node executes; the entries are held to the node's own head, replayed from the
-first, so a peer serving another chain is refused and the next is asked. It
-streams as the pull does, a page at a time, and holds the entries to the head
-once the last page is written (#4446). **The backfill
+node executes. It streams as the pull does, a page at a time, each page
+written and dropped before the next is asked for (#4446), and holds the
+entries to the node's own head once the walk has stopped: replayed locally
+from the last mark point at or below where it stopped, they and the node's
+open set must reproduce the head, and the replay writes the mark points and
+intermediates the elements alone do not. Entries that do not reproduce it are
+not trusted again: the record says so, and the next walk asks for every entry
+below the head, overwriting position by position. **The backfill
 runs from the newest entry to the oldest, and never asks for an entry the
 database already holds; a resync stops at the first entry that exists**
 (Paul, 2026-10-02): a retry after a failure, or a restart, resumes with what
@@ -667,11 +671,39 @@ is in no leaf, no root and no anchor, and a node's agreement does not depend
 on how much history it holds. It is the account's `SyncedEntries` record, one
 per chain (internal/database model.yml): `Synced`, the max synced entry as a
 count -- every entry below it is held, with the message behind it, and was
-held to a head -- and the span of the walk under way. No account hash reads
-it (`TestTheMaxSyncedEntryIsNotState`: written and committed through the BPT
-update it changes no leaf, root or receipt, and an executed block leaves it
-as it was) (#4493; until the backfill uses it, a retry restarts a chain from
-its first entry — DIFFERENCES). The
+held to a head -- and the spans unfinished walks have brought in. No account
+hash reads it (`TestTheMaxSyncedEntryIsNotState`: written and committed
+through the BPT update it changes no leaf, root or receipt, and an executed
+block leaves it as it was).
+
+A chain is walked from its head down, a page at a time. An entry is held when
+its element is, and on a chain that carries messages the message behind it:
+the open mark set a node took with the head holds elements and no messages,
+so its messages are asked for. Before a page is asked for, the store is
+asked which of its entries it holds, and a peer is asked only for the rest,
+in runs. The record is written with each page: the walk's own span, joined
+with every earlier span it has stepped over. The walk stops
+
+- at the record's max synced entry: everything below it is held;
+- at the first entry that exists below an entry the walk found missing, when
+  no unfinished walk's span lies below it: everything older is held. Entries
+  the node executed above a walk interrupted earlier exist too, and the chain
+  is not whole below them, so with a span below the walk steps over what
+  exists and goes on (`TestAnUnfinishedWalkBelowExecutedEntriesIsStillFinished`);
+- at the first entry, otherwise.
+
+A span the walk reaches is stepped over at once, without a read. So a retry
+asks for nothing the first attempt brought in
+(`TestABackfillInterruptedMidChainResumesWhereItStopped`), a restart resumes
+from the record after taking newer heads
+(`TestARestartMidFillResumesFromTheRecord`), and a chain held whole -- by
+execution, with no record, or by an earlier backfill -- is resynced with one
+page for one page of new entries
+(`TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists`). In process, a
+50,000-entry chain interrupted at its half-way page is backfilled with 197
+page requests, against 293 when a retry started from entry 0
+(`BenchmarkBackfill50k`) (#4493; a peer's capacity refusal still fails the
+chain's attempt — DIFFERENCES). The
 node ends holding every account's chains and entries
 (`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
 

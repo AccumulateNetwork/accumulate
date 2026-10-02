@@ -406,19 +406,20 @@ func (s *PulledState) backfillOne(ctx context.Context, u *url.URL) bool {
 }
 
 // backfillProgress is what one account's backfill says of itself: nothing in
-// its first minute, then the chain, the entries written and the chain's
-// height, at most once a minute.
-func (s *PulledState) backfillProgress(u *url.URL) func(chain string, done, total uint64) {
+// its first minute, then the chain, how far down from the head the walk has
+// got and the chain's height, at most once a minute (#4493: the walk runs
+// from the head down, so the line counts down).
+func (s *PulledState) backfillProgress(u *url.URL) func(chain string, at, total uint64) {
 	start := s.clock()
 	said := start
-	return func(chain string, done, total uint64) {
+	return func(chain string, at, total uint64) {
 		now := s.clock()
 		if now.Sub(said) < stallSayEvery {
 			return
 		}
 		said = now
 		s.log.Info("Backfilling a large account",
-			"partition", s.partition, "account", u, "chain", chain, "entries", done, "of", total,
+			"partition", s.partition, "account", u, "chain", chain, "down_to", at, "of", total,
 			"for", now.Sub(start).Round(time.Second))
 	}
 }

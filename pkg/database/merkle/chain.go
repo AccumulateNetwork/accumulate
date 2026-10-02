@@ -328,6 +328,17 @@ func (m *Chain) PutBelow(st *State, hash []byte, indexIfAbsent bool) error {
 	if err := m.Element(index).Put(hash); err != nil {
 		return errors.UnknownError.WithFormat("%v: put element %d: %w", m.key, index, err)
 	}
+	return m.ReplayBelow(st, hash)
+}
+
+// ReplayBelow is PutBelow for an entry whose element and index are already
+// written: it writes the intermediates the cascade computes and the mark
+// point the entry closes, and advances st past it. A backfill that brings the
+// elements in from the head down replays them from the oldest once they are
+// all held (pull.Backfill).
+func (m *Chain) ReplayBelow(st *State, hash []byte) error {
+	hash = copyHash(hash)
+	index := uint64(st.Count)
 	if err := m.putIntermediates(st, hash); err != nil {
 		return errors.UnknownError.Wrap(err)
 	}

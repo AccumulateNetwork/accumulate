@@ -177,12 +177,20 @@ SyncedEntries:
     - name: Synced
       description: is the max synced entry, as a count -- every entry below it is held, with the message behind it, and was held to a head
       type: uint
-    - name: Top
-      description: is the head count the walk under way started from; zero when none is
-      type: uint
-    - name: Low
-      description: is how far down the walk under way has got -- it holds every entry from Low up to Top
-      type: uint
+    - name: Spans
+      description: are the runs of entries walks not yet finished have brought in, newest first. A walk that ends before it meets the one below it leaves both
+      type: SyncedSpan
+      marshal-as: reference
+      pointer: true
+      repeatable: true
     - name: Refetch
       description: is set when the entries a walk brought in did not reproduce the head -- the next walk asks for every entry below the head again rather than trusting what is held
       type: bool
+
+SyncedSpan:
+  description: is a run of a chain's entries a backfill walk brought in -- every entry from Low up to Top is held
+  fields:
+    - name: Top
+      type: uint
+    - name: Low
+      type: uint

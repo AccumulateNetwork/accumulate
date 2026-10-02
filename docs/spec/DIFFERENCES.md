@@ -2235,14 +2235,15 @@ last sealed height. Paul, 2026-10-01: a restart does not replay; it syncs to
 the signed anchor and backfills the changed accounts' entries. database.md says
 so now; the committed log's role as the durability point is unchanged.
 
-### The backfill restarts a chain from entry 0, and a capacity refusal fails the account (#4493)
+### A capacity refusal fails the backfill's attempt at a chain (#4493)
 
-The spec (executor.md, "Past the match") has the backfill run newest to
-oldest, never ask for an entry the database holds, and stop at the first
-entry that exists on a resync (Paul, 2026-10-02). The code
-(`pull.backfillChain`, internal/core/bootstrap/pull/backfill.go:139) streams
-every chain from entry 0 to the head on every attempt, and a peer's
-`query capacity exhausted` (NotReady) ends the account's attempt as a
-NotFound. On Docker run 20260929T152146Z, cycle 6, three followers' Directory
-backfills restarted repeatedly on a 2.3M-entry chain and none finished in
-5.7 h. Not built.
+Paul's decision on #4493 (2026-10-02) has a peer's `query capacity
+exhausted` (NotReady) retry the page, with back-off and the next peer, and
+only a NotFound from every peer fail the chain. The code
+(`chainWalk.fetch`, internal/core/bootstrap/pull/backfill.go) asks each
+source once and fails the attempt when none serves the page, NotReady
+included. The walk itself resumes from its record (the retry no longer
+restarts the chain from entry 0, built in #4493), so a refusal costs a
+backfill pass, not the chain's progress. On Docker run 20260929T152146Z,
+cycle 6, three followers' Directory backfills restarted repeatedly on a
+2.3M-entry chain and none finished in 5.7 h.

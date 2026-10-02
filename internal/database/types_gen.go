@@ -102,12 +102,18 @@ type SyncedEntries struct {
 	fieldsSet []bool
 	// Synced is the max synced entry, as a count -- every entry below it is held, with the message behind it, and was held to a head.
 	Synced uint64 `json:"synced,omitempty" form:"synced" query:"synced" validate:"required"`
-	// Top is the head count the walk under way started from; zero when none is.
-	Top uint64 `json:"top,omitempty" form:"top" query:"top" validate:"required"`
-	// Low is how far down the walk under way has got -- it holds every entry from Low up to Top.
-	Low uint64 `json:"low,omitempty" form:"low" query:"low" validate:"required"`
+	// Spans are the runs of entries walks not yet finished have brought in, newest first. A walk that ends before it meets the one below it leaves both.
+	Spans []*SyncedSpan `json:"spans,omitempty" form:"spans" query:"spans" validate:"required"`
 	// Refetch is set when the entries a walk brought in did not reproduce the head -- the next walk asks for every entry below the head again rather than trusting what is held.
 	Refetch   bool `json:"refetch,omitempty" form:"refetch" query:"refetch" validate:"required"`
+	extraData []byte
+}
+
+// SyncedSpan is a run of a chain's entries a backfill walk brought in -- every entry from Low up to Top is held.
+type SyncedSpan struct {
+	fieldsSet []bool
+	Top       uint64 `json:"top,omitempty" form:"top" query:"top" validate:"required"`
+	Low       uint64 `json:"low,omitempty" form:"low" query:"low" validate:"required"`
 	extraData []byte
 }
 
@@ -349,8 +355,13 @@ func (v *SyncedEntries) Copy() *SyncedEntries {
 	u := new(SyncedEntries)
 
 	u.Synced = v.Synced
-	u.Top = v.Top
-	u.Low = v.Low
+	u.Spans = make([]*SyncedSpan, len(v.Spans))
+	for i, v := range v.Spans {
+		v := v
+		if v != nil {
+			u.Spans[i] = (v).Copy()
+		}
+	}
 	u.Refetch = v.Refetch
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
@@ -361,6 +372,21 @@ func (v *SyncedEntries) Copy() *SyncedEntries {
 }
 
 func (v *SyncedEntries) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *SyncedSpan) Copy() *SyncedSpan {
+	u := new(SyncedSpan)
+
+	u.Top = v.Top
+	u.Low = v.Low
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *SyncedSpan) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
 	u := new(TransactionChainEntry)
@@ -636,13 +662,26 @@ func (v *SyncedEntries) Equal(u *SyncedEntries) bool {
 	if !(v.Synced == u.Synced) {
 		return false
 	}
+	if len(v.Spans) != len(u.Spans) {
+		return false
+	}
+	for i := range v.Spans {
+		if !((v.Spans[i]).Equal(u.Spans[i])) {
+			return false
+		}
+	}
+	if !(v.Refetch == u.Refetch) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyncedSpan) Equal(u *SyncedSpan) bool {
 	if !(v.Top == u.Top) {
 		return false
 	}
 	if !(v.Low == u.Low) {
-		return false
-	}
-	if !(v.Refetch == u.Refetch) {
 		return false
 	}
 
@@ -1273,9 +1312,8 @@ func (v *SignatureSetEntry) IsValid() error {
 
 var fieldNames_SyncedEntries = []string{
 	1: "Synced",
-	2: "Top",
-	3: "Low",
-	4: "Refetch",
+	2: "Spans",
+	3: "Refetch",
 }
 
 func (v *SyncedEntries) MarshalBinary() ([]byte, error) {
@@ -1291,14 +1329,13 @@ func (v *SyncedEntries) MarshalBinary() ([]byte, error) {
 	if !(v.Synced == 0) {
 		writer.WriteUint(1, v.Synced)
 	}
-	if !(v.Top == 0) {
-		writer.WriteUint(2, v.Top)
-	}
-	if !(v.Low == 0) {
-		writer.WriteUint(3, v.Low)
+	if !(len(v.Spans) == 0) {
+		for _, v := range v.Spans {
+			writer.WriteValue(2, v.MarshalBinary)
+		}
 	}
 	if !(!v.Refetch) {
-		writer.WriteBool(4, v.Refetch)
+		writer.WriteBool(3, v.Refetch)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyncedEntries)
@@ -1322,19 +1359,72 @@ func (v *SyncedEntries) IsValid() error {
 		errs = append(errs, "field Synced is not set")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field Spans is missing")
+	} else if len(v.Spans) == 0 {
+		errs = append(errs, "field Spans is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field Refetch is missing")
+	} else if !v.Refetch {
+		errs = append(errs, "field Refetch is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_SyncedSpan = []string{
+	1: "Top",
+	2: "Low",
+}
+
+func (v *SyncedSpan) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	if !(v.Top == 0) {
+		writer.WriteUint(1, v.Top)
+	}
+	if !(v.Low == 0) {
+		writer.WriteUint(2, v.Low)
+	}
+
+	_, _, err := writer.Reset(fieldNames_SyncedSpan)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *SyncedSpan) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
 		errs = append(errs, "field Top is missing")
 	} else if v.Top == 0 {
 		errs = append(errs, "field Top is not set")
 	}
-	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Low is missing")
 	} else if v.Low == 0 {
 		errs = append(errs, "field Low is not set")
-	}
-	if len(v.fieldsSet) > 3 && !v.fieldsSet[3] {
-		errs = append(errs, "field Refetch is missing")
-	} else if !v.Refetch {
-		errs = append(errs, "field Refetch is not set")
 	}
 
 	switch len(errs) {
@@ -1842,17 +1932,44 @@ func (v *SyncedEntries) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadUint(1); ok {
 		v.Synced = x
 	}
-	if x, ok := reader.ReadUint(2); ok {
-		v.Top = x
+	for {
+		if x := new(SyncedSpan); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
+			v.Spans = append(v.Spans, x)
+		} else {
+			break
+		}
 	}
-	if x, ok := reader.ReadUint(3); ok {
-		v.Low = x
-	}
-	if x, ok := reader.ReadBool(4); ok {
+	if x, ok := reader.ReadBool(3); ok {
 		v.Refetch = x
 	}
 
 	seen, err := reader.Reset(fieldNames_SyncedEntries)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
+func (v *SyncedSpan) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *SyncedSpan) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	if x, ok := reader.ReadUint(1); ok {
+		v.Top = x
+	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.Low = x
+	}
+
+	seen, err := reader.Reset(fieldNames_SyncedSpan)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2007,10 +2124,14 @@ func init() {
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("synced", "uint64"),
-		encoding.NewTypeField("top", "uint64"),
-		encoding.NewTypeField("low", "uint64"),
+		encoding.NewTypeField("spans", "SyncedSpan[]"),
 		encoding.NewTypeField("refetch", "bool"),
 	}, "SyncedEntries", "syncedEntries")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("top", "uint64"),
+		encoding.NewTypeField("low", "uint64"),
+	}, "SyncedSpan", "syncedSpan")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("account", "string"),
@@ -2207,6 +2328,26 @@ func (v *SignatureSetEntry) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.Hash == ([32]byte{})) {
 		u.Hash = encoding.ChainToJSON(&v.Hash)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *SyncedEntries) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Synced    uint64                         `json:"synced,omitempty"`
+		Spans     encoding.JsonList[*SyncedSpan] `json:"spans,omitempty"`
+		Refetch   bool                           `json:"refetch,omitempty"`
+		ExtraData *string                        `json:"$epilogue,omitempty"`
+	}{}
+	if !(v.Synced == 0) {
+		u.Synced = v.Synced
+	}
+	if !(len(v.Spans) == 0) {
+		u.Spans = v.Spans
+	}
+	if !(!v.Refetch) {
+		u.Refetch = v.Refetch
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -2492,6 +2633,30 @@ func (v *SignatureSetEntry) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Hash = *x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *SyncedEntries) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Synced    uint64                         `json:"synced,omitempty"`
+		Spans     encoding.JsonList[*SyncedSpan] `json:"spans,omitempty"`
+		Refetch   bool                           `json:"refetch,omitempty"`
+		ExtraData *string                        `json:"$epilogue,omitempty"`
+	}{}
+	u.Synced = v.Synced
+	u.Spans = v.Spans
+	u.Refetch = v.Refetch
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	v.Synced = u.Synced
+	v.Spans = u.Spans
+	v.Refetch = u.Refetch
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
