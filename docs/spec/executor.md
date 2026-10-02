@@ -658,9 +658,14 @@ once the last page is written (#4446). **The backfill
 runs from the newest entry to the oldest, and never asks for an entry the
 database already holds; a resync stops at the first entry that exists**
 (Paul, 2026-10-02): a retry after a failure, or a restart, resumes with what
-is held and asks only for what is not, so no attempt discards an earlier one
-(#4493; until built, a retry restarts a chain from its first entry —
-DIFFERENCES). The
+is held and asks only for what is not, so no attempt discards an earlier one.
+**Each account carries a max-synced-entry value in its state that is not
+hashed and not part of the persisted, hashed state; updating the account does
+not update it** (Paul, 2026-10-02). The backfill alone writes it, as it works
+back from the head, and reads it to resume; execution never touches it, so it
+is in no leaf, no root and no anchor, and a node's agreement does not depend
+on how much history it holds (#4493; until built, a retry restarts a chain
+from its first entry — DIFFERENCES). The
 node ends holding every account's chains and entries
 (`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
 
