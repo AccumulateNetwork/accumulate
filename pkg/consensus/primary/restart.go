@@ -64,3 +64,38 @@ func (p *Primary) LastAuthoredRound() (types.Round, bool) {
 	defer p.pendingMu.Unlock()
 	return p.lastAuthoredRound, p.hasAuthored
 }
+
+// RoundStatus is what a primary holds for its current round: what a stalled
+// partition's log line names so "will not author", "cannot collect votes" and
+// "certificates never formed" can be told apart (run 20261002T090546Z: BVN3's
+// four validators restored the same round and none left it).
+type RoundStatus struct {
+	Round        types.Round
+	LastAuthored types.Round
+	HasAuthored  bool
+	OwnHeader    bool // this primary holds its header for the round, awaiting votes
+	OwnVotes     int  // votes collected for it
+	CertsHere    int  // certificates in the DAG for the round
+	CertsBefore  int  // and for the round before it
+}
+
+// RoundStatus reports the primary's current round as it holds it.
+func (p *Primary) RoundStatus() RoundStatus {
+	p.roundMu.Lock()
+	r := p.currentRound
+	p.roundMu.Unlock()
+	st := RoundStatus{Round: r, CertsHere: p.dag.RoundCount(r)}
+	if r > 0 {
+		st.CertsBefore = p.dag.RoundCount(r - 1)
+	}
+	p.pendingMu.Lock()
+	st.LastAuthored, st.HasAuthored = p.lastAuthoredRound, p.hasAuthored
+	for d, h := range p.ourHeaders {
+		if h.Round == r {
+			st.OwnHeader = true
+			st.OwnVotes = len(p.pendingVotes[d])
+		}
+	}
+	p.pendingMu.Unlock()
+	return st
+}

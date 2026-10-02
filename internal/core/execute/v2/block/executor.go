@@ -29,6 +29,11 @@ var messageExecutors []ExecutorFactory1[messaging.MessageType, *MessageContext]
 var signatureExecutors []ExecutorFactory1[protocol.SignatureType, *SignatureContext]
 
 type Executor struct {
+	// disproved is the source/Directory-block pairs a dropped proof was said
+	// for (saidDisproved).
+	disprovedMu sync.Mutex
+	disproved   map[string]bool
+
 	ExecutorOptions
 	BlockTimers TimerSet
 

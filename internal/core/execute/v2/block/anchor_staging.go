@@ -7,6 +7,7 @@
 package block
 
 import (
+	"fmt"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -70,6 +71,15 @@ func (b *Block) intakeProof(source *url.URL, proof *protocol.AnnotatedReceipt, s
 		// The anchor it names has executed and does not carry its root:
 		// "never", not "not yet".
 		mExecStagedProofs.WithLabelValues("disproved").Inc()
+		// Said, once per source and Directory block: a dropped proof leaves
+		// its entries unvalidated, and a stream wedged behind one said
+		// nothing (run 20261002T090546Z, BVN2->BVN1 at 1896).
+		if b.Executor.saidDisproved(source, proof.Anchor.SourceBlock) {
+			root := proof.TerminalAnchor()
+			b.Executor.logger.Info("A proof names a Directory block this node executed whose anchors do not hold its root; dropped",
+				"module", "stream", "source", source, "directory-block", proof.Anchor.SourceBlock,
+				"root", fmt.Sprintf("%x", root[:8]), "executed-directory-block", executed)
+		}
 		return nil
 	}
 	if proof.Anchor.SourceBlock > executed+maxAnchorAhead {
@@ -223,4 +233,23 @@ func (b *Block) directoryAnchorBlock() (uint64, error) {
 		return 0, errors.UnknownError.WithFormat("load directory anchor block: %w", err)
 	}
 	return v, nil
+}
+
+// saidDisproved reports, once per source and Directory block, that a proof
+// naming that block was disproved: the line is said once, not per copy.
+func (x *Executor) saidDisproved(source *url.URL, block uint64) bool {
+	x.disprovedMu.Lock()
+	defer x.disprovedMu.Unlock()
+	if x.disproved == nil {
+		x.disproved = map[string]bool{}
+	}
+	k := fmt.Sprintf("%v/%d", source, block)
+	if x.disproved[k] {
+		return false
+	}
+	if len(x.disproved) > 4096 {
+		x.disproved = map[string]bool{}
+	}
+	x.disproved[k] = true
+	return true
 }
