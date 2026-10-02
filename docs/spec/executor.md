@@ -1252,7 +1252,17 @@ filling — is refused by the relay (`NotReady`), not passed round
 `TestAValidationThatNeedsASectionNotLoadedIsRefusedAndLoadsNothing`). A
 validate-only call refused that way answers `NotReady`, and the caller asks
 another node. Every other reader of the store is
-refused an account in a section not loaded (below). The store checks each account read against the set: a read of an
+refused an account in a section not loaded (below). **The gate is the
+store's, not one service's** (#4497): a node opens one database over each
+store, and the executor, the API's querier, network and event services, and
+the consensus, sequencer and proof services all read through it or a view of
+it (`Deep`, `Unisolated`), so the gate the join installs covers every reader.
+Before #4497 the daemon built each API service on a `database.New` of its own,
+whose gate was never set: blocks and validation were gated, and the API
+answered `NotFound` for an account it had not loaded and never redirected —
+while the simulator, whose querier shares the node's database, passed every
+test (`TestTheDaemonsAPIIsRefusedASectionNotLoaded`, cmd/accumulated/run;
+`TestTheSimulatorsQuerierSharesTheExecutorsGate`, test/simulator). The store checks each account read against the set: a read of an
 account in a section not loaded loads the section before it returns. The
 section is written into the block's batch beneath the account records, so the
 loaded accounts are not accounts the block changed — the block ledger does
@@ -1306,8 +1316,27 @@ store's contract in internal/database
 **What is not loaded is not served; the node redirects** (Paul, 2026-10-02:
 "We can ask and use answers that match the cryptography, and nodes that
 can't answer should be redirecting"). An account read in a section not
-loaded is refused with `NotReady` — a query; an `AccountStates` answer serves
-it with no body, so the asker asks the next peer. A BPT page that starts in a
+loaded is refused with `NotReady` — a query; an `AccountStates` or
+`ChangedAccountStates` answer serves it with no body and `NotLoaded`, carrying
+the section and the peers to ask instead (`Section`, `Redirect`: the
+refusal's `{notLoaded, redirect}` per account), so the asker asks the next
+peer. It is never `NoLeaf`: a peer that meets a section's marker where an
+account's leaf would be does not know whether the account exists (#4496; the
+#4485 code served `NoLeaf` there, and a pulling node deleted the account on
+it). **`NoLeaf` is a verdict only from a peer whose section is loaded, and
+one such answer is enough** (decided for #4496): it is that peer's executed
+state — the outcome of execution, which alone decides that an account does
+not exist — and it is the peer's word exactly as a served state is, which the
+match proves; a wrong one is a root that does not match, located and pulled
+again (Two mismatches). Requiring a second peer to agree would cost a call per
+deleted account and protect nothing a served state does not already expose.
+The asker deletes nothing on `NotLoaded`: the account is not taken, and is
+asked of the next of its own peers in the same round, or owed to the next
+(`TestAFillingPeersAnswerIsNoVerdict`, internal/node/join;
+`TestAnAccountInASectionNotLoadedIsNotServedAsNoLeaf`, internal/api/v3). A
+single-account read with a receipt is refused `NotReady` by the gate, never
+`NotFound`, so `pullOne`'s every-source-says-no-leaf rule is not met by a
+peer still filling either. A BPT page that starts in a
 section not loaded is refused with `NotReady`; a page that reaches a marker
 after other leaves ends before it (`Done` false, `NextStart` the last leaf
 served), so a node still filling serves every section it has loaded, and a

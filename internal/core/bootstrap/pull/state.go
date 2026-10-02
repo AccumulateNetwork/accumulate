@@ -37,6 +37,12 @@ func CheckState(st *api.AccountState) error {
 	if st == nil || st.Url == nil {
 		return errors.Conflict.With("the peer served an account state that names no account")
 	}
+	if st.NotLoaded {
+		// Neither a state nor "no leaf": the peer has not loaded the
+		// section, and another peer is asked (executor.md, "Sync", §3a;
+		// #4496).
+		return errors.NotReady.WithFormat("%v: the peer has not loaded section %d of its state tree", st.Url, st.Section)
+	}
 	if st.NoLeaf {
 		return errors.Conflict.WithFormat("%v: the peer holds no leaf for it", st.Url)
 	}

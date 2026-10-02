@@ -75,8 +75,14 @@ type AccountState struct {
 	OpenEntries []*ChainOpenEntries `json:"openEntries,omitempty" form:"openEntries" query:"openEntries" validate:"required"`
 	// LeafHash is the account's BPT leaf in the same view.
 	LeafHash [32]byte `json:"leafHash,omitempty" form:"leafHash" query:"leafHash" validate:"required"`
-	// NoLeaf says the peer's tree holds no leaf for the account.
-	NoLeaf    bool `json:"noLeaf,omitempty" form:"noLeaf" query:"noLeaf" validate:"required"`
+	// NoLeaf says the peer's tree holds no leaf for the account, in a section the peer has loaded.
+	NoLeaf bool `json:"noLeaf,omitempty" form:"noLeaf" query:"noLeaf" validate:"required"`
+	// NotLoaded says the account is in a section of the peer's state tree the peer has not loaded, so the peer can say neither that the account exists nor that it does not; the asker asks another peer (executor.md, "Sync", §3a;.
+	NotLoaded bool `json:"notLoaded,omitempty" form:"notLoaded" query:"notLoaded" validate:"required"`
+	// Section is the section not loaded, when NotLoaded is set.
+	Section uint64 `json:"section,omitempty" form:"section" query:"section" validate:"required"`
+	// Redirect is the peers the refusing node names to ask instead, when NotLoaded is set.
+	Redirect  []string `json:"redirect,omitempty" form:"redirect" query:"redirect" validate:"required"`
 	extraData []byte
 }
 
@@ -989,6 +995,13 @@ func (v *AccountState) Copy() *AccountState {
 	}
 	u.LeafHash = v.LeafHash
 	u.NoLeaf = v.NoLeaf
+	u.NotLoaded = v.NotLoaded
+	u.Section = v.Section
+	u.Redirect = make([]string, len(v.Redirect))
+	for i, v := range v.Redirect {
+		v := v
+		u.Redirect[i] = v
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -2801,6 +2814,20 @@ func (v *AccountState) Equal(u *AccountState) bool {
 	}
 	if !(v.NoLeaf == u.NoLeaf) {
 		return false
+	}
+	if !(v.NotLoaded == u.NotLoaded) {
+		return false
+	}
+	if !(v.Section == u.Section) {
+		return false
+	}
+	if len(v.Redirect) != len(u.Redirect) {
+		return false
+	}
+	for i := range v.Redirect {
+		if !(v.Redirect[i] == u.Redirect[i]) {
+			return false
+		}
 	}
 
 	return true
@@ -4709,13 +4736,16 @@ func (v *AccountRecord) IsValid() error {
 }
 
 var fieldNames_AccountState = []string{
-	1: "Url",
-	2: "Main",
-	3: "Directory",
-	4: "Leaf",
-	5: "OpenEntries",
-	6: "LeafHash",
-	7: "NoLeaf",
+	1:  "Url",
+	2:  "Main",
+	3:  "Directory",
+	4:  "Leaf",
+	5:  "OpenEntries",
+	6:  "LeafHash",
+	7:  "NoLeaf",
+	8:  "NotLoaded",
+	9:  "Section",
+	10: "Redirect",
 }
 
 func (v *AccountState) MarshalBinary() ([]byte, error) {
@@ -4752,6 +4782,17 @@ func (v *AccountState) MarshalBinary() ([]byte, error) {
 	}
 	if !(!v.NoLeaf) {
 		writer.WriteBool(7, v.NoLeaf)
+	}
+	if !(!v.NotLoaded) {
+		writer.WriteBool(8, v.NotLoaded)
+	}
+	if !(v.Section == 0) {
+		writer.WriteUint(9, v.Section)
+	}
+	if !(len(v.Redirect) == 0) {
+		for _, v := range v.Redirect {
+			writer.WriteString(10, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_AccountState)
@@ -4803,6 +4844,21 @@ func (v *AccountState) IsValid() error {
 		errs = append(errs, "field NoLeaf is missing")
 	} else if !v.NoLeaf {
 		errs = append(errs, "field NoLeaf is not set")
+	}
+	if len(v.fieldsSet) > 7 && !v.fieldsSet[7] {
+		errs = append(errs, "field NotLoaded is missing")
+	} else if !v.NotLoaded {
+		errs = append(errs, "field NotLoaded is not set")
+	}
+	if len(v.fieldsSet) > 8 && !v.fieldsSet[8] {
+		errs = append(errs, "field Section is missing")
+	} else if v.Section == 0 {
+		errs = append(errs, "field Section is not set")
+	}
+	if len(v.fieldsSet) > 9 && !v.fieldsSet[9] {
+		errs = append(errs, "field Redirect is missing")
+	} else if len(v.Redirect) == 0 {
+		errs = append(errs, "field Redirect is not set")
 	}
 
 	switch len(errs) {
@@ -10104,6 +10160,19 @@ func (v *AccountState) UnmarshalBinaryFrom(rd io.Reader) error {
 	if x, ok := reader.ReadBool(7); ok {
 		v.NoLeaf = x
 	}
+	if x, ok := reader.ReadBool(8); ok {
+		v.NotLoaded = x
+	}
+	if x, ok := reader.ReadUint(9); ok {
+		v.Section = x
+	}
+	for {
+		if x, ok := reader.ReadString(10); ok {
+			v.Redirect = append(v.Redirect, x)
+		} else {
+			break
+		}
+	}
 
 	seen, err := reader.Reset(fieldNames_AccountState)
 	if err != nil {
@@ -12972,6 +13041,9 @@ func init() {
 		encoding.NewTypeField("openEntries", "ChainOpenEntries[]"),
 		encoding.NewTypeField("leafHash", "bytes32"),
 		encoding.NewTypeField("noLeaf", "bool"),
+		encoding.NewTypeField("notLoaded", "bool"),
+		encoding.NewTypeField("section", "uint64"),
+		encoding.NewTypeField("redirect", "string[]"),
 	}, "AccountState", "accountState")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -13575,6 +13647,9 @@ func (v *AccountState) MarshalJSON() ([]byte, error) {
 		OpenEntries encoding.JsonList[*ChainOpenEntries]          `json:"openEntries,omitempty"`
 		LeafHash    *string                                       `json:"leafHash,omitempty"`
 		NoLeaf      bool                                          `json:"noLeaf,omitempty"`
+		NotLoaded   bool                                          `json:"notLoaded,omitempty"`
+		Section     uint64                                        `json:"section,omitempty"`
+		Redirect    encoding.JsonList[string]                     `json:"redirect,omitempty"`
 		ExtraData   *string                                       `json:"$epilogue,omitempty"`
 	}{}
 	if !(v.Url == nil) {
@@ -13597,6 +13672,15 @@ func (v *AccountState) MarshalJSON() ([]byte, error) {
 	}
 	if !(!v.NoLeaf) {
 		u.NoLeaf = v.NoLeaf
+	}
+	if !(!v.NotLoaded) {
+		u.NotLoaded = v.NotLoaded
+	}
+	if !(v.Section == 0) {
+		u.Section = v.Section
+	}
+	if !(len(v.Redirect) == 0) {
+		u.Redirect = v.Redirect
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -15092,6 +15176,9 @@ func (v *AccountState) UnmarshalJSON(data []byte) error {
 		OpenEntries encoding.JsonList[*ChainOpenEntries]          `json:"openEntries,omitempty"`
 		LeafHash    *string                                       `json:"leafHash,omitempty"`
 		NoLeaf      bool                                          `json:"noLeaf,omitempty"`
+		NotLoaded   bool                                          `json:"notLoaded,omitempty"`
+		Section     uint64                                        `json:"section,omitempty"`
+		Redirect    encoding.JsonList[string]                     `json:"redirect,omitempty"`
 		ExtraData   *string                                       `json:"$epilogue,omitempty"`
 	}{}
 	u.Url = v.Url
@@ -15101,6 +15188,9 @@ func (v *AccountState) UnmarshalJSON(data []byte) error {
 	u.OpenEntries = v.OpenEntries
 	u.LeafHash = encoding.ChainToJSON(&v.LeafHash)
 	u.NoLeaf = v.NoLeaf
+	u.NotLoaded = v.NotLoaded
+	u.Section = v.Section
+	u.Redirect = v.Redirect
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -15119,6 +15209,9 @@ func (v *AccountState) UnmarshalJSON(data []byte) error {
 		v.LeafHash = *x
 	}
 	v.NoLeaf = u.NoLeaf
+	v.NotLoaded = u.NotLoaded
+	v.Section = u.Section
+	v.Redirect = u.Redirect
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

@@ -506,10 +506,13 @@ section and the names of every other peer the node knows serves the
 partition's queries — not peers known to hold the section (the open question
 in §3a; built: option (a)). The section loader of a block and of the fill
 follows those names; the pull's own loads before the match
-(`loadOpenedPage`) rotate over their peers and do not. An `AccountStates`
-answer for an account in a section not loaded still carries no body, and a
-plain account query is refused with the section and the names, but no client
-of the API follows them.
+(`loadOpenedPage`) rotate over their peers and do not. An `AccountStates` or
+`ChangedAccountStates` answer for an account in a section not loaded carries
+`NotLoaded` with the section and the names (#4496); the pull does not follow
+the names, it asks the next of its own peers. A plain account query is refused
+with the section and the names — in the daemon too since #4497, whose API
+services had a database, and so a gate, of their own — but no client of the
+API follows them.
 
 ### E11. A node cannot sync from the running protocol
 
