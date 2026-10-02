@@ -7,6 +7,7 @@
 package api
 
 import (
+	"context"
 	"encoding/binary"
 	"sort"
 	"strings"
@@ -15,8 +16,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -49,7 +52,7 @@ const maxAccountStatesAsked = 4096
 // One answer is the whole catch-up from After up to the cap (#4461): the union
 // is read from the records once per answer (namedCache), not once per page, so
 // a page costs the accounts it carries.
-func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
+func (s *Querier) queryChangedAccountStates(ctx context.Context, batch *database.Batch, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
 	if scope == nil || !s.partition.URL.Equal(scope) {
 		return nil, errors.BadRequest.WithFormat(
 			"the accounts a partition's records name are the partition's: this node serves %v, and the query is scoped to %v",
@@ -83,7 +86,7 @@ func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.UR
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	r, err := s.statesPage(batch, span.named, cur)
+	r, err := s.statesPage(ctx, batch, span.named, cur)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -102,7 +105,7 @@ func (s *Querier) queryChangedAccountStates(batch *database.Batch, scope *url.UR
 
 // queryAccountStates answers the sync state of the named accounts, from this
 // one view of the store, stamped with its block (executor.md, "Sync", §3).
-func (s *Querier) queryAccountStates(batch *database.Batch, scope *url.URL, query *api.AccountStatesQuery) (*api.AccountStatesRecord, error) {
+func (s *Querier) queryAccountStates(ctx context.Context, batch *database.Batch, scope *url.URL, query *api.AccountStatesQuery) (*api.AccountStatesRecord, error) {
 	if scope == nil || !s.partition.URL.Equal(scope) {
 		return nil, errors.BadRequest.WithFormat(
 			"account states are asked of the partition: this node serves %v, and the query is scoped to %v",
@@ -132,8 +135,9 @@ func (s *Querier) queryAccountStates(batch *database.Batch, scope *url.URL, quer
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
 		}
+		peers := s.redirectOnce(ctx)
 		r, err := s.statesPageWith(query.Accounts, cur, func(u *url.URL) *api.AccountState {
-			return s.accountStateAt(batch, u, at)
+			return s.accountStateAt(batch, u, at, peers)
 		})
 		if err != nil {
 			return nil, errors.UnknownError.Wrap(err)
@@ -142,7 +146,7 @@ func (s *Querier) queryAccountStates(batch *database.Batch, scope *url.URL, quer
 		return r, nil
 	}
 	// As of this view's own block, the current state is the block's.
-	r, err := s.statesPage(batch, query.Accounts, cur)
+	r, err := s.statesPage(ctx, batch, query.Accounts, cur)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
@@ -253,8 +257,42 @@ func (c *namedCache) get(after, through uint64, read func() (*recordSpan, error)
 // statesPage answers the accounts from cur on, as many whole as fit the
 // budget. An account that does not fit a page of its own is answered in
 // parts, one part a page, and a page that carries a part carries nothing else.
-func (s *Querier) statesPage(batch *database.Batch, accounts []*url.URL, cur statesCursor) (*api.AccountStatesRecord, error) {
-	return s.statesPageWith(accounts, cur, func(u *url.URL) *api.AccountState { return s.accountState(batch, u) })
+func (s *Querier) statesPage(ctx context.Context, batch *database.Batch, accounts []*url.URL, cur statesCursor) (*api.AccountStatesRecord, error) {
+	peers := s.redirectOnce(ctx)
+	return s.statesPageWith(accounts, cur, func(u *url.URL) *api.AccountState { return s.accountState(batch, u, peers) })
+}
+
+// redirectOnce is the peers a page names for every account it cannot answer
+// because its section is not loaded, asked of the network at most once a
+// page and only when such an account is met.
+func (s *Querier) redirectOnce(ctx context.Context) func() []string {
+	var peers []string
+	asked := false
+	return func() []string {
+		if !asked && s.redirect != nil {
+			asked = true
+			peers = s.redirect(ctx)
+		}
+		return peers
+	}
+}
+
+// notLoaded is the answer for an account in a section this view has not
+// loaded: neither a state nor "no leaf" -- only execution decides that an
+// account does not exist -- but the section, and the peers to ask instead
+// (executor.md, "Sync", §3a, "What is not loaded is not served; the node
+// redirects"; #4496). It is the per-account form of the refusal a query of
+// the account gets (database.NotLoaded).
+func notLoaded(u *url.URL, sec bpt.Section, peers func() []string) *api.AccountState {
+	return &api.AccountState{Url: u, NotLoaded: true, Section: uint64(sec), Redirect: peers()}
+}
+
+// sectionNotLoaded reports whether the section of the key hash kh is not
+// loaded: the tree get reads holds the section's marker. A leaf the tree does
+// not hold is "no leaf" only in a section the tree holds whole.
+func sectionNotLoaded(kh [32]byte, get func(key *record.Key) error) (bpt.Section, bool) {
+	sec := bpt.SectionOf(kh)
+	return sec, get(sec.MarkerKey()) == nil
 }
 
 // statesPageWith is statesPage with the state of each account read by read.
@@ -307,10 +345,24 @@ func (s *Querier) statesPageWith(accounts []*url.URL, cur statesCursor, read fun
 // leaf, and asks again. Failing the page for it would fail it on every peer,
 // which all hold the same state, and pin the asker's records where they stand
 // -- an account with a leaf and no main state (#4437) is such a case.
-func (s *Querier) accountState(batch *database.Batch, u *url.URL) *api.AccountState {
+func (s *Querier) accountState(batch *database.Batch, u *url.URL, peers func() []string) *api.AccountState {
 	st, err := s.readAccountState(batch, u)
+	if err == nil && st.NoLeaf {
+		sec, ok := sectionNotLoaded(batch.Account(u).Key().Hash(), func(k *record.Key) error {
+			_, err := batch.BPT().Get(k)
+			return err
+		})
+		if ok {
+			return notLoaded(u, sec, peers)
+		}
+	}
 	if err == nil {
 		return st
+	}
+	if d, ok := database.NotLoadedOf(err); ok {
+		// The leaf is there, the records behind it are not: the gate
+		// refused them.
+		return notLoaded(u, bpt.Section(*d.Section), peers)
 	}
 	s.logger.Info("An account's sync state could not be read; it is served without its body", "account", u, "error", err)
 	out := &api.AccountState{Url: u}
@@ -405,10 +457,25 @@ func (s *Querier) readAccountState(batch *database.Batch, u *url.URL) (*api.Acco
 // one the node cannot answer as of the block -- a state it did not retain,
 // or a partition ledger, whose scheduled events are not retained -- with no
 // body, which the asker refuses and asks the next peer for.
-func (s *Querier) accountStateAt(batch *database.Batch, u *url.URL, at uint64) *api.AccountState {
+func (s *Querier) accountStateAt(batch *database.Batch, u *url.URL, at uint64, peers func() []string) *api.AccountState {
 	st, err := s.readAccountStateAt(batch, u, at)
+	if err == nil && st.NoLeaf {
+		root, _, rerr := indexing.BPTRootAt(s.partition, batch, at)
+		if rerr == nil {
+			sec, ok := sectionNotLoaded(batch.Account(u).Key().Hash(), func(k *record.Key) error {
+				_, err := batch.BPT().GetReceiptAt(k, at, root)
+				return err
+			})
+			if ok {
+				return notLoaded(u, sec, peers)
+			}
+		}
+	}
 	if err == nil {
 		return st
+	}
+	if d, ok := database.NotLoadedOf(err); ok {
+		return notLoaded(u, bpt.Section(*d.Section), peers)
 	}
 	s.logger.Info("An account's sync state as of a block could not be read; it is served without its body", "account", u, "block", at, "error", err)
 	return &api.AccountState{Url: u}

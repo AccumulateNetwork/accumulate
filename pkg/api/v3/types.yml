@@ -264,8 +264,18 @@ AccountState:
       description: is the account's BPT leaf in the same view
       type: hash
     - name: NoLeaf
-      description: says the peer's tree holds no leaf for the account
+      description: says the peer's tree holds no leaf for the account, in a section the peer has loaded
       type: bool
+    - name: NotLoaded
+      description: says the account is in a section of the peer's state tree the peer has not loaded, so the peer can say neither that the account exists nor that it does not; the asker asks another peer (executor.md, "Sync", §3a; #4496)
+      type: bool
+    - name: Section
+      description: is the section not loaded, when NotLoaded is set
+      type: uint
+    - name: Redirect
+      description: is the peers the refusing node names to ask instead, when NotLoaded is set
+      type: string
+      repeatable: true
 
 ChainOpenEntries:
   fields:

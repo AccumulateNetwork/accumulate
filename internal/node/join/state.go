@@ -1069,8 +1069,12 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 // stands at the answer's block like every other (#4442; #4453 review F1).
 // An account the answer holds no leaf for is deleted: at the answer's block
 // it does not exist, and a record after it names it if a block creates it.
-// Every other account is checked against its leaf and written as served
-// (pull.KeepStates).
+// That is the answer of a peer whose section is loaded, and one such answer
+// is the peer's word as a served state is, which the match proves (executor
+// spec, "Sync", §3a; #4496). An account in a section the peer has not loaded
+// (NotLoaded) is no verdict at all: nothing is deleted, and it is asked of
+// the next peer. Every other account is checked against its leaf and written
+// as served (pull.KeepStates).
 //
 // blocks[i] is the block of the view states[i] was read from.
 func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Source, states []*api.AccountState, blocks []uint64) map[[32]byte]bool {
@@ -1101,6 +1105,11 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 			s.log.Info("A named account is not this partition's and was dropped",
 				"account", u, "partition", s.partition)
 			taken[accountKey(u)] = true
+			continue
+		}
+		if st.NotLoaded {
+			s.log.Debug("A peer has not loaded the section an account is in; it is asked of another",
+				"account", u, "peer", sourceKey(src), "section", st.Section)
 			continue
 		}
 		if st.NoLeaf {

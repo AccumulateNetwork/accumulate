@@ -411,10 +411,10 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		return s.queryBptBlock(batch, scope, query)
 
 	case *api.ChangedAccountStatesQuery:
-		return s.queryChangedAccountStates(batch, scope, query)
+		return s.queryChangedAccountStates(ctx, batch, scope, query)
 
 	case *api.AccountStatesQuery:
-		return s.queryAccountStates(batch, scope, query)
+		return s.queryAccountStates(ctx, batch, scope, query)
 
 	default:
 		return nil, errors.NotAllowed.WithFormat("unknown query type %v", query.QueryType())
