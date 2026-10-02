@@ -113,13 +113,25 @@ They ask the peer's node info (at the peer's base port, where its one API is)
 for its libp2p identity and partitions, fetch each partition's genesis from
 that node, and write the layout `init network` writes for a node: one
 `accumulate.toml` with a core-validator (or, with `--follow`, follower)
-configuration — `DN`, `BVN` or, for `init dual`, `Dual` — its node and
+configuration — `DN`, `BVN` or `Dual` — its node and
 validator keys inline, `join-running-network` set, and the genesis snapshots
 beside it (`directory-genesis.snap`, `{bvn}-genesis.snap`). The peer is the
 bootstrap peer, at `/ip4|dns/{host}/tcp/{base+2}/p2p/{id}`. `--genesis-doc`
 (`--dn-genesis-doc`, `--bvn-genesis-doc`) supplies a snapshot from a file
 instead. `init` never overwrites an existing `accumulate.toml`; `--reset`
 removes it first.
+
+**Which partitions.** A DAG-BFT node has one API, so the peer's port no longer
+says which partition is meant (on main it did: the DN and BVN had separate
+base ports). `init node --partition <id>` names it — `Directory` or a BVN's
+ID, in any case. Without it the node runs **every partition the peer runs**:
+the consensus services its node info lists, the Directory and its BVN, which
+is what `init dual` writes; against a peer that runs only a BVN, a `BVN` node.
+Each partition is confirmed by asking the peer's `consensus-status` with that
+partition set, and its type and canonical ID come from the answer; a
+partition the peer does not run is refused at `init`, naming it. `init dual`
+is the default case that insists on both. With `--seed`, the seed proxy's
+`<partition>.<network>` names the partition unless `--partition` does (#4489).
 
 A node initialized for CometBFT is converted by the standalone
 `tools/cmd/migrate-legacy` (see "Converting a mainnet node"). A node never
