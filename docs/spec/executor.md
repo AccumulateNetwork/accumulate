@@ -1151,8 +1151,19 @@ with the block, or is discarded with it, and the set in memory forgets the
 section only when the block commits. A section that cannot be loaded — no peer
 answers it as of H in 30 s of asking every peer — **holds the block**: the
 read fails and the block's batch refuses to commit (`NotReady`), so the block
-is not produced and the node is sent back to syncing as a handoff that cannot
-be performed is (§5).
+is not produced. A held block is held, never skipped: nothing after it is
+executed, and above all not the next committed group under the held block's
+number, which is a different block than the peers' (#4485 review, finding 3).
+At the handoff the node is sent back to syncing as a handoff that cannot be
+performed is (§5). After it, the DAG service produces the same group as the
+same block again, once a second, until it is produced or for 30 s from the
+first refusal; then it goes back to collecting with the held group first in
+its buffer and says which block it held (`HeldBlock`), and the join, which
+watches for a node that stopped executing as it watches the roots, demotes
+the node at that block and syncs again. The hold is said as the join's
+waiting is: `The block is held` (on, for, asks, block, round, error) at its
+start and every 10 s, `The block is no longer held` (after, asks) when it is
+produced, and `The block was held past its bound` when the node gives it up.
 
 **The fill.** A goroutine of its own, beside the backfill and with its
 lifecycle (#4472): started after each handoff, stopped — and waited for —
@@ -1171,8 +1182,12 @@ The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
 `TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt`,
 `TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchanged`,
 `TestTheFillLoadsEverySectionAndTheRootMatchesThroughout`,
-`TestARestartMidFillResumes` (test/e2e), `TestAForgedSectionIsRefused`
-(internal/node/join), and the store's contract in internal/database
+`TestARestartMidFillResumes`,
+`TestATrulyFreshJoinerTakesTheNetworksOracleAndHandsOff` (test/e2e),
+`TestAForgedSectionIsRefused` and `TestJoin_ABlockHeldPastItsBoundSyncsAgain`
+(internal/node/join), `TestAHeldBlockIsHeldNotSkipped` and
+`TestAHeldBlockPastItsBoundCollectsAgain` (internal/node/dagbft), and the
+store's contract in internal/database
 (`TestAReadOfASectionNotLoadedIsRefusedNotNotFound` and its neighbours).
 
 **What is not loaded is not served.** An account read in a section not

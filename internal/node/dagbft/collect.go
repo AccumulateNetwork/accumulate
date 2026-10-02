@@ -421,6 +421,7 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	s.buffer = nil
 	s.bufferBytes = 0
 	s.collecting = false
+	s.heldBlock = 0
 	s.lastBlockIndex = q
 	s.lastLeaderRound = round
 	s.mu.Unlock()

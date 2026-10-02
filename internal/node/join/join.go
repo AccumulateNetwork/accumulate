@@ -328,7 +328,7 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		}
 		stopBackfill := backfillBeside(ctx, opts.State)
 		stopFill := fillBeside(ctx, opts.State)
-		n, err := watchRoots(ctx, watch, log, retry)
+		n, held, err := watchRoots(ctx, watch, opts.Buffer, log, retry)
 		// Nothing of the backfill or the fill runs past here: the node is
 		// stopping, or it is demoted and pulls again, and the pull rewrites
 		// what they write.
@@ -349,7 +349,15 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		// none of them is executed until the root matches again. It stops
 		// answering first: its state is known wrong, and an ACTIVE node
 		// serving it is what run 20260924T074702Z measured (#4385).
-		log.Warn("An executed block's root differs from its proven root; syncing again", "block", n)
+		if held {
+			// A block a section could not be loaded for was held past the
+			// hold's bound, and the service collects again from it: the
+			// node syncs again as a failed handoff does (executor spec,
+			// "Sync", §3a).
+			log.Warn("A block was held past its bound; syncing again", "block", n)
+		} else {
+			log.Warn("An executed block's root differs from its proven root; syncing again", "block", n)
+		}
 		opts.State.Demote(n)
 		opts.Buffer.StartCollecting()
 
@@ -418,26 +426,47 @@ type RootWatch interface {
 	Diverged(ctx context.Context) (uint64, bool, error)
 }
 
-// watchRoots asks the watch every retry until a block diverges or the
-// context ends. It returns the block that diverged.
-func watchRoots(ctx context.Context, watch RootWatch, log *slog.Logger, retry time.Duration) (uint64, error) {
+// A HeldBuffer is a buffer whose node stopped executing at a block it held:
+// a section of the state tree the block reads could not be loaded within the
+// hold's bound, so the block was not produced and the node collects again,
+// holding that block's group (executor spec, "Sync", §3a; #4485).
+type HeldBuffer interface {
+	// HeldBlock is the block the node held and did not produce.
+	HeldBlock() uint64
+}
+
+// watchRoots asks the watch every retry until a block diverges, the node
+// stops executing on its own, or the context ends. It returns the block that
+// diverged or that was held, and whether it was held.
+func watchRoots(ctx context.Context, watch RootWatch, buf Buffer, log *slog.Logger, retry time.Duration) (uint64, bool, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return 0, nil
+			return 0, false, nil
 		case <-time.After(retry):
+		}
+
+		// The node went back to collecting without the join: it held a
+		// block past the hold's bound. It is not executing, and an ACTIVE
+		// node that executes nothing serves a state that falls behind.
+		if buf.Collecting() {
+			var n uint64
+			if h, ok := buf.(HeldBuffer); ok {
+				n = h.HeldBlock()
+			}
+			return n, true, nil
 		}
 
 		n, diverged, err := watch.Diverged(ctx)
 		switch {
 		case ctx.Err() != nil:
-			return 0, nil
+			return 0, false, nil
 		case err != nil:
 			// A peer that cannot serve an anchor this second says nothing
 			// about this node's roots. The next round asks again.
 			log.Info("The executed blocks' roots could not be checked this round", "error", err)
 		case diverged:
-			return n, nil
+			return n, false, nil
 		}
 	}
 }

@@ -138,6 +138,9 @@ type Service struct {
 	// off at (#4407).
 	collectedThrough types.Round
 	lostThrough      types.Round
+	// heldBlock is the block the service held past the hold's bound and
+	// went back to collecting from (holdBlock); zero once it hands off.
+	heldBlock uint64
 	// handoff and stageThrough carry the join's requests; the block
 	// production loop serves both, because it is the only thing that
 	// produces blocks and the only thing that writes the buffer (#4294).
@@ -855,10 +858,95 @@ func (s *Service) processCommittedGroup(group []*types.Certificate) (*types.Cert
 	}
 
 	err := s.produceGroup(executedCerts, batches, leader, isLeader, payloadEntries)
+	if err != nil && errors.Is(err, errors.NotReady) {
+		err = s.holdBlock(&CollectedGroup{Certs: executedCerts, Batches: batches, Leader: leader, IsLeader: isLeader}, payloadEntries, err)
+	}
 	if err != nil {
 		return leader, err
 	}
 	return nil, nil
+}
+
+// heldBlockBound is how long a held block is retried before the node gives it
+// up and syncs again; heldBlockRetry is how long it waits between tries. They
+// are vars only so a test can shorten them.
+var (
+	heldBlockBound = 30 * time.Second
+	heldBlockRetry = time.Second
+)
+
+// heldBlockSay is how often a block still held says so.
+const heldBlockSay = 10 * time.Second
+
+// holdBlock holds a block the executor refused as not ready -- a section of
+// the state tree the block reads could not be loaded, and the store refused
+// its commit (executor spec, "Sync", §3a; #4485). The block is not skipped:
+// the next group would execute under its number, a different block than the
+// peers' (#4485 review, finding 3). It is produced again, as the same block,
+// until it is produced, or until the hold's bound, when the node goes back to
+// collecting with the group first in its buffer and the join syncs again, as
+// it does after a handoff that fails (join.HeldBuffer).
+func (s *Service) holdBlock(g *CollectedGroup, payloadEntries int, err error) error {
+	s.mu.RLock()
+	block := s.lastBlockIndex + 1
+	s.mu.RUnlock()
+	const on = "a section of the state tree the block reads"
+	since := time.Now()
+	said := since
+	asks := 1
+	s.logger.Info("The block is held", "on", on, "for", time.Duration(0), "asks", asks,
+		"partition", s.config.Partition.ID, "block", block, "round", g.Round(), "error", err)
+	for {
+		if held := time.Since(since); held >= heldBlockBound {
+			s.collectHeld(g, block)
+			s.logger.Error("The block was held past its bound; collecting again, and the join syncs again",
+				"on", on, "for", held.Round(time.Second), "asks", asks,
+				"partition", s.config.Partition.ID, "block", block, "round", g.Round(), "error", err)
+			return errors.NotReady.WithFormat("block %d held for %v: %w", block, held.Round(time.Second), err)
+		}
+		select {
+		case <-s.ctx.Done():
+			return err
+		case <-time.After(heldBlockRetry):
+		}
+		asks++
+		err = s.produce(g.Certs, g.Batches, g.Leader, g.IsLeader, payloadEntries, true)
+		switch {
+		case err == nil:
+			s.logger.Info("The block is no longer held", "on", on, "after", time.Since(since).Round(time.Second), "asks", asks,
+				"partition", s.config.Partition.ID, "block", block, "round", g.Round())
+			return nil
+		case !errors.Is(err, errors.NotReady):
+			return err
+		}
+		if time.Since(said) >= heldBlockSay {
+			said = time.Now()
+			s.logger.Info("The block is held", "on", on, "for", time.Since(since).Round(time.Second), "asks", asks,
+				"partition", s.config.Partition.ID, "block", block, "round", g.Round(), "error", err)
+		}
+	}
+}
+
+// collectHeld puts the service back into collecting mode with the held group
+// first in its buffer: the block it was to be was not produced, and every
+// group committed after it is collected behind it until the join hands off
+// again (resumeCollecting, for a failed handoff).
+func (s *Service) collectHeld(g *CollectedGroup, block uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.collecting = true
+	s.bufferOverrun = false
+	s.buffer = []*CollectedGroup{g}
+	s.bufferBytes = g.bytes()
+	s.heldBlock = block
+}
+
+// HeldBlock is the block the service last held past the hold's bound and did
+// not produce, and is zero once it hands off again (join.HeldBuffer).
+func (s *Service) HeldBlock() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.heldBlock
 }
 
 // produceGroup produces one block from a committed group whose batches are in
