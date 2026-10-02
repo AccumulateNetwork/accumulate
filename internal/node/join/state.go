@@ -153,7 +153,10 @@ type PulledState struct {
 	// state has matched they are backfilled while the node executes
 	// (backfill). It is kept under SystemData too, and read back at start,
 	// so a restart before the backfill ends does not forget them
-	// (markHeadOnly).
+	// (markHeadOnly). How far each chain of them has got is the account's
+	// SyncedEntries record (pull.Backfill); this set is the index of the
+	// accounts whose record is not yet whole, so that finding them does not
+	// read every account the partition holds (#4493).
 	headOnly map[[32]byte]*url.URL
 
 	// backfilled counts the accounts this process has backfilled, and

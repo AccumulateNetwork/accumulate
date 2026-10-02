@@ -20,7 +20,8 @@ import (
 // TestALongBackfillSaysHowFarItHasGot — #4472. One account of the Directory
 // is minutes of pages, and on Docker three followers said nothing of it for
 // ten minutes. An account's backfill says nothing in its first minute, then
-// names the account, the chain and the entries written of the chain's
+// names the account, the chain and how far down from its head the walk has
+// got (#4493: the walk runs from the head down) of the chain's
 // height, at most once a minute.
 func TestALongBackfillSaysHowFarItHasGot(t *testing.T) {
 	var buf bytes.Buffer
@@ -34,10 +35,10 @@ func TestALongBackfillSaysHowFarItHasGot(t *testing.T) {
 	lines := func() int { return strings.Count(buf.String(), line) }
 
 	progress := s.backfillProgress(url.MustParse("dn.acme/anchors"))
-	page := uint64(0)
+	page := uint64(40_000)
 	next := func(after time.Duration) {
 		clock = clock.Add(after)
-		page += 256
+		page -= 256
 		progress("anchor(directory)-bpt", page, 40_000)
 	}
 
@@ -49,7 +50,7 @@ func TestALongBackfillSaysHowFarItHasGot(t *testing.T) {
 	require.Equal(t, 1, lines(), "an account that has taken a minute says how far it has got")
 	require.Contains(t, buf.String(), "account=acc://dn.acme/anchors")
 	require.Contains(t, buf.String(), "chain=anchor(directory)-bpt")
-	require.Contains(t, buf.String(), "entries=768 of=40000")
+	require.Contains(t, buf.String(), "down_to=39232 of=40000")
 
 	for i := 0; i < 5; i++ {
 		next(10 * time.Second)

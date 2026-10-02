@@ -171,7 +171,7 @@ func (s *dbSource) QueryChainEntries(_ context.Context, u *url.URL, q *api.Chain
 	return out, nil
 }
 
-func newObservedDB(t *testing.T) *database.Database {
+func newObservedDB(t testing.TB) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
 	db.SetObserver(database.NewDatabaseObserver())
@@ -388,7 +388,7 @@ func TestFullSpine_ChainEntriesReplayed(t *testing.T) {
 }
 
 // buildChain writes an account whose main chain holds n entries.
-func buildChain(t *testing.T, db *database.Database, u *url.URL, n int, salt byte) {
+func buildChain(t testing.TB, db *database.Database, u *url.URL, n int, salt byte) {
 	t.Helper()
 	b := db.Begin(true)
 	defer b.Discard()
@@ -406,7 +406,7 @@ func buildChain(t *testing.T, db *database.Database, u *url.URL, n int, salt byt
 // addTransactionEntry stores a transaction and appends its hash to u's main
 // chain, as execution does: a transaction chain's entry names a message the
 // store holds.
-func addTransactionEntry(t *testing.T, b *database.Batch, u *url.URL, i int, salt byte) [32]byte {
+func addTransactionEntry(t testing.TB, b *database.Batch, u *url.URL, i int, salt byte) [32]byte {
 	t.Helper()
 	txn := new(protocol.Transaction)
 	txn.Header.Principal = u
