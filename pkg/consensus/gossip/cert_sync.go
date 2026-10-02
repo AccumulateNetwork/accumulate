@@ -38,6 +38,10 @@ type CertSyncResponse struct {
 	Certificates []*types.Certificate
 	// RequestID is the correlation ID from the request
 	RequestID uint64
+	// Requester is the request's requester. A request is named by the pair
+	// (Requester, RequestID): every node numbers its own requests, so an ID
+	// alone can name a request of several nodes at once (#4470).
+	Requester ed25519.PublicKey
 	// Missing contains digests we don't have
 	Missing []types.CertificateDigest
 }
@@ -165,6 +169,8 @@ func UnmarshalCertSyncRequest(data []byte) (*CertSyncRequest, error) {
 // Marshal serializes a CertSyncResponse.
 // Format:
 //   - RequestID (8 bytes)
+//   - RequesterLen (4 bytes)
+//   - Requester (variable, typically 32 bytes)
 //   - NumCertificates (4 bytes)
 //   - For each certificate: [len (4 bytes)][data]
 //   - NumMissing (4 bytes)
@@ -173,9 +179,12 @@ func (r *CertSyncResponse) Marshal() ([]byte, error) {
 	if len(r.Certificates) > MaxSyncCertificates {
 		return nil, fmt.Errorf("too many certificates: %d > %d", len(r.Certificates), MaxSyncCertificates)
 	}
+	if len(r.Requester) > 64 {
+		return nil, errors.New("requester too large")
+	}
 
 	// Calculate size
-	size := 8 + 4 // RequestID + NumCertificates
+	size := 8 + 4 + len(r.Requester) + 4 // RequestID + Requester + NumCertificates
 
 	certData := make([][]byte, len(r.Certificates))
 	for i, cert := range r.Certificates {
@@ -195,6 +204,12 @@ func (r *CertSyncResponse) Marshal() ([]byte, error) {
 	// RequestID
 	binary.BigEndian.PutUint64(data[offset:], r.RequestID)
 	offset += 8
+
+	// Requester
+	binary.BigEndian.PutUint32(data[offset:], uint32(len(r.Requester)))
+	offset += 4
+	copy(data[offset:], r.Requester)
+	offset += len(r.Requester)
 
 	// Certificates
 	binary.BigEndian.PutUint32(data[offset:], uint32(len(r.Certificates)))
@@ -222,7 +237,7 @@ func (r *CertSyncResponse) Marshal() ([]byte, error) {
 
 // UnmarshalCertSyncResponse deserializes a CertSyncResponse.
 func UnmarshalCertSyncResponse(data []byte) (*CertSyncResponse, error) {
-	if len(data) < 16 { // Minimum: 8 (requestID) + 4 (numCerts) + 4 (numMissing)
+	if len(data) < 20 { // Minimum: 8 (requestID) + 4 (requesterLen) + 4 (numCerts) + 4 (numMissing)
 		return nil, errors.New("cert sync response data too short")
 	}
 
@@ -232,6 +247,19 @@ func UnmarshalCertSyncResponse(data []byte) (*CertSyncResponse, error) {
 	// RequestID
 	r.RequestID = binary.BigEndian.Uint64(data[offset:])
 	offset += 8
+
+	// Requester
+	requesterLen := binary.BigEndian.Uint32(data[offset:])
+	offset += 4
+	if requesterLen > 64 {
+		return nil, errors.New("requester too large")
+	}
+	if offset+int(requesterLen)+4 > len(data) {
+		return nil, errors.New("cert sync response truncated: missing requester")
+	}
+	r.Requester = make([]byte, requesterLen)
+	copy(r.Requester, data[offset:offset+int(requesterLen)])
+	offset += int(requesterLen)
 
 	// Certificates
 	numCerts := binary.BigEndian.Uint32(data[offset:])

@@ -38,7 +38,35 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 		return CertDuplicate
 	}
 
+	// Refuse before verifying what the buffer would refuse after. A
+	// certificate held pending or refused by the full buffer never enters the
+	// DAG, so the check above never sees its copies, and every copy -- from
+	// gossip, and from each of the peers that answer a sync request -- cost
+	// a Verify, an ed25519 check per signature. A joining node, its buffer
+	// full of frontier certificates, spent its time verifying refused copies
+	// while its sync responses queued and were dropped behind them,
+	// including the ones carrying the parents it needed (#4469). Nothing is
+	// inserted without verification: a certificate refused here is one the
+	// insert path would have refused anyway, and one the node needs (at or
+	// below the next round) still takes the full path.
+	if p.pendingCerts.Contains(cert.Digest()) {
+		return CertBuffered
+	}
+	if p.pendingCerts.Full() && len(p.findMissingParents(cert)) > 0 {
+		p.roundMu.Lock()
+		ahead := cert.Round() > p.currentRound+1
+		p.roundMu.Unlock()
+		if ahead {
+			return CertDropped
+		}
+	}
+
 	// Verify certificate
+	p.verifications.Add(1)
+	metrics.CertVerificationsTotal.WithLabelValues(p.config.Partition).Inc()
+	if p.certSyncer != nil {
+		p.certSyncer.window.verification()
+	}
 	if err := cert.Verify(p.committee); err != nil {
 		// Info, not Debug: silently dropping peers' certificates stalls
 		// round advancement with no externally visible cause (#4054).

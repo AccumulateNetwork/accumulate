@@ -225,6 +225,10 @@ type Primary struct {
 	// certSyncer handles requesting missing certificates from peers
 	certSyncer *CertSyncer
 
+	// verifications counts received certificates verified against the
+	// committee (#4469)
+	verifications atomic.Uint64
+
 	// Channel to signal new certificates (for Bullshark)
 	newCerts   chan *types.Certificate
 	newCertsMu sync.Mutex

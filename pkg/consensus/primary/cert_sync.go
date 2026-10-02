@@ -122,12 +122,12 @@ type CertSyncer struct {
 	batchQueueMu sync.Mutex
 	batchTimer   *time.Timer
 
-	// Request ID counter
+	// Request ID counter, started at a random value (#4470)
 	nextReqID atomic.Uint64
 
 	// Response suppression (#4057): requests are broadcast, so peers skip
 	// answering when another peer's response has already been observed
-	answered   map[uint64]struct{}
+	answered   map[requestKey]struct{}
 	answeredMu sync.Mutex
 
 	// Callback for received certificates; returns what inserting it did
@@ -164,14 +164,31 @@ func NewCertSyncer(
 ) *CertSyncer {
 	config.applyDefaults()
 
-	return &CertSyncer{
-		answered: map[uint64]struct{}{},
+	s := &CertSyncer{
+		answered: map[requestKey]struct{}{},
 		config:   config,
 		dag:      d,
 		gossip:   g,
 		pending:  pending,
 		inFlight: make(map[types.CertificateDigest]*inFlightRequest),
 	}
+	// A node restarted under the same key must not reuse the IDs its peers
+	// saw answered before it stopped (#4470). Half the range leaves room to
+	// count up.
+	s.nextReqID.Store(rand.Uint64() >> 1)
+	return s
+}
+
+// requestKey names a request: each node numbers only its own requests, so
+// suppression keyed on the ID alone skips node B's request k because node
+// A's request k was answered (#4470).
+type requestKey struct {
+	requester string
+	id        uint64
+}
+
+func keyOf(requester []byte, id uint64) requestKey {
+	return requestKey{string(requester), id}
 }
 
 // SetCertReceivedCallback sets the callback to invoke when a certificate is
@@ -438,7 +455,7 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 		time.Sleep(jitter)
 	}
 	s.answeredMu.Lock()
-	_, answered := s.answered[req.RequestID]
+	_, answered := s.answered[keyOf(req.Requester, req.RequestID)]
 	s.answeredMu.Unlock()
 	if answered {
 		s.served("suppressed")
@@ -491,6 +508,7 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 	resp := &gossip.CertSyncResponse{
 		Certificates: certs,
 		RequestID:    req.RequestID,
+		Requester:    req.Requester,
 		Missing:      missing,
 	}
 
@@ -549,9 +567,9 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 	// Note the response so we do not also answer this request (suppression)
 	s.answeredMu.Lock()
 	if len(s.answered) > 4096 {
-		s.answered = make(map[uint64]struct{})
+		s.answered = make(map[requestKey]struct{})
 	}
-	s.answered[resp.RequestID] = struct{}{}
+	s.answered[keyOf(resp.Requester, resp.RequestID)] = struct{}{}
 	s.answeredMu.Unlock()
 
 	s.responsesRecv.Add(1)
@@ -779,6 +797,7 @@ func (s *CertSyncer) logSummary() {
 	if w.answered+w.suppressed+w.empty > 0 {
 		args = append(args, "served", w.answered, "suppressed", w.suppressed, "servedEmpty", w.empty)
 	}
+	args = append(args, "verified", w.verifications)
 	slog.Info("Certificate catch-up", args...)
 }
 
@@ -814,6 +833,10 @@ type syncWindowCounts struct {
 	lastRefusal           string
 	answered, suppressed  int
 	empty                 int
+	// verifications counts received certificates verified against the
+	// committee, from gossip as well as sync. It is reported with the rest
+	// but does not by itself make the line worth writing (#4469).
+	verifications int
 }
 
 func (c syncWindowCounts) isEmpty() bool {
@@ -866,6 +889,12 @@ func (w *syncWindow) certificate(o CertOutcome) {
 	case CertDropped, CertInvalid, CertEquivocation, CertFailed:
 		w.lastRefusal = string(o)
 	}
+}
+
+func (w *syncWindow) verification() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.verifications++
 }
 
 func (w *syncWindow) served(outcome string) {

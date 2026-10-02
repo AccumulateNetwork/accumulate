@@ -296,10 +296,38 @@ broadcast:
   does not fit unanswered, and it would wait out the 30 s retry (#4469).
 
 A peer answers after a random delay of up to 200 ms with at most 100
-certificates, and does not answer a request whose ID it has already seen
-answered. What arrives is verified against the committee and inserted. A
+certificates, and does not answer a request it has already seen answered.
+A request is named by its requester's key and its ID together, and a
+response carries both: every node numbers its own requests, so an ID alone
+named a request of every node at once, and a peer that had seen node A's
+request *k* answered skipped node B's request *k*. A node numbers its
+requests from a random starting point, so one restarted under the same key
+does not reuse the IDs its peers saw answered before it stopped (#4470).
+What arrives is verified against the committee and inserted. A
 certificate whose parents are missing is held (up to `2 × 10 × committee`
 certificates) until they arrive, and its parents are asked for.
+
+**A certificate the buffer will refuse is refused before it is verified.**
+Verification is an ed25519 check per signature, and a certificate already
+in the DAG is recognised before it. A certificate that is held, or that the
+full buffer refuses, is never in the DAG, so before this check every copy of
+it was verified again. Copies are many: gossip delivers each certificate,
+every peer that answers a sync request sends its own response, and every
+node receives every response, not just answers to its own requests.
+Responses wait in a queue of 500 per partition (`gossip.go`), read one at a
+time; when it is full, a new response is dropped. A joining node with its
+buffer full of frontier certificates spent its time verifying refused
+copies. Its queue filled and the responses carrying the parents it needed
+were dropped, though peers had answered every request. Under `-race`, consim
+`TestFollowerJoinCatchesUp` failed 10 runs in 10 this way (#4469). So a
+certificate the buffer already holds is reported held, and one with
+missing parents that the full buffer would refuse, above the round after the
+node's own, is reported dropped, both without verification. A certificate
+the node needs (at or below the round after its own) still takes the full
+path: it is verified, and its parents are asked for. Nothing enters the DAG
+or the buffer unverified. `accumulate_dagbft_cert_verifications_total` and
+the `verified` field of the `Certificate catch-up` line count the
+verifications.
 
 **A certificate the node needs to advance is never refused without asking
 for its parents.** When the buffer is full, a certificate at or below the
