@@ -773,6 +773,17 @@ func (s *Service) checkBlockLiveness() {
 		// stays put is executing nothing, not partitioned away.
 		args = append(args, "everProducedBlock", false)
 	}
+	// What consensus holds for its round: a stall with the round frozen is
+	// told apart by it (own header? votes? certificates formed?).
+	s.mu.RLock()
+	node := s.node
+	s.mu.RUnlock()
+	if node != nil && node.Primary() != nil {
+		rs := node.Primary().RoundStatus()
+		args = append(args, "lastAuthored", rs.LastAuthored, "hasAuthored", rs.HasAuthored,
+			"ownHeader", rs.OwnHeader, "ownVotes", rs.OwnVotes,
+			"certsThisRound", rs.CertsHere, "certsRoundBefore", rs.CertsBefore)
+	}
 	s.logger.Error("Partition stalled: no block produced", args...)
 }
 
