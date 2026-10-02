@@ -185,7 +185,9 @@ type heldSource struct {
 }
 
 func (s *heldSource) QueryChainEntries(ctx context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
-	if r := q.Range; u.Equal(s.held.account) && r != nil && r.Start == 0 && r.Count != nil && *r.Count >= 256 {
+	// The backfill walks from the head down (#4493): its first page of
+	// dave is held, wherever it starts.
+	if r := q.Range; u.Equal(s.held.account) && join.Backfilling(ctx) && r != nil && r.Count != nil && *r.Count >= 256 {
 		s.held.entered.Add(1)
 		s.held.waiting.Add(1)
 		defer s.held.waiting.Add(-1)
