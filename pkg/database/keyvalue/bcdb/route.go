@@ -209,3 +209,19 @@ func chainRepeats(chain string) bool {
 	}
 	return false
 }
+
+// isPositional reports whether k names a record a chain writes once at a
+// position its head accounts for -- Element(i), Intermediate(i, h) -- which
+// a reader asks for only when the head says it exists. Such a record is
+// never legitimately absent, so a shallow miss on it is the window, and the
+// adapter reads history for it (database.go, getCurrent; #4507).
+func isPositional(k *record.Key) bool {
+	last, _, trailing := tail(k)
+	switch last {
+	case "Element":
+		return trailing == 1
+	case "Intermediate":
+		return trailing == 2
+	}
+	return false
+}

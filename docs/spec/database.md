@@ -108,6 +108,16 @@ an account, so a record the previous block wrote can already be past the
 window. The executor's reads of its own queued local deliveries fall back to
 a deep read (#4405).
 
+**A positional permanent record is never absent to any reader.** A chain's
+`Element(i)` and `Intermediate(i, h)` are asked for only at positions the
+chain's head accounts for, so a shallow miss on one is the window and nothing
+else; the adapter reads history for it, and counts the read so the reader is
+still named (#4507). Run 20261002T145702Z: a kill left one Tail chunk short on
+two validators, the chain refilled it from elements past the window through
+the block's change set, and every block failed for ever. `ElementIndex` is not
+such a record — its absence is the question a unique append asks — and stays
+shallow.
+
 A store with no window ignores the distinction: its ordinary reads already see
 everything.
 

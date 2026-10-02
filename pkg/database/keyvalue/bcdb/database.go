@@ -994,6 +994,27 @@ func (d *Database) getCurrent(key *record.Key, h [32]byte, deep bool) ([]byte, e
 		// reaches back and for what.
 		value, err = d.kv.GetDeep(h)
 		d.recordHistoryRead(keyShape(key), h, err == nil)
+	} else if err != nil && isPositional(key) {
+		// A positional permanent record -- Element(i), Intermediate(i, h)
+		// -- is asked for only at a position the chain's head says exists,
+		// so its absence is never the answer: it is the window. Read
+		// history for it, counted both as the shallow miss it was and as
+		// the history read it became, so the numbers still name the reader.
+		// Run 20261002T145702Z: a kill left one Tail chunk short on two
+		// validators, the chain refilled it from its elements through the
+		// block's batch, the elements were past the window, and every
+		// block failed for ever (#4507). ElementIndex is not here: its
+		// absence IS asked, on every unique append, and walking history for
+		// each was the 113.8 million probes #4219 removed.
+		shape := keyShape(key)
+		d.fallbackMu.Lock()
+		if d.shallowMisses == nil {
+			d.shallowMisses = map[string]uint64{}
+		}
+		d.shallowMisses[shape]++
+		d.fallbackMu.Unlock()
+		value, err = d.kv.GetDeep(h)
+		d.recordHistoryRead(shape, h, err == nil)
 	} else if err != nil {
 		// A shallow reader missed, and the miss IS the answer (database
 		// spec, "Windowed stores", "Duplicates are caught at entry"). A
