@@ -494,45 +494,6 @@ rebuilt together.
 condition below it in `shouldSendAnchor`, if the assumption ever stops
 holding.
 
-### E24. A section a peer retained no state for at H holds the block
-
-*[#4485](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4485)*
-
-**Spec** (executor.md, "Sync", §3a, "Open"): once the root has matched, a
-section is loaded as of H, the block the node last committed, and the
-recommended answer to a peer that retained no state at H for an account in it
-is (a): every node retains, on an account's first change inside its retention
-window, the state before the change as well.
-
-**Code**: (a) is not built. A peer serves an account as of H from the states
-it retained when the account changed (`indexing.retainedAccountAt`); an
-account whose last change is older than the peer's window and that changed
-after H is refused (`IncompleteChain`) by every peer, and its current state
-does not hash to the section's marker either. The section loader asks every
-peer for 30 s and then holds the block (`NotReady` at commit); the DAG
-service produces it again as the same block for 30 s more, then collects
-again with it first in its buffer, and the node pulls again: the pull's records name that account and load its section
-from the peers' current state, and the match proves it. A simulated network
-retains from genesis and never meets this; a long-running network meets it on
-the first block that writes a cold account in a section the node has not
-loaded, until the fill reaches the section.
-
-**Size**: `retainStateReceipt` writing, when the account has no retained
-block, the state its store held before the block — body, leaf and state
-receipt — under the window's start; the pre-block state is the outermost
-batch's committed view.
-
-**Decided (Paul, 2026-10-02): no retention.** "We don't need retention
-because all the entries are in the database, and going back we will find the
-entries that are missing working back from the account state, and find the
-entries once we have caught an account up." A section loaded while the node
-executes is loaded as the peer holds it now, not as of H; a root that then
-differs from its anchor is the anchor mismatch of "Two mismatches" — repaired
-from the block ledger, and the node moves on — and the account's entries are
-found from its chains once it has caught up. The hold stays only for a load
-that gets no answer at all. The as-of-H load and the hold-then-re-pull of a
-cold account are to be removed (#4485).
-
 ### E25. Open (#4485): validation loads a peer's current state, unchecked
 
 executor.md §3a says a validation (submission-time check) loads a section it

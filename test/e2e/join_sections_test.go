@@ -64,6 +64,14 @@ const sectionsAccounts = 600
 const sectionsOraclePrice = 31415
 
 func joinWithSectionsNotLoaded(t *testing.T) *sectionsJoin {
+	j := prepareSectionsJoin(t)
+	j.run()
+	return j
+}
+
+// prepareSectionsJoin builds the network and the reinstalled joiner, and
+// restarts it, but does not run its join.
+func prepareSectionsJoin(t *testing.T) *sectionsJoin {
 	j := &sectionsJoin{t: t, fresh: 3}
 	j.alice = url.MustParse("alice")
 	j.bob = url.MustParse("bob")
@@ -139,7 +147,6 @@ func joinWithSectionsNotLoaded(t *testing.T) *sectionsJoin {
 
 	// The join, through the production join.Run.
 	j.part.RestartNode(j.fresh)
-	j.run()
 	return j
 }
 

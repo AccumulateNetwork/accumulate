@@ -574,7 +574,8 @@ served them. There is no as-of-H load and no retention of pre-change state:
 a section loaded while the node executes is the peer's current state, and a
 root that then differs from its anchor is repaired from the block ledger
 ("Two mismatches"); the entries an account is missing are found from its
-chains once it has caught up (DIFFERENCES E24–E26).
+chains once it has caught up (DIFFERENCES E25–E26; E24, the as-of-H load, is
+built).
 
 #### 2. Nothing is proven before the match, and the match is the proof
 
@@ -1136,15 +1137,28 @@ that an account does not exist.
   the peer's current view, stamped with its block, the accounts the records
   brought current skipped (§3). Nothing is checked against the section's hash
   there: the records move the section on from `S`, and the match is the proof.
-- *Once the root has matched* a section is loaded **as of H**, the block the
-  node last committed: `BptPage` and `AccountStates` with `ForHeight = H`.
-  The leaves must hash to the marker's value by the tree's rule, and each
-  account's state to its leaf, or the answer is refused and the next peer
-  asked. Nothing executed touched the section since the match — a touch
-  loads it — so the marker's value is the section's hash at H. A peer that
-  cannot answer as of H (it retains no history, or not this account's) is
-  asked for its current state, checked against the same hash: a section no
-  block after H changed is taken that way, and one that changed is refused.
+- *Once the root has matched* a section is loaded **as the peers hold it
+  now** (Paul, 2026-10-02: no as-of-H load, no retention of pre-change
+  state). The loader asks the peers in turn for the section's leaves
+  (`BptPage` from the current tree, stamped with the peer's block P) and the
+  accounts behind them (`AccountStates`, current), and each account's state
+  must hash to its leaf, whoever serves it. A peer whose leaves hash to the
+  marker's value is taken: the section is the one the node's tree holds. A
+  peer at or before H — the block the node last committed — whose leaves hash
+  to anything else is refused and the next peer asked: at H the section is
+  the marker's, since nothing executed touched it since the match (a touch
+  loads it). A peer past H whose leaves differ holds the section as blocks
+  after H left it. A block's load takes the first such answer when no peer's
+  verifies, and says so (`A section a block reads was taken as a peer holds
+  it after this node's block; the root check decides`); the root check does
+  its job — a root that then differs from its anchor is the anchor mismatch of
+  "Two mismatches", 2, repaired from the block ledger, and the node moves on.
+  This is the case of a cold account — written last before any peer's
+  retention window — that a block writes after the peers have executed that
+  block: no peer could answer it as of H, and holding the block for it is what
+  this replaces (`TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`).
+  The fill takes only an answer that hashes to the marker: a section a block
+  after H changed is loaded by the block that touches it.
 
 **Execution loads what it reads.** The batch a block executes in loads, and
 so does the batch a validation reads (the builder's decision on #4485: a
@@ -1162,7 +1176,7 @@ deletion and the leaves' insertion are made in the block's own tree, so the
 root after the block is the root the block's changes make. The load commits
 with the block, or is discarded with it, and the set in memory forgets the
 section only when the block commits. A section that cannot be loaded — no peer
-answers it as of H in 30 s of asking every peer — **holds the block**: the
+answers it at all in 30 s of asking every peer — **holds the block**: the
 read fails and the block's batch refuses to commit (`NotReady`), so the block
 is not produced. A held block is held, never skipped: nothing after it is
 executed, and above all not the next committed group under the held block's
@@ -1181,8 +1195,8 @@ produced, and `The block was held past its bound` when the node gives it up.
 **The fill.** A goroutine of its own, beside the backfill and with its
 lifecycle (#4472): started after each handoff, stopped — and waited for —
 before the node is demoted and pulls again, and when the join ends. It loads
-the sections still not loaded, in key order, as of H, checked as execution's
-loads are, and **hands each to the next block's batch to write**; it never
+the sections still not loaded, in key order, as the peers hold them now,
+taking only an answer that hashes to the section's marker, and **hands each to the next block's batch to write**; it never
 commits itself, because a commit beside the block's would write tree nodes
 the block's batch also holds, and the later commit would put back the earlier
 one's marker. A loaded section waiting for a block is written only if its
@@ -1192,6 +1206,7 @@ the sections not loaded` at most once a minute, and `Every section is loaded`
 once.
 
 The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
+`TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`,
 `TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt`,
 `TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchanged`,
 `TestTheFillLoadsEverySectionAndTheRootMatchesThroughout`,
@@ -1219,19 +1234,13 @@ takes before it writes it. An account a section load takes is taken by its
 chain heads and open mark set, like every account the pull takes, and is
 recorded for the history backfill (§2).
 
-**Open (#4485), and what is built meanwhile: a peer cannot always answer a
-section as of H.** A peer serves an account as of a block from what it
-retained when the account changed (`retainedAccountAt`). An account whose
-last change is older than the peer's retention window and that changed again
-after H has no state retained at H, and the peer refuses it
-(`IncompleteChain`); no peer ever will. A cold account written by block
-H + 1 is exactly that once the peers have executed H + 1. The options:
-(a) on an account's first change inside the window, retain the state before
-the change as well, at the window's start — a write per cold account changed,
-on every node; (b) leave it, so the load holds the block and the node pulls
-again, the pull's records naming that account and loading its section.
-**Recommended: (a).** Built meanwhile: (b) (DIFFERENCES E24). A simulated
-network retains from genesis and never meets it.
+**Decided (Paul, 2026-10-02): no retention.** A peer cannot answer a section
+as of H for a cold account a later block changed (it retained no state at H;
+`retainedAccountAt`), and the open question was whether every node should
+retain pre-change state for it. It does not: "all the entries are in the
+database, and going back we will find the entries that are missing working
+back from the account state." The section is taken as the peers hold it now,
+above, and the root check repairs what that changes.
 
 #### 4. Staging is what was collected, minus what the state says executed
 
