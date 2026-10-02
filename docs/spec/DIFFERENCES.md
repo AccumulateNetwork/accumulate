@@ -510,7 +510,9 @@ follows those names; the pull's own loads before the match
 `ChangedAccountStates` answer for an account in a section not loaded carries
 `NotLoaded` with the section and the names (#4496); the pull does not follow
 the names, it asks the next of its own peers. A plain account query is refused
-with the section and the names, but no client of the API follows them.
+with the section and the names — in the daemon too since #4497, whose API
+services had a database, and so a gate, of their own — but no client of the
+API follows them.
 
 ### E11. A node cannot sync from the running protocol
 

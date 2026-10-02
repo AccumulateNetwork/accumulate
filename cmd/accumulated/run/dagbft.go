@@ -254,8 +254,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		Router:  routing.MessageRouter{Router: router},
 	}}
 
-	// Create database
-	db := database.New(store, logger)
+	// Create database: the one every service over this store shares, so
+	// the section gate the join installs on it covers them all (#4497).
+	db := inst.database(store, logger)
 
 	// Load genesis snapshot if needed (before creating executor)
 	genesisPath := inst.path(s.Genesis)
@@ -728,7 +729,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 	// the window the store answers protocol reads from (BlockchainDB
 	// spec 1.3), so they read deep.  The executor keeps the windowed
 	// database it is given above, where the cost of a miss is bounded.
-	db := database.New(store, logger).Deep()
+	db := inst.database(store, logger).Deep()
 
 	// Create consensus service
 	consensusSvc, err := newConsensusAPIService(dagbft.ConsensusAPIServiceParams{
@@ -843,7 +844,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 			if err != nil {
 				return nil, err
 			}
-			return database.New(store, logger).Deep(), nil
+			return inst.database(store, logger).Deep(), nil
 		}),
 	}
 	registerRpcService(inst, proofSvc.Type().AddressFor(s.Partition.ID), message.ProofService{ProofService: proofSvc})

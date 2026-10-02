@@ -13,7 +13,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
@@ -80,7 +79,7 @@ func (q *Querier) start(inst *Instance) error {
 		// Deep: an API read reaches whatever the caller asks for, and
 		// the store answers protocol reads from a window (BlockchainDB
 		// spec 1.3).  The executor keeps the windowed database.
-		Database:  database.New(store, logging.NewSlogLogger(inst.logger)).Deep(),
+		Database:  inst.database(store, logging.NewSlogLogger(inst.logger)).Deep(),
 		Consensus: consensus,
 		NodeState: nodeState,
 		// A read in a section this node has not loaded names the
@@ -129,7 +128,7 @@ func (n *NetworkService) start(inst *Instance) error {
 	impl := api.NewNetworkService(api.NetworkServiceParams{
 		Logger:    logging.NewSlogLogger(inst.logger).With("module", "api"),
 		Partition: n.Partition,
-		Database:  database.New(store, logging.NewSlogLogger(inst.logger)).Deep(),
+		Database:  inst.database(store, logging.NewSlogLogger(inst.logger)).Deep(),
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(n.Partition), message.NetworkService{NetworkService: impl})
@@ -196,7 +195,7 @@ func (e *EventsService) start(inst *Instance) error {
 	impl := api.NewEventService(api.EventServiceParams{
 		Logger:    logging.NewSlogLogger(inst.logger).With("module", "api"),
 		Partition: e.Partition,
-		Database:  database.New(store, logging.NewSlogLogger(inst.logger)).Deep(),
+		Database:  inst.database(store, logging.NewSlogLogger(inst.logger)).Deep(),
 		EventBus:  events,
 	})
 	registerRpcService(inst, impl.Type().AddressFor(e.Partition), message.EventService{EventService: impl})

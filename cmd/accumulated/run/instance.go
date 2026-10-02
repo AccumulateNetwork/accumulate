@@ -47,6 +47,10 @@ type Instance struct {
 
 	haltControllersMu sync.RWMutex
 	haltControllers   map[string]*HaltController
+
+	// databases is the one database each store is opened as, so every
+	// service over a store shares its section gate (#4497).
+	databases databases
 }
 
 const minDiskSpace = 0.05

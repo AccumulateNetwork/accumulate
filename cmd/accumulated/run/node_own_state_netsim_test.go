@@ -122,6 +122,14 @@ func startNetsimAndExecute(t *testing.T) string {
 // that refuses to (#4361). Nil takes the node's default.
 func startNetsimAndExecuteWith(t *testing.T, bptHistoryDepth *uint64) string {
 	t.Helper()
+	_, api := startNetsimInstance(t, bptHistoryDepth)
+	return api
+}
+
+// startNetsimInstance is startNetsimAndExecuteWith, returning the instance
+// as well.
+func startNetsimInstance(t *testing.T, bptHistoryDepth *uint64) (*Instance, string) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -189,7 +197,7 @@ func startNetsimAndExecuteWith(t *testing.T, bptHistoryDepth *uint64) string {
 		}
 	}
 	require.True(t, ready, "the API never answered for both partitions")
-	return api
+	return inst, api
 }
 
 // --- the process's own Prometheus registry ---------------------------------
