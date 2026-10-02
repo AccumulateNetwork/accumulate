@@ -420,10 +420,19 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   read at start-up is the only read of the historical record the cache makes.
 - **Never served from storage.** Every entry is also persisted to the
   permanent layer through execution; that is the record, not a fallback. A
-  request for an entry the cache does not hold is refused and **counted as a
-  miss** with its depth — a miss means the cache is undersized or the request
-  is stale, and either is a defect worth a number. The historical record is
-  not read to build an answer.
+  request for an entry the cache does not hold is **counted as a miss** with
+  its depth — a miss means the cache is undersized or the request is stale,
+  and either is a defect worth a number — and is **relayed one hop** to the
+  partition's other nodes serving the sequencer, by name, in turn; the first
+  answer is this node's answer, with the signatures of the node that held the
+  entry, and a miss on every node is refused (`NotFound`). The relayed request
+  is marked (`SequenceOptions.Relayed`), and a node that receives a marked
+  request answers from its own cache and never relays it again, so no request
+  goes round (Paul, 2026-10-01, #4487: "A cache miss would relay the request
+  to another fully synced node"; `TestACacheMissIsRelayedToANodeThatHoldsTheEntry`;
+  `accumulate_sequencer_relayed_total{outcome}`). A node that is not
+  `ACTIVE` refuses `NotReady` before it reads its cache, so a relay that
+  reaches it moves on. The historical record is not read to build an answer.
 - **Nothing is invalidated.** An entry's content cannot change under its index
   or its hash.
 
@@ -546,8 +555,9 @@ anchor to the block's root, built at close from the root chain segment the
 block appended; the Directory receipt and anchor the
 block was dispatched under, recorded at dispatch (`MarkDispatched`).
 Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
-(`sequencer_cache.go`) read it and nothing else; a miss is refused as
-`NotFound` and counted (`accumulate_synthcache_misses_total{kind}`). Released by
+(`sequencer_cache.go`) read it and nothing else; a miss is counted
+(`accumulate_synthcache_misses_total{kind}`), relayed one hop
+(`SequencerParams.Relay`), and refused as `NotFound` when no node answers. Released by
 the destination's `Delivered` carried on every dispatched `SyntheticProof`
 and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
 at commit: the stream's entries at or below it, the block segments that held

@@ -24,3 +24,10 @@ SequenceOptions:
     # infer the held anchor without being told.
     - name: ProveAgainstAnchor
       type: uint
+    # Set by a node that relays a request its own cache missed to another
+    # node of the partition (#4487; executor spec, "Sync", Redirection). The
+    # node it reaches answers from its own cache and never relays it again:
+    # one hop. A client that sets it only gives up the relay for its own
+    # request.
+    - name: Relayed
+      type: bool

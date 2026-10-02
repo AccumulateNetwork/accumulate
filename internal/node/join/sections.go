@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -41,6 +42,10 @@ type sections struct {
 	// peers is the partition's peers, in the order they are asked.
 	peers func(ctx context.Context) []pull.Source
 
+	// sourceFor addresses a peer a refusal named; nil when the sources
+	// cannot address a peer by name.
+	sourceFor func(peer.ID) pull.Source
+
 	// loaded is told the accounts a committed block's sections brought in:
 	// they are taken by their chain heads, and backfilled (§2).
 	loaded func([]*url.URL)
@@ -51,6 +56,11 @@ type sections struct {
 
 	notLoaded  [bpt.Sections]atomic.Bool
 	nNotLoaded atomic.Int64 // how many of notLoaded are set
+
+	// unverified counts the sections a block took as a peer holds them
+	// with no peer's hashing to the marker: each is a load whose block the
+	// root check decides.
+	unverified atomic.Int64
 	turn       atomic.Uint64
 
 	mu   sync.Mutex
@@ -231,14 +241,15 @@ type loadedSection struct {
 	states  []*api.AccountState
 }
 
-// Load implements [database.SectionGate]: the section is loaded as of the
-// block the node last committed, checked against its marker, and written
-// into the block's batch. It asks every peer until one answers or the time is
-// up, and then holds the block.
-func (x *sections) Load(batch *database.Batch, s bpt.Section, executing bool) error {
-	if !executing {
-		return x.loadForCheck(batch, s)
-	}
+// Load implements [database.SectionGate]: the section is loaded as the peers
+// hold it now and written into the block's batch. A peer whose section hashes
+// to the marker is taken first; failing one, the section as a peer past the
+// node's block holds it is taken, and the root check decides: a root that then
+// differs from its anchor is the anchor mismatch of "Two mismatches", repaired
+// from the block ledger (executor spec, "Sync", §3a; Paul, 2026-10-02). It
+// asks every peer until one answers or the time is up, and only a load that no
+// peer answers at all holds the block.
+func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 	want, ok := x.expected(s)
 	if !ok {
 		x.mu.Lock()
@@ -273,39 +284,23 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section, executing bool) er
 	var last error
 	for ctx.Err() == nil {
 		var ld *loadedSection
-		ld, last = x.fetch(ctx, s, h, want)
+		var verified bool
+		ld, verified, last = x.fetch(ctx, s, h, want, true)
 		if last == nil {
+			if !verified {
+				x.unverified.Add(1)
+				x.log.Info("A section a block reads was taken as a peer holds it after this node's block; the root check decides",
+					"partition", x.partition, "section", s, "block", h+1, "peer-block", ld.block)
+			}
 			return x.apply(batch, ld)
 		}
 		if !pause(ctx, 200*time.Millisecond) {
 			break
 		}
 	}
-	x.log.Warn("A section of the state tree a block reads could not be loaded; the block is held",
+	x.log.Warn("A section of the state tree a block reads could not be loaded from any peer; the block is held",
 		"partition", x.partition, "section", s, "block", h+1, "error", last)
-	return errors.NotReady.WithFormat("section %d as of block %d: %w", s, h, last)
-}
-
-// checkTimeout is how long a validation's load asks the peers.
-const checkTimeout = 5 * time.Second
-
-// loadForCheck loads a section into a validation's batch, from a peer's
-// current state, which the validators judge the transaction against too. It
-// is not checked against the marker -- the section may have changed since
-// the block this node last committed -- and it is discarded with the batch:
-// it decides no block (executor spec, "Sync", §3a).
-func (x *sections) loadForCheck(batch *database.Batch, s bpt.Section) error {
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), backfillKey{}, true), checkTimeout)
-	defer cancel()
-	var last error = errors.NotFound.With("no peer to load from")
-	for _, src := range x.peers(ctx) {
-		ld, err := x.fetchAt(ctx, src, s, 0, nil)
-		if err == nil {
-			return x.write(batch, ld)
-		}
-		last = err
-	}
-	return errors.NotReady.WithFormat("section %d for a validation: %w", s, last)
+	return errors.NotReady.WithFormat("section %d for block %d: %w", s, h+1, last)
 }
 
 // checkMarker is whether the batch's tree still holds the section's marker
@@ -442,10 +437,20 @@ func (x *sections) dropReady() {
 	x.pending = map[bpt.Section][]*url.URL{}
 }
 
-// fetch loads a section as of block h from the first peer that answers it,
-// checked against want: the section's leaves as of h must hash to want by the
-// tree's rule, and each account's state to its leaf.
-func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]byte) (*loadedSection, error) {
+// fetch loads a section as the peers hold it now (executor spec, "Sync", §3a;
+// Paul, 2026-10-02: there is no as-of-H load). It asks the peers in turn for
+// the section's leaves, and the first peer whose leaves hash to want is taken,
+// verified: the section is the one the marker holds. When no peer's verifies
+// and later is set (a block's load), the first answer is taken, and the
+// answer says it is not verified: the root check decides, and a root that
+// then differs from its anchor is the anchor mismatch of "Two mismatches",
+// repaired. A peer past h holds the section as later blocks left it; one at
+// h or before it whose section differs says the node's own marker no longer
+// stands -- a node that took a later section and diverged -- and holding the
+// block for it repairs nothing (#4485: only a load no peer answers holds the
+// block). The fill does not set later: it takes only what verifies. Each
+// account's state must hash to its leaf, whoever served it.
+func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]byte, later bool) (*loadedSection, bool, error) {
 	var last error = errors.NotFound.With("no peer to load from")
 	srcs := x.peers(ctx)
 	// Each load starts at the next peer, so no one peer answers every load.
@@ -453,45 +458,93 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		turn := int(x.turn.Add(1) % uint64(n))
 		srcs = append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...)
 	}
+	type candidate struct {
+		src    pull.Source
+		leaves []bpt.SectionLeaf
+		urls   []*url.URL
+		block  uint64
+		hash   [32]byte
+	}
+	var fallback *candidate
+	asked := map[peer.ID]bool{}
 	for _, src := range srcs {
-		ld, err := x.fetchFrom(ctx, src, s, h, want)
-		if err == nil {
-			return ld, nil
+		if p, ok := src.(interface{ PeerID() peer.ID }); ok {
+			asked[p.PeerID()] = true
 		}
-		last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
 	}
-	return nil, last
+	n := len(srcs)
+	for i := 0; i < len(srcs); i++ {
+		src := srcs[i]
+		if ctx.Err() != nil {
+			break
+		}
+		leaves, urls, block, err := sectionLeavesAt(ctx, src, x.partition, s, 0)
+		if err != nil {
+			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
+			// A peer that has not loaded the section names peers that may
+			// hold it; they are asked after the rest. What they answer is
+			// checked as any answer is (executor spec, "Sync",
+			// Redirection; Paul, 2026-10-02).
+			srcs = x.redirect(srcs, asked, err, n+maxRedirected)
+			continue
+		}
+		got, ok := bpt.SectionHash(leaves)
+		if ok && got == want {
+			ld, err := x.statesFor(ctx, src, s, block, got, leaves, urls)
+			if err == nil {
+				return ld, true, nil
+			}
+			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
+			continue
+		}
+		last = errors.Conflict.WithFormat("%s: the leaves of section %d as of block %d hash to %x, not to its marker %x", sourceKey(src), s, block, got[:8], want[:8])
+		if later && fallback == nil {
+			fallback = &candidate{src, leaves, urls, block, got}
+		}
+	}
+	if fallback != nil {
+		ld, err := x.statesFor(ctx, fallback.src, s, fallback.block, fallback.hash, fallback.leaves, fallback.urls)
+		if err == nil {
+			return ld, false, nil
+		}
+		last = errors.UnknownError.WithFormat("%s: %w", sourceKey(fallback.src), err)
+	}
+	return nil, false, last
 }
 
-func (x *sections) fetchFrom(ctx context.Context, src pull.Source, s bpt.Section, h uint64, want [32]byte) (*loadedSection, error) {
-	ld, err := x.fetchAt(ctx, src, s, h, &want)
-	if err == nil {
-		return ld, nil
+// maxRedirected bounds how many named peers one load adds to those it asks.
+const maxRedirected = 16
+
+// redirect adds to srcs each peer a refusal of a section not loaded named and
+// that was not asked yet, up to max sources in all.
+func (x *sections) redirect(srcs []pull.Source, asked map[peer.ID]bool, err error, max int) []pull.Source {
+	if x.sourceFor == nil {
+		return srcs
 	}
-	// A peer that retains no state as of h, or has moved on past it, may
-	// still hold the section as it was at h: a section no block after h
-	// changed. Its current state is checked against the same hash, so it is
-	// taken only if it is h's.
-	cur, err2 := x.fetchAt(ctx, src, s, 0, &want)
-	if err2 == nil {
-		cur.block = h
-		return cur, nil
+	d, ok := database.NotLoadedOf(err)
+	if !ok {
+		return srcs
 	}
-	return nil, err
+	for _, name := range d.Redirect {
+		if len(srcs) >= max {
+			break
+		}
+		id, err := peer.Decode(name)
+		if err != nil || asked[id] {
+			continue
+		}
+		asked[id] = true
+		if src := x.sourceFor(id); src != nil {
+			srcs = append(srcs, src)
+		}
+	}
+	return srcs
 }
 
-// fetchAt loads a section from one peer as of block h, zero being its current
-// state, checked against want unless it is nil.
-func (x *sections) fetchAt(ctx context.Context, src pull.Source, s bpt.Section, h uint64, want *[32]byte) (*loadedSection, error) {
-	leaves, urls, err := sectionLeaves(ctx, src, x.partition, s, h)
-	if err != nil {
-		return nil, err
-	}
-	got, ok := bpt.SectionHash(leaves)
-	if want != nil && (!ok || got != *want) {
-		return nil, errors.Conflict.WithFormat("the leaves of section %d as of %d hash to %x, not to its marker %x", s, h, got[:8], want[:8])
-	}
-	states, err := statesAt(ctx, src, x.partition, urls, h)
+// statesFor asks one peer for the accounts behind a section's leaves, as it
+// holds them now, and checks each against its leaf.
+func (x *sections) statesFor(ctx context.Context, src pull.Source, s bpt.Section, block uint64, hash [32]byte, leaves []bpt.SectionLeaf, urls []*url.URL) (*loadedSection, error) {
+	states, err := statesAt(ctx, src, x.partition, urls, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -503,20 +556,15 @@ func (x *sections) fetchAt(ctx context.Context, src pull.Source, s bpt.Section, 
 			return nil, errors.Conflict.WithFormat("%v: the state hashes to leaf %x, the section's leaf is %x", st.Url, st.LeafHash[:8], leaves[i].Hash[:8])
 		}
 	}
-	return &loadedSection{section: s, block: h, hash: got, leaves: leaves, states: states}, nil
+	return &loadedSection{section: s, block: block, hash: hash, leaves: leaves, states: states}, nil
 }
 
 // sectionPage is how many leaves one page of a section asks for.
 const sectionPage = 256
 
-// sectionLeaves pages the leaves of one section of the peer's tree as of
+// sectionLeavesAt pages the leaves of one section of the peer's tree as of
 // block h (zero is the current tree), with the account each names, in the
 // page's order, and the block the pages were read at.
-func sectionLeaves(ctx context.Context, src pull.Source, partition *url.URL, s bpt.Section, h uint64) ([]bpt.SectionLeaf, []*url.URL, error) {
-	leaves, urls, _, err := sectionLeavesAt(ctx, src, partition, s, h)
-	return leaves, urls, err
-}
-
 func sectionLeavesAt(ctx context.Context, src pull.Source, partition *url.URL, s bpt.Section, h uint64) ([]bpt.SectionLeaf, []*url.URL, uint64, error) {
 	var leaves []bpt.SectionLeaf
 	var urls []*url.URL
@@ -524,6 +572,11 @@ func sectionLeavesAt(ctx context.Context, src pull.Source, partition *url.URL, s
 	var block uint64
 	for {
 		page, err := src.QueryBptPage(ctx, partition, &api.BptPageQuery{StartHash: start, Count: sectionPage, ForHeight: h})
+		if d, ok := database.NotLoadedOf(err); ok && bpt.Section(*d.Section) < s {
+			// The page went on into a section below this one that the
+			// peer has not loaded: this section ended before it.
+			return leaves, urls, block, nil
+		}
 		if err != nil {
 			return nil, nil, 0, errors.UnknownError.WithFormat("page section %d: %w", s, err)
 		}
@@ -686,7 +739,9 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			if !ok {
 				continue
 			}
-			ld, err := x.fetch(ctx, s, h, want)
+			// Only a section that hashes to its marker: one that a block
+			// after h changed is loaded by the block that touches it.
+			ld, _, err := x.fetch(ctx, s, h, want, false)
 			if err != nil {
 				failed++
 				x.log.Debug("A section could not be loaded by the fill; it is asked again", "partition", x.partition, "section", s, "block", h, "error", err)

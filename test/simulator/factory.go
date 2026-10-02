@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"log/slog"
 	"math/big"
+	"sort"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -95,6 +96,9 @@ type nodeFactory struct {
 	// Options
 	id      int
 	network *accumulated.NodeInit
+
+	// partition is the partition the node is built into.
+	partition *Partition
 
 	// State
 	logger     logging.Logger
@@ -180,6 +184,7 @@ func (f *networkFactory) Build(s *Simulator) *Partition {
 }
 
 func (f *nodeFactory) Build(p *Partition) *Node {
+	f.partition = p
 	n := new(Node)
 	n.id = f.id
 	n.network = f.network
@@ -532,6 +537,12 @@ func (node *nodeFactory) newApp(exec execute.Executor, restore consensus.Restore
 		Restore:  restore,
 		Join:     &node.join,
 	}
+	if p := node.partition; p != nil {
+		self := node.id
+		app.Redirect = func(env *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
+			return p.redirectCheck(self, env)
+		}
+	}
 	node.join.produce = app.Produce
 	return app
 }
@@ -586,6 +597,41 @@ func (f *nodeFactory) getSynthCache() *synthcache.Cache {
 	return f.cache
 }
 
+// queryPeers is every peer serving the partition's query service but this
+// node, in a stable order.
+func (f *nodeFactory) queryPeers(context.Context) []string {
+	self := f.getPeerID()
+	var out []string
+	for id := range f.getServices().Services[api.ServiceTypeQuery.AddressFor(f.networkFactory.id).String()] {
+		if id != self {
+			out = append(out, id.String())
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// sequencerPeers is every other node serving the partition's sequencer, each
+// addressed by name, in a stable order.
+func (f *nodeFactory) sequencerPeers(context.Context) []private.SequenceRanger {
+	self := f.getPeerID()
+	addr := private.ServiceTypeSequencer.AddressFor(f.networkFactory.id)
+	var ids []peer.ID
+	for id := range f.getServices().Services[addr.String()] {
+		if id != self {
+			ids = append(ids, id)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	out := make([]private.SequenceRanger, 0, len(ids))
+	for _, id := range ids {
+		if r, ok := f.getServices().Client.ForPeer(id).ForAddress(addr.Multiaddr()).Private().(private.SequenceRanger); ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
 	// The API services read deep, as the node's do (cmd/accumulated/run,
@@ -604,6 +650,10 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			// simulator node answered reads from the store its pull was
 			// still filling.
 			NodeState: &f.nodeState,
+			// The partition's other query peers, named by a refusal of a
+			// section this node has not loaded, as the daemon names them
+			// from its p2p node (#4485).
+			Redirect: f.queryPeers,
 		}),
 	})
 
@@ -640,6 +690,9 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			// simulator runs several networks in one process, so there is
 			// no registry to find it in.
 			Staging: f.getStaging(),
+			// A miss is relayed to the partition's other nodes, as the
+			// daemon relays it over its p2p node (#4487).
+			Relay: f.sequencerPeers,
 		}),
 	})
 

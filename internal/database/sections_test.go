@@ -38,7 +38,7 @@ type peerGate struct {
 func (g *peerGate) NotLoaded(s bpt.Section) bool { _, ok := g.notLoaded[s]; return ok }
 func (g *peerGate) AnyNotLoaded() bool           { return len(g.notLoaded) > 0 }
 
-func (g *peerGate) Load(batch *Batch, s bpt.Section, _ bool) error {
+func (g *peerGate) Load(batch *Batch, s bpt.Section) error {
 	g.loads++
 	if g.fail {
 		return errors.NotFound.With("no peer answers")
@@ -178,7 +178,7 @@ func TestABlockLoadsTheSectionItReadsAndNamesNothingItLoaded(t *testing.T) {
 	node, gate, alice, _, absent := sectionsFixture(t)
 	before := rootOf(t, node)
 
-	b := node.BeginExecuting(true)
+	b := node.BeginExecuting()
 	defer b.Discard()
 
 	// Absent from a section not loaded: the section is loaded, and the
@@ -215,7 +215,7 @@ func TestABlockWhoseSectionCannotBeLoadedIsHeld(t *testing.T) {
 	node, gate, alice, _, _ := sectionsFixture(t)
 	gate.fail = true
 
-	b := node.BeginExecuting(true)
+	b := node.BeginExecuting()
 	defer b.Discard()
 	_, err := b.Account(alice).Main().Get()
 	require.True(t, errors.Is(err, errors.NotReady), "a section that could not be loaded read as %v", err)
@@ -226,34 +226,32 @@ func TestABlockWhoseSectionCannotBeLoadedIsHeld(t *testing.T) {
 	require.True(t, gate.NotLoaded(SectionOfAccount(alice)))
 }
 
-func TestAValidationLoadsWhatItReadsAndKeepsNothing(t *testing.T) {
+// TestAValidationIsRefusedAndLoadsNothing — #4485, Paul 2026-10-02
+// (DIFFERENCES E25): validation does not load. The batch a validation reads
+// is an ordinary read batch: an account in a section not loaded is refused
+// NotReady, so the submission is redirected, and no peer is asked for the
+// section.
+func TestAValidationIsRefusedAndLoadsNothing(t *testing.T) {
 	node, gate, alice, _, _ := sectionsFixture(t)
 
-	b := node.BeginLoading(false)
-	var acct *protocol.TokenAccount
-	require.NoError(t, b.Account(alice).Main().GetAs(&acct), "a validation did not load the section it read")
-	require.Equal(t, int64(5), acct.Balance.Int64())
-	require.Equal(t, 1, gate.loads)
-	b.Discard()
-
-	require.Empty(t, gate.committed, "a validation's load counted as loaded")
+	b := node.Begin(false)
+	defer b.Discard()
+	_, err := b.Account(alice).Main().Get()
+	require.ErrorIs(t, err, errors.NotReady, "a validation read an account in a section not loaded")
+	require.Zero(t, gate.loads, "a validation asked for a section")
 	require.True(t, gate.NotLoaded(SectionOfAccount(alice)))
-	r := node.Ungated().Begin(false)
-	defer r.Discard()
-	_, err := r.Account(alice).Main().Get()
-	require.ErrorIs(t, err, errors.NotFound, "a validation's load was kept")
 }
 
 // countingGate is a gate with no section not loaded that counts how often a
 // read asked it about one.
 type countingGate struct{ asked atomic.Int64 }
 
-func (g *countingGate) NotLoaded(bpt.Section) bool         { g.asked.Add(1); return false }
-func (*countingGate) AnyNotLoaded() bool                   { return false }
-func (*countingGate) Load(*Batch, bpt.Section, bool) error { return nil }
-func (*countingGate) Committed([]bpt.Section)              {}
-func (*countingGate) Opened(*Batch)                        {}
-func (*countingGate) Discarded([]bpt.Section)              {}
+func (g *countingGate) NotLoaded(bpt.Section) bool   { g.asked.Add(1); return false }
+func (*countingGate) AnyNotLoaded() bool             { return false }
+func (*countingGate) Load(*Batch, bpt.Section) error { return nil }
+func (*countingGate) Committed([]bpt.Section)        {}
+func (*countingGate) Opened(*Batch)                  {}
+func (*countingGate) Discarded([]bpt.Section)        {}
 
 // TestTheGateCostsNothingWhenNoSectionIsNotLoaded — #4485 review, finding 6.
 // Every node past genesis runs with a gate for the life of its process, and
@@ -267,7 +265,7 @@ func TestTheGateCostsNothingWhenNoSectionIsNotLoaded(t *testing.T) {
 	gate := new(countingGate)
 	db.SetSectionGate(gate)
 
-	for _, b := range []*Batch{db.Begin(false), db.BeginExecuting(true), db.BeginLoading(false)} {
+	for _, b := range []*Batch{db.Begin(false), db.BeginExecuting()} {
 		var a *protocol.TokenAccount
 		require.NoError(t, b.Account(alice).Main().GetAs(&a))
 		_, err := b.Account(protocol.AccountUrl("nobody", "x")).Main().Get()
@@ -293,7 +291,7 @@ func BenchmarkAnAccountReadWithNoSectionNotLoaded(b *testing.B) {
 			if gated {
 				db.SetSectionGate(new(countingGate))
 			}
-			batch := db.BeginExecuting(false)
+			batch := db.BeginExecuting()
 			defer batch.Discard()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {

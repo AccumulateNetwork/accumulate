@@ -500,3 +500,9 @@ func (s *PulledState) Fill(ctx context.Context) {
 // SectionsNotLoaded is how many sections of the state tree this node holds by
 // their hash alone.
 func (s *PulledState) SectionsNotLoaded() int { return s.secs.count() }
+
+// SectionsTakenUnverified is how many sections a block has taken as a peer
+// held them after this node's block, no peer's hashing to the marker: each is
+// a block the root check decides, and may repair (executor spec, "Sync",
+// §3a).
+func (s *PulledState) SectionsTakenUnverified() int64 { return s.secs.unverified.Load() }

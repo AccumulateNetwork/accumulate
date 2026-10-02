@@ -641,7 +641,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("register node state: %w", err)
 	}
-	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState, serving)
+	err = s.registerAPIServices(inst, store, validatorKey, globals, healCounters, synthCache, staging, nodeState, serving, sectionsOf(joinState))
 	if err != nil {
 		return err
 	}
@@ -683,8 +683,44 @@ func nodeStateOf(joinState *join.PulledState) (*nodestate.Machine, nodestate.Ser
 	return m, m
 }
 
+// sectionsOf is the join's count of sections not loaded, which the submit,
+// validate and consensus services redirect by (executor spec, "Sync",
+// Redirection), or nil for a node that never joined and holds them all. Not
+// the nil *PulledState: an interface holding one is not nil.
+func sectionsOf(joinState *join.PulledState) dagbft.Sections {
+	if joinState == nil {
+		return nil
+	}
+	return joinState
+}
+
+// sequencerPeers is the partition's other nodes serving its sequencer, each
+// addressed by name, never this node: where a cache miss is relayed (#4487).
+func sequencerPeers(inst *Instance, partition string) func(context.Context) []private.SequenceRanger {
+	if inst.p2p == nil {
+		return nil
+	}
+	addr := private.ServiceTypeSequencer.AddressFor(partition)
+	client := &message.Client{Transport: &message.RoutedTransport{
+		Network: inst.config.Network,
+		Dialer:  inst.p2p.DialNetwork(),
+	}}
+	return func(ctx context.Context) []private.SequenceRanger {
+		var out []private.SequenceRanger
+		for _, id := range inst.p2p.Providers(ctx, addr, 16) {
+			if id == inst.p2p.ID() {
+				continue
+			}
+			if r, ok := client.ForPeer(id).ForAddress(addr.Multiaddr()).Private().(private.SequenceRanger); ok {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+}
+
 // registerAPIServices registers the API services for DAG-BFT.
-func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine, serving nodestate.Serving) error {
+func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine, serving nodestate.Serving, sections dagbft.Sections) error {
 	logger := logging.NewSlogLogger(inst.logger)
 	// These are the SERVING side of the node: consensus queries, the
 	// sequencer answering a peer's healing request, the API.  They are
@@ -706,8 +742,10 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		NodeKeyHash:      sha256.Sum256(validatorKey[32:]), // Public key portion
 		ValidatorKeyHash: sha256.Sum256(validatorKey[32:]),
 		// Reported as CatchingUp, which is what tells another node's relay
-		// that this one cannot propose yet (#4366).
+		// that this one cannot propose yet (#4366) -- and, with the sections
+		// not loaded, that it would redirect again (#4485).
 		NodeState: serving,
+		Sections:  sections,
 		// Answers a relay's challenge, so that naming a validator's key
 		// hash is not enough to be handed its traffic -- and answers it as
 		// THIS peer, so forwarding somebody else's answer is not enough
@@ -743,6 +781,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		EventBus:     s.eventBus,
 		Service:      s.service,
 		NodeState:    serving,
+		Sections:     sections,
 		Node:         inst.p2p,
 		Network:      inst.config.Network,
 	})
@@ -760,6 +799,7 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Logger:    logger.With("module", "api"),
 		Service:   s.service,
 		NodeState: nodeState,
+		Sections:  sections,
 	})
 	registerRpcService(inst, validatorSvc.Type().AddressFor(s.Partition.ID), message.Validator{Validator: validatorSvc})
 	err = dagbftProvidesValidator.Register(inst.services, s, validatorSvc)
@@ -778,6 +818,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Globals:      globals,
 		Partition:    s.Partition.ID,
 		ValidatorKey: validatorKey,
+		// A cache miss is relayed one hop to another node serving this
+		// partition's sequencer, by name (#4487).
+		Relay: sequencerPeers(inst, s.Partition.ID),
 	})
 	registerRpcService(inst, sequencerSvc.Type().AddressFor(s.Partition.ID), message.Sequencer{Sequencer: sequencerSvc})
 	err = dagbftProvidesSequencer.Register(inst.services, s, sequencerSvc)

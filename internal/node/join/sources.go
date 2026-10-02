@@ -182,6 +182,19 @@ type peerSource struct {
 
 func (p peerSource) String() string { return "peer " + p.peer.String() }
 
+// PeerID is the peer the source asks.
+func (p peerSource) PeerID() peer.ID { return p.peer }
+
+// Source addresses one named peer's query service for the partition: a peer
+// a refusal named to ask instead (executor spec, "Sync", Redirection). Nil
+// for this node itself, which a join never asks.
+func (q *QueryPeers) Source(id peer.ID, partition *url.URL) pull.Source {
+	if id == "" || id == q.Self || q.Client == nil {
+		return nil
+	}
+	return peerSource{api.Querier2{Querier: q.clientFor(id, partition)}, id}
+}
+
 // Querier implements [Sources].
 func (q *QueryPeers) Querier(partition *url.URL) api.Querier {
 	return &peerQuerier{peers: q, partition: partition}

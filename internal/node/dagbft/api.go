@@ -53,8 +53,21 @@ type ConsensusAPIService struct {
 	valKeyHash    [32]byte
 	heals         *crosschain.HealCounters
 	nodeState     nodestate.Serving
+	sections      Sections
 	validatorKey  ed25519.PrivateKey
 	peerID        peer.ID
+}
+
+// Sections is the part of a joined node's state that says how many sections
+// of its state tree it has not loaded yet (executor spec, "Sync", §3a). Nil
+// is a node that holds them all.
+type Sections interface {
+	SectionsNotLoaded() int
+}
+
+// allLoaded reports whether the node holds every section of its state tree.
+func allLoaded(s Sections) bool {
+	return s == nil || s.SectionsNotLoaded() == 0
 }
 
 var _ api.ConsensusService = (*ConsensusAPIService)(nil)
@@ -75,6 +88,13 @@ type ConsensusAPIServiceParams struct {
 	// propose yet and would only relay again -- the one fact that bounds a
 	// relay to a single hop (#4366; see relay.go).
 	NodeState nodestate.Serving
+
+	// Sections is this node's sections not loaded. A node that has not
+	// loaded every section is reported CatchingUp too: a submission relayed
+	// to it could need a section it would have to redirect again, and a relay
+	// that only targets nodes holding every section is what keeps a
+	// redirected submission to one hop (executor spec, "Sync", Redirection).
+	Sections Sections
 
 	// ValidatorKey is this node's author key, used ONLY to answer a relay's
 	// challenge: a caller that means to hand this node a submission asks it
@@ -109,6 +129,7 @@ func NewConsensusAPIService(params ConsensusAPIServiceParams) *ConsensusAPIServi
 	s.valKeyHash = params.ValidatorKeyHash
 	s.heals = params.Heals
 	s.nodeState = params.NodeState
+	s.sections = params.Sections
 	s.validatorKey = params.ValidatorKey
 	s.peerID = params.PeerID
 	return s
@@ -137,7 +158,7 @@ func (s *ConsensusAPIService) ConsensusStatus(ctx context.Context, opts api.Cons
 	// partition, still unable to propose. A relay reads this to avoid
 	// handing a submission to a node that would only relay it again
 	// (#4366).
-	res.CatchingUp = s.nodeState != nil && !s.nodeState.CanServeCurrent()
+	res.CatchingUp = s.nodeState != nil && !s.nodeState.CanServeCurrent() || !allLoaded(s.sections)
 
 	// A relay's challenge, answered with the key whose hash is above, as
 	// THIS node and for nobody else. Only when one is asked: a node signs
@@ -198,6 +219,7 @@ type SubmitterService struct {
 	logger     logging.OptionalLogger
 	service    *Service
 	nodeState  nodestate.Serving
+	sections   Sections
 	membership *Membership
 	relay      *Relay
 }
@@ -230,6 +252,12 @@ type SubmitterServiceParams struct {
 	// nowhere to hand it to, and a node that cannot propose then answers
 	// NotReady rather than taking what it would strand.
 	Relay *Relay
+
+	// Sections is this node's sections not loaded. A submission whose
+	// validation needs a section it has not loaded is redirected through the
+	// relay, to a node that holds every section (executor spec, "Sync",
+	// Redirection; Paul, 2026-10-02). Nil is a node that holds them all.
+	Sections Sections
 }
 
 // NewSubmitterService creates a new SubmitterService.
@@ -240,6 +268,7 @@ func NewSubmitterService(params SubmitterServiceParams) *SubmitterService {
 	s.nodeState = params.NodeState
 	s.membership = params.Membership
 	s.relay = params.Relay
+	s.sections = params.Sections
 	return s
 }
 
@@ -324,6 +353,18 @@ func (s *SubmitterService) submitted(outcome string) {
 
 // Type returns the service type.
 func (s *SubmitterService) Type() api.ServiceType { return api.ServiceTypeSubmit }
+
+// redirects reports whether a submission this node failed to take is one it
+// redirects: its validation read a section of the state tree this node has
+// not loaded (database.NotLoaded). A node holding every section never
+// redirects.
+func (s *SubmitterService) redirects(err error) bool {
+	if allLoaded(s.sections) || !stderrors.Is(err, worker.ErrValidationFailed) {
+		return false
+	}
+	_, notLoaded := database.NotLoadedOf(err)
+	return notLoaded
+}
 
 // signerOf returns a stable routing key for an envelope: the URL of the signer
 // of its first signature.
@@ -427,6 +468,18 @@ func (s *SubmitterService) Submit(ctx context.Context, envelope *messaging.Envel
 		submit = s.service.SubmitUserTransaction
 	}
 	if err := submit(b); err != nil {
+		// Validation needed a section of the state tree this node has not
+		// loaded. A validation does not load (Paul, 2026-10-02): the node
+		// tried, and redirects on the failure to a node that holds every
+		// section -- the relay's targets are nodes that report they are not
+		// catching up, and a node that has not loaded every section reports
+		// that it is. Such a node validates locally and never redirects, so
+		// the redirect is one hop, and a submission no node can validate is
+		// refused by the relay, not passed round.
+		if s.redirects(err) {
+			return s.relayIt(ctx, envelope, opts)
+		}
+
 		// Every road out of here is a rejection: the envelope did not enter
 		// this node's worker and Submit does not return success.
 		s.submitted("rejected")
@@ -505,6 +558,7 @@ type ValidatorService struct {
 	logger    logging.OptionalLogger
 	service   *Service
 	nodeState nodestate.Serving
+	sections  Sections
 }
 
 var _ api.Validator = (*ValidatorService)(nil)
@@ -516,6 +570,10 @@ type ValidatorServiceParams struct {
 
 	// NodeState is this node's join state; see SubmitterServiceParams.
 	NodeState nodestate.Serving
+
+	// Sections is this node's sections not loaded; see
+	// SubmitterServiceParams.
+	Sections Sections
 }
 
 // NewValidatorService creates a new ValidatorService.
@@ -524,6 +582,7 @@ func NewValidatorService(params ValidatorServiceParams) *ValidatorService {
 	s.logger.L = params.Logger
 	s.service = params.Service
 	s.nodeState = params.NodeState
+	s.sections = params.Sections
 	return s
 }
 
@@ -554,6 +613,11 @@ func (s *ValidatorService) Validate(ctx context.Context, envelope *messaging.Env
 
 	// Validate using adapter
 	if err := s.service.adapter.ValidateTransaction(b); err != nil {
+		// A section this node has not loaded is not a verdict on the
+		// envelope: NotReady, and the caller asks another node.
+		if _, notLoaded := database.NotLoadedOf(err); notLoaded {
+			return nil, errors.NotReady.WithFormat("%s cannot validate this yet: %w", s.service.config.Partition.ID, err)
+		}
 		return []*api.Submission{{
 			Success: false,
 			Message: fmt.Sprintf("Validation failed: %v", err),

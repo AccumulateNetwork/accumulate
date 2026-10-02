@@ -80,6 +80,10 @@ on its account ([database.md](database.md), "Isolation has a price").
 A message that reaches execution is validated again on the path above, by the
 gates that can only be evaluated with block state in hand.
 
+Validation loads nothing a joined node has not loaded: a read in a section of
+the state tree it holds by its hash alone is refused `NotReady`, and the
+submission is redirected to a node that holds it ("Sync", §3a).
+
 ### Draining
 
 A stream's messages arrive out of order. One that is not next cannot execute, so
@@ -574,7 +578,8 @@ served them. There is no as-of-H load and no retention of pre-change state:
 a section loaded while the node executes is the peer's current state, and a
 root that then differs from its anchor is repaired from the block ledger
 ("Two mismatches"); the entries an account is missing are found from its
-chains once it has caught up (DIFFERENCES E24–E26).
+chains once it has caught up (DIFFERENCES E26 says what of the redirect is not
+built; E24, the as-of-H load, and E25, validation loading, are built).
 
 #### 2. Nothing is proven before the match, and the match is the proof
 
@@ -1205,23 +1210,46 @@ that an account does not exist.
   the peer's current view, stamped with its block, the accounts the records
   brought current skipped (§3). Nothing is checked against the section's hash
   there: the records move the section on from `S`, and the match is the proof.
-- *Once the root has matched* a section is loaded **as of H**, the block the
-  node last committed: `BptPage` and `AccountStates` with `ForHeight = H`.
-  The leaves must hash to the marker's value by the tree's rule, and each
-  account's state to its leaf, or the answer is refused and the next peer
-  asked. Nothing executed touched the section since the match — a touch
-  loads it — so the marker's value is the section's hash at H. A peer that
-  cannot answer as of H (it retains no history, or not this account's) is
-  asked for its current state, checked against the same hash: a section no
-  block after H changed is taken that way, and one that changed is refused.
+- *Once the root has matched* a section is loaded **as the peers hold it
+  now** (Paul, 2026-10-02: no as-of-H load, no retention of pre-change
+  state). The loader asks the peers in turn for the section's leaves
+  (`BptPage` from the current tree, stamped with the peer's block P) and the
+  accounts behind them (`AccountStates`, current), and each account's state
+  must hash to its leaf, whoever serves it. A peer whose leaves hash to the
+  marker's value is taken: the section is the one the node's tree holds. A
+  peer at or before H — the block the node last committed — whose leaves hash
+  to anything else is refused and the next peer asked: at H the section is
+  the marker's, since nothing executed touched it since the match (a touch
+  loads it) — unless the node's own tree has gone wrong, which is why such a
+  peer is not refused either. A peer past H whose leaves differ holds the
+  section as blocks after H left it. A block's load takes the first answer
+  when no peer's verifies, whatever block it is of, and says so (`A section a block reads was taken as a peer holds
+  it after this node's block; the root check decides`); the root check does
+  its job — a root that then differs from its anchor is the anchor mismatch of
+  "Two mismatches", 2, repaired from the block ledger, and the node moves on.
+  This is the case of a cold account — written last before any peer's
+  retention window — that a block writes after the peers have executed that
+  block: no peer could answer it as of H, and holding the block for it is what
+  this replaces (`TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`).
+  The fill takes only an answer that hashes to the marker: a section a block
+  after H changed is loaded by the block that touches it.
 
-**Execution loads what it reads.** The batch a block executes in loads, and
-so does the batch a validation reads (the builder's decision on #4485: a
-validation judges a transaction against the latest state, and the
-simulator's nodes must agree on it). A validation's load is a peer's current
-state, not checked against the marker — the section may have moved since the
-node's last block — and it is held in the read-only batch and discarded with
-it: it decides no block. Every other reader of the store is
+**Execution loads what it reads; validation does not.** Only the batch a
+block executes in loads. A validation (the submission-time check) that reads
+an account in a section not loaded is refused `NotReady` and asks no peer
+for anything (Paul, 2026-10-02: "once synced, a node can give it a try, then
+redirect on a failure (data not loaded)"): the submit service sees the
+refusal and **redirects** the submission through the relay (#4366) to a node
+of the partition that holds every section, and answers with that node's
+answer. A node that has not loaded every section reports itself catching up
+in its consensus status, so no relay chooses it; the node a redirect reaches
+holds every section, validates locally and never redirects, so a redirect is
+one hop, and a submission no node can validate — every validator still
+filling — is refused by the relay (`NotReady`), not passed round
+(`TestASubmissionNeedingASectionNotLoadedIsRedirected`,
+`TestAValidationThatNeedsASectionNotLoadedIsRefusedAndLoadsNothing`). A
+validate-only call refused that way answers `NotReady`, and the caller asks
+another node. Every other reader of the store is
 refused an account in a section not loaded (below). The store checks each account read against the set: a read of an
 account in a section not loaded loads the section before it returns. The
 section is written into the block's batch beneath the account records, so the
@@ -1231,7 +1259,7 @@ deletion and the leaves' insertion are made in the block's own tree, so the
 root after the block is the root the block's changes make. The load commits
 with the block, or is discarded with it, and the set in memory forgets the
 section only when the block commits. A section that cannot be loaded — no peer
-answers it as of H in 30 s of asking every peer — **holds the block**: the
+answers it at all in 30 s of asking every peer — **holds the block**: the
 read fails and the block's batch refuses to commit (`NotReady`), so the block
 is not produced. A held block is held, never skipped: nothing after it is
 executed, and above all not the next committed group under the held block's
@@ -1250,8 +1278,8 @@ produced, and `The block was held past its bound` when the node gives it up.
 **The fill.** A goroutine of its own, beside the backfill and with its
 lifecycle (#4472): started after each handoff, stopped — and waited for —
 before the node is demoted and pulls again, and when the join ends. It loads
-the sections still not loaded, in key order, as of H, checked as execution's
-loads are, and **hands each to the next block's batch to write**; it never
+the sections still not loaded, in key order, as the peers hold them now,
+taking only an answer that hashes to the section's marker, and **hands each to the next block's batch to write**; it never
 commits itself, because a commit beside the block's would write tree nodes
 the block's batch also holds, and the later commit would put back the earlier
 one's marker. A loaded section waiting for a block is written only if its
@@ -1261,6 +1289,7 @@ the sections not loaded` at most once a minute, and `Every section is loaded`
 once.
 
 The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
+`TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`,
 `TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt`,
 `TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchanged`,
 `TestTheFillLoadsEverySectionAndTheRootMatchesThroughout`,
@@ -1272,11 +1301,42 @@ The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
 store's contract in internal/database
 (`TestAReadOfASectionNotLoadedIsRefusedNotNotFound` and its neighbours).
 
-**What is not loaded is not served.** An account read in a section not
-loaded is refused with `NotReady` — a query, an `AccountStates` answer, which serves it with no body so the asker asks the next peer; a BPT
-page that would carry a marker is refused with `NotReady`. A stored block
-(`BptBlockQuery`) is served: its hashes are the tree's, markers included.
-Forwarding a refused read to a peer is not built.
+**What is not loaded is not served; the node redirects** (Paul, 2026-10-02:
+"We can ask and use answers that match the cryptography, and nodes that
+can't answer should be redirecting"). An account read in a section not
+loaded is refused with `NotReady` — a query; an `AccountStates` answer serves
+it with no body, so the asker asks the next peer. A BPT page that starts in a
+section not loaded is refused with `NotReady`; a page that reaches a marker
+after other leaves ends before it (`Done` false, `NextStart` the last leaf
+served), so a node still filling serves every section it has loaded, and a
+loader whose section ends there takes the refusal of the section below it as
+the end of its own. **A refusal of a section not loaded carries the section
+and names the peers to ask instead** (`database.NotLoaded`, in the error's
+data: `{"notLoaded": s, "redirect": [peer IDs]}`). A section's loader —
+a block's load and the fill — asks the named peers after the ones it already
+had, by name, up to sixteen more, and takes an answer from any of them only
+as it takes any answer: by the section's hash, and each account by its leaf
+(`TestASectionOnlyOnePeerHoldsIsLoadedThroughARedirect`: two of three
+validators hold the section by its hash, the joiner's own peers leave out the
+third, and the fill loads it through the redirect;
+`TestAForgedRedirectTargetIsRefusedByTheHash`: a stranger reached only by a
+redirect serves the section forged, and nothing of it is written). A joiner
+takes the top from any peer, markers and all: the top is the section hashes,
+which a marker holds exactly. A stored block (`BptBlockQuery`) is served: its
+hashes are the tree's, markers included.
+
+*Open (#4485): whom a redirect names.* Built: every other peer the refusing
+node knows serves the partition's queries (its p2p providers; the
+simulator's registry) — it holds no record of which peers hold which
+sections, and every answer is checked, so a name is a hint. The options:
+(a) that — cheap, stateless, and it reaches a holder the asker's own
+discovery missed; (b) only peers known to hold the section — each node would
+publish its sections not loaded (its consensus status, say) and the refusing
+node would filter on them, which saves the asker the refusals of other nodes
+still filling; (c) forward the read one hop and answer with what the holder
+answered, as a cache miss is (#4487) — one round trip for the asker, but the
+refusing node then carries the load and a bound on hops. **Recommended:
+(a)**, until a measurement shows the refusals cost something.
 
 **With the rest of the join.** The records are unchanged by sections: a
 record names every account its block changed, and the pull loads the section
@@ -1288,19 +1348,33 @@ takes before it writes it. An account a section load takes is taken by its
 chain heads and open mark set, like every account the pull takes, and is
 recorded for the history backfill (§2).
 
-**Open (#4485), and what is built meanwhile: a peer cannot always answer a
-section as of H.** A peer serves an account as of a block from what it
-retained when the account changed (`retainedAccountAt`). An account whose
-last change is older than the peer's retention window and that changed again
-after H has no state retained at H, and the peer refuses it
-(`IncompleteChain`); no peer ever will. A cold account written by block
-H + 1 is exactly that once the peers have executed H + 1. The options:
-(a) on an account's first change inside the window, retain the state before
-the change as well, at the window's start — a write per cold account changed,
-on every node; (b) leave it, so the load holds the block and the node pulls
-again, the pull's records naming that account and loading its section.
-**Recommended: (a).** Built meanwhile: (b) (DIFFERENCES E24). A simulated
-network retains from genesis and never meets it.
+**Open (#4485): a node behind its peers diverges on every block that loads a
+section.** A block that reads a section not loaded is, at a node behind its
+peers — every joiner executing the blocks it collected, and any node a block
+behind — executed on the section as the peers hold it *after* that block, so
+the block's own changes are applied twice and the root differs from the
+anchor; the join repairs it and hands off again. Measured in the simulator:
+`TestAJoinAgreesAcrossRepeatedBurns` diverged once after its handoff, on
+such a load, and `TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`
+twice; tests that pin "no divergence after the handoff" now count a divergence
+that follows an unverified load apart (`SectionsTakenUnverified`). Options:
+(a) accept it — every such load costs a repair, until the fill is done
+(built); (b) ask the peers for the section as of H first, where one retains
+it, and take the current state only when none does — the retention question
+does not arise, since a peer that cannot answer as of H is simply passed
+over, but it is the as-of-H load Paul removed; (c) at the handoff, load the
+sections the collected blocks read before executing them, from the peers'
+state at the handoff block. **Recommended: (b)** — it removes the repair for
+every account inside the window and keeps Paul's rule for the rest; built
+meanwhile: (a), as decided.
+
+**Decided (Paul, 2026-10-02): no retention.** A peer cannot answer a section
+as of H for a cold account a later block changed (it retained no state at H;
+`retainedAccountAt`), and the open question was whether every node should
+retain pre-change state for it. It does not: "all the entries are in the
+database, and going back we will find the entries that are missing working
+back from the account state." The section is taken as the peers hold it now,
+above, and the root check repairs what that changes.
 
 #### 4. Staging is what was collected, minus what the state says executed
 

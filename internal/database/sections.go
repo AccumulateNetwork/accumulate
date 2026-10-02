@@ -7,13 +7,12 @@
 package database
 
 import (
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -26,7 +25,46 @@ import (
 // reported them not found would say an account does not exist that does. So
 // every outermost batch checks each read of an account's records against the
 // sections not loaded: a batch a block executes in loads the section; every
-// other batch is refused.
+// other batch -- a validation's among them -- is refused (executor spec,
+// "Sync", Redirection: validation does not load, Paul 2026-10-02).
+
+// NotLoaded is the data a refusal of a read in a section not loaded carries
+// (executor spec, "Sync", Redirection; Paul, 2026-10-02): the section, and the
+// peers the refusing node names to ask instead. Whoever answers, the answer is
+// used only if it matches the cryptography -- the signed root, the section's
+// hash -- so a name is a hint and never a proof.
+type NotLoaded struct {
+	Section  *uint16  `json:"notLoaded"`
+	Redirect []string `json:"redirect,omitempty"`
+}
+
+// NotLoadedError is the refusal of a read in a section this node has not
+// loaded: NotReady, carrying the section.
+func NotLoadedError(s bpt.Section, format string, args ...any) *errors.Error {
+	e := errors.NotReady.WithFormat(format, args...)
+	v := uint16(s)
+	e.Data, _ = json.Marshal(NotLoaded{Section: &v})
+	return e
+}
+
+// NotLoadedOf finds a refusal of a section not loaded in err, the outermost
+// first, and what it carries.
+func NotLoadedOf(err error) (*NotLoaded, bool) {
+	var e *errors.Error
+	if !errors.As(err, &e) {
+		return nil, false
+	}
+	for ; e != nil; e = e.Cause {
+		if len(e.Data) == 0 {
+			continue
+		}
+		d := new(NotLoaded)
+		if json.Unmarshal(e.Data, d) == nil && d.Section != nil {
+			return d, true
+		}
+	}
+	return nil, false
+}
 
 // A SectionGate knows which sections the node has not loaded, and loads one.
 type SectionGate interface {
@@ -44,9 +82,8 @@ type SectionGate interface {
 	// Load loads the section into the batch a block executes in: the
 	// accounts beneath the batch's records (WriteBeneath) and the marker
 	// swapped for the leaves in the batch's tree. It may take as long as
-	// asking the peers takes. An error holds the block. executing is false
-	// for a validation's batch, which is discarded.
-	Load(batch *Batch, section bpt.Section, executing bool) error
+	// asking the peers takes. An error holds the block.
+	Load(batch *Batch, section bpt.Section) error
 
 	// Committed says a batch that loaded the sections committed: they are
 	// loaded.
@@ -88,29 +125,11 @@ func (d *Database) Ungated() *Database {
 	return v
 }
 
-// gateMode is what an outermost batch does with a read of an account in a
-// section not loaded.
-type gateMode int
-
-const (
-	gateRefuses gateMode = iota
-	gateLoads
-	gateExecutes
-)
-
 // BeginExecuting begins the batch a block executes in. A read of an account
 // in a section not loaded loads the section into it, and what was loaded
 // beside the blocks is written into it first (SectionGate.Opened).
-func (d *Database) BeginExecuting(writable bool) *Batch {
-	return d.begin(writable, gateExecutes)
-}
-
-// BeginLoading begins a batch that loads a section not loaded when it reads
-// an account in it, as a block's does, and is discarded: the batch a
-// validation reads, which judges a transaction against the state the next
-// block executes on.
-func (d *Database) BeginLoading(writable bool) *Batch {
-	return d.begin(writable, gateLoads)
+func (d *Database) BeginExecuting() *Batch {
+	return d.begin(true, true)
 }
 
 func (d *Database) gate() SectionGate {
@@ -135,18 +154,9 @@ type gatedChangeSet struct {
 	keyvalue.ChangeSet
 	gate SectionGate
 
-	// batch is the batch this change set is the store of, when it loads;
-	// nil refuses.
-	batch     *Batch
-	executing bool
-
-	// writable is whether the change set can take what a load writes; a
-	// read-only one (a validation's) holds it in overlay instead, and it is
-	// discarded with the batch.
-	writable   bool
-	ovMu       sync.Mutex
-	overlay    map[[32]byte]memory.Entry
-	hasOverlay atomic.Bool
+	// batch is the batch a block executes in, which this change set is the
+	// store of; nil refuses.
+	batch *Batch
 
 	// loading serializes loads; mu guards loaded and failed, and is not
 	// held while a load reads through this change set.
@@ -173,40 +183,14 @@ func (c *gatedChangeSet) Get(key *record.Key) ([]byte, error) {
 	return c.raw(key)
 }
 
-// raw reads past the gate: what a load wrote into a read-only change set,
-// then the change set.
+// raw reads past the gate.
 func (c *gatedChangeSet) raw(key *record.Key) ([]byte, error) {
-	if !c.hasOverlay.Load() {
-		return c.ChangeSet.Get(key)
-	}
-	c.ovMu.Lock()
-	e, ok := c.overlay[key.Hash()]
-	c.ovMu.Unlock()
-	if ok {
-		if e.Delete {
-			return nil, (*database.NotFoundError)(key)
-		}
-		return e.Value, nil
-	}
 	return c.ChangeSet.Get(key)
-}
-
-func (c *gatedChangeSet) putOverlay(entries map[[32]byte]memory.Entry) error {
-	c.ovMu.Lock()
-	defer c.ovMu.Unlock()
-	if c.overlay == nil {
-		c.overlay = map[[32]byte]memory.Entry{}
-	}
-	for k, e := range entries {
-		c.overlay[k] = e
-	}
-	c.hasOverlay.Store(len(c.overlay) > 0)
-	return nil
 }
 
 func (c *gatedChangeSet) ensure(s bpt.Section, u *url.URL) error {
 	if c.batch == nil {
-		return errors.NotReady.WithFormat("%v is in section %d of the state tree, which this node has not loaded yet", u, s)
+		return NotLoadedError(s, "%v is in section %d of the state tree, which this node has not loaded yet", u, s)
 	}
 	c.loading.Lock()
 	defer c.loading.Unlock()
@@ -219,7 +203,7 @@ func (c *gatedChangeSet) ensure(s bpt.Section, u *url.URL) error {
 	case failed != nil:
 		return failed
 	}
-	err := c.gate.Load(c.batch, s, c.executing)
+	err := c.gate.Load(c.batch, s)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err != nil {
@@ -337,14 +321,14 @@ func (b *Batch) WriteBeneath(fn func(*Batch) error) error {
 	if b.parent != nil {
 		return errors.InternalError.With("a section is written beneath the outermost batch only")
 	}
+	if !b.writable {
+		return errors.InternalError.With("a section is written into a writable batch only")
+	}
 	under := b.kvs()
 	var cs keyvalue.ChangeSet
-	switch g, ok := under.(*gatedChangeSet); {
-	case ok && !g.writable:
-		cs = memory.NewChangeSet(memory.ChangeSetOptions{Get: g.raw, Commit: g.putOverlay})
-	case ok:
+	if g, ok := under.(*gatedChangeSet); ok {
 		cs = g.ChangeSet.Begin(nil, true)
-	default:
+	} else {
 		cs = under.Begin(nil, true)
 	}
 	c := NewBatch(b.id+".beneath", cs, true, b.logger.L)

@@ -9,6 +9,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ type Querier struct {
 	consensus api.ConsensusService
 	nodeState nodestate.Serving
 	named     *namedCache
+	redirect  func(context.Context) []string
 }
 
 var _ api.Querier = (*Querier)(nil)
@@ -66,6 +68,12 @@ type QuerierParams struct {
 	// node's pull must not take an unverified spine from it (#4297). Nil
 	// means the node never joined, and it serves everything.
 	NodeState nodestate.Serving
+
+	// Redirect names the partition's other peers serving queries. A read
+	// this node refuses because it has not loaded the section it falls in
+	// names them, so the asker can ask a node that holds it (executor spec,
+	// "Sync", Redirection; Paul, 2026-10-02). Nil names nobody.
+	Redirect func(context.Context) []string
 }
 
 func NewQuerier(params QuerierParams) *Querier {
@@ -74,6 +82,7 @@ func NewQuerier(params QuerierParams) *Querier {
 	s.db = params.Database
 	s.consensus = params.Consensus
 	s.nodeState = params.NodeState
+	s.redirect = params.Redirect
 	s.named = new(namedCache)
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
@@ -127,7 +136,27 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 		r, err = s.query(ctx, batch, scope, query)
 		return err
 	})
-	return r, err
+	if err != nil {
+		return nil, s.redirected(ctx, err)
+	}
+	return r, nil
+}
+
+// redirected is a refusal of a section this node has not loaded, naming the
+// peers to ask instead (executor spec, "Sync", Redirection). Any other error
+// is returned as it is.
+func (s *Querier) redirected(ctx context.Context, err error) error {
+	d, ok := database.NotLoadedOf(err)
+	if !ok || s.redirect == nil || len(d.Redirect) > 0 {
+		return err
+	}
+	d.Redirect = s.redirect(ctx)
+	if len(d.Redirect) == 0 {
+		return err
+	}
+	e := errors.NotReady.WithCauseAndFormat(err, "section %d of this node's state tree is not loaded; ask %d other peers", *d.Section, len(d.Redirect))
+	e.Data, _ = json.Marshal(d)
+	return e
 }
 
 // servingFor refuses every query while this node cannot serve current state
@@ -470,8 +499,17 @@ func bptPageRecord(page *bptproof.Page, err error) (*api.BptPageRecord, error) {
 	for i, e := range page.Entries {
 		if bpt.IsSectionMarker(e.KeyHash) {
 			// A section this node has not loaded: the page would name
-			// none of its accounts (executor.md, "Sync", §3a; #4485).
-			return nil, errors.NotReady.WithFormat("section %d of this node's state tree is not loaded yet", bpt.SectionOf(e.KeyHash))
+			// none of its accounts (executor.md, "Sync", §3a; #4485). A
+			// page that reached it after other leaves ends before it, so
+			// the sections it did read are served; a page that starts in
+			// it is refused, naming the section.
+			if i == 0 {
+				return nil, database.NotLoadedError(bpt.SectionOf(e.KeyHash), "section %d of this node's state tree is not loaded yet", bpt.SectionOf(e.KeyHash))
+			}
+			out.Entries = out.Entries[:i]
+			out.NextStart = page.Entries[i-1].KeyHash
+			out.Done = false
+			break
 		}
 		out.Entries[i] = &api.BptLeafSummary{
 			KeyHash:   e.KeyHash,

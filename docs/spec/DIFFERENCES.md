@@ -494,80 +494,22 @@ rebuilt together.
 condition below it in `shouldSendAnchor`, if the assumption ever stops
 holding.
 
-### E24. A section a peer retained no state for at H holds the block
+### E26. A redirect names peers, not holders; account reads are not redirected
 
 *[#4485](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4485)*
 
-**Spec** (executor.md, "Sync", §3a, "Open"): once the root has matched, a
-section is loaded as of H, the block the node last committed, and the
-recommended answer to a peer that retained no state at H for an account in it
-is (a): every node retains, on an account's first change inside its retention
-window, the state before the change as well.
+**Spec** (executor.md, "Sync", Redirection, §3a; Paul, 2026-10-02): a peer
+that does not hold what is asked redirects to one that does.
 
-**Code**: (a) is not built. A peer serves an account as of H from the states
-it retained when the account changed (`indexing.retainedAccountAt`); an
-account whose last change is older than the peer's window and that changed
-after H is refused (`IncompleteChain`) by every peer, and its current state
-does not hash to the section's marker either. The section loader asks every
-peer for 30 s and then holds the block (`NotReady` at commit); the DAG
-service produces it again as the same block for 30 s more, then collects
-again with it first in its buffer, and the node pulls again: the pull's records name that account and load its section
-from the peers' current state, and the match proves it. A simulated network
-retains from genesis and never meets this; a long-running network meets it on
-the first block that writes a cold account in a section the node has not
-loaded, until the fill reaches the section.
-
-**Size**: `retainStateReceipt` writing, when the account has no retained
-block, the state its store held before the block — body, leaf and state
-receipt — under the window's start; the pre-block state is the outermost
-batch's committed view.
-
-**Decided (Paul, 2026-10-02): no retention.** "We don't need retention
-because all the entries are in the database, and going back we will find the
-entries that are missing working back from the account state, and find the
-entries once we have caught an account up." A section loaded while the node
-executes is loaded as the peer holds it now, not as of H; a root that then
-differs from its anchor is the anchor mismatch of "Two mismatches" — repaired
-from the block ledger, and the node moves on — and the account's entries are
-found from its chains once it has caught up. The hold stays only for a load
-that gets no answer at all. The as-of-H load and the hold-then-re-pull of a
-cold account are to be removed (#4485).
-
-### E25. Open (#4485): validation loads a peer's current state, unchecked
-
-executor.md §3a says a validation (submission-time check) loads a section it
-needs from a peer's current state, unchecked, and discards it. That sentence
-is the first builder's decision (624669231), not Paul's design, which says
-nothing about validation. It is not a consensus-safety question — validation
-decides only admission — but it downloads a whole section per check with no
-cache, and admission is then at a peer's mercy (review 2026-10-02, finding 5).
-Options for Paul: (a) refuse at submission until the fill loads the section;
-(b) load through the gate, verified and kept. The code does neither yet; it
-loads unchecked (`sections.loadForCheck`, `beginValidation`).
-
-**Decided (Paul, 2026-10-02): validation does not load.** A submission that
-needs a section the node has not loaded is redirected to another node while
-the node is loading; "once synced, a node can give it a try, then redirect on
-a failure (data not loaded)." Option (a) with redirection, not (b). To be
-built (#4485, with the redirection of #4487).
-
-### E26. Open (#4485): a section not loaded propagates between joiners
-
-A joiner takes the top of the tree from one peer. A peer that still holds
-markers serves its markers' hashes as the top (they are exact), but refuses
-pages in those sections, so the joiner marks them too and cannot load them
-from that peer. Under a whole-network or rolling restart in which every node
-was still filling, a section can end with no holder (review 2026-10-02,
-finding 4). Proposed: load a section only from a peer that holds it, rotating
-on a not-loaded answer; a joiner takes the top only from a peer with no
-markers. Not decided; not built (`fetchTop`, `install`, `queryBptBlock`).
-
-**Decided (Paul, 2026-10-02):** "We can ask and use answers that match the
-cryptography, and nodes that can't answer should be redirecting." A joiner may
-take the top, and a section, from any peer — every answer is verified against
-the signed root or the section's hash — and a peer that does not hold what is
-asked redirects to one that does, rather than answering not-loaded. To be built
-(#4485).
+**Code**: a BPT page that starts in a section not loaded is refused with the
+section and the names of every other peer the node knows serves the
+partition's queries — not peers known to hold the section (the open question
+in §3a; built: option (a)). The section loader of a block and of the fill
+follows those names; the pull's own loads before the match
+(`loadOpenedPage`) rotate over their peers and do not. An `AccountStates`
+answer for an account in a section not loaded still carries no body, and a
+plain account query is refused with the section and the names, but no client
+of the API follows them.
 
 ### E11. A node cannot sync from the running protocol
 
@@ -2220,13 +2162,6 @@ question. It is not a large change; it is a change that must not be guessed at.
 **Size**: medium. `pull.Verify` and `pull.DirectoryAnchors` on one side, the
 proof client and the trust anchor on the other; `tracker` unchanged if the
 final root match stays as it is.
-
-### A cache miss is refused, not relayed
-
-The spec (database.md, "Caches"; Paul, 2026-10-01) has a synthetic or anchor
-cache miss relayed to another `ACTIVE` node, which holds every entry in play.
-The code refuses the request (healing.md, "Never served from storage", R3);
-no relay exists. Not built.
 
 ### E13's replay clause is superseded
 

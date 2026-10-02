@@ -310,10 +310,9 @@ account's records against it:
   section the set no longer holds is loaded for a batch only if the batch's
   own tree holds no marker for it: a view older than the commit that loaded
   it is refused (`NotReady`), not read as holding it.
-- **A batch a validation reads loads it too**, from a peer's current state,
-  and keeps what it loaded in the read-only batch's own overlay, discarded
-  with it.
-- **Every other batch is refused** with `NotReady`.
+- **Every other batch is refused** with `NotReady` — a validation's
+  included: validation does not load, and the submission it refuses is
+  redirected (executor.md, "Sync", §3a; Paul, 2026-10-02).
 - **The join's own batches pass**: they are what writes the sections.
 
 The check costs nothing when no section is not loaded, which is every node's
@@ -341,8 +340,8 @@ churn with the working set. Synthetic and anchor entries are persisted to the
 **permanent** layer through execution and never change, so their cache is a hot
 front for entries in play. A miss is never served from storage (healing.md):
 an `ACTIVE` node holds every entry in play, so a miss means the request belongs
-to another `ACTIVE` node, and is relayed there (Paul, 2026-10-01; not built —
-DIFFERENCES, "A cache miss is refused, not relayed").
+to another `ACTIVE` node, and is relayed there, one hop (Paul, 2026-10-01;
+healing.md, "Never served from storage"; #4487).
 Sizing either cache is decided from measurement, not here.
 
 ## 2. Specification — how it is implemented

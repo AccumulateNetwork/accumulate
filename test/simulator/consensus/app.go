@@ -12,6 +12,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioutil"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -84,6 +85,13 @@ type ExecutorApp struct {
 	// the join takes the buffer into staging only through the block after the
 	// state it proves (#4398).
 	Join Joining
+
+	// Redirect validates an envelope this node's check refused because a
+	// section of the state tree it has not loaded was read, at a node that
+	// holds it, and returns that node's answer, as the submit service redirects
+	// through the relay (executor spec, "Sync", Redirection; #4485). Nil
+	// redirects nothing.
+	Redirect func(*messaging.Envelope) ([]*protocol.TransactionStatus, error)
 }
 
 // Joining is a node's join, as the DAG service keeps it: whether the node is
@@ -113,6 +121,9 @@ func (a *ExecutorApp) Info(*InfoRequest) (*InfoResponse, error) {
 func (a *ExecutorApp) Check(req *CheckRequest) (*CheckResponse, error) {
 	// Copy to avoid interference between nodes
 	res, err := a.Executor.Validate(req.Envelope.Copy(), !req.New)
+	if _, notLoaded := database.NotLoadedOf(err); notLoaded && a.Redirect != nil {
+		res, err = a.Redirect(req.Envelope)
+	}
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("check messages: %w", err)
 	}
