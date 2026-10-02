@@ -55,6 +55,12 @@ type overlap struct {
 	// ask bounds how long one block asks the peers for its record.
 	ask time.Duration
 
+	// loading reports whether any section of the state tree is not loaded
+	// yet. The overlap does not end while one is: a block executed alone that
+	// loads a cold section takes it as its peers hold it now, after the block,
+	// and diverges -- the clean run is a run of blocks with everything loaded.
+	loading func() bool
+
 	// blocks is how many clean blocks in a row end the overlap:
 	// OverlapBlocks, unless a test sets it (SetOverlapBlocks).
 	blocks int
@@ -94,9 +100,10 @@ type settling struct {
 }
 
 // OverlapBlocks is how many blocks in a row with no difference end the
-// overlap: "we are synced after 5 blocks of perfect matches" (Paul,
+// overlap, with every section loaded: "we are synced after 5 blocks of
+// perfect matches", then "Let's demand 20 perfect blocks instead of 5" (Paul,
 // 2026-10-02).
-const OverlapBlocks = 5
+const OverlapBlocks = 20
 
 // overlapAsk bounds how long a block asks the peers for its record: each is
 // asked once, and a peer that has not produced the block is not waited for.
@@ -654,6 +661,14 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 	}
 	o.clean++
 	if o.clean < o.blocks {
+		return
+	}
+	if o.loading != nil && o.loading() {
+		// "Eventually everything settles out": a clean run before every
+		// section is loaded is not settled. Run 20261002T090546Z: BVN1
+		// matched at 10818, ran 5 clean buffered blocks with 808 sections
+		// not loaded, and block 10824, executed alone, loaded a section as
+		// its peers held it after 10824 and diverged.
 		return
 	}
 	o.active = false

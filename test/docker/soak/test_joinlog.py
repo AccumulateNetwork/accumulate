@@ -205,7 +205,7 @@ class TestRemovedFollowerIsForgotten(unittest.TestCase):
 
 class OverlapPhases(unittest.TestCase):
     """The overlap after a match (#4495): an ACTIVE line inside it does not end
-    it; a return to the ledger is counted; 5 perfect blocks make it synced."""
+    it; a return to the ledger is counted; 20 perfect blocks make it synced."""
 
     def test_overlap_then_synced(self):
         r = joinlog.Reader()

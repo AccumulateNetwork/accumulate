@@ -36,7 +36,7 @@ PHASES = (
     ("not executing in agreement", "BOOTING"),
     # The overlap (#4495, Paul 2026-10-02): after the match each block is
     # executed and checked against its block-ledger record; a mismatch goes
-    # back to the ledger from that block; 5 perfect blocks in a row and the
+    # back to the ledger from that block; 20 perfect blocks in a row and the
     # node is synced. These lines contain no "executing in agreement".
     ("The overlap is over", "synced"),
     ("going back to the block ledger", "back to ledger"),

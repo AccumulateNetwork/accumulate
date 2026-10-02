@@ -1231,7 +1231,7 @@ that an account does not exist.
   retention window — that a block writes after the peers have executed that
   block: no peer could answer it as of H, and holding the block for it is what
   this replaces (`TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`
-  in the overlap, `TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`
+  in the overlap, `TestTheOverlapHoldsWhileASectionIsNotLoaded`
   after it).
   The fill takes only an answer that hashes to the marker: a section a block
   after H changed is loaded by the block that touches it.
@@ -1399,8 +1399,13 @@ blockledgers starting at the mismatch until everything matches again"** (Paul,
 overlap and sends the node back to the block ledger from that block: the root
 watch reports it as a divergence there (`takeMismatch`), the node is demoted,
 repairs from the block ledger, matches its anchor again, hands off, and a new
-overlap begins. After 5 blocks in a row of perfect matches (`OverlapBlocks`)
-the node stops taking the records and executes alone. A staging error is
+overlap begins. After 20 blocks in a row of perfect matches (`OverlapBlocks`;
+Paul raised it from 5 on 2026-10-02), **with every section of the state tree
+loaded**, the node stops taking the records and executes alone. A clean run
+before every section is loaded is not settled: a block executed alone that
+loads a cold section takes it as its peers hold it after the block and
+diverges (run 20261002T090546Z: BVN1 matched at 10818, ran 5 clean buffered
+blocks with 808 sections not loaded, and block 10824 diverged). A staging error is
 repaired by the same loop; nothing at the handoff pulls staging. A
 section loaded from the peers' current state during the overlap cannot make
 the root differ: the records set the states the anchor commits to (#4495).
@@ -1479,10 +1484,10 @@ a block executed alone at the frontier, a chain this execution changed that
 the record does not name (it cannot be unmarked), an account this execution
 made that the record does not hold, the ledger's own chains, and every block
 after the overlap — a cold load then is repaired as before
-(`TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`). The tests:
+(`TestTheOverlapHoldsWhileASectionIsNotLoaded`). The tests:
 `TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`,
 `TestAnExecutionThatDiffersFromItsRecordSendsTheNodeBackToTheLedger`,
-`TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`,
+`TestTheOverlapHoldsWhileASectionIsNotLoaded`,
 `TestARestartMidOverlapBeginsTheOverlapAgain` (test/e2e, through the
 production join, executor and API peers), and
 `TestAJoinAgreesAcrossRepeatedBurns`, which requires zero divergence of every

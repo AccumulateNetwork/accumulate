@@ -3272,7 +3272,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 <div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
   <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node). Phase is the latest of Pulling the state / The walk has covered / Joined / not executing in agreement (BOOTING) / executing in agreement (ACTIVE). Counts are whole-run, from the log, and never clear.</div>
-  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>catch-up: state downloaded</th><th>catch-up: state proven</th><th>catch-up: in agreement</th><th>catch-up: synced (5 perfect blocks)</th><th>returns to the ledger (#)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>proven → repairing (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>catch-up: state downloaded</th><th>catch-up: state proven</th><th>catch-up: in agreement</th><th>catch-up: synced (20 perfect blocks)</th><th>returns to the ledger (#)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>proven → repairing (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
   <div class=panel data-p=synflow>
@@ -3451,7 +3451,7 @@ function followersView(fj,jp){
   const PC={ACTIVE:'grn',synced:'grn',overlap:'yel','back to ledger':'yel',BOOTING:'red','handed off':'yel',walked:'yel',proven:'yel',pulling:'yel'};
   const fresh=r=>r.life==='waiting'||r.life==='removed';
   // Plain words for the join's own phase names (Paul: "handed off? walked?").
-  const PHASE_WORDS={'pulling':'downloading state','walked':'state downloaded','proven':'state proven','handed off':'executing, not yet proven','BOOTING':'root missed, repairing','ACTIVE':'proven, in agreement','overlap':'executing, checked against the ledger','back to ledger':'mismatch: back to the ledger','synced':'synced (5 perfect blocks)','no join line yet':'starting'};
+  const PHASE_WORDS={'pulling':'downloading state','walked':'state downloaded','proven':'state proven','handed off':'executing, not yet proven','BOOTING':'root missed, repairing','ACTIVE':'proven, in agreement','overlap':'executing, checked against the ledger','back to ledger':'mismatch: back to the ledger','synced':'synced (20 perfect blocks)','no join line yet':'starting'};
   const n=(v,col)=>v==null?'—':`<span class="${v&&col?col:''}">${fmt(v)}</span>`;
   return fj.rows.map(r=>{
     const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')

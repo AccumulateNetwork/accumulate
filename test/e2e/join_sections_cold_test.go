@@ -47,7 +47,7 @@ func TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord(t *testing.T) {
 	state := j.part.NodeJoinState(j.fresh)
 	// The deposit lands some blocks after the match; the overlap must still be
 	// running then, or the block is a cold load after the overlap, which the
-	// root watch repairs (TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired).
+	// root watch repairs (TestTheOverlapHoldsWhileASectionIsNotLoaded).
 	state.SetOverlapBlocks(20)
 
 	var target *url.URL

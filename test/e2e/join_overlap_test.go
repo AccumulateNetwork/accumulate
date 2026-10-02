@@ -140,13 +140,16 @@ func TestAnExecutionThatDiffersFromItsRecordSendsTheNodeBackToTheLedger(t *testi
 
 // TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired: the overlap
 // ends after its run of clean blocks, and from there the node executes alone.
-// The run is one block here (SetOverlapBlocks), so that a block the node
-// executes behind its peers comes after it: a deposit to a cold account,
-// executed by the validators while the node collects, which the node then
-// executes from its buffer on the peers' state after the block. Outside the
-// overlap it is handled as before it: the root differs from the anchor and
-// the root watch repairs it.
-func TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired(t *testing.T) {
+// TestTheOverlapHoldsWhileASectionIsNotLoaded: the clean run is a run of
+// blocks with everything loaded. The run is one block here
+// (SetOverlapBlocks), and a deposit to a cold account is executed by the
+// validators while the node collects; the node then executes it from its
+// buffer, loading the cold section as its peers hold it after the block. The
+// overlap has not ended -- sections are still not loaded -- so the record
+// settles the block and no anchor mismatch demotes the node (run
+// 20261002T090546Z: an overlap that ended with 808 sections not loaded let a
+// cold load diverge on the next block).
+func TestTheOverlapHoldsWhileASectionIsNotLoaded(t *testing.T) {
 	j := prepareSectionsJoin(t)
 	state := j.part.NodeJoinState(j.fresh)
 	state.SetOverlapBlocks(1)
@@ -180,11 +183,10 @@ func TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired(t *testing.T)
 	w := overlapJoin(t, j, buf, step, func() bool { return deposited > 0 && j.agreedPast(deposited) })
 
 	require.NotNil(t, target, "the join never handed off")
-	require.NotZero(t, ended.EndedAt, "the overlap never ended")
-	require.Equal(t, 1, ended.Checked+ended.Frontier, "the overlap did not end on its clean run")
-	require.Less(t, ended.EndedAt, deposited, "precondition: the deposit is after the overlap")
+	require.True(t, ended.EndedAt == 0 || ended.EndedAt >= deposited,
+		"the overlap ended at %d, before the cold deposit at %d, while sections were not loaded", ended.EndedAt, deposited)
 	require.True(t, w.done(), "the node did not come to agree with its peers")
-	require.NotEmpty(t, w.demoted, "a cold load after the overlap did not diverge: it was not handled as outside the overlap")
+	requireOnlyOverlapReturns(t, w.demoted, state, "a cold load inside the overlap diverged at the root watch")
 	require.Equal(t, j.balance(0, target), j.balance(j.fresh, target))
 }
 
