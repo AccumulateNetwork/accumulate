@@ -125,12 +125,12 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 		s.served = nil // what it took is proven
 		proven = true
 		if s.ownRoot {
-			// ACTIVE on its own root since the whole-restart exit, and now
+			// ACTIVE on its own root -- the whole-restart exit, or a start with the network (#4506) -- and now
 			// a signed anchor has proved a block it executed: the only
 			// line that says a resumed node is in agreement (#4483).
 			s.ownRoot = false
 			s.agreedAt.Store(o.Block)
-			s.log.Info("This node is executing in agreement; its own root matched its signed anchor after the whole-restart exit",
+			s.log.Info("This node is executing in agreement; its own root matched its signed anchor",
 				"block", o.Block, "partition", s.partition)
 		}
 		if s.machine.State() != nodestate.StateActive {

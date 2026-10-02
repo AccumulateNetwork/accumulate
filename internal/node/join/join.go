@@ -315,6 +315,56 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		return Joined, errors.UnknownError.Wrap(err)
 	}
 	wait.on("")
+	return watchAndRepair(ctx, opts, log, retry, wait, q)
+}
+
+// Watch is Run for a node that executes from its first block without a join:
+// a non-validator that started with its network. Nothing is pulled and
+// nothing is handed off -- the node is ACTIVE on its own root from block
+// from, as a node that took the whole-restart exit is -- and from there it is
+// what Run is after a handoff: every executed block is checked against its
+// signed anchor, and a mismatch demotes it, syncs it from the ledger and
+// hands it off again (executor spec, "Sync", "A node that starts with its
+// network"; #4506). A node that is never checked is not a comparison of
+// anything: runs 20260929T152146Z and 20261002T145702Z carried one for hours
+// and could only say it had never joined.
+func Watch(ctx context.Context, opts Options, from uint64) (Outcome, error) {
+	if opts.Buffer == nil || opts.Stage == nil || opts.State == nil || opts.Peers == nil {
+		return Joined, errors.BadRequest.With("a watch needs a buffer, a stage, a state and peers")
+	}
+	log := opts.Logger
+	if log == nil {
+		log = slog.Default()
+	}
+	log = log.With("module", "join", "partition", opts.Partition)
+	retry := opts.Retry
+	if retry <= 0 {
+		retry = DefaultRetry
+	}
+	wait := waitingOf(opts.State)
+	wait.mu.Lock()
+	wait.log = log
+	wait.mu.Unlock()
+	every := opts.WaitSay
+	if every <= 0 {
+		every = DefaultWaitSay
+	}
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+	go wait.watch(watchCtx, every)
+
+	if err := opts.State.Executing(from); err != nil {
+		return Joined, errors.UnknownError.WithFormat("mark the node executing from its own block %d: %w", from, err)
+	}
+	log.Info("This node started with its network and executes from its own blocks; every block it executes is checked against its signed anchor", "block", from)
+	return watchAndRepair(ctx, opts, log, retry, wait, from)
+}
+
+// watchAndRepair is the join from the handoff on (steps 4 and 5 of Run): it
+// watches the executed blocks' roots, and on a divergence or a held block
+// demotes the node, syncs it again and hands it off again, for as long as
+// the context lives.
+func watchAndRepair(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration, wait *waiting, q uint64) (Outcome, error) {
 
 	// A state that can check the blocks this node executes keeps checking
 	// them for as long as the node runs; one that cannot has joined.

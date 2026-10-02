@@ -519,6 +519,16 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// A store holding only genesis cannot tell the first node of a network
 	// from a node added to a running one; the deployment says which (#4340).
 	joining := nodeMustJoin(lastBlock) || s.JoinRunningNetwork != nil && *s.JoinRunningNetwork
+	// A node that executes from genesis and is not a validator of its
+	// partition -- a follower started with its network -- is checked as a
+	// joined node is: every block it executes against its signed anchor,
+	// with a mismatch repaired from the ledger (join.Watch; #4506). A node
+	// nobody checks compares nothing, and the comparison follower on runs
+	// 20260929T152146Z and 20261002T145702Z could only ever say it had
+	// never joined.
+	membership := dagbft.NewMembership(s.Partition.ID, validatorKey[32:])
+	membership.SetGlobals(globals)
+	watching := !joining && !membership.CanPropose()
 	if !joining {
 		// Said out loud, because it is the one condition under which a node
 		// executes without asking anyone (executor spec, "Sync", step 2), and
@@ -534,7 +544,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		// a peer. Reported rather than left at BOOTING, because a node that
 		// never joins never enters the state machine and BOOTING for the
 		// life of the process is the negative-only reading of #4345a.
-		nodestate.Report(s.Partition.ID, nodestate.StateActive)
+		if !watching {
+			nodestate.Report(s.Partition.ID, nodestate.StateActive)
+		}
 	}
 
 	// The join's state is built first, because its node state is what the
@@ -543,7 +555,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// several nodes of one partition — devnet does — and a registry keyed by
 	// partition would give them all one node's state.
 	var joinState *join.PulledState
-	if joining {
+	if joining || watching {
 		// The pull is addressed at NAMED PEERS, never at this node. The
 		// client above is routed, and a routed client answers locally for any
 		// service this node provides -- p2p.DialNetwork installs a
@@ -575,7 +587,9 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)
 		}
-		s.service.StartCollecting()
+		if joining {
+			s.service.StartCollecting()
+		}
 	}
 
 	// Start the service
@@ -584,7 +598,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		return errors.UnknownError.WithFormat("start DAG-BFT service: %w", err)
 	}
 
-	if joining {
+	if joining || watching {
 		settler, ok := exec.(join.Settler)
 		if !ok {
 			return errors.InternalError.With("this executor cannot join: it cannot settle staging")
@@ -593,7 +607,12 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		opts := joinOptions(s.Partition.ID, joinState, s.service, stage,
 			&join.APIPeers{Partition: s.Partition.ID, Client: client, Network: inst.config.Network})
 		go func() {
-			_, err := join.Run(inst.context, opts)
+			var err error
+			if joining {
+				_, err = join.Run(inst.context, opts)
+			} else {
+				_, err = join.Watch(inst.context, opts, lastBlock)
+			}
 			if err != nil {
 				// A buffer overrun does not end the join: Run records it and
 				// collects again. A join that cannot finish leaves the node

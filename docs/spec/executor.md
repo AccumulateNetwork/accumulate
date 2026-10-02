@@ -1619,9 +1619,18 @@ few peers had a root to verify it against; from there every executed block is ch
 after any handoff, and a mismatch is repaired ("Two mismatches"). The first block after
 the exit whose root its signed anchor proves is recorded (`AgreedAt`) and
 said once — `This node is executing in agreement; its own root matched its
-signed anchor after the whole-restart exit` — the one line that says a node
-which resumed is in agreement, since it was already `ACTIVE` and is never
-promoted (#4483).
+signed anchor` — the one line that says a node which resumed is in
+agreement, since it was already `ACTIVE` and is never promoted (#4483).
+
+**A node that starts with its network** — a non-validator created with the
+validators, executing from genesis — never joins: it has executed every
+block itself. It is not thereby exempt from the check. It is `ACTIVE` on its
+own root from its first block, as a node that took the whole-restart exit
+is, and from there it is watched exactly as a node is after a handoff: every
+executed block against its signed anchor, a mismatch demoting it, syncing it
+from the ledger and handing it off again (`join.Watch`; #4506). The first
+block its anchor proves is said with the same line. A validator starting
+from genesis is not watched: it signs the anchors the check would read.
 
 This is safe for the reason the join exists: a join takes a peer's state
 because the peers hold what this node lacks, and here no peer holds anything

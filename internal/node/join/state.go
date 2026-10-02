@@ -170,7 +170,7 @@ type PulledState struct {
 	backfillSaid time.Time
 
 	// ownRoot is whether the node is ACTIVE on a root no anchor verified: it
-	// took the whole-restart exit (Executing). agreedAt is the first block
+	// took the whole-restart exit or started with its network (Executing). agreedAt is the first block
 	// after that whose root its signed anchor proved, said once (#4483).
 	ownRoot  bool
 	agreedAt atomic.Uint64
@@ -1815,7 +1815,7 @@ func (s *PulledState) Executing(block uint64) error {
 	return nil
 }
 
-// AgreedAt is the first block, after the node took the whole-restart exit,
+// AgreedAt is the first block, after the node became ACTIVE on its own root,
 // whose root its signed anchor proved; zero until then, and for a node that
 // joined, whose promotion is its agreement (#4483).
 func (s *PulledState) AgreedAt() uint64 { return s.agreedAt.Load() }
