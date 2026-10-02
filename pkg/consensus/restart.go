@@ -119,8 +119,9 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 
 // writeTail persists the certificates at and above RescueWindow below the
 // commit floor, and the batches they name that this node holds or has
-// already persisted, and removes what neither this checkpoint nor the
-// previous one names, sparing what was written since it began.
+// already persisted, keeps the batches of the header this node authored
+// last, and removes what neither this checkpoint nor the previous one
+// names, sparing what was written since it began.
 func (n *Node) writeTail(lastCommit types.Round) []string {
 	mark := n.dagStore.Mark()
 	floor := types.Round(0)
@@ -129,6 +130,16 @@ func (n *Node) writeTail(lastCommit types.Round) []string {
 	}
 	names := map[string]bool{}
 	n.persistRounds(floor, names)
+	// The header this node authored last comes back with the DAG at a
+	// restart (restoreTail), and a voter takes it only with every batch it
+	// names. Authored after the rounds above and not yet certified, no
+	// certificate names its batches, and Retain would remove them: the
+	// restored header could then never be voted, and its author could not
+	// author the round again (run 20261002T090546Z: BVN3 held at round
+	// 25839 with two certificates of the three it needed).
+	if h, err := n.dagStore.Authored(); err == nil && h != nil {
+		n.persistBatches(h, names)
+	}
 	tail := make([]string, 0, len(names))
 	for name := range names {
 		tail = append(tail, name)

@@ -115,7 +115,10 @@ So a validator holds batches in four places, for four reasons:
 11. **A vote deferred is a vote asked for.** A validator votes on a header only
     when it holds everything that header names: every parent certificate and
     every batch. When something is missing it must ASK for it, not merely
-    wait. The author rebroadcasts its header about once a second and each
+    wait, and it asks for everything it lacks at once: a header authored
+    after a restart names every batch its node accumulated while it was
+    down, hundreds of them, and a voter that asked for one per rebroadcast
+    took minutes to certify it (#4503). The author rebroadcasts its header about once a second and each
     rebroadcast re-tests the same condition, so anything broadcast once and
     never re-sent — a certificate, a batch — leaves a condition that cannot
     become true on its own. The cost of getting this wrong is a whole
@@ -452,9 +455,13 @@ named by digest, written once):
   (`orderDag`), so the restored node orders the certificates above the floor
   exactly as its peers do; the batches are what those groups execute, and
   after a whole restart no memory holds them. The checkpoint lists them
-  (`Checkpoint.Tail`); files neither this checkpoint nor the previous one
-  lists are removed, except those written after the checkpoint began. The
-  write cost per block is the certificates and batches the block adds.
+  (`Checkpoint.Tail`), with the batches of the header this node authored
+  last: authored after the rounds above and not yet certified, no
+  certificate names them, and a restart that handed the header back without
+  them left a round no vote could certify and its author could not author
+  again (#4502). Files neither this checkpoint nor the previous one lists
+  are removed, except those written after the checkpoint began. The write
+  cost per block is the certificates and batches the block adds.
 - **Before each header this node authors is broadcast**, the header itself
   and the DAG from four rounds below it up, with the batches held. The
   executor, and so the checkpoint, can be many rounds behind consensus when
