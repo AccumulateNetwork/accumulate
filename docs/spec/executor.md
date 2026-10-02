@@ -654,7 +654,13 @@ writes nothing at or above a chain's head, so it does not race the blocks the
 node executes; the entries are held to the node's own head, replayed from the
 first, so a peer serving another chain is refused and the next is asked. It
 streams as the pull does, a page at a time, and holds the entries to the head
-once the last page is written (#4446). The
+once the last page is written (#4446). **The backfill
+runs from the newest entry to the oldest, and never asks for an entry the
+database already holds; a resync stops at the first entry that exists**
+(Paul, 2026-10-02): a retry after a failure, or a restart, resumes with what
+is held and asks only for what is not, so no attempt discards an earlier one
+(#4493; until built, a retry restarts a chain from its first entry —
+DIFFERENCES). The
 node ends holding every account's chains and entries
 (`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
 
