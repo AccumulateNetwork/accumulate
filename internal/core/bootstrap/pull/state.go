@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -258,8 +259,66 @@ func WriteStates(batch *database.Batch, states []*api.AccountState) error {
 	return nil
 }
 
+// The parts of a served state a block's settling writes (SettleStates).
+type SettleParts int
+
+const (
+	// SettleAll is every part, as WriteStates writes them.
+	SettleAll SettleParts = iota
+
+	// SettleNotIndex is every part but the index chains, which a block
+	// writes when it closes, after its transactions.
+	SettleNotIndex
+
+	// SettleIndex is the index chains alone.
+	SettleIndex
+)
+
+// SettleStates writes checked account states into the batch a block executes
+// in, as WriteStates does, except that a chain whose head the batch already
+// holds as served is left as it is -- a chain written is a chain the block
+// changed, and the block's record names it -- and only the parts named
+// (executor.md, "Sync", §3a, "The handoff is an overlap"; #4495).
+func SettleStates(batch *database.Batch, states []*api.AccountState, parts SettleParts) error {
+	for _, st := range states {
+		if err := CheckState(st); err != nil {
+			return err
+		}
+		one := batch.Begin(true)
+		err := writeStateWith(one, st, true, parts)
+		if err == nil {
+			err = one.Commit()
+		}
+		one.Discard()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // writeState writes one checked account state into the batch.
 func writeState(batch *database.Batch, st *api.AccountState) error {
+	return writeStateWith(batch, st, false, SettleAll)
+}
+
+// sameHead is whether the chain's head is count and pending already.
+func sameHead(chain *database.Chain2, count uint64, pending [][]byte) bool {
+	head, err := chain.Inner().Head().Get()
+	if err != nil || head.Count != int64(count) || len(head.Pending) != len(pending) {
+		return false
+	}
+	for i := range pending {
+		if !bytes.Equal(head.Pending[i], pending[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// writeStateWith writes the parts of one checked account state into the
+// batch; changed leaves alone each chain whose head is already the one served.
+func writeStateWith(batch *database.Batch, st *api.AccountState, changed bool, parts SettleParts) error {
 	leaf, err := retainedLeaf(st)
 	if err != nil {
 		return errors.Conflict.WithFormat("%v: %w", st.Url, err)
@@ -267,6 +326,9 @@ func writeState(batch *database.Batch, st *api.AccountState) error {
 
 	u := st.Url
 	account := batch.Account(u)
+	if parts == SettleIndex {
+		return writeChains(account, st, changed, parts)
+	}
 	if err := account.Main().Put(st.Main); err != nil {
 		return errors.UnknownError.WithFormat("%v: store main: %w", u, err)
 	}
@@ -305,15 +367,26 @@ func writeState(batch *database.Batch, st *api.AccountState) error {
 		}
 	}
 
-	// Each chain's head and open mark set, and the chain index as the peer
-	// holds it: a chain the node holds that the peer's account does not is
-	// hashed into the leaf by the index, so the index is replaced.
+	return writeChains(account, st, changed, parts)
+}
+
+// writeChains writes each chain's head and open mark set, and the chain index
+// as the peer holds it: a chain the node holds that the peer's account does
+// not is hashed into the leaf by the index, so the index is replaced.
+func writeChains(account *database.Account, st *api.AccountState, changed bool, parts SettleParts) error {
+	u := st.Url
 	open := openEntries(st)
 	var index []*protocol.ChainMetadata
 	for _, c := range leafOf(st).Chains {
 		chain, err := account.ChainByName(c.Name)
 		if err != nil {
 			return errors.UnknownError.WithFormat("%v: chain %s: %w", u, c.Name, err)
+		}
+		isIndex := strings.HasSuffix(strings.ToLower(c.Name), "-index")
+		if (parts == SettleNotIndex && isIndex) || (parts == SettleIndex && !isIndex) ||
+			(changed && sameHead(chain, c.Count, c.State)) {
+			index = append(index, &protocol.ChainMetadata{Name: c.Name, Type: c.Type})
+			continue
 		}
 		head := &merkle.State{Count: int64(c.Count), Pending: c.State}
 		if err := chain.Inner().RestoreHead(head, open[c.Name]); err != nil {
@@ -339,6 +412,43 @@ func putPendingSets(account *database.Account, p *database.RetainedPendingTransa
 		return err
 	}
 	return txn.Signatures().Put(p.Signatures)
+}
+
+// KeepChainMessages fetches, from src, the message behind each entry of the
+// open mark sets of a served state's chains that carry messages, where the
+// store does not hold it, and keeps each only if it hashes to its entry. A
+// block that settles an account against its record writes the record's chain
+// heads and open mark sets (SettleStates); the entries this node did not
+// execute have no message behind them until this takes them (executor.md,
+// "Sync", §3a, "The handoff is an overlap"; #4495).
+func KeepChainMessages(ctx context.Context, src Source, store Store, st *api.AccountState) error {
+	if st == nil || st.Url == nil {
+		return nil
+	}
+	open := openEntries(st)
+	batch := store.Begin(true)
+	defer batch.Discard()
+	for _, c := range leafOf(st).Chains {
+		if c == nil || !carriesMessages(c) {
+			continue
+		}
+		for _, e := range open[c.Name] {
+			if len(e) != 32 {
+				continue
+			}
+			_, err := batch.Message([32]byte(e)).Main().Get()
+			switch {
+			case err == nil:
+				continue
+			case !errors.Is(err, errors.NotFound):
+				return errors.UnknownError.WithFormat("%v chain %s: %w", st.Url, c.Name, err)
+			}
+			if err := pullMessage(ctx, src, batch, st.Url.WithTxID([32]byte(e))); err != nil {
+				return errors.UnknownError.WithFormat("%v chain %s entry %x: %w", st.Url, c.Name, e[:8], err)
+			}
+		}
+	}
+	return errors.UnknownError.Wrap(batch.Commit())
 }
 
 // KeepQueuedMessages fetches, from src, the message behind each queued local

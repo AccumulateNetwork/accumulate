@@ -2183,14 +2183,3 @@ E13 (PLAN.md, 2026-09-06) had a restart re-execute the committed log from the
 last sealed height. Paul, 2026-10-01: a restart does not replay; it syncs to
 the signed anchor and backfills the changed accounts' entries. database.md says
 so now; the committed log's role as the durability point is unchanged.
-
-### The overlap is not built (#4495)
-
-The spec (executor.md §3a, Paul 2026-10-02) has a node that has just matched
-execute each block AND take its block-ledger record for a few blocks, the
-record's account states standing where execution differs, before executing
-alone. The code switches at the handoff: a block that loads a section from
-the peers' current state can apply the block's changes twice, the root then
-differs from the anchor, and the root watch repairs it — one repair per such
-load (`TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`;
-`TestAJoinAgreesAcrossRepeatedBurns` counts that class apart). Not built.

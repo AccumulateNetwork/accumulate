@@ -254,6 +254,9 @@ func TestAJoinRepairsABlockExecutedWithoutItsSynthetic(t *testing.T) {
 // deletes it.
 func TestAJoinDeletesAnAccountOnlyItsOwnExecutionCreated(t *testing.T) {
 	f := newRepairFixture(t)
+	// The repair is what is tested: the overlap would settle the page's
+	// chains from the record before the root watch saw them (#4495).
+	f.p.NodeJoinState(f.joiner).SetOverlapBlocks(0)
 	extra := f.bob.JoinPath("extra")
 
 	env := MustBuild(t, build.Transaction().For(f.bob).

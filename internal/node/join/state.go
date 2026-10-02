@@ -80,6 +80,10 @@ type PulledState struct {
 	// the gate that loads one when a block reads it (#4485).
 	secs *sections
 
+	// overlap settles the first blocks after a match against the
+	// partition's records of them (#4495). The section gate calls it.
+	overlap *overlap
+
 	// anchors is where this partition's verified roots come from: its own
 	// anchors, collected from its validators (anchorsrc.Collector).
 	anchors anchorSource
@@ -472,6 +476,11 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	if err := s.secs.read(); err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
+	// The handoff is an overlap: the blocks after a match are settled
+	// against their records, in the batch each executes in (§3a; #4495).
+	s.overlap = &overlap{partition: opts.Partition, label: label, log: s.log, peers: s.secs.peers, ask: overlapAsk, blocks: OverlapBlocks}
+	s.overlap.taken = func(urls ...*url.URL) { s.markHeadOnly(urls...) }
+	s.secs.overlap = s.overlap
 	opts.Database.SetSectionGate(s.secs)
 
 	mSpineStalled.WithLabelValues(label).Set(-1)
@@ -1837,6 +1846,7 @@ func (s *PulledState) Promote(block uint64) {
 // tracker's streak starts again, so the next match takes as many as the first.
 func (s *PulledState) Demote(block uint64) {
 	s.secs.dropReady()
+	s.overlap.stop()
 	if !s.machine.Demote(block) {
 		return
 	}
@@ -1912,6 +1922,11 @@ func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
 	s.matched = tracker.Match{Block: v, Anchor: anchor}
 	s.provenAt = v
 	s.repairs = 0
+
+	// The blocks after V are the overlap's: it begins before the handoff
+	// executes the buffered groups, which are the blocks most likely to
+	// load a section ahead of themselves (§3a; #4495).
+	s.overlap.start(v)
 
 	// The state is proven now, and with it the network definition it holds.
 	s.refreshAuthority()
