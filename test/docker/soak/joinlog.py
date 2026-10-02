@@ -34,16 +34,31 @@ PART = re.compile(r"\bpartition=(\S+)")
 # Order matters: "not executing in agreement" contains "executing in agreement".
 PHASES = (
     ("not executing in agreement", "BOOTING"),
+    # The overlap (#4495, Paul 2026-10-02): after the match each block is
+    # executed and checked against its block-ledger record; a mismatch goes
+    # back to the ledger from that block; 5 perfect blocks in a row and the
+    # node is synced. These lines contain no "executing in agreement".
+    ("The overlap is over", "synced"),
+    ("going back to the block ledger", "back to ledger"),
+    ("The overlap begins", "overlap"),
     ("executing in agreement", "ACTIVE"),
     ("Joined", "handed off"),
     ("The state is proven", "proven"),
-    ("The walk has covered", "walked"),
+    # Sections (#4485): the top of the tree, then the block-ledger records
+    # to a block. ("The walk has covered" no longer exists.)
+    ("The state is complete at a block", "walked"),
     ("Pulling the state", "pulling"),
 )
+# An ACTIVE line does not end an overlap: the node promotes at its first root
+# check, blocks into its overlap. Only "The overlap is over" (synced) or a
+# demotion (BOOTING) does.
+_IN_OVERLAP = ("overlap", "back to ledger")
 COUNTS = (
     ("not its anchored root", "rootMisses"),
     ("Repairing the state", "repairs"),
     ("A repair changed an account", "repairChanged"),
+    ("going back to the block ledger", "overlapReturns"),
+    ("Every section is loaded", "sectionsLoaded"),
 )
 _ANY = re.compile("|".join(re.escape(k) for k, _ in PHASES + COUNTS))
 
@@ -78,8 +93,9 @@ def _since(at, added):
 
 def new_partition():
     return {"phase": "not started", "phaseAt": None, "firstActiveAt": None,
-            "firstWalkedAt": None, "firstProvenAt": None,
-            "rootMisses": 0, "repairs": 0, "repairChanged": 0, "drops": 0}
+            "firstWalkedAt": None, "firstProvenAt": None, "firstSyncedAt": None,
+            "rootMisses": 0, "repairs": 0, "repairChanged": 0, "drops": 0,
+            "overlapReturns": 0, "sectionsLoaded": 0}
 
 
 class Reader:
@@ -126,7 +142,10 @@ class Reader:
             at = _epoch(ts)
             for key, phase in PHASES:
                 if key in ln:
-                    p["phase"], p["phaseAt"] = phase, at
+                    if not (phase == "ACTIVE" and p["phase"] in _IN_OVERLAP):
+                        p["phase"], p["phaseAt"] = phase, at
+                    if phase == "synced" and p["firstSyncedAt"] is None:
+                        p["firstSyncedAt"] = at
                     if phase == "ACTIVE" and p["firstActiveAt"] is None:
                         p["firstActiveAt"] = at
                     if phase == "walked" and p["firstWalkedAt"] is None:
@@ -249,6 +268,9 @@ def rows(followers, reader, heights, lives, state, mem, now):
                 "toActiveSec": (fa - added) if (fa and added and fa >= added) else None,
                 "toWalkedSec": _since(lp["firstWalkedAt"], added),
                 "toProvenSec": _since(lp["firstProvenAt"], added),
+                "toSyncedSec": _since(lp["firstSyncedAt"], added),
+                "overlapReturns": lp["overlapReturns"],
+                "sectionsLoaded": lp["sectionsLoaded"] > 0,
                 "rootMisses": lp["rootMisses"], "repairs": lp["repairs"],
                 "repairChanged": lp["repairChanged"], "drops": lp["drops"],
                 "memMiB": mem.get(c),

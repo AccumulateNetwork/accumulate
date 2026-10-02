@@ -200,3 +200,30 @@ class TestRemovedFollowerIsForgotten(unittest.TestCase):
         r.track("f", None)                # removed
         self.assertFalse(r.parts.get("f"))
         self.assertNotIn("f", r.last)
+
+
+
+class OverlapPhases(unittest.TestCase):
+    """The overlap after a match (#4495): an ACTIVE line inside it does not end
+    it; a return to the ledger is counted; 5 perfect blocks make it synced."""
+
+    def test_overlap_then_synced(self):
+        r = joinlog.Reader()
+        B = "acc://bvn-BVN1.acme"
+        r.feed("f", [
+            L("2026-10-02T10:00:00.000000001Z", "The state is complete at a block; waiting for its signed anchor", B),
+            L("2026-10-02T10:00:01.000000001Z", "The state is proven at the block it is complete at", B),
+            L("2026-10-02T10:00:01.000000002Z", "The overlap begins: each block is executed and settled against its record", B),
+            L("2026-10-02T10:00:03.000000001Z", "This node is executing in agreement; it is ACTIVE", B),
+        ])
+        p = r.parts["f"]["bvn1"]
+        self.assertEqual("overlap", p["phase"], "an ACTIVE line ended the overlap")
+        self.assertIsNotNone(p["firstWalkedAt"])
+        self.assertIsNotNone(p["firstActiveAt"])
+        r.feed("f", [
+            L("2026-10-02T10:00:05.000000001Z", "Execution differs from the block ledger; going back to the block ledger from this block", B),
+            L("2026-10-02T10:00:09.000000001Z", "The overlap is over: the node executes alone", B),
+        ])
+        self.assertEqual(1, p["overlapReturns"])
+        self.assertEqual("synced", p["phase"])
+        self.assertIsNotNone(p["firstSyncedAt"])
