@@ -732,14 +732,22 @@ left to backfill are recorded under `SystemData(partition).HeadOnly` as they
 are taken and cleared as they are backfilled, so a restart before the
 backfill ends still backfills them: the next join finds their leaves equal to
 the peers' and takes nothing of them
-(`TestARestartBeforeTheBackfillEndsStillBackfills`). How much is left is
+(`TestARestartBeforeTheBackfillEndsStillBackfills`). The set stays beside
+the per-chain `SyncedEntries` record as the index of the accounts whose
+record is not yet whole (#4493): the record says how far each chain has got,
+but finding the accounts left from the records alone would read every
+account the partition holds, at every start, where the set names the few
+left. An account stays in the set until every chain of it is held whole,
+and a pass over an account whose chains are already whole reads what it
+holds and asks no peer for anything. How much is left is
 visible: `accumulate_join_backfill_accounts_left{partition}` counts the
 accounts not yet held whole, `Backfilling the history of accounts taken by
 their chain heads` says how far it has got at most once a minute, and `The
 backfill is done: every account is held whole` is said once when the last is
 brought in (#4471). An account that takes longer than a minute says so
 itself, at most once a minute: `Backfilling a large account` with the
-account, the chain, and the entries written of the chain's height (#4472).
+account, the chain, and how far down from the head the walk has got of the
+chain's height, counting down (`down_to`; #4472, #4493).
 
 **A message is proven by its entry.** The leaf covers a chain's head, and the
 head covers its entries, but an entry of a transaction chain is the hash of a
