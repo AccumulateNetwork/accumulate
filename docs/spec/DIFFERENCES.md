@@ -522,6 +522,29 @@ block, the state its store held before the block — body, leaf and state
 receipt — under the window's start; the pre-block state is the outermost
 batch's committed view.
 
+### E25. Open (#4485): validation loads a peer's current state, unchecked
+
+executor.md §3a says a validation (submission-time check) loads a section it
+needs from a peer's current state, unchecked, and discards it. That sentence
+is the first builder's decision (624669231), not Paul's design, which says
+nothing about validation. It is not a consensus-safety question — validation
+decides only admission — but it downloads a whole section per check with no
+cache, and admission is then at a peer's mercy (review 2026-10-02, finding 5).
+Options for Paul: (a) refuse at submission until the fill loads the section;
+(b) load through the gate, verified and kept. The code does neither yet; it
+loads unchecked (`sections.loadForCheck`, `beginValidation`).
+
+### E26. Open (#4485): a section not loaded propagates between joiners
+
+A joiner takes the top of the tree from one peer. A peer that still holds
+markers serves its markers' hashes as the top (they are exact), but refuses
+pages in those sections, so the joiner marks them too and cannot load them
+from that peer. Under a whole-network or rolling restart in which every node
+was still filling, a section can end with no holder (review 2026-10-02,
+finding 4). Proposed: load a section only from a peer that holds it, rotating
+on a not-loaded answer; a joiner takes the top only from a peer with no
+markers. Not decided; not built (`fetchTop`, `install`, `queryBptBlock`).
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
