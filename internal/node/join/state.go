@@ -83,6 +83,9 @@ type PulledState struct {
 	// anchors, collected from its validators (anchorsrc.Collector).
 	anchors anchorSource
 
+	// wait is the step the join is on, said when it lasts (#4484).
+	wait waiting
+
 	// authority is the validator sets this node trusts. It is seeded from
 	// this node's OWN store before anything is pulled, and it moves only
 	// when the state has matched: <partition>/network and /globals are
@@ -418,6 +421,13 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		return nil, errors.UnknownError.Wrap(err)
 	}
 	collector.OnAnchor = track.Observe
+	collector.OnAsk = func(n uint64, who string) {
+		if n == 0 {
+			s.wait.on(stepAnchors, "asking", "the newest anchor number", "peer", who)
+			return
+		}
+		s.wait.on(stepAnchors, "anchor", n, "validator", who)
+	}
 	collector.OnRefused = s.anchorRefused
 	collector.OnRootChain = s.observeRootChain
 	s.anchors = collector
@@ -460,6 +470,14 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	})
 	return s, nil
 }
+
+// The steps of a pull that ask peers, as the join says them when they last.
+const (
+	stepAnchors    = "reading this partition's signed anchors from its validators"
+	stepPeersBlock = "asking this partition's peers which block it is at"
+)
+
+func (s *PulledState) joinWaiting() *waiting { return &s.wait }
 
 // anchorSource is what the join reads its partition's verified roots from.
 type anchorSource interface {
@@ -507,6 +525,7 @@ func (s *PulledState) clock() time.Time {
 // is held at an entry: on the gauge every round, in the log once a minute and
 // once when it moves on (#4419).
 func (s *PulledState) readAnchors(ctx context.Context) error {
+	s.wait.on(stepAnchors)
 	err := s.anchors.Read(ctx)
 
 	st, held := s.anchors.Stalled()
@@ -610,6 +629,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	}
 
 	peer, err := s.peersBlock(ctx)
+	s.wait.on("pulling the state")
 	if err != nil {
 		// No peer could say where the partition is. Nothing is lost by
 		// waiting: the records are read from where they stopped.
@@ -1445,6 +1465,7 @@ type peersAt struct {
 // with it L, where it stands.
 func (s *PulledState) peersBlock(ctx context.Context) (peersAt, error) {
 	s.peersJoining = false
+	s.wait.on(stepPeersBlock)
 	srcs, _, err := s.sources.For(ctx, s.partition.JoinPath(protocol.Ledger))
 	if err != nil {
 		return peersAt{}, errors.UnknownError.WithFormat("find the partition's peers: %w", err)
@@ -1459,6 +1480,7 @@ func (s *PulledState) peersBlock(ctx context.Context) (peersAt, error) {
 	var joining, other int
 	defer func() { s.peersJoining = joining > 0 && uint64(other) < s.signingThreshold() }()
 	for _, src := range srcs {
+		s.wait.on(stepPeersBlock, "peer", src)
 		n, err := ledgerIndexOf(ctx, src, s.partition)
 		switch {
 		case nodestate.IsJoiningRefusal(err):
@@ -1837,6 +1859,7 @@ func (s *PulledState) Matched(ctx context.Context) (uint64, bool, error) {
 	if err := s.readAnchors(ctx); err != nil && !(errors.Is(err, errors.NotReady) && s.spineStalled()) {
 		s.log.Debug("This partition's anchors could not be read", "partition", s.partition, "error", err)
 	}
+	s.wait.on("proving the pulled state against its signed anchor")
 	p := s.sync
 	if p == nil || !p.ready || p.compared == p.last {
 		return 0, false, nil

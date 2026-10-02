@@ -216,6 +216,10 @@ type Options struct {
 	// Rounds is how many times the partition's validators are looked for
 	// before the join gives up on finding any. Zero means DefaultRounds.
 	Rounds int
+
+	// WaitSay is how long the join may stay on one step before it says
+	// what it is waiting on (#4484). Zero means DefaultWaitSay.
+	WaitSay time.Duration
 }
 
 // DefaultRetry is how long a join waits before asking again.
@@ -273,6 +277,19 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		retry = DefaultRetry
 	}
 
+	// A step that lasts is said, with what it is asking (#4484).
+	wait := waitingOf(opts.State)
+	wait.mu.Lock()
+	wait.log = log
+	wait.mu.Unlock()
+	every := opts.WaitSay
+	if every <= 0 {
+		every = DefaultWaitSay
+	}
+	watchCtx, stopWatch := context.WithCancel(ctx)
+	defer stopWatch()
+	go wait.watch(watchCtx, every)
+
 	// Step 1. Collecting starts before anything is pulled, so every block
 	// committed after the state the pull reaches is one this node has
 	// collected. Staging is this node's own: nothing is loaded into it.
@@ -283,6 +300,7 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 	// the join exists to prevent (#4290, #4296). It keeps collecting, which
 	// is the safe state, and says so. There is no exception: a node that has
 	// executed nothing never gets here (#4304).
+	wait.on("finding this partition's validators")
 	found, err := findValidators(ctx, opts, log, retry)
 	if err != nil {
 		return Joined, errors.UnknownError.Wrap(err)
@@ -292,10 +310,11 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 			"no validator of %s could be found; this node is collecting and not executing", opts.Partition)
 	}
 
-	q, err := converge(ctx, opts, log, retry, false)
+	q, err := converge(ctx, opts, log, retry, false, wait)
 	if err != nil {
 		return Joined, errors.UnknownError.Wrap(err)
 	}
+	wait.on("")
 
 	// A state that can check the blocks this node executes keeps checking
 	// them for as long as the node runs; one that cannot has joined.
@@ -337,10 +356,11 @@ func Run(ctx context.Context, opts Options) (Outcome, error) {
 		// The pull comes first: the local root still equals the block the
 		// node handed off at, and matching it again would hand off where
 		// the divergence began.
-		q, err = converge(ctx, opts, log, retry, true)
+		q, err = converge(ctx, opts, log, retry, true, wait)
 		if err != nil {
 			return Joined, errors.UnknownError.Wrap(err)
 		}
+		wait.on("")
 	}
 }
 
@@ -426,8 +446,9 @@ func watchRoots(ctx context.Context, watch RootWatch, log *slog.Logger, retry ti
 // and hands off, and returns that block (steps 2 and 3 of Run). pullFirst
 // pulls before the first match: a node syncing again holds a state that
 // matched once and no longer does.
-func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration, pullFirst bool) (uint64, error) {
+func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration, pullFirst bool, wait *waiting) (uint64, error) {
 	if pullFirst {
+		wait.on("pulling the state")
 		err := opts.State.Pull(ctx)
 		if err != nil {
 			return 0, errors.UnknownError.WithFormat("pull state: %w", err)
@@ -468,6 +489,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 
 		// The state is proven at q, or the node executes nothing: a pulled
 		// state that is not proven is never handed off (#4442).
+		wait.on("proving the pulled state against its signed anchor")
 		q, ok, err := opts.State.Matched(ctx)
 		if err != nil {
 			return 0, errors.UnknownError.WithFormat("match the anchored root: %w", err)
@@ -483,6 +505,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			}
 		}
 		if ok {
+			wait.on("staging the collected blocks and handing off", "block", q)
 			done, err := stageAndHandOff(opts, log, q, &failures)
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)
@@ -492,6 +515,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			}
 		}
 
+		wait.on("pulling the state")
 		err = opts.State.Pull(ctx)
 		if err != nil {
 			return 0, errors.UnknownError.WithFormat("pull state: %w", err)

@@ -541,6 +541,28 @@ is a **stall**, and it is said: the join reports the anchor's sequence number
 on `accumulate_join_spine_stalled_entry` (−1 when not held) and logs it, with
 the validators asked, once a minute (#4419).
 
+**A join that stays on one step says so** (#4484). Every step before the pull
+logs only when it fails, so a call that is slow, or that a peer never
+answers, was silent: two of three followers' Directory joins of Docker run
+`20260929T152146Z` logged nothing for about six minutes before `Pulling the
+state`, and nothing could say which call they were in. The join names its
+step before each call that asks a peer — finding the validators, reading the
+signed anchors (with the anchor number and the validator asked), asking the
+peers which block the partition is at (with the peer asked), proving the
+state, pulling it, handing off — and a step held for a minute is said, once a
+minute: `The join is waiting` with the step, how long, how many questions it
+has asked on it, and the one it is asking now. Many slow answers and one
+that never comes are told apart by that count. When a step that was said
+ends, `The join is no longer waiting` says after how long.
+
+**Open (#4485): the BPT by sections.** The walk above takes the whole BPT
+before the node executes. Paul's design (2026-10-01) takes the interior nodes
+down to a section level, verified against the signed root, flags every section
+not loaded, loads a section when execution reads or writes an account in it,
+and fills the rest in the background. Executing block n then needs n−1's
+interior nodes and the sections block n touches, not the complete BPT. It is
+being built; until it lands, step 1 and §3 describe the walk.
+
 #### 2. Nothing is proven before the match, and the match is the proof
 
 **The accounts a peer serves to a join are as of a block** (decided after
@@ -553,7 +575,11 @@ chain's `Count` and pending set, so the node can append) serve it. A pull of
 current state straddles blocks — the tree it builds is a mixture no block
 ever held, and equals a block's root only when the partition is quiet
 (#4411) — so after applying block B's record the local root is the root of
-B, and can be compared at every block. The bound is the peers' retention
+B, and can be compared at every block. "As of a block" names the state the
+pull converges to, not a block chosen when it starts: the BPT is pulled while
+the block-ledger records are applied, until the local root is some block V's
+and matches V's signed anchor; the sectioned pull (#4485) reaches that root
+before every account's leaves are pulled (Paul, 2026-10-01). The bound is the peers' retention
 (`BPTHistoryDepth`, 1024 blocks by default): a walk or record the peers can
 no longer serve as of its block moves the start forward to a block they can,
 and the walk is taken again from there. Pulls run in parallel; a join that
@@ -1462,9 +1488,10 @@ fully synced when its state is the state a signed anchor commits to and it
 executes every block from there at the network's cadence — the only proof
 this protocol has of its own state is the signed anchor at a height ("We only
 need the signed anchor at the current height to prove the state of the entire
-protocol at that height"; Paul, 2026-09-18/19, the spine decision), and this
-line has no backfill of
-history. The producer cache fills by execution, and once more at the first
+protocol at that height"; Paul, 2026-09-18/19, the spine decision). The sync
+pulls no history: it takes account states and chain heads — the leaves of the
+BPT — and not the entries behind them; those are backfilled once the node is
+`ACTIVE` (§2, `pull.Backfill`; Paul, 2026-10-01). The producer cache fills by execution, and once more at the first
 block a process opens, when it is seeded from the store by position (#4241):
 the anchors this partition produced, from the anchor sequence chain; the
 Directory's receipts of its blocks, from the anchor pool's main chain; and the

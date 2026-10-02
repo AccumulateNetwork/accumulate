@@ -55,9 +55,12 @@ Nothing at or below `Delivered` is a gap. An index further ahead than about an
 hour of the source's production is refused on arrival, not healed: a partition
 that far ahead is a fault to be dealt with elsewhere.
 
-A node that restarts syncs first: it replays the committed stream and rebuilds
-staging as its peers built it, so when it has caught up it holds what they
-hold and has the gaps they have (executor.md, "Sync").
+A node that restarts syncs first: it applies the block-ledger records to the
+BPT until its computed root matches the protocol's signed anchor, and executes
+the transactions consensus delivers from the block after. Healing plays no
+part while it syncs; it begins once the node executes — when its anchor
+matches and it executes consensus's transactions properly (Paul, 2026-10-01;
+executor.md, "Sync").
 
 ### Stranded streams
 
@@ -98,9 +101,9 @@ a node that cannot see its partition cannot know what its peers hold (#4296).
 The cache holds what the source *produced*; the peers hold what they had
 *received* by a given block, and the two differ by whatever is in flight —
 one entry held early is one entry executed a block early (run
-20260918T023054Z). A node that starts takes its staging from a running
-validator of its partition as of that validator's last committed block, and
-keeps it current from consensus from there (executor.md, "Sync"). Healing
+20260918T023054Z). A node that starts holds no staging but what
+consensus delivers from the block after its root matched (executor.md,
+"Sync"); nothing is taken from a peer's staging. Healing
 begins where it always did: once the node executes, a hole in its stage is a
 gap like any other, asked of the source on the cadence.
 
@@ -395,8 +398,9 @@ two-level cycled cache in the dynamic layer and serves reads, not healing.
   it executed — not a window of history. **A synthetic stream's word is
   applied after a grace** (`RejoinGrace`, five minutes of blocks): the word
   is the partition's, and a validator of the destination that restarted as
-  the partition executed those entries lost them from staging and pulls them
-  back from here before its first block (see Rejoining). Released at once,
+  the partition executed those entries lost them from staging, and once it
+  executes it heals them from here like any other hole (see Rejoining).
+  Released at once,
   they would be gone by the time it asked. **Nothing else drops an entry or
   an anchor the destination has not delivered** (#4464): not a horizon of
   blocks, not a restart. A memory bound remains for safety; reaching it drops
@@ -604,9 +608,10 @@ identifiers; DIFFERENCES.md, "Removed (#4362)").
 ### Rejoining is the join
 
 There is no separate rejoin. A node that restarts takes the same path as a
-node that has never run: it collects the blocks it is handed, takes a running
-validator's staging, pulls the state, and executes from the block after its
-root matches (executor.md, "Sync"). The interim pull — `Conductor.Rejoin`,
+node that has never run: it collects the blocks it is handed, pulls the state
+and applies the block-ledger records until its root matches, and executes from
+the block after (executor.md, "Sync"). It does not replay the committed log
+(Paul, 2026-10-01). The interim pull — `Conductor.Rejoin`,
 which asked each source for the span above `Delivered` and held what came
 back — is gone, with its metric: the source's cache holds what the source
 *produced*, and a node that started from it held an entry its peers had not
@@ -617,8 +622,7 @@ and the holes it asks for may be entries the source's word has already
 released; the grace is what lets the source still answer.
 
 The simulator's `Partition.RestartNode` empties a node's staging and starts
-its join; `TakeStaging` and `CompleteJoin` are the two steps a test drives
-(`TestOneValidatorRestartDoesNotDiverge`).
+its join through `join.Run` (`TestOneValidatorRestartDoesNotDiverge`).
 
 ### Healing is for a synthetic stream that has stopped
 
