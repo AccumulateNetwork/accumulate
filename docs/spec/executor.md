@@ -559,13 +559,11 @@ has asked on it, and the one it is asking now. Many slow answers and one
 that never comes are told apart by that count. When a step that was said
 ends, `The join is no longer waiting` says after how long.
 
-**Open (#4485): the BPT by sections.** The walk above takes the whole BPT
-before the node executes. Paul's design (2026-10-01) takes the interior nodes
-down to a section level, verified against the signed root, flags every section
-not loaded, loads a section when execution reads or writes an account in it,
-and fills the rest in the background. Executing block n then needs n−1's
-interior nodes and the sections block n touches, not the complete BPT. It is
-being built; until it lands, step 1 and §3 describe the walk.
+**The BPT by sections (#4485, built).** The walk in step 1 is now the top of
+the tree, verified against the signed root, with every section flagged not
+loaded; a section is loaded when a block reads or writes an account in it, and
+the rest in the background (§3a). Executing block n needs n−1's interior
+nodes and the sections block n touches, not the complete BPT.
 
 **Redirection (Paul, 2026-10-02).** One rule covers a section not loaded, a
 validation that needs it, and a cache miss (#4487): a node that cannot answer
@@ -1348,25 +1346,22 @@ takes before it writes it. An account a section load takes is taken by its
 chain heads and open mark set, like every account the pull takes, and is
 recorded for the history backfill (§2).
 
-**Open (#4485): a node behind its peers diverges on every block that loads a
-section.** A block that reads a section not loaded is, at a node behind its
-peers — every joiner executing the blocks it collected, and any node a block
-behind — executed on the section as the peers hold it *after* that block, so
-the block's own changes are applied twice and the root differs from the
-anchor; the join repairs it and hands off again. Measured in the simulator:
-`TestAJoinAgreesAcrossRepeatedBurns` diverged once after its handoff, on
-such a load, and `TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`
-twice; tests that pin "no divergence after the handoff" now count a divergence
-that follows an unverified load apart (`SectionsTakenUnverified`). Options:
-(a) accept it — every such load costs a repair, until the fill is done
-(built); (b) ask the peers for the section as of H first, where one retains
-it, and take the current state only when none does — the retention question
-does not arise, since a peer that cannot answer as of H is simply passed
-over, but it is the as-of-H load Paul removed; (c) at the handoff, load the
-sections the collected blocks read before executing them, from the peers'
-state at the handoff block. **Recommended: (b)** — it removes the repair for
-every account inside the window and keeps Paul's rule for the rest; built
-meanwhile: (a), as decided.
+**The handoff is an overlap, not a switch (Paul, 2026-10-02).** "You don't
+execute txs AND the blockledger. If you are still syncing the BPT, then you
+are updating with the BlockLedger. If you are synced, and you shift to
+executing txs, you also take the block ledger and confirm that executing txs
+resulted in the same account states specified by the blockledger. There is no
+'double-apply' if executing txs resulted in the same state for all modified
+accounts; you can do that for a few blocks to ensure everything is clean, then
+stop applying the blockledger." So for the first blocks after the match the
+node executes each block and takes its block-ledger record: every account the
+record names must end in the state the record gives; where execution differs,
+the record's state stands and the difference is counted and said. After a run
+of clean blocks the node stops taking the records and executes alone. A
+section loaded from the peers' current state during the overlap cannot make
+the root differ: the records set the states the anchor commits to (#4495).
+Until built, a cold load's divergence is repaired by the root watch
+(DIFFERENCES, "The overlap is not built").
 
 **Decided (Paul, 2026-10-02): no retention.** A peer cannot answer a section
 as of H for a cold account a later block changed (it retained no state at H;
