@@ -225,5 +225,8 @@ class OverlapPhases(unittest.TestCase):
             L("2026-10-02T10:00:09.000000001Z", "The overlap is over: the node executes alone", B),
         ])
         self.assertEqual(1, p["overlapReturns"])
+        self.assertEqual("holding", p["phase"], "the overlap's end is not synced until it holds")
+        self.assertIsNone(p["firstSyncedAt"])
+        r.feed("f", [L("2026-10-02T10:01:49.000000001Z", "The node is synced: its overlap's perfect blocks held with no regression", B)])
         self.assertEqual("synced", p["phase"])
         self.assertIsNotNone(p["firstSyncedAt"])

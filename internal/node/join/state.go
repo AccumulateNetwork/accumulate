@@ -1856,7 +1856,7 @@ func (s *PulledState) Promote(block uint64) {
 // tracker's streak starts again, so the next match takes as many as the first.
 func (s *PulledState) Demote(block uint64) {
 	s.secs.dropReady()
-	s.overlap.stop()
+	s.overlap.stop(block)
 	if !s.machine.Demote(block) {
 		return
 	}

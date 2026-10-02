@@ -1401,7 +1401,13 @@ watch reports it as a divergence there (`takeMismatch`), the node is demoted,
 repairs from the block ledger, matches its anchor again, hands off, and a new
 overlap begins. After 20 blocks in a row of perfect matches (`OverlapBlocks`;
 Paul raised it from 5 on 2026-10-02), **with every section of the state tree
-loaded**, the node stops taking the records and executes alone. A clean run
+loaded**, the node stops taking the records and executes alone. **It is synced only when
+that holds: "If we regress back a state (within say 100 blocks) then regress
+and consider it we are still syncing"** (Paul, 2026-10-02). For `SyncedHold`
+(100) proven blocks after the overlap's end, a demotion withdraws the end --
+the node was still syncing (`accumulate_join_overlap_regressions_total`) --
+and the next match begins a new overlap; past the hold the node says it is
+synced, once. A clean run
 before every section is loaded is not settled: a block executed alone that
 loads a cold section takes it as its peers hold it after the block and
 diverges (run 20261002T090546Z: BVN1 matched at 10818, ran 5 clean buffered

@@ -118,6 +118,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 			return o.Block, true, nil
 		}
 		s.executed = o.Block
+		s.overlap.executed(o.Block)
 		s.checked.Store(o.Block)
 		s.provenAt = o.Block
 		s.repairs = 0

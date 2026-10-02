@@ -38,7 +38,10 @@ PHASES = (
     # executed and checked against its block-ledger record; a mismatch goes
     # back to the ledger from that block; 20 perfect blocks in a row and the
     # node is synced. These lines contain no "executing in agreement".
-    ("The overlap is over", "synced"),
+    # Synced only when the overlap's perfect blocks hold 100 blocks with no
+    # regression (Paul, 2026-10-02); the overlap's end starts the hold.
+    ("The node is synced", "synced"),
+    ("The overlap is over", "holding"),
     ("going back to the block ledger", "back to ledger"),
     ("The overlap begins", "overlap"),
     ("executing in agreement", "ACTIVE"),
@@ -52,13 +55,14 @@ PHASES = (
 # An ACTIVE line does not end an overlap: the node promotes at its first root
 # check, blocks into its overlap. Only "The overlap is over" (synced) or a
 # demotion (BOOTING) does.
-_IN_OVERLAP = ("overlap", "back to ledger")
+_IN_OVERLAP = ("overlap", "back to ledger", "holding")
 COUNTS = (
     ("not its anchored root", "rootMisses"),
     ("Repairing the state", "repairs"),
     ("A repair changed an account", "repairChanged"),
     ("going back to the block ledger", "overlapReturns"),
     ("Every section is loaded", "sectionsLoaded"),
+    ("regressed within the hold", "regressions"),
 )
 _ANY = re.compile("|".join(re.escape(k) for k, _ in PHASES + COUNTS))
 
@@ -95,7 +99,7 @@ def new_partition():
     return {"phase": "not started", "phaseAt": None, "firstActiveAt": None,
             "firstWalkedAt": None, "firstProvenAt": None, "firstSyncedAt": None,
             "rootMisses": 0, "repairs": 0, "repairChanged": 0, "drops": 0,
-            "overlapReturns": 0, "sectionsLoaded": 0}
+            "overlapReturns": 0, "sectionsLoaded": 0, "regressions": 0}
 
 
 class Reader:
@@ -270,6 +274,7 @@ def rows(followers, reader, heights, lives, state, mem, now):
                 "toProvenSec": _since(lp["firstProvenAt"], added),
                 "toSyncedSec": _since(lp["firstSyncedAt"], added),
                 "overlapReturns": lp["overlapReturns"],
+                "regressions": lp["regressions"],
                 "sectionsLoaded": lp["sectionsLoaded"] > 0,
                 "rootMisses": lp["rootMisses"], "repairs": lp["repairs"],
                 "repairChanged": lp["repairChanged"], "drops": lp["drops"],

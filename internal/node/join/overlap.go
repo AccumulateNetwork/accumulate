@@ -74,6 +74,7 @@ type overlap struct {
 	frontier    int    // blocks no peer had produced yet
 	differences int64
 	endedAt     uint64
+	syncedAt    uint64 // the block the node was synced at: endedAt + SyncedHold, held
 
 	// mismatch is the first block of this overlap whose execution left an
 	// account other than its record: the join goes back to the block ledger
@@ -104,6 +105,13 @@ type settling struct {
 // perfect matches" (Paul, 2026-10-02).
 const OverlapBlocks = 20
 
+// SyncedHold is how many blocks after the overlap's end the node must run
+// without regressing before it is synced: "If we regress back a state
+// (within say 100 blocks) then regress and consider it we are still syncing"
+// (Paul, 2026-10-02). A demotion inside it means the overlap ended too soon,
+// and the node is still syncing.
+const SyncedHold = 100
+
 // overlapAsk bounds how long a block asks the peers for its record: each is
 // asked once, and a peer that has not produced the block is not waited for.
 const overlapAsk = 5 * time.Second
@@ -115,6 +123,15 @@ var mOverlapDifferences = promauto.NewCounterVec(prometheus.CounterOpts{
 	Subsystem: "join",
 	Name:      "overlap_differences_total",
 	Help:      "Accounts and chains a block executed during the overlap after a join left other than the partition's block-ledger record, which then stood",
+}, []string{"partition"})
+
+// mOverlapRegressions counts the overlaps whose end was withdrawn: the node
+// regressed within SyncedHold blocks of it, and was still syncing.
+var mOverlapRegressions = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "overlap_regressions_total",
+	Help:      "Overlaps whose end was withdrawn because the node regressed within the hold after it",
 }, []string{"partition"})
 
 // mOverlapReturns counts the blocks at which an overlap sent the node back to
@@ -142,19 +159,44 @@ func (o *overlap) start(block uint64) {
 	o.active = true
 	o.from, o.last = block, block
 	o.clean, o.checked, o.frontier = 0, 0, 0
-	o.endedAt = 0
+	o.endedAt, o.syncedAt = 0, 0
 	o.log.Info("The overlap begins: each block is executed and settled against its record",
 		"partition", o.partition, "proven", block, "until-clean", o.blocks)
 }
 
 // stop ends the overlap without its clean run: the node stopped executing.
-func (o *overlap) stop() {
+// A node demoted at block within SyncedHold of the overlap's end was still
+// syncing: the end is withdrawn, and it is said.
+func (o *overlap) stop(block uint64) {
 	if o == nil {
 		return
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.active = false
+	if o.endedAt != 0 && o.syncedAt == 0 {
+		o.log.Info("The node regressed within the hold after its overlap ended; it is still syncing",
+			"partition", o.partition, "block", block, "overlap-ended", o.endedAt, "hold", SyncedHold)
+		mOverlapRegressions.WithLabelValues(o.label).Inc()
+		o.endedAt = 0
+	}
+}
+
+// executed records that the node has executed block alone, after the overlap.
+// Once it has run SyncedHold blocks past the overlap's end without a
+// regression, it is synced, and that is said once.
+func (o *overlap) executed(block uint64) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.endedAt == 0 || o.syncedAt != 0 || block < o.endedAt+SyncedHold {
+		return
+	}
+	o.syncedAt = block
+	o.log.Info("The node is synced: its overlap's perfect blocks held with no regression",
+		"partition", o.partition, "block", block, "overlap-ended", o.endedAt, "perfect", o.blocks, "hold", SyncedHold)
 }
 
 // due reports whether block is one the overlap settles.
@@ -698,6 +740,7 @@ type OverlapStatus struct {
 	Active      bool
 	From        uint64 // the block the overlap began after: the last match
 	EndedAt     uint64 // the block the overlap ended at; zero while it runs
+	SyncedAt    uint64 // the block the node was synced at (EndedAt + SyncedHold held); zero until then
 	Checked     int    // blocks settled against their record
 	Frontier    int    // blocks no peer had produced when they were settled
 	Differences int64  // accounts and chains a record settled, since the process started
@@ -721,7 +764,7 @@ func (s *PulledState) Overlap() OverlapStatus {
 	o := s.overlap
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return OverlapStatus{Active: o.active, From: o.from, EndedAt: o.endedAt, Checked: o.checked, Frontier: o.frontier, Differences: o.differences, Returns: append([]uint64(nil), o.returns...)}
+	return OverlapStatus{Active: o.active, From: o.from, EndedAt: o.endedAt, SyncedAt: o.syncedAt, Checked: o.checked, Frontier: o.frontier, Differences: o.differences, Returns: append([]uint64(nil), o.returns...)}
 }
 
 // SettleBlock implements [database.BlockSettler].
