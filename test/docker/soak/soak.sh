@@ -541,13 +541,13 @@ docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
     set_now=$(members)
     docker compose -f "$here/../docker-compose.yml" --profile late-follower logs -f --no-color \
       ${since:+--since "$since"} >> "$rd/node-logs-live.txt" 2>&1 &
-    lp=$!
+    LOGSTREAM=$!
     why="a container went away"
-    while kill -0 "$lp" 2>/dev/null; do
+    while kill -0 "$LOGSTREAM" 2>/dev/null; do
       sleep 15
-      if [ "$(members)" != "$set_now" ]; then why="the containers changed"; kill "$lp" 2>/dev/null; break; fi
+      if [ "$(members)" != "$set_now" ]; then why="the containers changed"; kill "$LOGSTREAM" 2>/dev/null; break; fi
     done
-    wait "$lp" 2>/dev/null
+    wait "$LOGSTREAM" 2>/dev/null
     since=$(date -u -d '-2 seconds' +%FT%TZ)
     echo "=== log capture restarted at $(date -u +%FT%TZ) ($why) ===" >> "$rd/node-logs-live.txt"
     sleep 2

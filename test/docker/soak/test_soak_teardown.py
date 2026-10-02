@@ -54,7 +54,8 @@ LINES = SRC.splitlines()
 # so its last round and its report land.
 EXEMPT = {"STALLKILL": "it takes the network down after this script exits",
           "READPROBE": "signalled and waited on separately so its report lands",
-          "DRIVER": "the load generator; `wait $DRIVER` is the run"}
+          "DRIVER": "the load generator; `wait $DRIVER` is the run",
+          "LOGSTREAM": "inside the LOGCAP subshell: stop_bg's pkill -P of LOGCAP stops it"}
 
 
 def background_starts():
