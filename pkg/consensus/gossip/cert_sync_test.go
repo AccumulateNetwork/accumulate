@@ -69,6 +69,7 @@ func TestCertSyncResponse_MarshalUnmarshal(t *testing.T) {
 	resp := &gossip.CertSyncResponse{
 		Certificates: []*types.Certificate{cert},
 		RequestID:    67890,
+		Requester:    []byte("the requester"),
 		Missing:      missing,
 	}
 
@@ -79,6 +80,7 @@ func TestCertSyncResponse_MarshalUnmarshal(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, resp.RequestID, resp2.RequestID)
+	assert.Equal(t, resp.Requester, resp2.Requester, "the response names its request by requester and ID (#4470)")
 	require.Equal(t, len(resp.Certificates), len(resp2.Certificates))
 	assert.Equal(t, resp.Certificates[0].Digest(), resp2.Certificates[0].Digest())
 	require.Equal(t, len(resp.Missing), len(resp2.Missing))

@@ -296,8 +296,14 @@ broadcast:
   does not fit unanswered, and it would wait out the 30 s retry (#4469).
 
 A peer answers after a random delay of up to 200 ms with at most 100
-certificates, and does not answer a request whose ID it has already seen
-answered. What arrives is verified against the committee and inserted. A
+certificates, and does not answer a request it has already seen answered.
+A request is named by its requester's key and its ID together, and a
+response carries both: every node numbers its own requests, so an ID alone
+named a request of every node at once, and a peer that had seen node A's
+request *k* answered skipped node B's request *k*. A node numbers its
+requests from a random starting point, so one restarted under the same key
+does not reuse the IDs its peers saw answered before it stopped (#4470).
+What arrives is verified against the committee and inserted. A
 certificate whose parents are missing is held (up to `2 × 10 × committee`
 certificates) until they arrive, and its parents are asked for.
 
