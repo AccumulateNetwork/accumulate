@@ -196,6 +196,14 @@ knows neither key type (their numbers, 4 and 5, stay unassigned): a
 configuration that still names one fails to load with a message pointing at
 the tool.
 
+A node is one libp2p identity, so `dnn/` and `bvnn/` must hold the same node
+key (main's `init dual` wrote one); the tool **refuses keys that differ**,
+for node keys as for validator keys, rather than keep one and drop the other.
+**Nothing it replaces is lost**: each partition's `accumulate.toml`, and any
+`<work>/accumulate.toml` it is about to write over, is copied into
+`<work>/backup/` first; a backup is never overwritten (a later one is named
+`accumulate.toml.1`, `.2`, …) (#4490).
+
 **The database (future work).** Converting a mainnet node's database to
 what a DAG-BFT node holds is not built. When it is, it belongs here and in
 the same tool: the key conversion is its first step, not a separate one.

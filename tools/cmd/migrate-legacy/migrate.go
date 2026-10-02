@@ -147,6 +147,11 @@ func migrate(_ *cobra.Command, args []string) {
 		check(err)
 		check(os.WriteFile(filepath.Join(backupDir, "dn-accumulate.toml"), b, 0600))
 	}
+	if existing := filepath.Join(flagMain.WorkDir, "accumulate.toml"); fileExists(existing) {
+		kept, err := backupFile(existing, backupDir)
+		check(err)
+		fmt.Fprintln(os.Stderr, color.HiYellowString("Replacing %s; the original is kept as %s", existing, kept))
+	}
 	check(cfg.Save())
 	if cvc.Mode == run.CoreValidatorModeBVN || cvc.Mode == run.CoreValidatorModeDual {
 		check(os.Remove(filepath.Join(bvnDir, "config", "accumulate.toml")))
@@ -185,7 +190,13 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, root, dir 
 	if err != nil {
 		return fmt.Errorf("node key: %w", err)
 	}
-	cfg.P2P.Key = nodeKey
+	// A node is one libp2p identity. Main's `init dual` gave both partitions
+	// one node key; keys that differ cannot be merged without dropping one.
+	if cfg.P2P.Key == nil {
+		cfg.P2P.Key = nodeKey
+	} else if other, ok := cfg.P2P.Key.(*run.RawPrivateKey); !ok || !other.Equal(nodeKey) {
+		return fmt.Errorf("DN and BVN nodes cannot use different node keys: the node has one peer ID")
+	}
 	// old.Accumulate.Healing.Enable is deliberately dropped: healing is
 	// unconditional now — recovery is not something an operator can switch
 	// off (#4138).
@@ -466,9 +477,28 @@ func convertConfigFile(file string) {
 		return
 	}
 
-	backup := filepath.Join(filepath.Dir(file), "backup")
-	check(os.MkdirAll(backup, 0700))
-	check(os.WriteFile(filepath.Join(backup, "accumulate.toml"), b, 0600))
+	kept, err := backupFile(file, filepath.Join(filepath.Dir(file), "backup"))
+	check(err)
 	check(os.WriteFile(file, out.Bytes(), 0600))
-	color.Green("Keys converted; the original is in %s", backup)
+	color.Green("Keys converted; the original is kept as %s", kept)
+}
+
+// backupFile copies file into dir, under its own name or, when an earlier
+// backup has that name, the first free name.N, and returns the copy's path. A
+// backup is never overwritten: the first is the node's original.
+func backupFile(file, dir string) (string, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	err = os.MkdirAll(dir, 0700)
+	if err != nil {
+		return "", err
+	}
+	name := filepath.Base(file)
+	dst := filepath.Join(dir, name)
+	for i := 1; fileExists(dst); i++ {
+		dst = filepath.Join(dir, fmt.Sprintf("%s.%d", name, i))
+	}
+	return dst, os.WriteFile(dst, b, 0600)
 }
