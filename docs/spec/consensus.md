@@ -542,3 +542,15 @@ batch a peer wants, never one this node still needs to replay.
 
 Where the implementation departs from this specification, see
 [DIFFERENCES.md](DIFFERENCES.md).
+
+**A joiner collects no votes for decided rounds (Paul, 2026-10-02; #4476).**
+"We can't expect a joining node to collect all the votes for blocks that have
+already met consensus." Every block records the leader round it was committed
+at (the system ledger), so a node whose state is proven at block V, committed
+at round R, holds the result of every round at or below R: a certificate for
+such a round is dropped on arrival, unverified, and is never requested. A
+joiner keeps applying block-ledger records until its proven block is the
+newest, and only then seeds consensus at that block's round, so the rounds it
+must collect are the frontier's last few. The pending buffer's size is not the
+question ("240 is nothing, it is just we don't need even that"); it stays as
+is.
