@@ -522,6 +522,17 @@ block, the state its store held before the block — body, leaf and state
 receipt — under the window's start; the pre-block state is the outermost
 batch's committed view.
 
+**Decided (Paul, 2026-10-02): no retention.** "We don't need retention
+because all the entries are in the database, and going back we will find the
+entries that are missing working back from the account state, and find the
+entries once we have caught an account up." A section loaded while the node
+executes is loaded as the peer holds it now, not as of H; a root that then
+differs from its anchor is the anchor mismatch of "Two mismatches" — repaired
+from the block ledger, and the node moves on — and the account's entries are
+found from its chains once it has caught up. The hold stays only for a load
+that gets no answer at all. The as-of-H load and the hold-then-re-pull of a
+cold account are to be removed (#4485).
+
 ### E25. Open (#4485): validation loads a peer's current state, unchecked
 
 executor.md §3a says a validation (submission-time check) loads a section it
@@ -534,6 +545,12 @@ Options for Paul: (a) refuse at submission until the fill loads the section;
 (b) load through the gate, verified and kept. The code does neither yet; it
 loads unchecked (`sections.loadForCheck`, `beginValidation`).
 
+**Decided (Paul, 2026-10-02): validation does not load.** A submission that
+needs a section the node has not loaded is redirected to another node while
+the node is loading; "once synced, a node can give it a try, then redirect on
+a failure (data not loaded)." Option (a) with redirection, not (b). To be
+built (#4485, with the redirection of #4487).
+
 ### E26. Open (#4485): a section not loaded propagates between joiners
 
 A joiner takes the top of the tree from one peer. A peer that still holds
@@ -544,6 +561,13 @@ was still filling, a section can end with no holder (review 2026-10-02,
 finding 4). Proposed: load a section only from a peer that holds it, rotating
 on a not-loaded answer; a joiner takes the top only from a peer with no
 markers. Not decided; not built (`fetchTop`, `install`, `queryBptBlock`).
+
+**Decided (Paul, 2026-10-02):** "We can ask and use answers that match the
+cryptography, and nodes that can't answer should be redirecting." A joiner may
+take the top, and a section, from any peer — every answer is verified against
+the signed root or the section's hash — and a peer that does not hold what is
+asked redirects to one that does, rather than answering not-loaded. To be built
+(#4485).
 
 ### E11. A node cannot sync from the running protocol
 

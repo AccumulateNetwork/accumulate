@@ -563,6 +563,19 @@ and fills the rest in the background. Executing block n then needs n−1's
 interior nodes and the sections block n touches, not the complete BPT. It is
 being built; until it lands, step 1 and §3 describe the walk.
 
+**Redirection (Paul, 2026-10-02).** One rule covers a section not loaded, a
+validation that needs it, and a cache miss (#4487): a node that cannot answer
+redirects to a node that can. Reads and submissions in a section the node has
+not loaded are redirected while it loads; a synced node tries first and
+redirects on a not-loaded failure; a peer asked for a section or a page it does
+not hold redirects to one that holds it. Answers are used when they match the
+cryptography — the signed root, the section's hash, the entry's hash — whoever
+served them. There is no as-of-H load and no retention of pre-change state:
+a section loaded while the node executes is the peer's current state, and a
+root that then differs from its anchor is repaired from the block ledger
+("Two mismatches"); the entries an account is missing are found from its
+chains once it has caught up (DIFFERENCES E24–E26).
+
 #### 2. Nothing is proven before the match, and the match is the proof
 
 **The accounts a peer serves to a join are as of a block** (decided after
