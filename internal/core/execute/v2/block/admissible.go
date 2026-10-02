@@ -7,7 +7,11 @@
 package block
 
 import (
+	"bytes"
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -52,8 +56,45 @@ func (x *Executor) provingAnchorIndex(batch *database.Batch, proof *protocol.Ann
 	case err == nil:
 		return i, true, nil
 	case errors.Is(err, errors.NotFound):
+		x.sayAnchorMissing(batch, anchor, err)
 		return -1, false, nil
 	default:
 		return -1, false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
+}
+
+// sayAnchorMissing is a diagnostic for run 20261002T090546Z: a proof's
+// terminal anchor that the element index does not hold, said once per anchor,
+// with whether the same batch finds the anchor by scanning the chain's
+// entries. Tells "the entry is here but its index is not" from "the entry is
+// not here".
+func (x *Executor) sayAnchorMissing(batch *database.Batch, anchor []byte, err error) {
+	k := fmt.Sprintf("%x", anchor)
+	x.disprovedMu.Lock()
+	if x.anchorMissing == nil {
+		x.anchorMissing = map[string]bool{}
+	}
+	seen := x.anchorMissing[k]
+	x.anchorMissing[k] = true
+	x.disprovedMu.Unlock()
+	if seen {
+		return
+	}
+	chain := batch.Account(x.Describe.AnchorPool()).AnchorChain(protocol.Directory).Root()
+	count := int64(-1)
+	if head, herr := chain.Head().Get(); herr == nil {
+		count = head.Count
+	}
+	found, scanned := int64(-1), int64(0)
+	for i := count - 1; i >= 0 && i >= count-6000; i-- {
+		scanned++
+		if e, eerr := chain.Entry(i); eerr == nil && bytes.Equal(e, anchor) {
+			found = i
+			break
+		}
+	}
+	x.logger.Info("DIAG: a proof's terminal anchor is not in the Directory root chain's element index",
+		"module", "stream", "anchor", logging.AsHex(anchor), "error", err,
+		"chain", chain.Name(), "key", chain.Key().String(), "count", count,
+		"scanned", scanned, "found-by-scan", found)
 }
