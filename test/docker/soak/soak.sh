@@ -528,13 +528,28 @@ docker image inspect --format '{{.Id}} {{.RepoTags}}' "$soak_image" \
 # started again from where the last stream ended, and the minutes around a
 # restart -- where in-flight messages are lost -- are kept (2026-09-29: four
 # restarts went uncaptured and their losses could not be traced).
+# The late followers are in a compose profile, which `logs` leaves out unless
+# it is named, and `logs -f` follows only the containers that exist when it
+# starts: a follower added later was never captured, and its own `docker logs`
+# had rotated past the event by the time anyone looked (#4486, #4484). So the
+# profile is named, and the stream is started again whenever the project's set
+# of containers changes -- an add as well as a removal.
 (
   since=$([ "$ATTACH" = 1 ] && date -u +%FT%TZ)
+  members() { docker compose -f "$here/../docker-compose.yml" --profile late-follower ps -q 2>/dev/null | sort | tr '\n' ' '; }
   while :; do
-    docker compose -f "$here/../docker-compose.yml" logs -f --no-color \
-      ${since:+--since "$since"} >> "$rd/node-logs-live.txt" 2>&1
+    set_now=$(members)
+    docker compose -f "$here/../docker-compose.yml" --profile late-follower logs -f --no-color \
+      ${since:+--since "$since"} >> "$rd/node-logs-live.txt" 2>&1 &
+    lp=$!
+    why="a container went away"
+    while kill -0 "$lp" 2>/dev/null; do
+      sleep 15
+      if [ "$(members)" != "$set_now" ]; then why="the containers changed"; kill "$lp" 2>/dev/null; break; fi
+    done
+    wait "$lp" 2>/dev/null
     since=$(date -u -d '-2 seconds' +%FT%TZ)
-    echo "=== log capture restarted at $(date -u +%FT%TZ) (a container went away) ===" >> "$rd/node-logs-live.txt"
+    echo "=== log capture restarted at $(date -u +%FT%TZ) ($why) ===" >> "$rd/node-logs-live.txt"
     sleep 2
   done
 ) &

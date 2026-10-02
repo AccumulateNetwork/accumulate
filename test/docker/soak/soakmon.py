@@ -2335,6 +2335,20 @@ def nodestate_sample(per, cs, followers):
     return ns
 
 
+def join_progress_from(per):
+    """What each follower still lacks, per partition, from its own gauges:
+    sections of the state tree not yet loaded (#4485) and accounts whose
+    history is not yet backfilled (#4471). {container: {partition: {...}}}."""
+    out = {}
+    for c, rows in per.items():
+        for name, labels, v in rows or ():
+            key = {NS + "_join_sections_not_loaded": "sectionsNotLoaded",
+                   NS + "_join_backfill_accounts_left": "backfillLeft"}.get(name)
+            if key and labels.get("partition"):
+                out.setdefault(c, {}).setdefault(labels["partition"], {})[key] = int(v)
+    return out
+
+
 def collect_metrics():
     # Scrape every node's /metrics and aggregate. Counters (heals/drops) sum
     # across a partition's validators; gauges (sequence) take the max, since all
@@ -2476,9 +2490,11 @@ def collect_metrics():
 
     ex = exec_from(per)
     ex["scope"] = SCOPE_VAL
+    join_progress = join_progress_from(per_fol)
     # Followers are already out of `per`.
     executed_heights = executed_heights_from(per)
     return {"heals": heals, "wedges": drops, "handoff": handoff, "flows": flows, "life": life, "exec": ex, "executedHeights": executed_heights,
+            "joinProgress": join_progress,
             "nodeState": nstate,
             "synProduced": syn_prod, "ancProduced": anc_prod, "nodeStats": nodes,
             "nodes": len(cs), "scraped": sum(1 for r in per.values() if r)
@@ -2933,6 +2949,7 @@ def _collect_once(last, hist):
             upd["life"] = m.get("life", {})
             upd["exec"] = m.get("exec", {})
             upd["executedHeights"] = m.get("executedHeights", {})
+            upd["joinProgress"] = m.get("joinProgress", {})
             upd["scrape"] = {"nodes": m["nodes"], "scraped": m["scraped"]}
             upd["nodeStats"] = m.get("nodeStats", {})
             upd["nodeState"] = m.get("nodeState", {})
@@ -3255,7 +3272,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 <div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
   <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node). Phase is the latest of Pulling the state / The walk has covered / Joined / not executing in agreement (BOOTING) / executing in agreement (ACTIVE). Counts are whole-run, from the log, and never clear.</div>
-  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>catch-up: state downloaded</th><th>catch-up: state proven</th><th>catch-up: in agreement</th><th>catch-up: synced (5 perfect blocks)</th><th>returns to the ledger (#)</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>proven → repairing (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>catch-up: state downloaded</th><th>catch-up: state proven</th><th>catch-up: in agreement</th><th>catch-up: synced (5 perfect blocks)</th><th>returns to the ledger (#)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>proven → repairing (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
   <div class=panel data-p=synflow>
@@ -3427,9 +3444,9 @@ function nodestateView(nsd){
 }
 // The Followers panel (followerJoins on /data): one row per follower x
 // partition, from each container's log. Absent is `— not measured`, never 0.
-function followersView(fj){
-  if(!fj||!fj.rows)return '<tr><td class=mut colspan=12>— not measured: the monitor has not read the followers yet</td></tr>';
-  if(!fj.rows.length)return `<tr><td class=mut colspan=12>${fj.why||'no follower in this topology'}</td></tr>`;
+function followersView(fj,jp){
+  if(!fj||!fj.rows)return '<tr><td class=mut colspan=18>— not measured: the monitor has not read the followers yet</td></tr>';
+  if(!fj.rows.length)return `<tr><td class=mut colspan=18>${fj.why||'no follower in this topology'}</td></tr>`;
   const d=s=>s==null?'—':(s<3600?`${Math.floor(s/60)}m ${String(Math.floor(s%60)).padStart(2,'0')}s`:`${Math.floor(s/3600)}h ${String(Math.floor(s%3600/60)).padStart(2,'0')}m`);
   const PC={ACTIVE:'grn',synced:'grn',overlap:'yel','back to ledger':'yel',BOOTING:'red','handed off':'yel',walked:'yel',proven:'yel',pulling:'yel'};
   const fresh=r=>r.life==='waiting'||r.life==='removed';
@@ -3448,6 +3465,7 @@ function followersView(fj){
     return `<tr><td class=name>${r.container}${launched} → ${shortP(r.partition)}</td>`
       +`<td class=${phc} title="${ph}">${PHASE_WORDS[ph]||ph}</td><td>${h}</td><td>${fresh(r)?'—':n(r.behind,'yel')}</td>`
       +`<td>${fresh(r)?'—':d(r.sinceAddSec)}</td><td>${r.toWalkedSec!=null?d(r.toWalkedSec):'—'}</td><td>${r.toProvenSec!=null?d(r.toProvenSec):'—'}</td><td><b>${toA}</b></td><td>${r.toSyncedSec!=null?d(r.toSyncedSec):'—'}</td><td>${n(r.overlapReturns||0,'yel')}</td>`
+      +`<td>${((jp||{})[r.container]||{})[r.partition]?.sectionsNotLoaded??'—'}</td><td>${((jp||{})[r.container]||{})[r.partition]?.backfillLeft??'—'}</td>`
       +`<td>${n(r.rootMisses,'yel')}</td><td>${n(r.repairs,'yel')}</td><td>${n(r.repairChanged,'red')}</td><td>${n(r.drops,'red')}</td>`
       +`<td>${r.memMiB==null?'—':fmt(Math.round(r.memMiB))}</td><td>${st}</td></tr>`;
   }).join('');
@@ -3629,7 +3647,7 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   // A panel that measures nothing is hidden, not shown as a wall of dashes.
   $('wpanel').style.display=w.measured?'':'none';
   $('whrow').style.gridTemplateColumns=w.measured?'':'1fr';
-  $('fjtab').querySelector('tbody').innerHTML=followersView(s.followerJoins);
+  $('fjtab').querySelector('tbody').innerHTML=followersView(s.followerJoins,s.joinProgress);
   for(const el of document.querySelectorAll('.cap.clamp'))el.title=el.textContent;
   // wedges / heals pills
   $('wsyn').innerHTML=w.measured?fmt((w.byReason||{})['queue-full']||0):nm(null);$('wanc').innerHTML=w.measured?fmt((w.byReason||{}).deadline||0):nm(null);$('wtot').innerHTML=nm(w.total);
