@@ -133,16 +133,12 @@ func (p *Partition) RestartNode(i int) {
 }
 
 // redirectCheck is the submit service's redirect (#4485): node self's check
-// was refused NotReady. If self has sections of its state tree not loaded,
-// the envelope is validated at a node that holds every section and is not
-// joining, and that node's answer is self's; that node validates locally,
-// so the redirect is one hop. A node with every section loaded, or a
-// submission no node can validate, is refused.
+// read a section of its state tree it has not loaded. The envelope is
+// validated at a node that holds every section and is not joining, and that
+// node's answer is self's; that node validates locally, so the redirect is
+// one hop. A submission no node can validate is refused.
 func (p *Partition) redirectCheck(self int, env *messaging.Envelope) ([]*protocol.TransactionStatus, error) {
 	refused := errors.NotReady.WithFormat("no node of %s that holds every section can validate this", p.ID)
-	if js := p.nodes[self].joinState; js == nil || js.SectionsNotLoaded() == 0 {
-		return nil, refused
-	}
 	for i, n := range p.nodes {
 		if i == self || n.stopped || n.executor == nil || n.join.Joining() {
 			continue
@@ -154,7 +150,7 @@ func (p *Partition) redirectCheck(self int, env *messaging.Envelope) ([]*protoco
 		if err == nil {
 			return res, nil
 		}
-		if errors.Code(err) != errors.NotReady {
+		if _, notLoaded := database.NotLoadedOf(err); !notLoaded {
 			return nil, err
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"log/slog"
 	"math/big"
+	"sort"
 	"sync"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -596,6 +597,20 @@ func (f *nodeFactory) getSynthCache() *synthcache.Cache {
 	return f.cache
 }
 
+// queryPeers is every peer serving the partition's query service but this
+// node, in a stable order.
+func (f *nodeFactory) queryPeers(context.Context) []string {
+	self := f.getPeerID()
+	var out []string
+	for id := range f.getServices().Services[api.ServiceTypeQuery.AddressFor(f.networkFactory.id).String()] {
+		if id != self {
+			out = append(out, id.String())
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
 	// The API services read deep, as the node's do (cmd/accumulated/run,
@@ -614,6 +629,10 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			// simulator node answered reads from the store its pull was
 			// still filling.
 			NodeState: &f.nodeState,
+			// The partition's other query peers, named by a refusal of a
+			// section this node has not loaded, as the daemon names them
+			// from its p2p node (#4485).
+			Redirect: f.queryPeers,
 		}),
 	})
 

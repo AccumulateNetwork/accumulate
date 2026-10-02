@@ -494,23 +494,22 @@ rebuilt together.
 condition below it in `shouldSendAnchor`, if the assumption ever stops
 holding.
 
-### E26. Open (#4485): a section not loaded propagates between joiners
+### E26. A redirect names peers, not holders; account reads are not redirected
 
-A joiner takes the top of the tree from one peer. A peer that still holds
-markers serves its markers' hashes as the top (they are exact), but refuses
-pages in those sections, so the joiner marks them too and cannot load them
-from that peer. Under a whole-network or rolling restart in which every node
-was still filling, a section can end with no holder (review 2026-10-02,
-finding 4). Proposed: load a section only from a peer that holds it, rotating
-on a not-loaded answer; a joiner takes the top only from a peer with no
-markers. Not decided; not built (`fetchTop`, `install`, `queryBptBlock`).
+*[#4485](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4485)*
 
-**Decided (Paul, 2026-10-02):** "We can ask and use answers that match the
-cryptography, and nodes that can't answer should be redirecting." A joiner may
-take the top, and a section, from any peer — every answer is verified against
-the signed root or the section's hash — and a peer that does not hold what is
-asked redirects to one that does, rather than answering not-loaded. To be built
-(#4485).
+**Spec** (executor.md, "Sync", Redirection, §3a; Paul, 2026-10-02): a peer
+that does not hold what is asked redirects to one that does.
+
+**Code**: a BPT page that starts in a section not loaded is refused with the
+section and the names of every other peer the node knows serves the
+partition's queries — not peers known to hold the section (the open question
+in §3a; built: option (a)). The section loader of a block and of the fill
+follows those names; the pull's own loads before the match
+(`loadOpenedPage`) rotate over their peers and do not. An `AccountStates`
+answer for an account in a section not loaded still carries no body, and a
+plain account query is refused with the section and the names, but no client
+of the API follows them.
 
 ### E11. A node cannot sync from the running protocol
 

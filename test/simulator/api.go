@@ -8,6 +8,7 @@ package simulator
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"net"
 	"net/http"
 	"strings"
@@ -39,6 +40,13 @@ func (s *Simulator) Services() *message.Client { return s.services.Client }
 // call goes to a node that can serve, never to one that is joining
 // (services.Network.HarnessClient). The nodes themselves use Services.
 func (s *Simulator) HarnessServices() *message.Client { return s.services.HarnessClient() }
+
+// RegisterPeerService registers a service under a peer that is no node of
+// the network -- a test's stranger or forger -- so that discovery finds it and
+// a call addressed to it reaches the handler.
+func (s *Simulator) RegisterPeerService(id peer.ID, address *api.ServiceAddress, handler func(message.Stream)) bool {
+	return s.services.RegisterService(id, address, handler)
+}
 
 // SetService replaces the service handler for the given address.
 func (s *Simulator) SetService(address *api.ServiceAddress, handler func(message.Stream)) {

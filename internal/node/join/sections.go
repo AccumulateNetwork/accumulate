@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -40,6 +41,10 @@ type sections struct {
 
 	// peers is the partition's peers, in the order they are asked.
 	peers func(ctx context.Context) []pull.Source
+
+	// sourceFor addresses a peer a refusal named; nil when the sources
+	// cannot address a peer by name.
+	sourceFor func(peer.ID) pull.Source
 
 	// loaded is told the accounts a committed block's sections brought in:
 	// they are taken by their chain heads, and backfilled (§2).
@@ -451,13 +456,26 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		hash   [32]byte
 	}
 	var fallback *candidate
+	asked := map[peer.ID]bool{}
 	for _, src := range srcs {
+		if p, ok := src.(interface{ PeerID() peer.ID }); ok {
+			asked[p.PeerID()] = true
+		}
+	}
+	n := len(srcs)
+	for i := 0; i < len(srcs); i++ {
+		src := srcs[i]
 		if ctx.Err() != nil {
 			break
 		}
 		leaves, urls, block, err := sectionLeavesAt(ctx, src, x.partition, s, 0)
 		if err != nil {
 			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
+			// A peer that has not loaded the section names peers that may
+			// hold it; they are asked after the rest. What they answer is
+			// checked as any answer is (executor spec, "Sync",
+			// Redirection; Paul, 2026-10-02).
+			srcs = x.redirect(srcs, asked, err, n+maxRedirected)
 			continue
 		}
 		got, ok := bpt.SectionHash(leaves)
@@ -485,6 +503,35 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		last = errors.UnknownError.WithFormat("%s: %w", sourceKey(fallback.src), err)
 	}
 	return nil, false, last
+}
+
+// maxRedirected bounds how many named peers one load adds to those it asks.
+const maxRedirected = 16
+
+// redirect adds to srcs each peer a refusal of a section not loaded named and
+// that was not asked yet, up to max sources in all.
+func (x *sections) redirect(srcs []pull.Source, asked map[peer.ID]bool, err error, max int) []pull.Source {
+	if x.sourceFor == nil {
+		return srcs
+	}
+	d, ok := database.NotLoadedOf(err)
+	if !ok {
+		return srcs
+	}
+	for _, name := range d.Redirect {
+		if len(srcs) >= max {
+			break
+		}
+		id, err := peer.Decode(name)
+		if err != nil || asked[id] {
+			continue
+		}
+		asked[id] = true
+		if src := x.sourceFor(id); src != nil {
+			srcs = append(srcs, src)
+		}
+	}
+	return srcs
 }
 
 // statesFor asks one peer for the accounts behind a section's leaves, as it
@@ -518,6 +565,11 @@ func sectionLeavesAt(ctx context.Context, src pull.Source, partition *url.URL, s
 	var block uint64
 	for {
 		page, err := src.QueryBptPage(ctx, partition, &api.BptPageQuery{StartHash: start, Count: sectionPage, ForHeight: h})
+		if d, ok := database.NotLoadedOf(err); ok && bpt.Section(*d.Section) < s {
+			// The page went on into a section below this one that the
+			// peer has not loaded: this section ended before it.
+			return leaves, urls, block, nil
+		}
 		if err != nil {
 			return nil, nil, 0, errors.UnknownError.WithFormat("page section %d: %w", s, err)
 		}

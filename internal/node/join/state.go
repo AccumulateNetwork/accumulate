@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -458,6 +459,13 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		return srcs
 	}
 	s.secs.loaded = func(urls []*url.URL) { s.markHeadOnly(urls...) }
+	// A peer that refuses a section it has not loaded names peers to ask
+	// instead, and the loader asks them too (Redirection).
+	if named, ok := s.sources.(interface {
+		Source(peer.ID, *url.URL) pull.Source
+	}); ok {
+		s.secs.sourceFor = func(id peer.ID) pull.Source { return named.Source(id, s.partition) }
+	}
 	if err := s.secs.read(); err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}

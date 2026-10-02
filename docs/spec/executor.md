@@ -578,8 +578,8 @@ served them. There is no as-of-H load and no retention of pre-change state:
 a section loaded while the node executes is the peer's current state, and a
 root that then differs from its anchor is repaired from the block ledger
 ("Two mismatches"); the entries an account is missing are found from its
-chains once it has caught up (DIFFERENCES E26; E24, the as-of-H load, and E25,
-validation loading, are built).
+chains once it has caught up (DIFFERENCES E26 says what of the redirect is not
+built; E24, the as-of-H load, and E25, validation loading, are built).
 
 #### 2. Nothing is proven before the match, and the match is the proof
 
@@ -1231,11 +1231,42 @@ The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
 store's contract in internal/database
 (`TestAReadOfASectionNotLoadedIsRefusedNotNotFound` and its neighbours).
 
-**What is not loaded is not served.** An account read in a section not
-loaded is refused with `NotReady` — a query, an `AccountStates` answer, which serves it with no body so the asker asks the next peer; a BPT
-page that would carry a marker is refused with `NotReady`. A stored block
-(`BptBlockQuery`) is served: its hashes are the tree's, markers included.
-Forwarding a refused read to a peer is not built.
+**What is not loaded is not served; the node redirects** (Paul, 2026-10-02:
+"We can ask and use answers that match the cryptography, and nodes that
+can't answer should be redirecting"). An account read in a section not
+loaded is refused with `NotReady` — a query; an `AccountStates` answer serves
+it with no body, so the asker asks the next peer. A BPT page that starts in a
+section not loaded is refused with `NotReady`; a page that reaches a marker
+after other leaves ends before it (`Done` false, `NextStart` the last leaf
+served), so a node still filling serves every section it has loaded, and a
+loader whose section ends there takes the refusal of the section below it as
+the end of its own. **A refusal of a section not loaded carries the section
+and names the peers to ask instead** (`database.NotLoaded`, in the error's
+data: `{"notLoaded": s, "redirect": [peer IDs]}`). A section's loader —
+a block's load and the fill — asks the named peers after the ones it already
+had, by name, up to sixteen more, and takes an answer from any of them only
+as it takes any answer: by the section's hash, and each account by its leaf
+(`TestASectionOnlyOnePeerHoldsIsLoadedThroughARedirect`: two of three
+validators hold the section by its hash, the joiner's own peers leave out the
+third, and the fill loads it through the redirect;
+`TestAForgedRedirectTargetIsRefusedByTheHash`: a stranger reached only by a
+redirect serves the section forged, and nothing of it is written). A joiner
+takes the top from any peer, markers and all: the top is the section hashes,
+which a marker holds exactly. A stored block (`BptBlockQuery`) is served: its
+hashes are the tree's, markers included.
+
+*Open (#4485): whom a redirect names.* Built: every other peer the refusing
+node knows serves the partition's queries (its p2p providers; the
+simulator's registry) — it holds no record of which peers hold which
+sections, and every answer is checked, so a name is a hint. The options:
+(a) that — cheap, stateless, and it reaches a holder the asker's own
+discovery missed; (b) only peers known to hold the section — each node would
+publish its sections not loaded (its consensus status, say) and the refusing
+node would filter on them, which saves the asker the refusals of other nodes
+still filling; (c) forward the read one hop and answer with what the holder
+answered, as a cache miss is (#4487) — one round trip for the asker, but the
+refusing node then carries the load and a bound on hops. **Recommended:
+(a)**, until a measurement shows the refusals cost something.
 
 **With the rest of the join.** The records are unchanged by sections: a
 record names every account its block changed, and the pull loads the section

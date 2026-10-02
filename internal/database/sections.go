@@ -7,6 +7,7 @@
 package database
 
 import (
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 
@@ -26,6 +27,44 @@ import (
 // sections not loaded: a batch a block executes in loads the section; every
 // other batch -- a validation's among them -- is refused (executor spec,
 // "Sync", Redirection: validation does not load, Paul 2026-10-02).
+
+// NotLoaded is the data a refusal of a read in a section not loaded carries
+// (executor spec, "Sync", Redirection; Paul, 2026-10-02): the section, and the
+// peers the refusing node names to ask instead. Whoever answers, the answer is
+// used only if it matches the cryptography -- the signed root, the section's
+// hash -- so a name is a hint and never a proof.
+type NotLoaded struct {
+	Section  *uint16  `json:"notLoaded"`
+	Redirect []string `json:"redirect,omitempty"`
+}
+
+// NotLoadedError is the refusal of a read in a section this node has not
+// loaded: NotReady, carrying the section.
+func NotLoadedError(s bpt.Section, format string, args ...any) *errors.Error {
+	e := errors.NotReady.WithFormat(format, args...)
+	v := uint16(s)
+	e.Data, _ = json.Marshal(NotLoaded{Section: &v})
+	return e
+}
+
+// NotLoadedOf finds a refusal of a section not loaded in err, the outermost
+// first, and what it carries.
+func NotLoadedOf(err error) (*NotLoaded, bool) {
+	var e *errors.Error
+	if !errors.As(err, &e) {
+		return nil, false
+	}
+	for ; e != nil; e = e.Cause {
+		if len(e.Data) == 0 {
+			continue
+		}
+		d := new(NotLoaded)
+		if json.Unmarshal(e.Data, d) == nil && d.Section != nil {
+			return d, true
+		}
+	}
+	return nil, false
+}
 
 // A SectionGate knows which sections the node has not loaded, and loads one.
 type SectionGate interface {
@@ -151,7 +190,7 @@ func (c *gatedChangeSet) raw(key *record.Key) ([]byte, error) {
 
 func (c *gatedChangeSet) ensure(s bpt.Section, u *url.URL) error {
 	if c.batch == nil {
-		return errors.NotReady.WithFormat("%v is in section %d of the state tree, which this node has not loaded yet", u, s)
+		return NotLoadedError(s, "%v is in section %d of the state tree, which this node has not loaded yet", u, s)
 	}
 	c.loading.Lock()
 	defer c.loading.Unlock()

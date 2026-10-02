@@ -60,7 +60,7 @@ func (a *gatedAdapter) ValidateTransaction(tx []byte) error {
 		for _, m := range a.needs {
 			if bytes.Contains(tx, m) {
 				return fmt.Errorf("validate: %w", errors.UnknownError.WithFormat("load signer: %w",
-					errors.NotReady.With("acc://dave/book/1 is in section 1017 of the state tree, which this node has not loaded yet")))
+					database.NotLoadedError(1017, "acc://dave/book/1 is in section 1017 of the state tree, which this node has not loaded yet")))
 			}
 		}
 	}

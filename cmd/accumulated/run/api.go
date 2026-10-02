@@ -7,6 +7,8 @@
 package run
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
@@ -81,6 +83,20 @@ func (q *Querier) start(inst *Instance) error {
 		Database:  database.New(store, logging.NewSlogLogger(inst.logger)).Deep(),
 		Consensus: consensus,
 		NodeState: nodeState,
+		// A read in a section this node has not loaded names the
+		// partition's other query peers to ask instead (#4485).
+		Redirect: func(ctx context.Context) []string {
+			if inst.p2p == nil {
+				return nil
+			}
+			var out []string
+			for _, id := range inst.p2p.Providers(ctx, v3.ServiceTypeQuery.AddressFor(q.Partition), 16) {
+				if id != inst.p2p.ID() {
+					out = append(out, id.String())
+				}
+			}
+			return out
+		},
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
 	return querierProvides.Register(inst.services, q, impl)

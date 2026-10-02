@@ -355,11 +355,15 @@ func (s *SubmitterService) submitted(outcome string) {
 func (s *SubmitterService) Type() api.ServiceType { return api.ServiceTypeSubmit }
 
 // redirects reports whether a submission this node failed to take is one it
-// redirects: its validation was refused NotReady while this node has not
-// loaded every section of its state tree. A node holding every section never
+// redirects: its validation read a section of the state tree this node has
+// not loaded (database.NotLoaded). A node holding every section never
 // redirects.
 func (s *SubmitterService) redirects(err error) bool {
-	return !allLoaded(s.sections) && stderrors.Is(err, worker.ErrValidationFailed) && errors.Code(err) == errors.NotReady
+	if allLoaded(s.sections) || !stderrors.Is(err, worker.ErrValidationFailed) {
+		return false
+	}
+	_, notLoaded := database.NotLoadedOf(err)
+	return notLoaded
 }
 
 // signerOf returns a stable routing key for an envelope: the URL of the signer
@@ -611,7 +615,7 @@ func (s *ValidatorService) Validate(ctx context.Context, envelope *messaging.Env
 	if err := s.service.adapter.ValidateTransaction(b); err != nil {
 		// A section this node has not loaded is not a verdict on the
 		// envelope: NotReady, and the caller asks another node.
-		if !allLoaded(s.sections) && errors.Code(err) == errors.NotReady {
+		if _, notLoaded := database.NotLoadedOf(err); notLoaded {
 			return nil, errors.NotReady.WithFormat("%s cannot validate this yet: %w", s.service.config.Partition.ID, err)
 		}
 		return []*api.Submission{{
