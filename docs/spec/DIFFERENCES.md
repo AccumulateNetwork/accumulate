@@ -2186,3 +2186,13 @@ E13 (PLAN.md, 2026-09-06) had a restart re-execute the committed log from the
 last sealed height. Paul, 2026-10-01: a restart does not replay; it syncs to
 the signed anchor and backfills the changed accounts' entries. database.md says
 so now; the committed log's role as the durability point is unchanged.
+
+### A whole restart resumes per node, not from the highest signed state (#4501)
+
+The spec (executor.md, "A partition that restarts as a whole", Paul
+2026-10-02) has the partition converge on the node with the highest signed,
+validated state: that node resumes from its own block and serves; the others
+take its state and route requests to it. The code (#4447/#4466) lets each node
+resume from its own block when fewer peers serve than the signing threshold,
+so nodes can resume at different blocks, and a peer that times out counts as
+not serving. Not built.

@@ -1539,6 +1539,21 @@ stopped is not in those runs' logs, and the gap line below is what will say
 `Delivered`, and no message's status: what a message records when it is held
 (#4423) does not enter it.
 
+**Decided (Paul, 2026-10-02; supersedes the per-node exit below): a partition
+that restarts as a whole resumes from its highest signed, validated state.**
+"They all resume from whichever node has the highest signed, validated state.
+Only if the node has the highest does it sync to its own block, and serve what
+it knows to its peers. Peers take the highest state, and route requests to the
+peer with the highest state." A node's signed, validated state is the highest
+block whose root it holds together with that block's anchor signed by a quorum
+of the partition's validators. In a whole restart every node states its own;
+the node holding the highest resumes from its own block and serves; every
+other node takes that state from it, as a join takes a peer's state, and routes
+requests to it until it is synced itself. Whether a peer that does not answer
+counts is no longer the question: a node resumes on its own block only when it
+knows it holds the highest. Not built (#4501); the text below describes the
+code as it is.
+
 **A partition that restarts as a whole resumes from each validator's own
 block (#4447).** When every validator of a partition stops and starts again
 together — a host or daemon restart takes them all — each one joins, and each
