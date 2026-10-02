@@ -386,6 +386,12 @@ func (x *Executor) sendSyntheticTransactions(block *Block, isLeader bool) error 
 func (x *Executor) sendSyntheticTransactionsForBlock(blockIndex uint64, blockReceipt *protocol.PartitionAnchorReceipt, anchorBlock uint64, send bool, deliveredFrom func(*url.URL) uint64) error {
 	blk, ok := x.synthCache().Block(blockIndex)
 	if !ok {
+		if !x.synthCache().Answers(blockIndex) {
+			// A block the cache decided it does not need -- nothing owed, or
+			// empty past the horizon -- receipted late: nothing to send (#4467).
+			x.logger.Debug("A receipt names a block that has nothing to dispatch", "module", "synthetic", "block", blockIndex, "anchor-block", anchorBlock)
+			return nil
+		}
 		x.logger.Error("Synthetic cache does not hold the block; its synthetics are not dispatched", "module", "synthetic", "block", blockIndex, "anchor-block", anchorBlock)
 		return nil
 	}

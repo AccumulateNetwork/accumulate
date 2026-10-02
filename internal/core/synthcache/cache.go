@@ -167,6 +167,17 @@ type Cache struct {
 	// them (executor spec, "Sync"; #4294).
 	joinedAt uint64
 
+	// answersFrom is the lowest block the cache still answers for. Below it
+	// is what the cache decided it does not need: blocks the restart seed did
+	// not rebuild because they owe nothing (Seed's from), and empty blocks
+	// trimmed past the horizon. A lookup there has nothing to send and is not
+	// a miss -- an old Directory receipt for such a block, delivered late,
+	// asked for it after every whole restart with anchors in flight (#4467).
+	// boundDropped is what the memory bound dropped, which held undelivered
+	// entries: a lookup for one of those stays a miss.
+	answersFrom  uint64
+	boundDropped map[uint64]bool
+
 	// how far this node's executor is behind consensus, nil until wired.
 	// The in-flight window is measured against it (#4248).
 	executionLag atomic.Pointer[func() int]
@@ -578,6 +589,11 @@ func (c *Cache) trimLocked() {
 				delete(c.blocks, idx)
 			}
 		}
+		// Every empty block below the cutoff is dropped; a block below it
+		// that held entries is still held, so nothing it answers is lost.
+		if cutoff > c.answersFrom {
+			c.answersFrom = cutoff
+		}
 	}
 	c.boundLocked()
 }
@@ -607,6 +623,10 @@ func (c *Cache) boundLocked() {
 					streams[k] = e.Number
 				}
 			}
+			if c.boundDropped == nil {
+				c.boundDropped = map[uint64]bool{}
+			}
+			c.boundDropped[i] = true
 			delete(c.blocks, i)
 		}
 		mBoundDropped.WithLabelValues("entry").Add(float64(before - len(c.byHash)))
@@ -684,7 +704,35 @@ func (c *Cache) Reset() {
 	c.pendingAnchorAcks = nil
 	c.anchorAcks = nil
 	c.joinedAt = 0
+	c.answersFrom = 0
+	c.boundDropped = nil
 	c.lastAnchorNumber, c.lastAnchorBlock, c.lastAnchorOK = 0, 0, false
+}
+
+// SeededFrom records that the restart seed examined the blocks from from on
+// and rebuilt every one that still owes a destination something: a block below
+// from owes nothing, so a lookup for it has nothing to send and is not a miss
+// (#4467).
+func (c *Cache) SeededFrom(from uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if from > c.answersFrom {
+		c.answersFrom = from
+	}
+}
+
+// Answers reports whether a lookup for block index that finds nothing is a
+// failure to hold what this node produced: false for a block below what the
+// cache answers for (nothing owed, or empty past the horizon) unless the
+// memory bound dropped it, and false for a block a join carried this node
+// past.
+func (c *Cache) Answers(index uint64) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.boundDropped[index] {
+		return true
+	}
+	return index >= c.answersFrom && index > c.joinedAt
 }
 
 // Seed inserts blocks rebuilt from the node's own chains at start, before
@@ -760,6 +808,11 @@ func (c *Cache) Block(index uint64) (*Block, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	b, ok := c.blocks[index]
+	if !ok && index < c.answersFrom && !c.boundDropped[index] {
+		// A block the cache decided it does not need: nothing owed when it
+		// was seeded, or empty and past the horizon. Nothing to send.
+		return nil, false
+	}
 	if !ok && index <= c.joinedAt {
 		// A block this node did not execute, because it joined at or after
 		// it. The answer is the same — it holds nothing for that block — but

@@ -557,7 +557,15 @@ block was dispatched under, recorded at dispatch (`MarkDispatched`).
 Dispatch (`sendSyntheticTransactionsForBlock`) and the sequencer service
 (`sequencer_cache.go`) read it and nothing else; a miss is counted
 (`accumulate_synthcache_misses_total{kind}`), relayed one hop
-(`SequencerParams.Relay`), and refused as `NotFound` when no node answers. Released by
+(`SequencerParams.Relay`), and refused as `NotFound` when no node answers.
+A miss means the cache failed to hold what this node produced, so a block
+below what the cache answers for (`Cache.Answers`) is not one: the restart
+seed records where it began (`SeededFrom`; every block below owes nothing),
+and the trim records the horizon it drops empty blocks below. A late
+Directory receipt for such a block -- after a whole restart, anchors held in
+flight are delivered by healing and carry receipts for old blocks -- has
+nothing to dispatch and says so at Debug (#4467). A block the memory bound
+dropped held undelivered entries, and a lookup for it stays a miss. Released by
 the destination's `Delivered` carried on every dispatched `SyntheticProof`
 and `SyntheticMessage` (`Txn.Release` at the destination's block close, applied
 at commit: the stream's entries at or below it, the block segments that held

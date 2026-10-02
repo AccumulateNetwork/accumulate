@@ -117,6 +117,7 @@ func (x *Executor) seedSynthCache(batch *database.Batch, current uint64, isLeade
 		blocks = append(blocks, blk)
 	}
 	x.synthCache().Seed(blocks)
+	x.synthCache().SeededFrom(from)
 	if len(blocks) > 0 || len(skipped) > 0 {
 		x.logger.Info("Seeded the synthetic cache from the chains", "module", "synthetic", "from", from, "owed-from", owed, "to", current-1, "blocks", len(blocks), "receipted", len(receipts), "skipped", len(skipped), "skipped-blocks", skipped)
 	}
