@@ -138,7 +138,16 @@ func TestABptBlockOutsideRetentionIsRefused(t *testing.T) {
 	c = clientFor(t, startNetsimAndExecuteWith(t, &none))
 	for _, h := range []uint64{1, 3, 5, 8} {
 		r, err := c.QueryBptBlock(ctx, part, &apiv3.BptBlockQuery{ForHeight: h})
-		require.Errorf(t, err, "block %d was answered by a node that retains nothing", h)
+		if err == nil {
+			// The block the node stands at is not a historical block: its
+			// current tree is that block's, and it answers as of it
+			// (executor.md, "Sync", §3a; #4485).
+			cur, err := c.QueryBptBlock(ctx, part, &apiv3.BptBlockQuery{})
+			require.NoError(t, err)
+			require.Equalf(t, h, r.Block, "block %d was answered by a node that retains nothing, as of block %d", h, r.Block)
+			require.Equalf(t, cur.Block, r.Block, "block %d was answered by a node that retains nothing and stands at %d", h, cur.Block)
+			continue
+		}
 		require.Nil(t, r)
 		// A block this node has not reached yet is NotReady; one it has is a
 		// capability limit. Neither is an answer.
