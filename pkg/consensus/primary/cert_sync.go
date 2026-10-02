@@ -797,6 +797,7 @@ func (s *CertSyncer) logSummary() {
 	if w.answered+w.suppressed+w.empty > 0 {
 		args = append(args, "served", w.answered, "suppressed", w.suppressed, "servedEmpty", w.empty)
 	}
+	args = append(args, "verified", w.verifications)
 	slog.Info("Certificate catch-up", args...)
 }
 
@@ -832,6 +833,10 @@ type syncWindowCounts struct {
 	lastRefusal           string
 	answered, suppressed  int
 	empty                 int
+	// verifications counts received certificates verified against the
+	// committee, from gossip as well as sync. It is reported with the rest
+	// but does not by itself make the line worth writing (#4469).
+	verifications int
 }
 
 func (c syncWindowCounts) isEmpty() bool {
@@ -884,6 +889,12 @@ func (w *syncWindow) certificate(o CertOutcome) {
 	case CertDropped, CertInvalid, CertEquivocation, CertFailed:
 		w.lastRefusal = string(o)
 	}
+}
+
+func (w *syncWindow) verification() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.verifications++
 }
 
 func (w *syncWindow) served(outcome string) {

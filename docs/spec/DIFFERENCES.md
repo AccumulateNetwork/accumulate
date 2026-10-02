@@ -1861,6 +1861,20 @@ same record C10 needs closes it: the checkpoint carrying the executor's last
 kept block when it was written, so that the empty-blocks resume takes only a
 store whose last block is that one.
 
+### C12. A certificate-sync response carries its requester: fresh installs only
+
+*[#4470](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4470)*
+
+consensus.md, "Certificate catch-up": a request is named by its requester
+and ID, and a response carries both. `CertSyncResponse` gained a
+length-prefixed `Requester` after `RequestID` (aade6ce8c), with no version
+field and no fallback. A node built before it and a node built after cannot
+decode each other's responses (each reads the other's as truncated or
+malformed and drops it), so certificate catch-up between them fails
+silently. Nothing gates the change: a partition must be installed fresh, or
+upgraded all at once, onto builds that carry it. The entry goes when no
+deployment runs an older build.
+
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 

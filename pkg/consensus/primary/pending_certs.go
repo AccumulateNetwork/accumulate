@@ -242,3 +242,11 @@ func (p *PendingCertificates) GetAllMissingParents() []types.CertificateDigest {
 
 	return result
 }
+
+// Full reports whether the buffer will refuse a certificate it does not
+// already hold.
+func (p *PendingCertificates) Full() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.pending) >= p.maxSize
+}

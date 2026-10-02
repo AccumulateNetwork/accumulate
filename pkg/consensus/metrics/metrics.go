@@ -290,6 +290,19 @@ var (
 		Name:      "cert_sync_certificates_received_total",
 		Help:      "Certificates received via sync, by partition and insert outcome",
 	}, []string{"partition", "outcome"})
+
+	// CertVerificationsTotal counts certificates verified against the
+	// committee on receipt (gossip and sync), an ed25519 check per signature.
+	// A certificate the full pending buffer would refuse is refused before
+	// verification; without that, every redundant copy of a refused frontier
+	// certificate was verified again and a joining node's sync responses
+	// queued and were dropped behind the work (#4469).
+	CertVerificationsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "cert_verifications_total",
+		Help:      "Received certificates verified against the committee, by partition",
+	}, []string{"partition"})
 )
 
 // Rate limiting metrics
