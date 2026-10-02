@@ -692,7 +692,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		ok := true
 		// The sections the node's own services read outside a block, so
 		// none of them is refused once the node hands off.
-		s.openFor(p, systemAccounts(s.partition)...)
+		s.openFor(p, SystemAccounts(s.partition)...)
 		for _, u := range pull.SpineAccounts(s.partition) {
 			if p.current[accountKey(u)] {
 				continue

@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -57,6 +58,10 @@ type sectionsJoin struct {
 }
 
 const sectionsAccounts = 600
+
+// sectionsOraclePrice is the partition's oracle when the joiner joins: not
+// genesis's.
+const sectionsOraclePrice = 31415
 
 func joinWithSectionsNotLoaded(t *testing.T) *sectionsJoin {
 	j := &sectionsJoin{t: t, fresh: 3}
@@ -111,7 +116,26 @@ func joinWithSectionsNotLoaded(t *testing.T) *sectionsJoin {
 		MakeIdentity(t, db, j.dave, j.daveKey[32:])
 		CreditCredits(t, db, j.dave.JoinPath("book", "1"), 1e9)
 		MakeAccount(t, db, &TokenAccount{Url: j.dave.JoinPath("tokens"), TokenUrl: AcmeUrl(), Balance: *big.NewInt(1e6)})
+
+		// The partition's oracle is not genesis's, as a live network's
+		// never is: the joiner must take it, not keep a copy of its own.
+		b = db.Begin(true)
+		g := new(network.GlobalValues)
+		get := func(u *url.URL, v interface{}) error { return b.Account(u).Main().GetAs(v) }
+		require.NoError(t, g.Load(PartitionUrl("BVN0"), get))
+		g.Oracle.Price = sectionsOraclePrice
+		require.NoError(t, g.InitializeDataAccounts(PartitionUrl("BVN0"), get, func(a Account) error { return b.Account(a.GetUrl()).Main().Put(a) }))
+		require.NoError(t, b.UpdateBPT())
+		require.NoError(t, b.Commit())
 	}
+
+	// The joiner is a new install: an empty store with the genesis
+	// snapshot loaded, as the daemon loads it. Its oracle is genesis's,
+	// not the partition's, and it holds nothing the test wrote, so every
+	// section it needs, it takes (#4485 review, finding 1). A store with
+	// no genesis at all cannot join: the join verifies what it pulls by
+	// the network definition it holds.
+	j.part.ReinstallNode(j.fresh)
 
 	// The join, through the production join.Run.
 	j.part.RestartNode(j.fresh)
@@ -386,4 +410,34 @@ func TestARestartMidFillResumes(t *testing.T) {
 	j.fill(func(int) bool { return false })
 	j.agree("after the restart's fill")
 	j.holdsAll()
+}
+
+// TestATrulyFreshJoinerTakesTheNetworksOracleAndHandsOff — #4485 review,
+// finding 1. The joiner is a new install -- genesis and nothing else -- and
+// the partition's oracle is not genesis's. The handoff reloads the executor's globals from the state it
+// settles at -- the oracle and the routing table among them -- through a
+// batch no section loads into, so every system account the handoff reads
+// must be loaded by the join. The node hands off, holds the partition's
+// oracle, and executes in agreement with the validators.
+func TestATrulyFreshJoinerTakesTheNetworksOracleAndHandsOff(t *testing.T) {
+	j := joinWithSectionsNotLoaded(t)
+	require.Positive(t, j.notLoadedAtHandoff, "precondition: the node handed off with every section loaded")
+
+	oracle := PartitionUrl("BVN0").JoinPath(Oracle)
+	g := new(network.GlobalValues)
+	require.NoError(t, j.part.NodeDatabase(j.fresh).View(func(b *database.Batch) error {
+		return g.LoadOracle(PartitionUrl("BVN0"), func(u *url.URL, v interface{}) error { return b.Account(u).Main().GetAs(v) })
+	}), "the joiner cannot read %v through a batch that loads nothing", oracle)
+	require.Equal(t, uint64(sectionsOraclePrice), g.Oracle.Price, "the joiner does not hold the partition's oracle")
+
+	// Every system account the node reads outside a block is loaded.
+	for _, u := range join.SystemAccounts(PartitionUrl("BVN0")) {
+		require.False(t, j.notLoaded(u), "%v is in a section the joiner has not loaded", u)
+	}
+
+	for i := 0; i < 3; i++ {
+		j.send()
+	}
+	j.sim.StepN(5)
+	j.agree("after a truly fresh joiner executed")
 }

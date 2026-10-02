@@ -1095,9 +1095,19 @@ that restarts takes nothing of what it already holds. A section whose marker
 already holds the top's hash stays not loaded. Every other section is made not
 loaded: the node's own leaves in it are forgotten (`ForgetAccount`) and the
 marker is written in their place. A section empty in the top is emptied. The
-sections of the partition's own system accounts — the spine and the synthetic
-ledger, which the node's services read while it joins — are not forgotten:
-they are left as the node holds them and loaded by the pull over it. A
+sections of the partition's own system accounts are not forgotten: they are
+left as the node holds them and loaded by the pull over it. They are every
+account the node reads outside a block, through a batch no section loads into
+— at the handoff and after it: the ledger, the anchor pool, the operators' key
+book and page, the network definition, the globals, the synthetic ledger, the
+oracle and the routing table. The handoff's settle reloads the executor's
+globals from the state it settles at (the oracle, globals, network definition,
+routing table and the ledger's executor versions) and reads the anchor pool and
+the stream ledgers; staging, dispatch, the root watch and the seed read the
+ledger, the pool and the synthetic ledger. A new install holds genesis's copies
+of these, and the partition's oracle is never genesis's, so a set that left one
+out is a node that cannot hand off. Votes and evidence are read only by a
+block, whose batch loads. A
 section the pull has opened and not yet loaded is not loaded to every reader,
 as a section under a marker is.
 

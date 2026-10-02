@@ -23,12 +23,14 @@ import (
 
 	execute "gitlab.com/accumulatenetwork/accumulate/internal/core/execute/multi"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/snapshot"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator/consensus"
@@ -41,6 +43,9 @@ type Partition struct {
 	mu         *sync.Mutex
 	nodes      []*Node
 	submitHook SubmitHookFunc
+
+	// genesis is the partition's genesis snapshot.
+	genesis []byte
 }
 
 type SubmitHookFunc = func([]messaging.Message) (drop, keepHook bool)
@@ -125,6 +130,39 @@ func (p *Partition) RestartNode(i int) {
 	}
 	n.joinState = state
 	n.nodeState.machine.Store(state.Machine())
+}
+
+// ReinstallNode stands node i where a new install stands: its store is
+// emptied -- every key deleted -- and the partition's genesis snapshot loaded
+// into it, as the daemon does for an empty database (loadGenesisIfNeeded,
+// cmd/accumulated/run/dagbft.go). It holds genesis's oracle, routing table
+// and network definition and nothing the network wrote since. Call
+// RestartNode after it. A node merely restarted from genesis still holds
+// whatever the test wrote into every node's store (#4485 review, finding 1).
+func (p *Partition) ReinstallNode(i int) {
+	n := p.nodes[i]
+	cs := n.store.Begin(nil, true)
+	defer cs.Discard()
+	var keys []*record.Key
+	err := cs.ForEach(func(k *record.Key, _ []byte) error {
+		keys = append(keys, k)
+		return nil
+	})
+	if err != nil {
+		panic(fmt.Errorf("reinstall node %d of %s: list its keys: %w", i, p.ID, err))
+	}
+	for _, k := range keys {
+		if err := cs.Delete(k); err != nil {
+			panic(fmt.Errorf("reinstall node %d of %s: delete %v: %w", i, p.ID, k, err))
+		}
+	}
+	if err := cs.Commit(); err != nil {
+		panic(fmt.Errorf("reinstall node %d of %s: %w", i, p.ID, err))
+	}
+	err = snapshot.FullRestore(n.database, ioutil2.NewBuffer(p.genesis), p.logger, config.NetworkUrl{URL: protocol.PartitionUrl(p.ID)})
+	if err != nil {
+		panic(fmt.Errorf("reinstall node %d of %s: load genesis: %w", i, p.ID, err))
+	}
 }
 
 // NodeJoinState is the join state RestartNode built for node i, as the daemon
@@ -332,6 +370,16 @@ func (p *Partition) initChain(snapshot ioutil2.SectionReader) error {
 			Power:     1,
 		})
 	}
+
+	// Kept for a node that is installed again (ReinstallNode).
+	if _, err := snapshot.Seek(0, io.SeekStart); err != nil {
+		return errors.UnknownError.WithFormat("reset snapshot file: %w", err)
+	}
+	genesis, err := io.ReadAll(snapshot)
+	if err != nil {
+		return errors.UnknownError.WithFormat("read snapshot file: %w", err)
+	}
+	p.genesis = genesis
 
 	results := make([][]byte, len(p.nodes))
 	for i, n := range p.nodes {

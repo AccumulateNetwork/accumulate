@@ -29,12 +29,28 @@ import (
 // sectionID is one section of the state tree.
 type sectionID = bpt.Section
 
-// systemAccounts is the partition's accounts the node's own services read
-// outside a block -- staging, dispatch, the root watch, the seed -- whose
-// sections every pull loads, so none of them is refused once the node hands
-// off.
-func systemAccounts(partition *url.URL) []*url.URL {
-	return append(pull.SpineAccounts(partition), partition.JoinPath(protocol.Synthetic))
+// SystemAccounts is the partition's accounts the node reads outside a block
+// -- at the handoff and after it -- whose sections every pull loads, so none
+// of them is refused (executor spec, "Sync", §3a). A batch no section loads
+// into reads them:
+//
+//   - the handoff's settle (Executor.SettleStagingAt): the system ledger, the
+//     executor's globals reloaded from the state (reloadGlobals: the oracle,
+//     the globals, the network definition, the routing table, and the
+//     executor versions from the ledger), the anchor pool's Directory block,
+//     and the synthetic and anchor ledgers' Delivered;
+//   - staging, dispatch, the root watch and the seed: the ledger, the anchor
+//     pool, the synthetic ledger;
+//   - the anchor authority: the operators' key book and page, the network
+//     definition and the globals.
+//
+// Votes and evidence are read only by a block's own batch, which loads.
+func SystemAccounts(partition *url.URL) []*url.URL {
+	return append(pull.SpineAccounts(partition),
+		partition.JoinPath(protocol.Synthetic),
+		partition.JoinPath(protocol.Oracle),
+		partition.JoinPath(protocol.Routing),
+	)
 }
 
 // openFor opens the sections the accounts' leaves fall in, where the node has
@@ -310,7 +326,7 @@ func (s *PulledState) takeTop(ctx context.Context, p *syncing) error {
 		// read them while it joins. Their sections are loaded by the pull,
 		// over what the node holds.
 		keep := map[sectionID]bool{}
-		for _, u := range systemAccounts(s.partition) {
+		for _, u := range SystemAccounts(s.partition) {
 			keep[database.SectionOfAccount(u)] = true
 		}
 		n, differ, err := s.install(top, keep)

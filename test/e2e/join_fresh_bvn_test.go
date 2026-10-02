@@ -72,7 +72,9 @@ func TestAFreshDirectoryNodeJoinsByPull(t *testing.T) {
 // the pool taken whole, the network moved on, the pool taken state-only --
 // and the join must fetch the missing messages and hand off.
 func TestANodeHoldingPoolEntriesWithNoMessageJoins(t *testing.T) {
-	freshNodeJoinsByPull(t, "BVN0", func(sim *Sim, part *simulator.Partition, node int, send func()) {
+	// Not a new install: a node that joined before, holding what it joined
+	// to -- alice among it, whose transactions the damage sends.
+	nodeJoinsByPull(t, "BVN0", false, func(sim *Sim, part *simulator.Partition, node int, send func()) {
 		pool := PartitionUrl("BVN0").JoinPath(AnchorPool)
 		peer := api.Querier2{Querier: sim.S.Services().ForPeer(part.NodePeerID(0)).ForAddress(api.ServiceTypeQuery.AddressFor("BVN0").Multiaddr())}
 		take := func(mode pull.Mode) {
@@ -136,6 +138,13 @@ func TestAFreshBVNNodeJoinsByPullOnBlockchainDB(t *testing.T) {
 // under load. The node must hand off, and hold no entry of a spine account's
 // transaction chain without the message behind it.
 func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, part *simulator.Partition, node int, send func()), opts ...simulator.Option) {
+	nodeJoinsByPull(t, partition, true, damage, opts...)
+}
+
+// nodeJoinsByPull is freshNodeJoinsByPull, with the node installed anew
+// before the damage only when reinstall is set: a node that joined before
+// holds what it joined to, and is not a new install.
+func nodeJoinsByPull(t *testing.T, partition string, reinstall bool, damage func(sim *Sim, part *simulator.Partition, node int, send func()), opts ...simulator.Option) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
 	aliceKey := acctesting.GenerateKey(alice)
@@ -179,6 +188,13 @@ func freshNodeJoinsByPull(t *testing.T, partition string, damage func(sim *Sim, 
 		send()
 	}
 	sim.StepN(10)
+
+	// A new install: an empty store with the genesis snapshot loaded, as
+	// the daemon loads it -- not a node that holds what the test wrote into
+	// every node's store (#4485 review, finding 1).
+	if reinstall {
+		part.ReinstallNode(fresh)
+	}
 	if damage != nil {
 		damage(sim, part, fresh, send)
 	}
