@@ -414,6 +414,43 @@ func putPendingSets(account *database.Account, p *database.RetainedPendingTransa
 	return txn.Signatures().Put(p.Signatures)
 }
 
+// KeepChainMessages fetches, from src, the message behind each entry of the
+// open mark sets of a served state's chains that carry messages, where the
+// store does not hold it, and keeps each only if it hashes to its entry. A
+// block that settles an account against its record writes the record's chain
+// heads and open mark sets (SettleStates); the entries this node did not
+// execute have no message behind them until this takes them (executor.md,
+// "Sync", §3a, "The handoff is an overlap"; #4495).
+func KeepChainMessages(ctx context.Context, src Source, store Store, st *api.AccountState) error {
+	if st == nil || st.Url == nil {
+		return nil
+	}
+	open := openEntries(st)
+	batch := store.Begin(true)
+	defer batch.Discard()
+	for _, c := range leafOf(st).Chains {
+		if c == nil || !carriesMessages(c) {
+			continue
+		}
+		for _, e := range open[c.Name] {
+			if len(e) != 32 {
+				continue
+			}
+			_, err := batch.Message([32]byte(e)).Main().Get()
+			switch {
+			case err == nil:
+				continue
+			case !errors.Is(err, errors.NotFound):
+				return errors.UnknownError.WithFormat("%v chain %s: %w", st.Url, c.Name, err)
+			}
+			if err := pullMessage(ctx, src, batch, st.Url.WithTxID([32]byte(e))); err != nil {
+				return errors.UnknownError.WithFormat("%v chain %s entry %x: %w", st.Url, c.Name, e[:8], err)
+			}
+		}
+	}
+	return errors.UnknownError.Wrap(batch.Commit())
+}
+
 // KeepQueuedMessages fetches, from src, the message behind each queued local
 // delivery of a served synthetic ledger that the store does not hold, and
 // keeps each only if it hashes to the ID the queue names. The next block

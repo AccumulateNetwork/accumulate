@@ -114,6 +114,9 @@ func (o *overlap) start(block uint64) {
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.blocks <= 0 {
+		return // Turned off by a test (SetOverlapBlocks)
+	}
 	o.active = true
 	o.from, o.last = block, block
 	o.clean, o.checked, o.frontier = 0, 0, 0
@@ -192,7 +195,7 @@ func (o *overlap) settle(batch *database.Batch, n uint64) error {
 		}
 		s.states = states
 	}
-	if err := o.settleNamed(s); err != nil {
+	if err := o.settleNamed(ctx, s); err != nil {
 		return err
 	}
 	if err := o.settleChains(s, entries); err != nil {
@@ -308,6 +311,7 @@ func (o *overlap) verifySystem(s *settling) error {
 		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleAll); err != nil {
 			return errors.UnknownError.WithFormat("write the record's state of %v: %w", st.Url, err)
 		}
+		o.keepMessages(ctx, s, st)
 		if err := pull.KeepQueuedMessages(ctx, s.src, s.batch, st); err != nil {
 			return errors.UnknownError.WithFormat("the queued deliveries of %v: %w", st.Url, err)
 		}
@@ -367,7 +371,7 @@ func userAccounts(urls []*url.URL, skip map[[32]byte]bool) []*url.URL {
 
 // settleNamed gives each account the record names, and each the block
 // changed, the record's state but for its index chains, where it differs.
-func (o *overlap) settleNamed(s *settling) error {
+func (o *overlap) settleNamed(ctx context.Context, s *settling) error {
 	var taken []*url.URL
 	for _, st := range s.states {
 		u := st.Url
@@ -393,6 +397,7 @@ func (o *overlap) settleNamed(s *settling) error {
 		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleNotIndex); err != nil {
 			return errors.UnknownError.WithFormat("write the record's state of %v: %w", u, err)
 		}
+		o.keepMessages(ctx, s, st)
 		s.diffs++
 		o.said(s.n, u, local, st.LeafHash, s.peer, "")
 		taken = append(taken, u)
@@ -538,6 +543,7 @@ func (o *overlap) settleAhead(ctx context.Context, s *settling, src pull.Source,
 			if err != nil {
 				return errors.UnknownError.WithFormat("write the state of %v as of %d: %w", u, s.n, err)
 			}
+			o.keepMessages(ctx, s, st)
 			taken = append(taken, u)
 		}
 		s.diffs++
@@ -547,6 +553,16 @@ func (o *overlap) settleAhead(ctx context.Context, s *settling, src pull.Source,
 		o.taken(taken...)
 	}
 	return nil
+}
+
+// keepMessages takes the messages behind the entries a record's state brought
+// into the node's chains (pull.KeepChainMessages). One it cannot take is left
+// to the backfill, which asks for the messages of an open mark set (§2).
+func (o *overlap) keepMessages(ctx context.Context, s *settling, st *api.AccountState) {
+	if err := pull.KeepChainMessages(ctx, s.src, s.batch, st); err != nil {
+		o.log.Info("The messages behind a record's entries could not all be taken; the backfill takes them",
+			"partition", o.partition, "block", s.n, "account", st.Url, "error", err)
+	}
 }
 
 // executedLeaf is the leaf the batch holds u with, and whether u exists.
@@ -631,7 +647,8 @@ type OverlapStatus struct {
 }
 
 // SetOverlapBlocks sets how many clean blocks in a row end the overlap, for a
-// test that needs it over sooner or later than OverlapBlocks.
+// test that needs it over sooner or later than OverlapBlocks; zero turns it
+// off, for a test of the root watch's repair it would otherwise preempt.
 func (s *PulledState) SetOverlapBlocks(k int) {
 	s.overlap.mu.Lock()
 	defer s.overlap.mu.Unlock()
