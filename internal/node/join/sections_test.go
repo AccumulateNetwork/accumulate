@@ -146,7 +146,12 @@ func TestAForgedSectionIsRefused(t *testing.T) {
 	liar := consistentForger(t, alice)
 	before := rootIn(t, node)
 
-	for _, forger := range []pull.Source{pageForger, stateForger, liar} {
+	// A forger alone: a page whose leaf is forged or a state that does not
+	// hash to its leaf is refused by the per-account check. The consistent
+	// liar's section is one a block would take when no peer verifies (the
+	// root check decides; Paul, 2026-10-02) -- below, with an honest peer
+	// beside it, it is never taken.
+	for _, forger := range []pull.Source{pageForger, stateForger} {
 		x := gateOver(t, node, forger)
 		require.True(t, x.NotLoaded(database.SectionOfAccount(alice)))
 
@@ -165,8 +170,10 @@ func TestAForgedSectionIsRefused(t *testing.T) {
 		require.ErrorIs(t, err, errors.NotFound, "%v: what the forger served was written", forger)
 	}
 
-	// A forger, then an honest peer: the section is the honest peer's.
-	x := gateOver(t, node, pageForger, stateForger, liar, honest)
+	// Forgers, then an honest peer: the section is the honest peer's, the one
+	// that hashes to the marker -- the consistent liar answers first and is
+	// refused only by that check.
+	x := gateOver(t, node, liar, pageForger, stateForger, honest)
 	b := node.BeginExecuting()
 	defer b.Discard()
 	var acct *protocol.TokenAccount

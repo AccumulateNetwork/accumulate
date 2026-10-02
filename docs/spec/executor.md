@@ -1151,9 +1151,10 @@ that an account does not exist.
   peer at or before H — the block the node last committed — whose leaves hash
   to anything else is refused and the next peer asked: at H the section is
   the marker's, since nothing executed touched it since the match (a touch
-  loads it). A peer past H whose leaves differ holds the section as blocks
-  after H left it. A block's load takes the first such answer when no peer's
-  verifies, and says so (`A section a block reads was taken as a peer holds
+  loads it) — unless the node's own tree has gone wrong, which is why such a
+  peer is not refused either. A peer past H whose leaves differ holds the
+  section as blocks after H left it. A block's load takes the first answer
+  when no peer's verifies, whatever block it is of, and says so (`A section a block reads was taken as a peer holds
   it after this node's block; the root check decides`); the root check does
   its job — a root that then differs from its anchor is the anchor mismatch of
   "Two mismatches", 2, repaired from the block ledger, and the node moves on.
@@ -1277,6 +1278,26 @@ names nothing takes the top again. After the match, a repair (Two mismatches,
 takes before it writes it. An account a section load takes is taken by its
 chain heads and open mark set, like every account the pull takes, and is
 recorded for the history backfill (§2).
+
+**Open (#4485): a node behind its peers diverges on every block that loads a
+section.** A block that reads a section not loaded is, at a node behind its
+peers — every joiner executing the blocks it collected, and any node a block
+behind — executed on the section as the peers hold it *after* that block, so
+the block's own changes are applied twice and the root differs from the
+anchor; the join repairs it and hands off again. Measured in the simulator:
+`TestAJoinAgreesAcrossRepeatedBurns` diverged once after its handoff, on
+such a load, and `TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`
+twice; tests that pin "no divergence after the handoff" now count a divergence
+that follows an unverified load apart (`SectionsTakenUnverified`). Options:
+(a) accept it — every such load costs a repair, until the fill is done
+(built); (b) ask the peers for the section as of H first, where one retains
+it, and take the current state only when none does — the retention question
+does not arise, since a peer that cannot answer as of H is simply passed
+over, but it is the as-of-H load Paul removed; (c) at the handoff, load the
+sections the collected blocks read before executing them, from the peers'
+state at the handoff block. **Recommended: (b)** — it removes the repair for
+every account inside the window and keeps Paul's rule for the rest; built
+meanwhile: (a), as decided.
 
 **Decided (Paul, 2026-10-02): no retention.** A peer cannot answer a section
 as of H for a cold account a later block changed (it retained no state at H;

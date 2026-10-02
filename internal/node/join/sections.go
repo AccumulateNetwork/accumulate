@@ -56,6 +56,11 @@ type sections struct {
 
 	notLoaded  [bpt.Sections]atomic.Bool
 	nNotLoaded atomic.Int64 // how many of notLoaded are set
+
+	// unverified counts the sections a block took as a peer holds them
+	// with no peer's hashing to the marker: each is a load whose block the
+	// root check decides.
+	unverified atomic.Int64
 	turn       atomic.Uint64
 
 	mu   sync.Mutex
@@ -283,6 +288,7 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 		ld, verified, last = x.fetch(ctx, s, h, want, true)
 		if last == nil {
 			if !verified {
+				x.unverified.Add(1)
 				x.log.Info("A section a block reads was taken as a peer holds it after this node's block; the root check decides",
 					"partition", x.partition, "section", s, "block", h+1, "peer-block", ld.block)
 			}
@@ -433,13 +439,17 @@ func (x *sections) dropReady() {
 
 // fetch loads a section as the peers hold it now (executor spec, "Sync", §3a;
 // Paul, 2026-10-02: there is no as-of-H load). It asks the peers in turn for
-// the section's leaves. The first peer whose leaves hash to want is taken,
-// verified: the section is the one the marker holds. A peer whose tree stands
-// at or before block h and whose leaves hash to anything else is refused: at
-// that block the section is the marker's. A peer past h whose leaves differ
-// holds the section as later blocks left it; when later is set, the first such
-// peer is taken if no peer verifies, and the answer says it is not verified.
-// Each account's state must hash to its leaf, whoever served it.
+// the section's leaves, and the first peer whose leaves hash to want is taken,
+// verified: the section is the one the marker holds. When no peer's verifies
+// and later is set (a block's load), the first answer is taken, and the
+// answer says it is not verified: the root check decides, and a root that
+// then differs from its anchor is the anchor mismatch of "Two mismatches",
+// repaired. A peer past h holds the section as later blocks left it; one at
+// h or before it whose section differs says the node's own marker no longer
+// stands -- a node that took a later section and diverged -- and holding the
+// block for it repairs nothing (#4485: only a load no peer answers holds the
+// block). The fill does not set later: it takes only what verifies. Each
+// account's state must hash to its leaf, whoever served it.
 func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]byte, later bool) (*loadedSection, bool, error) {
 	var last error = errors.NotFound.With("no peer to load from")
 	srcs := x.peers(ctx)
@@ -487,11 +497,8 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
 			continue
 		}
-		if block <= h || !later {
-			last = errors.Conflict.WithFormat("%s: the leaves of section %d as of block %d hash to %x, not to its marker %x", sourceKey(src), s, block, got[:8], want[:8])
-			continue
-		}
-		if fallback == nil {
+		last = errors.Conflict.WithFormat("%s: the leaves of section %d as of block %d hash to %x, not to its marker %x", sourceKey(src), s, block, got[:8], want[:8])
+		if later && fallback == nil {
 			fallback = &candidate{src, leaves, urls, block, got}
 		}
 	}
