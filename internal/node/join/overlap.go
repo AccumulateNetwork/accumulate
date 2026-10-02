@@ -100,9 +100,8 @@ type settling struct {
 }
 
 // OverlapBlocks is how many blocks in a row with no difference end the
-// overlap, with every section loaded: "we are synced after 5 blocks of
-// perfect matches", then "Let's demand 20 perfect blocks instead of 5" (Paul,
-// 2026-10-02).
+// overlap, with every section loaded: "we are synced after [20] blocks of
+// perfect matches" (Paul, 2026-10-02).
 const OverlapBlocks = 20
 
 // overlapAsk bounds how long a block asks the peers for its record: each is

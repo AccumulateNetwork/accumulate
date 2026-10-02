@@ -1392,8 +1392,8 @@ record names must end in the state the record gives; where execution differs,
 the record's state stands and the difference is counted and said. **"Process
 txs then check the blockledger, over and over. That repairs any errors due to
 staging or anything. Eventually, everything settles out, and processing txs
-matches the blockledger state at every account, and then we are synced after 5
-blocks of perfect matches. If we get a mismatch, we go back to processing the
+matches the blockledger state at every account, and then we are synced after
+[20] blocks of perfect matches. If we get a mismatch, we go back to processing the
 blockledgers starting at the mismatch until everything matches again"** (Paul,
 2026-10-02). So a block whose execution differs from its record ends the
 overlap and sends the node back to the block ledger from that block: the root

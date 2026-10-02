@@ -2346,6 +2346,11 @@ def join_progress_from(per):
                    NS + "_join_backfill_accounts_left": "backfillLeft"}.get(name)
             if key and labels.get("partition"):
                 out.setdefault(c, {}).setdefault(labels["partition"], {})[key] = int(v)
+        # The node's own executed height: read from its metrics, so it is there
+        # even while the node is BOOTING and refuses API reads.
+        for k, h in heights.executed_from_rows(rows).items():
+            name = "Directory" if k == "directory" else k.upper()
+            out.setdefault(c, {}).setdefault(name, {})["executed"] = h
     return out
 
 
@@ -3271,8 +3276,8 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 </div>
 <div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
-  <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node). Phase is the latest of Pulling the state / The walk has covered / Joined / not executing in agreement (BOOTING) / executing in agreement (ACTIVE). Counts are whole-run, from the log, and never clear.</div>
-  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>phase</th><th>height / network (blocks)</th><th>behind (blocks)</th><th>since added</th><th>catch-up: state downloaded</th><th>catch-up: state proven</th><th>catch-up: in agreement</th><th>catch-up: synced (20 perfect blocks)</th><th>returns to the ledger (#)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>root misses (#)</th><th>repairs (#)</th><th>accounts a repair changed (#)</th><th>proven → repairing (#)</th><th>RSS (MiB)</th><th>container</th></tr></thead><tbody></tbody></table></div>
+  <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node); the same columns for every follower. A follower added to the running network goes: downloading state &rarr; proving state &rarr; checking against the ledger (each block executed and compared with its block-ledger record; a mismatch goes back to the ledger) &rarr; synced (20 perfect blocks in a row, every section loaded). A follower started with the network executes from genesis and never joins. Heights are each node&rsquo;s own executed block (its metrics), network = the validators&rsquo; highest. Counts are whole-run and never clear.</div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>state now</th><th>executed / network (block)</th><th>behind (blocks)</th><th>running for</th><th>time to state proven</th><th>time to synced (20 perfect blocks)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>returns to the ledger (#, run)</th><th>repairs after root &ne; anchor (#, run)</th><th>accounts a repair changed (#, run)</th><th>memory (MiB, now)</th><th>container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
   <div class=panel data-p=synflow>
@@ -3444,29 +3449,43 @@ function nodestateView(nsd){
 }
 // The Followers panel (followerJoins on /data): one row per follower x
 // partition, from each container's log. Absent is `— not measured`, never 0.
-function followersView(fj,jp){
-  if(!fj||!fj.rows)return '<tr><td class=mut colspan=18>— not measured: the monitor has not read the followers yet</td></tr>';
-  if(!fj.rows.length)return `<tr><td class=mut colspan=18>${fj.why||'no follower in this topology'}</td></tr>`;
+function followersView(fj,jp,net){
+  const COLS=14;
+  if(!fj||!fj.rows)return `<tr><td class=mut colspan=${COLS}>— not measured: the monitor has not read the followers yet</td></tr>`;
+  if(!fj.rows.length)return `<tr><td class=mut colspan=${COLS}>${fj.why||'no follower in this topology'}</td></tr>`;
   const d=s=>s==null?'—':(s<3600?`${Math.floor(s/60)}m ${String(Math.floor(s%60)).padStart(2,'0')}s`:`${Math.floor(s/3600)}h ${String(Math.floor(s%3600/60)).padStart(2,'0')}m`);
-  const PC={ACTIVE:'grn',synced:'grn',overlap:'yel','back to ledger':'yel',BOOTING:'red','handed off':'yel',walked:'yel',proven:'yel',pulling:'yel'};
-  const fresh=r=>r.life==='waiting'||r.life==='removed';
-  // Plain words for the join's own phase names (Paul: "handed off? walked?").
-  const PHASE_WORDS={'pulling':'downloading state','walked':'state downloaded','proven':'state proven','handed off':'executing, not yet proven','BOOTING':'root missed, repairing','ACTIVE':'proven, in agreement','overlap':'executing, checked against the ledger','back to ledger':'mismatch: back to the ledger','synced':'synced (20 perfect blocks)','no join line yet':'starting'};
   const n=(v,col)=>v==null?'—':`<span class="${v&&col?col:''}">${fmt(v)}</span>`;
+  // One plain state per row, the same vocabulary for every follower.
+  const STATE={
+    'not added':['not added yet','mut'], 'removed':['removed','mut'],
+    'genesis':['executing from genesis (started with the network)','grn'],
+    'not started':['starting','mut'], 'pulling':['downloading state','yel'],
+    'walked':['proving state','yel'], 'proven':['proving state','yel'],
+    'handed off':['checking against the ledger','yel'], 'ACTIVE':['checking against the ledger','yel'],
+    'overlap':['checking against the ledger','yel'], 'back to ledger':['mismatch: back to the ledger','yel'],
+    'BOOTING':['repairing: root ≠ anchor','red'], 'synced':['synced','grn'],
+  };
   return fj.rows.map(r=>{
+    const g=((jp||{})[r.container]||{})[r.partition]||{};
+    const launched=r.life==='launched';
+    let key=r.life==='waiting'?'not added':(r.life==='removed'?'removed':r.phase);
+    if(launched&&(r.phase==='not started'))key='genesis';
+    const [word,cls]=STATE[key]||[key,'mut'];
+    const gone=r.life==='waiting'||r.life==='removed';
+    const exec=gone?null:(g.executed??r.height);
+    const network=(net||{})[r.partition]??r.network;
+    const behind=(exec!=null&&network!=null)?Math.max(0,network-exec):null;
     const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')
       :r.oomKilled?`<span class=red>OOMKilled (exit ${r.exitCode})</span>`
       :r.status!=='running'?`<span class=red>${r.status} (exit ${r.exitCode})</span>`:'running';
-    const ph=r.life==='waiting'?'not added':r.phase==='not started'?(r.life==='launched'?'started with the network (never joined)':'no join line yet'):r.phase;
-    const phc=r.phase==='not started'&&r.life==='launched'?'mut':(PC[ph]||'mut');
-    const launched=r.life==='launched'?' <span class=mut>(comparison)</span>':'';
-    const h=fresh(r)?'—':`${fmt(r.height)} / ${fmt(r.network)}`;
-    const toA=r.toActiveSec!=null?d(r.toActiveSec):(r.phase==='ACTIVE'||r.life==='launched'?'<span class=mut>—</span>':'—');
-    return `<tr><td class=name>${r.container}${launched} → ${shortP(r.partition)}</td>`
-      +`<td class=${phc} title="${ph}">${PHASE_WORDS[ph]||ph}</td><td>${h}</td><td>${fresh(r)?'—':n(r.behind,'yel')}</td>`
-      +`<td>${fresh(r)?'—':d(r.sinceAddSec)}</td><td>${r.toWalkedSec!=null?d(r.toWalkedSec):'—'}</td><td>${r.toProvenSec!=null?d(r.toProvenSec):'—'}</td><td><b>${toA}</b></td><td>${r.toSyncedSec!=null?d(r.toSyncedSec):'—'}</td><td>${n(r.overlapReturns||0,'yel')}</td>`
-      +`<td>${((jp||{})[r.container]||{})[r.partition]?.sectionsNotLoaded??'—'}</td><td>${((jp||{})[r.container]||{})[r.partition]?.backfillLeft??'—'}</td>`
-      +`<td>${n(r.rootMisses,'yel')}</td><td>${n(r.repairs,'yel')}</td><td>${n(r.repairChanged,'red')}</td><td>${n(r.drops,'red')}</td>`
+    const na=launched?'<span class=mut>— (never joined)</span>':'—';
+    return `<tr><td class=name>${r.container} → ${shortP(r.partition)}${launched?' <span class=mut>(started with the network)</span>':''}</td>`
+      +`<td class=${cls}>${word}</td>`
+      +`<td>${gone?'—':`${fmt(exec)} / ${fmt(network)}`}</td><td>${gone?'—':n(behind,'yel')}</td>`
+      +`<td>${gone?'—':d(r.sinceAddSec)}</td>`
+      +`<td>${launched?na:(r.toProvenSec!=null?d(r.toProvenSec):'—')}</td><td><b>${launched?na:(r.toSyncedSec!=null?d(r.toSyncedSec):'—')}</b></td>`
+      +`<td>${gone?'—':n(g.sectionsNotLoaded??0,'yel')}</td><td>${gone?'—':n(g.backfillLeft??0,'yel')}</td>`
+      +`<td>${n(r.overlapReturns||0,'yel')}</td><td>${n(r.rootMisses||0,'red')}</td><td>${n(r.repairChanged||0,'red')}</td>`
       +`<td>${r.memMiB==null?'—':fmt(Math.round(r.memMiB))}</td><td>${st}</td></tr>`;
   }).join('');
 }
@@ -3647,7 +3666,7 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   // A panel that measures nothing is hidden, not shown as a wall of dashes.
   $('wpanel').style.display=w.measured?'':'none';
   $('whrow').style.gridTemplateColumns=w.measured?'':'1fr';
-  $('fjtab').querySelector('tbody').innerHTML=followersView(s.followerJoins,s.joinProgress);
+  $('fjtab').querySelector('tbody').innerHTML=followersView(s.followerJoins,s.joinProgress,s.executedHeights);
   for(const el of document.querySelectorAll('.cap.clamp'))el.title=el.textContent;
   // wedges / heals pills
   $('wsyn').innerHTML=w.measured?fmt((w.byReason||{})['queue-full']||0):nm(null);$('wanc').innerHTML=w.measured?fmt((w.byReason||{}).deadline||0):nm(null);$('wtot').innerHTML=nm(w.total);

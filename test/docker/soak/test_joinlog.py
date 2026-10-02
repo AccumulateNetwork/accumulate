@@ -141,7 +141,7 @@ class ThePanelRenders(unittest.TestCase):
              "phase": "not added", "rootMisses": 0, "repairs": 0, "repairChanged": 0,
              "drops": 0, "status": None}]})
         self.assertIn("acc-bvn1-fol1 → DN", html)
-        self.assertIn("BOOTING", html)
+        self.assertIn("repairing: root ≠ anchor", html)
         self.assertIn("5 / 9", html)
         self.assertIn("2m 05s", html)
         self.assertIn("OOMKilled (exit 137)", html)
