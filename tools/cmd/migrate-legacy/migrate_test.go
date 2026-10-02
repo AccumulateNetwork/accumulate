@@ -31,9 +31,7 @@ func TestMigrateOld(t *testing.T) {
 
 			[[configurations]]
 			bvn = "Grizzly"
-			bvn-bootstrap-peers = ["/dns/fozzie-bvn0.accumulate.defidevs.io/tcp/16691/p2p/QmVmNTZgZDEfS4NAi4bMKj9BnBLb7R1YdKmfmBH7nPwBKM"]
 			bvn-genesis = "bvnn/config/genesis.json"
-			dn-bootstrap-peers = ["/dns/fozzie-bvn0.accumulate.defidevs.io/tcp/16591/p2p/QmTaoxQm8iW3kunoJzQvDNUmeKBqz8khYKCbR38cqMb3Dq"]
 			dn-genesis = "dnn/config/genesis.json"
 			listen = "/ip4/127.0.2.1/tcp/16591"
 			max-envelopes-per-block = 100

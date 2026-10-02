@@ -204,6 +204,20 @@ for node keys as for validator keys, rather than keep one and drop the other.
 `<work>/backup/` first; a backup is never overwritten (a later one is named
 `accumulate.toml.1`, `.2`, …) (#4490).
 
+**Bootstrap peers are never made up.** CometBFT's `persistent_peers` name
+each peer by its CometBFT node ID, which is not a libp2p identity; main's
+`migrate` zero-padded it into a peer ID that no node has, so every such peer
+failed its identity check on dial. The tool carries none of them over, and
+drops any already written that way from a configuration main's `migrate`
+converted. A node converted from the CometBFT layout gets the partition
+bootstrap peers the operator names (a configuration main's `migrate` wrote
+keeps the real ones it has): `--bootstrap <multiaddr>` (with its `/p2p/` peer ID), or
+`--peer <url>`, a running node whose API v3 node info gives its libp2p
+identity, as `init node` takes it. When there are none, the tool says so;
+the node then finds peers only through `[p2p] bootstrap-peers`, which the
+CometBFT-era `accumulate.toml` already held as libp2p addresses and which are
+kept (#4490).
+
 **The database (future work).** Converting a mainnet node's database to
 what a DAG-BFT node holds is not built. When it is, it belongs here and in
 the same tool: the key conversion is its first step, not a separate one.
