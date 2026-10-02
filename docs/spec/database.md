@@ -88,7 +88,12 @@ that means to look back must say so:
 
 - The **executor** reads recent state and takes an ordinary change set —
   except the synthetic-cache seed at its first block, which reads by position
-  what was written long before and takes a deep one (#4405).
+  what was written long before and takes a deep one (#4405), and the
+  admissibility check of a proof whose Directory anchor has executed here:
+  the root that anchor carried was recorded, so a miss in the block's change
+  set is the window, not the proof, and the check looks once in history
+  before it calls a proof disproved (#4505). A proof that arrives before
+  its anchor keeps its ordinary miss.
 - A reader that knowingly reaches into history — the API, a tool walking the
   chain — takes a **deep** change set. Dispatch and healing are not such
   readers: they read the producer's cache (healing.md, "The cache"), and a

@@ -52,8 +52,67 @@ func (x *Executor) provingAnchorIndex(batch *database.Batch, proof *protocol.Ann
 	case err == nil:
 		return i, true, nil
 	case errors.Is(err, errors.NotFound):
-		return -1, false, nil
+		// Not in the batch's view. A store with a window answers a shallow
+		// read from its newest blocks only and calls anything older absent
+		// (database spec, "Windowed stores"), and the block's batch is
+		// shallow. If the Directory anchor the proof names has executed
+		// here, its root was recorded and the question is whether history
+		// holds it: one deep read, for that case alone -- a proof that
+		// arrives before its anchor misses here too, and that miss must
+		// stay the cheap one it is. Run 20261002T090546Z: a proof pulled
+		// for an entry undelivered longer than the window was "disproved"
+		// and the stream held behind it for the rest of the run (#4505).
+		if proof.Anchor == nil {
+			return -1, false, nil
+		}
+		executed, err := x.executedDirectoryBlock(batch)
+		if err != nil {
+			return -1, false, err
+		}
+		if proof.Anchor.SourceBlock > executed || x.Database == nil {
+			return -1, false, nil
+		}
+		return x.provingAnchorIndexDeep(anchor)
 	default:
 		return -1, false, errors.UnknownError.WithFormat("search for directory anchor %x: %w", anchor, err)
 	}
+}
+
+// provingAnchorIndexDeep is provingAnchorIndex's lookup through a reader
+// that reaches past the store's window.
+func (x *Executor) provingAnchorIndexDeep(anchor []byte) (int64, bool, error) {
+	index, found := int64(-1), false
+	err := x.deepView(func(batch *database.Batch) error {
+		i, err := batch.Account(x.Describe.AnchorPool()).
+			AnchorChain(protocol.Directory).
+			Root().
+			IndexOf(anchor)
+		switch {
+		case err == nil:
+			index, found = i, true
+			return nil
+		case errors.Is(err, errors.NotFound):
+			return nil
+		default:
+			return err
+		}
+	})
+	if err != nil {
+		return -1, false, errors.UnknownError.WithFormat("search history for directory anchor %x: %w", anchor, err)
+	}
+	return index, found, nil
+}
+
+// executedDirectoryBlock is the newest Directory block whose anchor this
+// partition has executed, as the anchor pool records it; zero before the
+// first.
+func (x *Executor) executedDirectoryBlock(batch *database.Batch) (uint64, error) {
+	v, err := batch.Account(x.Describe.AnchorPool()).DirectoryAnchorBlock().Get()
+	switch {
+	case errors.Is(err, errors.NotFound):
+		return 0, nil
+	case err != nil:
+		return 0, errors.UnknownError.WithFormat("load directory anchor block: %w", err)
+	}
+	return v, nil
 }

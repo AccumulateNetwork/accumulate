@@ -225,14 +225,7 @@ func noteAnchorDelivered(ctx *MessageContext, seq *messaging.SequencedMessage, d
 // directoryAnchorBlock is the Directory block of the newest Directory anchor
 // executed here, or zero.
 func (b *Block) directoryAnchorBlock() (uint64, error) {
-	v, err := b.Batch.Account(b.Executor.Describe.AnchorPool()).DirectoryAnchorBlock().Get()
-	switch {
-	case errors.Is(err, errors.NotFound):
-		return 0, nil
-	case err != nil:
-		return 0, errors.UnknownError.WithFormat("load directory anchor block: %w", err)
-	}
-	return v, nil
+	return b.Executor.executedDirectoryBlock(b.Batch)
 }
 
 // saidDisproved reports, once per source and Directory block, that a proof
