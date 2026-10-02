@@ -54,6 +54,10 @@ type sections struct {
 	// holds the block.
 	timeout time.Duration
 
+	// overlap settles a block's batch against the partition's record of it
+	// during the overlap after a match (#4495).
+	overlap *overlap
+
 	notLoaded  [bpt.Sections]atomic.Bool
 	nNotLoaded atomic.Int64 // how many of notLoaded are set
 

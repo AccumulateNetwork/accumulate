@@ -134,6 +134,18 @@ func (block *Block) close() (execute.BlockState, error) {
 	// its range proofs at a directory continuation, reproducing #4086 exactly
 	// when anchoring lagged — which is when recovery is needed (#4138).
 
+	// For the first blocks after a join's handoff, the partition's record of
+	// this block settles the accounts it names: where this execution left one
+	// other than the record, the record's state stands (executor spec,
+	// "Sync", §3a, "The handoff is an overlap"; #4495). Here, after the
+	// transactions and before the chains are anchored, so the root chain and
+	// the block ledger anchor and name what the record holds. A no-op on a
+	// node that is not in an overlap.
+	err = block.Batch.SettleBlock(block.Index)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("settle the block against its record: %w", err)
+	}
+
 	// List all of the chains that have been modified. shouldPrepareAnchor
 	// relies on this list so this must be done first.
 	// The block's segment of the root chain begins before its first root
@@ -418,6 +430,13 @@ func (block *Block) close() (execute.BlockState, error) {
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("store block ledger: %w", err)
 		}
+	}
+
+	// The overlap's second step: every account the partition's record of this
+	// block names holds the record's leaf before the tree is updated (#4495).
+	err = block.Batch.VerifyBlock(block.Index)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("verify the block against its record: %w", err)
 	}
 
 	// Retain what this block's BPT update is about to overwrite, so a peer can

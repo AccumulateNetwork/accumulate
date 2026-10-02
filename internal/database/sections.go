@@ -99,6 +99,61 @@ type SectionGate interface {
 	Opened(batch *Batch)
 }
 
+// A BlockSettler is a SectionGate that also settles the batch a block
+// executes in against the partition's record of the block: for the first
+// blocks after a join's handoff the node executes each block and takes its
+// block-ledger record, and the record's account states stand where execution
+// differs (executor spec, "Sync", §3a, "The handoff is an overlap"; #4495).
+type BlockSettler interface {
+	// SettleBlock is called once the block's transactions have executed and
+	// before its chains are anchored, so that what it writes is anchored and
+	// recorded as the block's own. An error fails the block.
+	SettleBlock(batch *Batch, block uint64) error
+
+	// VerifyBlock is called after the block's last write to an account and
+	// before its state tree is updated: each account the record names must
+	// hold the record's leaf. An error fails the block.
+	VerifyBlock(batch *Batch, block uint64) error
+}
+
+// SettleBlock settles the batch a block executes in against the partition's
+// record of the block when the gate is a [BlockSettler], and otherwise does
+// nothing. It is called after the block's transactions, before its chains
+// are anchored.
+func (b *Batch) SettleBlock(block uint64) error {
+	if s := b.settler(); s != nil {
+		return s.SettleBlock(b, block)
+	}
+	return nil
+}
+
+// VerifyBlock is SettleBlock's second step, called before the block's state
+// tree is updated.
+func (b *Batch) VerifyBlock(block uint64) error {
+	if s := b.settler(); s != nil {
+		return s.VerifyBlock(b, block)
+	}
+	return nil
+}
+
+// settler is the gate of the batch a block executes in, if it is a
+// [BlockSettler].
+func (b *Batch) settler() BlockSettler {
+	if b.parent != nil {
+		return nil
+	}
+	c, ok := b.store.(interface{ Unwrap() keyvalue.Store })
+	if !ok {
+		return nil
+	}
+	g, ok := c.Unwrap().(*gatedChangeSet)
+	if !ok || g.batch != b {
+		return nil
+	}
+	s, _ := g.gate.(BlockSettler)
+	return s
+}
+
 // sectionGates is the gate a database and its views share. It is a pointer
 // so that Deep and Unisolated views, taken before the gate is set, see it.
 type sectionGates struct {

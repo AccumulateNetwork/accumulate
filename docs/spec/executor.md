@@ -1222,13 +1222,17 @@ that an account does not exist.
   peer is not refused either. A peer past H whose leaves differ holds the
   section as blocks after H left it. A block's load takes the first answer
   when no peer's verifies, whatever block it is of, and says so (`A section a block reads was taken as a peer holds
-  it after this node's block; the root check decides`); the root check does
-  its job — a root that then differs from its anchor is the anchor mismatch of
-  "Two mismatches", 2, repaired from the block ledger, and the node moves on.
+  it after this node's block; the root check decides`). In the overlap after a
+  match (below) the block's record then settles what the load was ahead of;
+  outside it the root check does its job — a root that then differs from its
+  anchor is the anchor mismatch of "Two mismatches", 2, repaired from the
+  block ledger, and the node moves on.
   This is the case of a cold account — written last before any peer's
   retention window — that a block writes after the peers have executed that
   block: no peer could answer it as of H, and holding the block for it is what
-  this replaces (`TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`).
+  this replaces (`TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`
+  in the overlap, `TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`
+  after it).
   The fill takes only an answer that hashes to the marker: a section a block
   after H changed is loaded by the block that touches it.
 
@@ -1287,7 +1291,7 @@ the sections not loaded` at most once a minute, and `Every section is loaded`
 once.
 
 The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
-`TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired`,
+`TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`,
 `TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt`,
 `TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchanged`,
 `TestTheFillLoadsEverySectionAndTheRootMatchesThroughout`,
@@ -1360,8 +1364,91 @@ the record's state stands and the difference is counted and said. After a run
 of clean blocks the node stops taking the records and executes alone. A
 section loaded from the peers' current state during the overlap cannot make
 the root differ: the records set the states the anchor commits to (#4495).
-Until built, a cold load's divergence is repaired by the root watch
-(DIFFERENCES, "The overlap is not built").
+
+*How it is built (#4495).* The overlap begins at every match — before the
+handoff executes the groups it collected, which are the blocks a node
+executes behind its peers, and the only blocks a section a block loads can be
+ahead of. A block in the overlap is settled in the batch it executes in, in
+two steps (`database.BlockSettler`, called by the executor's close):
+
+1. *After its transactions, before its chains are anchored.* The node asks its
+   peers in turn, once each, for the block-ledger records from block n
+   (`ChangedAccountStatesQuery{After: n − 1}`, first page; its states are not
+   used), and for the accounts n's record names and the accounts this
+   execution changed, the peer's state as of n (`AccountStatesQuery{ForHeight:
+   n}`). An account whose state differs from the record's — compared with its
+   index chains taken from the record, since the block's close writes those
+   later — is written as the sync writes it, but a chain whose head is already
+   the record's is left as it is: a chain written is a chain the block changed.
+   A chain the record names that this execution did not change is marked
+   changed. That is the cold load's real effect, measured: a section loaded
+   from a peer past n already holds n's transaction, so the node refuses it as
+   one it has seen (the key page's timestamp is past it) and changes nothing;
+   the record makes the block change what the peers' did, so the root chain
+   anchors, and the node's own record names, what the partition's did. An
+   account a later record names that sits in a section this block loaded is
+   put back as of n, written beneath the block's records as a section load is,
+   and its leaf set in the block's tree.
+2. *After its last write to an account, before its state tree is updated.*
+   Each account the record names must hold the record's leaf; its index
+   chains are the record's where they are not. The partition's system
+   accounts, which the close writes, are compared here, all of them, named or
+   not — the synthetic ledger never is named: one whose leaf differs takes the
+   record's state, and a synthetic ledger the messages behind its queued local
+   deliveries (a refused purchase of credits queued no burn where the peers'
+   execution did; `TestAJoinAgreesAcrossRepeatedBurns`). The partition ledger
+   is not compared: a peer past n does not retain its scheduled events.
+
+Every account and chain that differed is counted —
+`accumulate_join_overlap_differences_total{partition}` — and said once per
+account (or chain) and block: `A block left an account other than its record;
+the record's state stands` (block, account, local and record leaf, peer, and
+why when it is not the plain case) or `A block changed a chain other than its
+record; the record stands`. An account the record wrote is taken by its chain
+heads and backfilled (§2).
+
+*K and the clean run.* The overlap ends after **eight** blocks in a row with no
+difference (`join.OverlapBlocks`): a handoff executes the groups it collected
+before it reaches the frontier, and the run that measured it buffered eight
+(#4398, run `20260924T052134Z`) — those are the blocks a load can be ahead
+of — and eight blocks hold at least two anchored blocks at rest, where a
+partition anchors every fourth. A block with a difference starts the run
+again. `The overlap begins` and `The overlap is over` (checked, frontier,
+differences) say it.
+
+*A record not there yet.* A peer that has not produced n answers at once
+(`NotReady`, or `Through` before n); the node does not wait for it, and asks
+each peer once within five seconds in all. A block no peer has a record of is
+executed alone and counts as clean: at the frontier the peers have not
+produced the block, so no load in it can be ahead of it, and a peer whose
+partition ledger has not moved since an empty block answers the same way.
+Its root is the root watch's, as every block's is.
+
+*A restart mid-overlap begins it again.* The overlap is memory: a restart is a
+join (above), its match begins the overlap at the block it matched, with no
+clean block counted from before (`TestARestartMidOverlapBeginsTheOverlapAgain`).
+A node that resumes on its own root (the whole-restart exit) takes no overlap:
+no peer holds a state it did not execute.
+
+*The root watch stays.* It is the backstop for what the overlap cannot settle:
+a block executed alone at the frontier, a chain this execution changed that
+the record does not name (it cannot be unmarked), an account this execution
+made that the record does not hold, the ledger's own chains, and every block
+after the overlap — a cold load then is repaired as before
+(`TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`). The tests:
+`TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`,
+`TestAnExecutionThatDiffersFromItsRecordIsCountedAndTheRecordStands`,
+`TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`,
+`TestARestartMidOverlapBeginsTheOverlapAgain` (test/e2e, through the
+production join, executor and API peers), and
+`TestAJoinAgreesAcrossRepeatedBurns`, which requires zero divergence of every
+class again.
+
+*Not built.* A query for one block's record alone: the first page of a
+`ChangedAccountStates` answer carries up to 1 MiB of current states the
+overlap does not use, once per block for at most a few blocks. The node's
+transaction status for a transaction it refused that the record settled is
+its own (not hashed, not in the root).
 
 **Decided (Paul, 2026-10-02): no retention.** A peer cannot answer a section
 as of H for a cold account a later block changed (it retained no state at H;
@@ -1369,7 +1456,8 @@ as of H for a cold account a later block changed (it retained no state at H;
 retain pre-change state for it. It does not: "all the entries are in the
 database, and going back we will find the entries that are missing working
 back from the account state." The section is taken as the peers hold it now,
-above, and the root check repairs what that changes.
+above; in the overlap the records settle what that changes, and after it the
+root check repairs it.
 
 #### 4. Staging is what was collected, minus what the state says executed
 

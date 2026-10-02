@@ -273,14 +273,11 @@ func TestAMismatchAtVNamesTheAccountServedWrong(t *testing.T) {
 type provenState struct {
 	steppingState
 	handoffs []handoffAt
-	diverged int
 
-	// explained counts the divergences that follow a section a block took
-	// as a peer held it after the node's block (Paul, 2026-10-02: no as-of-H
-	// load; the root check decides and the join repairs). They are not
-	// counted in diverged.
-	explained  int
-	unverified int64
+	// diverged counts every divergence, whatever its cause: a section a
+	// block took as a peer held it after the node's block is settled by
+	// the overlap's records, and no longer diverges (#4495).
+	diverged int
 }
 
 type handoffAt struct {
@@ -299,13 +296,7 @@ func (s *provenState) HandedOff(q uint64) {
 func (s *provenState) Diverged(ctx context.Context) (uint64, bool, error) {
 	n, d, err := s.steppingState.Diverged(ctx)
 	if d {
-		u := s.State.(interface{ SectionsTakenUnverified() int64 }).SectionsTakenUnverified()
-		if u > s.unverified {
-			s.explained++
-			s.unverified = u
-		} else {
-			s.diverged++
-		}
+		s.diverged++
 	}
 	return n, d, err
 }

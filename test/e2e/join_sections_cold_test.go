@@ -21,24 +21,27 @@ import (
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
 )
 
-// TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired — #4485,
-// DIFFERENCES E24 (Paul, 2026-10-02: no retention, no as-of-H load).
+// TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord — #4485,
+// DIFFERENCES E24 (Paul, 2026-10-02: no retention, no as-of-H load), and
+// #4495 (the handoff is an overlap).
 //
 // The trigger: the node executes a block that writes an account in a section
 // it has not loaded, after its peers have executed that block. The account
 // was last written before any retained block -- idle past the retention
 // window -- so no peer holds its state as of the block before, and the
-// peers' current section is not the one the node's marker holds. Before
-// Paul's decision the load asked as of H, was refused by every peer, and held
-// the block. Now the node takes the peers' current section, executes, and its
-// root differs from the anchor; that is the anchor mismatch of "Two
-// mismatches", repaired from the block ledger by the production join.Run,
-// and the node then agrees with its peers.
+// peers' current section is not the one the node's marker holds. The node
+// takes the peers' current section, which already holds the block's effects:
+// its execution refuses the transfer as one it has seen (the key page's
+// timestamp is past it), so it changes nothing the peers' block changed.
+// Before the overlap its root then differed from the anchor and the root
+// watch repaired it. Now the block is in the overlap: the partition's record
+// of it names the chains the transfer changed, the node's block changes them
+// too, and its root is its anchor's -- no divergence, no repair.
 //
 // The node lags its peers here as a joiner does: the deposit is executed by
 // the validators while the joiner is still collecting, and the joiner
 // executes it from its buffer when it hands off.
-func TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired(t *testing.T) {
+func TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord(t *testing.T) {
 	j := prepareSectionsJoin(t)
 	sim := j.sim
 	state := j.part.NodeJoinState(j.fresh)
@@ -104,12 +107,13 @@ func TestABlockThatWritesAColdAccountIsNotHeldAndTheRootIsRepaired(t *testing.T)
 	require.NotNil(t, target, "the join never handed off")
 	require.Empty(t, buf.refused, "the block that wrote the cold account was held: the handoff could not produce it")
 	require.True(t, w.done(), "the node did not come to agree with its peers within %d rounds", rounds)
-	require.NotEmpty(t, w.demoted, "the node's root never differed from its anchor: the cold account's section was not taken as its peers hold it now")
+	require.Empty(t, w.demoted, "the node's root differed from its anchor after the block that wrote the cold account: the overlap did not settle it")
+	require.NotZero(t, state.Overlap().Differences, "the overlap found nothing to settle: the cold account's section was not taken as its peers hold it now")
 
 	var got, want *TokenAccount
 	require.NoError(t, j.part.NodeDatabase(j.fresh).Ungated().View(func(b *database.Batch) error { return b.Account(target).Main().GetAs(&got) }))
 	require.NoError(t, j.part.NodeDatabase(0).View(func(b *database.Batch) error { return b.Account(target).Main().GetAs(&want) }))
-	require.Equal(t, want.Balance.String(), got.Balance.String(), "the repair did not bring the account to its peers' state")
+	require.Equal(t, want.Balance.String(), got.Balance.String(), "the account is not as its peers hold it")
 }
 
 // at is a node's block and root.
