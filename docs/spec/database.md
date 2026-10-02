@@ -340,8 +340,8 @@ churn with the working set. Synthetic and anchor entries are persisted to the
 **permanent** layer through execution and never change, so their cache is a hot
 front for entries in play. A miss is never served from storage (healing.md):
 an `ACTIVE` node holds every entry in play, so a miss means the request belongs
-to another `ACTIVE` node, and is relayed there (Paul, 2026-10-01; not built —
-DIFFERENCES, "A cache miss is refused, not relayed").
+to another `ACTIVE` node, and is relayed there, one hop (Paul, 2026-10-01;
+healing.md, "Never served from storage"; #4487).
 Sizing either cache is decided from measurement, not here.
 
 ## 2. Specification — how it is implemented

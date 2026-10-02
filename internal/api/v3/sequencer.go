@@ -10,6 +10,7 @@ import (
 	"context"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -42,6 +43,7 @@ type Sequencer struct {
 	partition   config.NetworkUrl
 	valKey      []byte
 	globals     atomic.Value
+	relay       func(context.Context) []private.SequenceRanger
 }
 
 var _ private.Sequencer = (*Sequencer)(nil)
@@ -74,6 +76,14 @@ type SequencerParams struct {
 	// and counted (healing spec, "The cache"). Without it — only the v1
 	// simulator, which has no cache — answers are read from the store.
 	Cache *synthcache.Cache
+
+	// Relay is the partition's other nodes serving the sequencer, each
+	// addressed by name, never this node. An entry or anchor this node's
+	// cache misses is asked of them, one hop, and the first answer is this
+	// node's answer, with the signatures of the node that held it (#4487;
+	// executor spec, "Sync", Redirection; database spec, "Caches"). Nil
+	// relays nothing: a miss is refused.
+	Relay func(context.Context) []private.SequenceRanger
 }
 
 func NewSequencer(params SequencerParams) *Sequencer {
@@ -94,6 +104,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 	s.partitionID = params.Partition
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	s.valKey = params.ValidatorKey
+	s.relay = params.Relay
 	s.globals.Store(params.Globals)
 	events.SubscribeSync(params.EventBus, func(e events.WillChangeGlobals) error {
 		s.globals.Store(e.New.Copy())
@@ -104,7 +115,7 @@ func NewSequencer(params SequencerParams) *Sequencer {
 
 func (s *Sequencer) Type() api.ServiceType { return private.ServiceTypeSequencer }
 
-func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64, opts private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
 	if err := s.serving("sequence"); err != nil {
 		return nil, err
 	}
@@ -138,15 +149,74 @@ func (s *Sequencer) Sequence(ctx context.Context, src, dst *url.URL, num uint64,
 	// Starting a batch would not be safe if the ABCI were updated to commit in
 	// the middle of a block
 
+	var r *api.MessageRecord[messaging.Message]
+	var err error
 	switch {
 	case s.partition.Synthetic().Equal(src):
-		return s.getSynthFromCache(globals, dst, num)
+		r, err = s.getSynthFromCache(globals, dst, num)
 	case s.partition.AnchorPool().Equal(src):
-		return s.getAnchorFromCache(globals, dst, num)
+		r, err = s.getAnchorFromCache(globals, dst, num)
+	default:
+		return nil, errors.BadRequest.WithFormat("invalid source: %s", src)
 	}
-
-	return nil, errors.BadRequest.WithFormat("invalid source: %s", src)
+	if !s.relays(err, opts) {
+		return r, err
+	}
+	rs, err := s.relayed(ctx, err, opts, func(ctx context.Context, peer private.SequenceRanger, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+		r, err := peer.Sequence(ctx, src, dst, num, opts)
+		if err != nil {
+			return nil, err
+		}
+		return []*api.MessageRecord[messaging.Message]{r}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return rs[0], nil
 }
+
+// relayAttempt bounds one relayed call, and relayBudget all of them for one
+// request.
+const relayAttempt = 5 * time.Second
+const relayBudget = 10 * time.Second
+
+// relays reports whether a request this node answered with err is relayed: a
+// miss of its cache (NotFound), not a request that was relayed to it.
+func (s *Sequencer) relays(err error, opts private.SequenceOptions) bool {
+	return err != nil && s.relay != nil && !opts.Relayed && errors.Code(err) == errors.NotFound
+}
+
+// relayed asks each of the partition's other nodes in turn, one hop, for what
+// this node's cache missed, and answers with the first that has it. A miss on
+// every node is refused with this node's own miss (#4487).
+func (s *Sequencer) relayed(ctx context.Context, miss error, opts private.SequenceOptions, call func(context.Context, private.SequenceRanger, private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error)) ([]*api.MessageRecord[messaging.Message], error) {
+	ctx, cancel := context.WithTimeout(ctx, relayBudget)
+	defer cancel()
+	opts.Relayed = true
+	for _, peer := range s.relay(ctx) {
+		if ctx.Err() != nil {
+			break
+		}
+		actx, acancel := context.WithTimeout(ctx, relayAttempt)
+		rs, err := call(actx, peer, opts)
+		acancel()
+		if err == nil && len(rs) > 0 {
+			mRelayed.WithLabelValues(strings.ToLower(s.partitionID), "answered").Inc()
+			return rs, nil
+		}
+	}
+	mRelayed.WithLabelValues(strings.ToLower(s.partitionID), "missed").Inc()
+	return nil, miss
+}
+
+// mRelayed counts the requests this node's cache missed and it relayed, by
+// whether another node answered (#4487).
+var mRelayed = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "sequencer",
+	Name:      "relayed_total",
+	Help:      "Requests this node's cache missed and relayed to another node of the partition, by whether one answered",
+}, []string{"partition", "outcome"})
 
 // SequenceRange implements [private.SequenceRanger.SequenceRange]: it serves
 // synthetic messages start through end (inclusive, 1-based) for the given
@@ -187,14 +257,22 @@ func (s *Sequencer) SequenceRange(ctx context.Context, src, dst *url.URL, start,
 		return nil, errors.NotReady
 	}
 
+	var rs []*api.MessageRecord[messaging.Message]
+	var err error
 	switch {
 	case s.partition.Synthetic().Equal(src):
-		return s.getSynthRangeFromCache(globals, dst, start, end, opts)
+		rs, err = s.getSynthRangeFromCache(globals, dst, start, end, opts)
 	case s.partition.AnchorPool().Equal(src):
-		return s.getAnchorRangeFromCache(globals, dst, start, end)
+		rs, err = s.getAnchorRangeFromCache(globals, dst, start, end)
 	default:
 		return nil, errors.BadRequest.With("only synthetic and anchor sequence ranges are supported")
 	}
+	if !s.relays(err, opts) {
+		return rs, err
+	}
+	return s.relayed(ctx, err, opts, func(ctx context.Context, peer private.SequenceRanger, opts private.SequenceOptions) ([]*api.MessageRecord[messaging.Message], error) {
+		return peer.SequenceRange(ctx, src, dst, start, end, opts)
+	})
 }
 
 // getReceiptForChainEntry gets a receipt from an entry to the first anchor

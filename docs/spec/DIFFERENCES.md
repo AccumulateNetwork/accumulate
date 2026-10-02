@@ -2163,13 +2163,6 @@ question. It is not a large change; it is a change that must not be guessed at.
 proof client and the trust anchor on the other; `tracker` unchanged if the
 final root match stays as it is.
 
-### A cache miss is refused, not relayed
-
-The spec (database.md, "Caches"; Paul, 2026-10-01) has a synthetic or anchor
-cache miss relayed to another `ACTIVE` node, which holds every entry in play.
-The code refuses the request (healing.md, "Never served from storage", R3);
-no relay exists. Not built.
-
 ### E13's replay clause is superseded
 
 E13 (PLAN.md, 2026-09-06) had a restart re-execute the committed log from the

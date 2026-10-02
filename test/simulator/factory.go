@@ -611,6 +611,27 @@ func (f *nodeFactory) queryPeers(context.Context) []string {
 	return out
 }
 
+// sequencerPeers is every other node serving the partition's sequencer, each
+// addressed by name, in a stable order.
+func (f *nodeFactory) sequencerPeers(context.Context) []private.SequenceRanger {
+	self := f.getPeerID()
+	addr := private.ServiceTypeSequencer.AddressFor(f.networkFactory.id)
+	var ids []peer.ID
+	for id := range f.getServices().Services[addr.String()] {
+		if id != self {
+			ids = append(ids, id)
+		}
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	out := make([]private.SequenceRanger, 0, len(ids))
+	for _, id := range ids {
+		if r, ok := f.getServices().Client.ForPeer(id).ForAddress(addr.Multiaddr()).Private().(private.SequenceRanger); ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	// Register a querier service
 	// The API services read deep, as the node's do (cmd/accumulated/run,
@@ -669,6 +690,9 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 			// simulator runs several networks in one process, so there is
 			// no registry to find it in.
 			Staging: f.getStaging(),
+			// A miss is relayed to the partition's other nodes, as the
+			// daemon relays it over its p2p node (#4487).
+			Relay: f.sequencerPeers,
 		}),
 	})
 

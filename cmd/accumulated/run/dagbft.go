@@ -694,6 +694,31 @@ func sectionsOf(joinState *join.PulledState) dagbft.Sections {
 	return joinState
 }
 
+// sequencerPeers is the partition's other nodes serving its sequencer, each
+// addressed by name, never this node: where a cache miss is relayed (#4487).
+func sequencerPeers(inst *Instance, partition string) func(context.Context) []private.SequenceRanger {
+	if inst.p2p == nil {
+		return nil
+	}
+	addr := private.ServiceTypeSequencer.AddressFor(partition)
+	client := &message.Client{Transport: &message.RoutedTransport{
+		Network: inst.config.Network,
+		Dialer:  inst.p2p.DialNetwork(),
+	}}
+	return func(ctx context.Context) []private.SequenceRanger {
+		var out []private.SequenceRanger
+		for _, id := range inst.p2p.Providers(ctx, addr, 16) {
+			if id == inst.p2p.ID() {
+				continue
+			}
+			if r, ok := client.ForPeer(id).ForAddress(addr.Multiaddr()).Private().(private.SequenceRanger); ok {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+}
+
 // registerAPIServices registers the API services for DAG-BFT.
 func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Beginner, validatorKey []byte, globals *network.GlobalValues, healCounters *crosschain.HealCounters, synthCache *synthcache.Cache, staging *execute.Staging, nodeState *nodestate.Machine, serving nodestate.Serving, sections dagbft.Sections) error {
 	logger := logging.NewSlogLogger(inst.logger)
@@ -793,6 +818,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		Globals:      globals,
 		Partition:    s.Partition.ID,
 		ValidatorKey: validatorKey,
+		// A cache miss is relayed one hop to another node serving this
+		// partition's sequencer, by name (#4487).
+		Relay: sequencerPeers(inst, s.Partition.ID),
 	})
 	registerRpcService(inst, sequencerSvc.Type().AddressFor(s.Partition.ID), message.Sequencer{Sequencer: sequencerSvc})
 	err = dagbftProvidesSequencer.Register(inst.services, s, sequencerSvc)
