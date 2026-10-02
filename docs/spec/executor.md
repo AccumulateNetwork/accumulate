@@ -702,8 +702,18 @@ page for one page of new entries
 (`TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists`). In process, a
 50,000-entry chain interrupted at its half-way page is backfilled with 197
 page requests, against 293 when a retry started from entry 0
-(`BenchmarkBackfill50k`) (#4493; a peer's capacity refusal still fails the
-chain's attempt — DIFFERENCES). The
+(`BenchmarkBackfill50k`) (#4493).
+
+A page is asked first of the peer that served the last. **A peer's capacity
+refusal is not a NotFound** (Paul, 2026-10-02, #4493): a validator answers
+NotReady (`query capacity exhausted`) when several followers pull from it at
+once, and the page is then asked of the next peer; once every peer has been
+asked and one was only busy, the page is asked again after a pause that
+doubles, from 250 ms up to 10 s
+(`TestACapacityRefusalRetriesThePage`, `TestABusyPeerIsPassedForTheNext`).
+Only a page every peer refuses otherwise fails the chain's attempt, and the
+record keeps what was written: the next attempt resumes
+(`TestAPageNoPeerServesFailsTheChainAndTheNextAttemptResumes`). The
 node ends holding every account's chains and entries
 (`TestARestartFarBehindJoinsAPartitionThatMovesEveryBlock`).
 

@@ -11,6 +11,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -144,6 +145,7 @@ type chainWalk struct {
 	at       uint64 // Every entry from at up to top is held
 	fetching bool   // The walk has found an entry the store does not hold
 	fetched  bool   // The walk has brought in an entry
+	next     int    // The source asked first
 }
 
 // backfillChain walks one chain from its head down, bringing in the entries
@@ -337,21 +339,53 @@ func (w *chainWalk) record() {
 	w.rec.Spans = spans
 }
 
+// backfillRetry is how long the backfill waits before it asks again for a
+// page every peer refused for capacity: first, doubling up to most.
+var backfillRetry = struct{ first, most time.Duration }{250 * time.Millisecond, 10 * time.Second}
+
 // fetch brings in the count entries from start, from the first source that
-// serves them.
+// serves them, starting with the one that served the last.
+//
+// A peer's NotReady -- its query capacity exhausted, as when several
+// followers pull from one validator at once -- is not a refusal of the
+// entries (#4493): the next peer is asked, and once every peer has been asked
+// and one of them was only busy, the page is asked again after a pause that
+// doubles. Only when every peer refuses the page otherwise does the walk fail;
+// what it wrote before is in the record, and the next attempt resumes there.
 func (w *chainWalk) fetch(ctx context.Context, srcs []Source, batch *database.Batch, start, count uint64) error {
-	var refusals []error
-	for i, src := range srcs {
-		err := w.fetchFrom(ctx, src, batch, start, count)
-		if err == nil {
-			return nil
+	pause := backfillRetry.first
+	for {
+		var refusals []error
+		busy := false
+		for k := range srcs {
+			i := (w.next + k) % len(srcs)
+			err := w.fetchFrom(ctx, srcs[i], batch, start, count)
+			if err == nil {
+				w.next = i
+				return nil
+			}
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if errors.Is(err, errors.NotReady) {
+				busy = true
+			}
+			refusals = append(refusals, fmt.Errorf("%s: %w", sourceName(i, srcs[i]), err))
 		}
-		if ctx.Err() != nil {
+		if !busy {
+			return errors.NotFound.WithFormat("no source served entries %d..%d: %w", start, start+count-1, stderrors.Join(refusals...))
+		}
+		// The next round starts with the next peer.
+		w.next = (w.next + 1) % len(srcs)
+		t := time.NewTimer(pause)
+		select {
+		case <-ctx.Done():
+			t.Stop()
 			return ctx.Err()
+		case <-t.C:
 		}
-		refusals = append(refusals, fmt.Errorf("%s: %w", sourceName(i, src), err))
+		pause = min(2*pause, backfillRetry.most)
 	}
-	return errors.NotFound.WithFormat("no source served entries %d..%d: %w", start, start+count-1, stderrors.Join(refusals...))
 }
 
 // fetchFrom brings in the count entries from start from one source. An entry

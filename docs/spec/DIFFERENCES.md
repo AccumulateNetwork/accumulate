@@ -2234,16 +2234,3 @@ E13 (PLAN.md, 2026-09-06) had a restart re-execute the committed log from the
 last sealed height. Paul, 2026-10-01: a restart does not replay; it syncs to
 the signed anchor and backfills the changed accounts' entries. database.md says
 so now; the committed log's role as the durability point is unchanged.
-
-### A capacity refusal fails the backfill's attempt at a chain (#4493)
-
-Paul's decision on #4493 (2026-10-02) has a peer's `query capacity
-exhausted` (NotReady) retry the page, with back-off and the next peer, and
-only a NotFound from every peer fail the chain. The code
-(`chainWalk.fetch`, internal/core/bootstrap/pull/backfill.go) asks each
-source once and fails the attempt when none serves the page, NotReady
-included. The walk itself resumes from its record (the retry no longer
-restarts the chain from entry 0, built in #4493), so a refusal costs a
-backfill pass, not the chain's progress. On Docker run 20260929T152146Z,
-cycle 6, three followers' Directory backfills restarted repeatedly on a
-2.3M-entry chain and none finished in 5.7 h.
