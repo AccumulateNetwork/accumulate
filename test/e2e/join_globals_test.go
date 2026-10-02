@@ -103,6 +103,12 @@ func joinDoesNotBurnAgain(t *testing.T, buyer string) {
 	s, err := f.join(t, 150, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, s.handoffs)
+	// A divergence the overlap repairs is not counted (overlapReturned): a
+	// follower whose sections were loaded from peers ahead of it refuses a
+	// repeated burn it finds already applied, and the record puts the issuer
+	// right. So this test proves the follower converges across repeated
+	// burns; whether a burn is skipped is TestRepeatedBurnsAllReduceIssued's,
+	// on validators, where no overlap repairs it (#4458).
 	require.Zero(t, s.diverged, "the follower executed a block other than its peers' %d times after handing off (handoffs at %v)",
 		s.diverged, handoffBlocks(s))
 	f.requireInAgreement(t)
