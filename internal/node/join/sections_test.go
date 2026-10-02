@@ -177,3 +177,61 @@ func TestAForgedSectionIsRefused(t *testing.T) {
 	require.False(t, x.NotLoaded(database.SectionOfAccount(alice)))
 	require.Equal(t, before, rootIn(t, node), "loading the section moved the root")
 }
+
+// TestABlockDiscardedAfterALoadLeavesNothingPending — #4485 review, finding
+// 8. A block that loaded a section and was discarded did not load it: the
+// accounts the gate would hand to the backfill when it commits are forgotten
+// with it, not kept for ever.
+func TestABlockDiscardedAfterALoadLeavesNothingPending(t *testing.T) {
+	peer, node, alice := sectionNotLoaded(t)
+	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}, name: "honest"}
+	x := gateOver(t, node, honest)
+
+	b := node.BeginExecuting(true)
+	_, err := b.Account(alice).Main().Get()
+	require.NoError(t, err)
+	b.Discard()
+
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	require.Empty(t, x.pending, "a discarded block's load is still pending")
+	require.True(t, x.notLoaded[database.SectionOfAccount(alice)].Load(), "a discarded block's load counts as loaded")
+}
+
+// TestALoadOfASectionCommittedSinceTheBatchBeganIsNotTakenAsLoaded — #4485
+// review, finding 8. A block's batch read its view before another commit
+// loaded the section; its view still holds the marker, and the gate no longer
+// does. Taking that as loaded reads the section's accounts as absent from a
+// view that does not hold them: the load refuses instead, and the block is
+// held and begun again.
+func TestALoadOfASectionCommittedSinceTheBatchBeganIsNotTakenAsLoaded(t *testing.T) {
+	peer, node, alice := sectionNotLoaded(t)
+	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}, name: "honest"}
+	x := gateOver(t, node, honest)
+	s := database.SectionOfAccount(alice)
+
+	b := node.BeginExecuting(true)
+	h, err := b.BPT().Get(s.MarkerKey())
+	require.NoError(t, err)
+	_, err = b.Account(alice).Main().Get()
+	require.NoError(t, err)
+	require.NoError(t, b.UpdateBPT())
+	require.NoError(t, b.Commit())
+	require.False(t, x.NotLoaded(s), "precondition: the section is not loaded")
+
+	// A view from before the commit: the in-memory store is not isolated,
+	// so the batch holds the marker in its own tree, as an isolated store's
+	// older view does.
+	stale := node.BeginExecuting(true)
+	defer stale.Discard()
+	require.NoError(t, stale.BPT().Insert(s.MarkerKey(), h))
+
+	err = x.Load(stale, s, true)
+	require.Error(t, err, "a batch whose view holds the marker took the section as loaded")
+	require.ErrorIs(t, err, errors.NotReady)
+
+	// A batch begun after the commit holds the section: loaded.
+	fresh := node.BeginExecuting(true)
+	defer fresh.Discard()
+	require.NoError(t, x.Load(fresh, s, true))
+}

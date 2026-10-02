@@ -52,6 +52,10 @@ type SectionGate interface {
 	// loaded.
 	Committed([]bpt.Section)
 
+	// Discarded says a batch that loaded the sections was discarded without
+	// committing: they are not loaded, and nothing of the load is kept.
+	Discarded([]bpt.Section)
+
 	// Opened is told of each batch a block executes in, before anything
 	// reads it: what was loaded beside the block is written into it here
 	// (WriteBeneath, MarkSectionLoaded).
@@ -148,9 +152,10 @@ type gatedChangeSet struct {
 	// held while a load reads through this change set.
 	loading sync.Mutex
 
-	mu     sync.Mutex
-	loaded map[bpt.Section]bool
-	failed error
+	mu        sync.Mutex
+	loaded    map[bpt.Section]bool
+	failed    error
+	committed bool
 }
 
 func (c *gatedChangeSet) Get(key *record.Key) ([]byte, error) {
@@ -246,10 +251,31 @@ func (c *gatedChangeSet) Commit() error {
 	if err != nil {
 		return err
 	}
+	c.mu.Lock()
+	c.committed = true
+	c.mu.Unlock()
 	if len(loaded) > 0 {
 		c.gate.Committed(loaded)
 	}
 	return nil
+}
+
+// Discard tells the gate of the sections a batch loaded and did not commit:
+// it did not load them.
+func (c *gatedChangeSet) Discard() {
+	c.mu.Lock()
+	var loaded []bpt.Section
+	if !c.committed {
+		for s := range c.loaded {
+			loaded = append(loaded, s)
+		}
+		c.loaded = nil
+	}
+	c.mu.Unlock()
+	if len(loaded) > 0 {
+		c.gate.Discarded(loaded)
+	}
+	c.ChangeSet.Discard()
 }
 
 // Loading reports whether the batch is the batch a block executes in, and has

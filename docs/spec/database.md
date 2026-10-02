@@ -306,7 +306,10 @@ account's records against it:
   writing it into the batch's change set beneath the account records, so the
   load commits with the block or is discarded with it and no account the load
   wrote is an account the block changed. The section leaves the set when the
-  batch commits.
+  batch commits; a batch discarded leaves nothing of its load behind. A
+  section the set no longer holds is loaded for a batch only if the batch's
+  own tree holds no marker for it: a view older than the commit that loaded
+  it is refused (`NotReady`), not read as holding it.
 - **A batch a validation reads loads it too**, from a peer's current state,
   and keeps what it loaded in the read-only batch's own overlay, discarded
   with it.

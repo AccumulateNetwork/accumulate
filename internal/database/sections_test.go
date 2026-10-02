@@ -82,7 +82,8 @@ func (g *peerGate) Committed(s []bpt.Section) {
 	}
 }
 
-func (g *peerGate) Opened(*Batch) {}
+func (g *peerGate) Opened(*Batch)           {}
+func (g *peerGate) Discarded([]bpt.Section) {}
 
 func putToken(t *testing.T, db *Database, u *url.URL, balance int64) {
 	t.Helper()
@@ -252,6 +253,7 @@ func (*countingGate) AnyNotLoaded() bool                   { return false }
 func (*countingGate) Load(*Batch, bpt.Section, bool) error { return nil }
 func (*countingGate) Committed([]bpt.Section)              {}
 func (*countingGate) Opened(*Batch)                        {}
+func (*countingGate) Discarded([]bpt.Section)              {}
 
 // TestTheGateCostsNothingWhenNoSectionIsNotLoaded — #4485 review, finding 6.
 // Every node past genesis runs with a gate for the life of its process, and

@@ -247,7 +247,18 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section, executing bool) er
 		if opening {
 			return errors.NotReady.WithFormat("section %d is being loaded by the join", s)
 		}
-		return nil
+		// Loaded since the read asked: by a commit this batch may not
+		// see. Its own tree says which -- a batch whose view still holds
+		// the marker does not hold the section, and taking it as loaded
+		// would read its accounts as absent.
+		_, err := batch.BPT().Get(s.MarkerKey())
+		switch {
+		case errors.Is(err, errors.NotFound):
+			return nil
+		case err != nil:
+			return errors.UnknownError.WithFormat("the marker of section %d: %w", s, err)
+		}
+		return errors.NotReady.WithFormat("section %d was loaded by a commit this batch does not see", s)
 	}
 	if err := checkMarker(batch, s, want); err != nil {
 		return err
@@ -379,6 +390,17 @@ func (x *sections) Committed(list []bpt.Section) {
 	}
 	if x.loaded != nil && len(urls) > 0 {
 		x.loaded(urls)
+	}
+}
+
+// Discarded implements [database.SectionGate]: a block that loaded the
+// sections was discarded, so the accounts it would have handed to the
+// backfill are forgotten with it.
+func (x *sections) Discarded(list []bpt.Section) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	for _, s := range list {
+		delete(x.pending, s)
 	}
 }
 
