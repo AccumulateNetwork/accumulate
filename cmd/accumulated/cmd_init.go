@@ -47,9 +47,9 @@ var cmdInit = &cobra.Command{
 
 var cmdInitNode = &cobra.Command{
 	Use:   "node <partition.network name> or <peer url>",
-	Short: "Initialize a node using the partition.network name and --seed or via a peer URL",
+	Short: "Initialize a node using the partition.network name and --seed or via a peer URL; it runs --partition, or every partition the peer runs",
 	Run: func(cmd *cobra.Command, args []string) {
-		out, err := initNode(cmd, args, 0)
+		out, err := initNode(cmd, args)
 		printOutput(cmd, out, err)
 	},
 	Args: cobra.ExactArgs(1),
@@ -71,6 +71,7 @@ var flagInitNode struct {
 	SkipVersionCheck bool
 	SeedProxy        string
 	NoPrometheus     bool
+	Partition        string
 }
 
 var flagInitDualNode struct {
@@ -116,6 +117,7 @@ func initInitFlags() {
 	cmdInitNode.Flags().BoolVar(&flagInitNode.SkipVersionCheck, "skip-version-check", false, "Do not enforce the version check")
 	cmdInitNode.Flags().StringVar(&flagInitNode.SeedProxy, "seed", "", "Fetch network configuration from seed proxy")
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.NoPrometheus, "no-prometheus", "", false, "disable prometheus")
+	cmdInitNode.Flags().StringVar(&flagInitNode.Partition, "partition", "", "The partition the node runs, Directory or a BVN's ID (default: every partition the peer runs, its Directory and its BVN)")
 
 	cmdInitDualNode.ResetFlags()
 	cmdInitDualNode.Flags().BoolVarP(&flagInitDualNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -249,18 +251,18 @@ type joinInit struct {
 
 // seedPeer asks a seed proxy for the partition's peers, checks that the proxy
 // is registered and its answers are signed, and returns a peer's address and
-// the partition's type.
-func seedPeer(ctx context.Context, arg string) (string, protocol.PartitionType, error) {
+// the partition's ID.
+func seedPeer(ctx context.Context, arg string) (string, string, error) {
 	s := strings.Split(arg, ".")
 	if len(s) != 2 {
-		return "", 0, fmt.Errorf("network must be in the form of <partition-name>.<network-name>, e.g. bvn0.mainnet")
+		return "", "", fmt.Errorf("network must be in the form of <partition-name>.<network-name>, e.g. bvn0.mainnet")
 	}
 	partitionName := s[0]
 	networkName := s[1]
 
 	seedProxy, err := proxy.New(flagInitNode.SeedProxy)
 	if err != nil {
-		return "", 0, err
+		return "", "", err
 	}
 
 	slr := proxy.SeedListRequest{}
@@ -269,18 +271,18 @@ func seedPeer(ctx context.Context, arg string) (string, protocol.PartitionType, 
 	slr.Sign = true
 	resp, err := seedProxy.GetSeedList(ctx, &slr)
 	if err != nil {
-		return "", 0, fmt.Errorf("proxy returned seeding error, %v", err)
+		return "", "", fmt.Errorf("proxy returned seeding error, %v", err)
 	}
 
 	b, err := resp.SeedList.MarshalBinary()
 	if err != nil {
-		return "", 0, fmt.Errorf("invalid seed list, %v", err)
+		return "", "", fmt.Errorf("invalid seed list, %v", err)
 	}
 	if !resp.Signature.Verify(nil, protocol.SignableHash(sha256.Sum256(b))) {
-		return "", 0, fmt.Errorf("invalid signature from proxy")
+		return "", "", fmt.Errorf("invalid signature from proxy")
 	}
 	if len(resp.Addresses) == 0 {
-		return "", 0, fmt.Errorf("no peers, cannot continue")
+		return "", "", fmt.Errorf("no peers, cannot continue")
 	}
 
 	// The node that answers must know the proxy: its registry key page must
@@ -288,11 +290,11 @@ func seedPeer(ctx context.Context, arg string) (string, protocol.PartitionType, 
 	addr := resp.Addresses[len(resp.Addresses)-1]
 	u, err := cfg.OffsetPort(addr, int(resp.BasePort), int(cfg.PortOffsetAccumulateApi))
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to parse url from network info %s, %v", addr, err)
+		return "", "", fmt.Errorf("failed to parse url from network info %s, %v", addr, err)
 	}
 	v2, err := client.New(fmt.Sprintf("http://%s:%s", u.Hostname(), u.Port()))
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to create accumulate client for %s, %v", u.String(), err)
+		return "", "", fmt.Errorf("failed to create accumulate client for %s, %v", u.String(), err)
 	}
 	kp := new(protocol.KeyPage)
 	res := new(api.ChainQueryResponse)
@@ -301,10 +303,10 @@ func seedPeer(ctx context.Context, arg string) (string, protocol.PartitionType, 
 	req.Url = protocol.AccountUrl("accuproxy.acme").JoinPath("registry", "1")
 	err = v2.RequestAPIv2(ctx, "query", req, res)
 	if err != nil {
-		return "", 0, fmt.Errorf("cannot query the accuproxy registry, %v", err)
+		return "", "", fmt.Errorf("cannot query the accuproxy registry, %v", err)
 	}
 	if _, _, found := kp.EntryByKeyHash(resp.Signature.GetPublicKeyHash()); !found {
-		return "", 0, fmt.Errorf("seed proxy is not registered")
+		return "", "", fmt.Errorf("seed proxy is not registered")
 	}
 
 	ncr := proxy.NetworkConfigRequest{}
@@ -312,17 +314,17 @@ func seedPeer(ctx context.Context, arg string) (string, protocol.PartitionType, 
 	ncr.Network = networkName
 	nc, err := seedProxy.GetNetworkConfig(ctx, &ncr)
 	if err != nil {
-		return "", 0, err
+		return "", "", err
 	}
 	d, err := nc.NetworkState.MarshalBinary()
 	if err != nil {
-		return "", 0, err
+		return "", "", err
 	}
 	if !nc.Signature.Verify(nil, protocol.SignableHash(sha256.Sum256(d))) {
-		return "", 0, fmt.Errorf("cannot verify network configuration from proxy")
+		return "", "", fmt.Errorf("cannot verify network configuration from proxy")
 	}
 	if _, _, found := kp.EntryByKeyHash(nc.Signature.GetPublicKeyHash()); !found {
-		return "", 0, fmt.Errorf("seed proxy is not registered")
+		return "", "", fmt.Errorf("seed proxy is not registered")
 	}
 	err = versionCheck(&api.VersionResponse{
 		Version:        nc.NetworkState.Version,
@@ -331,10 +333,14 @@ func seedPeer(ctx context.Context, arg string) (string, protocol.PartitionType, 
 		IsTestNet:      nc.NetworkState.IsTestNet,
 	}, "proxy")
 	if err != nil {
-		return "", 0, err
+		return "", "", err
 	}
 
-	return fmt.Sprintf("tcp://%s:%d", u.Hostname(), resp.BasePort), resp.Type, nil
+	partition := partitionName
+	if resp.Type == protocol.PartitionTypeDirectory {
+		partition = protocol.Directory
+	}
+	return fmt.Sprintf("tcp://%s:%d", u.Hostname(), resp.BasePort), partition, nil
 }
 
 // joinFromPeer asks a running DAG-BFT node, through API v3, for everything a
@@ -342,10 +348,12 @@ func seedPeer(ctx context.Context, arg string) (string, protocol.PartitionType, 
 // peer), the partition(s) to run and their genesis snapshots. A node has one
 // API, at its base port plus the API offset, whichever partition is asked for.
 //
-// With dual, the node runs the Directory and the peer's BVN. Otherwise it runs
-// the one partition asked for, or with partitionType zero, the one the peer
-// reports.
-func joinFromPeer(ctx context.Context, peer string, partitionType protocol.PartitionType, dual bool, dnGenesisFile, bvnGenesisFile string) (*joinInit, error) {
+// The node runs the partitions named, or with none named, every partition the
+// peer runs: its Directory and its BVN, the layout `init dual` writes. Each is
+// confirmed by asking the peer's consensus service for that partition, so one
+// the peer does not run is refused here rather than when the node fails to
+// join.
+func joinFromPeer(ctx context.Context, peer string, partitions []string, dnGenesisFile, bvnGenesisFile string) (*joinInit, error) {
 	netAddr, netPort, err := resolveAddrWithPort(peer)
 	if err != nil {
 		return nil, fmt.Errorf("invalid peer url %v", err)
@@ -379,37 +387,30 @@ func joinFromPeer(ctx context.Context, peer string, partitionType protocol.Parti
 		bootstrap: []multiaddr.Multiaddr{peerAddr},
 	}
 
-	if dual {
-		j.dn = true
-		bvn, ok := bvnOf(ni.Services)
-		if !ok {
-			return nil, fmt.Errorf("%s does not run a BVN", peer)
+	if len(partitions) == 0 {
+		partitions = partitionsOf(ni.Services)
+		if len(partitions) == 0 {
+			return nil, fmt.Errorf("%s runs no partition", peer)
 		}
-		j.bvn = bvn
-	} else {
-		if partitionType == 0 {
-			cs, err := accClient.ConsensusStatus(ctx, v3.ConsensusStatusOptions{NodeID: ni.PeerID.String()})
-			if err != nil {
-				return nil, fmt.Errorf("failed to get description from %s, %v", peer, err)
-			}
-			partitionType = cs.PartitionType
-			if partitionType == protocol.PartitionTypeBlockValidator {
-				j.bvn = cs.PartitionID
-			}
+	}
+	for _, id := range partitions {
+		cs, err := accClient.ConsensusStatus(ctx, v3.ConsensusStatusOptions{NodeID: ni.PeerID.String(), Partition: id})
+		if err != nil {
+			return nil, fmt.Errorf("%s does not serve partition %s: %v", peer, id, err)
 		}
-		switch partitionType {
+		if cs.PartitionID != "" {
+			id = cs.PartitionID
+		}
+		switch cs.PartitionType {
 		case protocol.PartitionTypeDirectory:
 			j.dn = true
 		case protocol.PartitionTypeBlockValidator:
-			if j.bvn == "" {
-				bvn, ok := bvnOf(ni.Services)
-				if !ok {
-					return nil, fmt.Errorf("%s does not run a BVN", peer)
-				}
-				j.bvn = bvn
+			if j.bvn != "" && !strings.EqualFold(j.bvn, id) {
+				return nil, fmt.Errorf("a node runs one BVN, not %s and %s", j.bvn, id)
 			}
+			j.bvn = id
 		default:
-			return nil, fmt.Errorf("unsupported partition type %v", partitionType)
+			return nil, fmt.Errorf("%s: unsupported partition type %v", id, cs.PartitionType)
 		}
 	}
 
@@ -625,21 +626,29 @@ func resetNodeDir(dir string) {
 	}
 }
 
-func initNode(cmd *cobra.Command, args []string, partitionType protocol.PartitionType) (string, error) {
+func initNode(cmd *cobra.Command, args []string) (string, error) {
 	if !cmd.Flag("work-dir").Changed {
 		return cmd.UsageString(), fmt.Errorf("Error: --work-dir flag is required\n\n")
 	}
 
 	peer := args[0]
+	var partitions []string
+	if flagInitNode.Partition != "" {
+		partitions = []string{flagInitNode.Partition}
+	}
 	if flagInitNode.SeedProxy != "" {
 		var err error
-		peer, partitionType, err = seedPeer(cmd.Context(), args[0])
+		var partition string
+		peer, partition, err = seedPeer(cmd.Context(), args[0])
 		if err != nil {
 			return "", fmt.Errorf("failed to configure node from seed proxy, %v", err)
 		}
+		if partitions == nil {
+			partitions = []string{partition}
+		}
 	}
 
-	j, err := joinFromPeer(cmd.Context(), peer, partitionType, false, flagInitNode.GenesisDoc, flagInitNode.GenesisDoc)
+	j, err := joinFromPeer(cmd.Context(), peer, partitions, flagInitNode.GenesisDoc, flagInitNode.GenesisDoc)
 	if err != nil {
 		return "", fmt.Errorf("failed to configure node from peer, %v", err)
 	}
@@ -744,6 +753,22 @@ func versionCheck(version *api.VersionResponse, peer string) error {
 		}
 	}
 	return nil
+}
+
+// partitionsOf names the partitions a node runs, from the consensus services
+// its node info lists: the Directory, if it runs it, then its BVN.
+func partitionsOf(services []*v3.ServiceAddress) []string {
+	var ids []string
+	for _, svc := range services {
+		if svc.Type == v3.ServiceTypeConsensus && strings.EqualFold(svc.Argument, protocol.Directory) {
+			ids = append(ids, protocol.Directory)
+			break
+		}
+	}
+	if bvn, ok := bvnOf(services); ok {
+		ids = append(ids, bvn)
+	}
+	return ids
 }
 
 // bvnOf names the BVN a node runs: the partition of its consensus service

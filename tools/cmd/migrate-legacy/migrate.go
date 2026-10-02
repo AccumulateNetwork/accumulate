@@ -9,27 +9,24 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
 	btoml "github.com/BurntSushi/toml"
 	"github.com/fatih/color"
-	"github.com/ipfs/go-cid"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
-	"github.com/multiformats/go-multibase"
-	"github.com/multiformats/go-multicodec"
 	"github.com/multiformats/go-multihash"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/cobra"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
+	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/jsonrpc"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -37,6 +34,8 @@ func init() {
 	cmdMigrate.Flags().BoolVarP(&flagMigrate.Pretend, "pretend", "n", false, "Verify the migration process without touching any files")
 	cmdMigrate.Flags().BoolVarP(&flagMigrate.Verbose, "verbose", "v", false, "Output the generated configuration in verbose form")
 	cmdMigrate.Flags().BoolVar(&flagMigrate.Try, "try", false, "Launch the node using the migrated configuration without writing it to disk")
+	cmdMigrate.Flags().StringSliceVar(&flagMigrate.Bootstrap, "bootstrap", nil, "A partition bootstrap peer, /ip4|dns/{host}/tcp/{port}/p2p/{peer ID} (repeatable)")
+	cmdMigrate.Flags().StringVar(&flagMigrate.Peer, "peer", "", "A running node (tcp://host:base-port) whose API v3 node info names the bootstrap peer")
 	cmdMigrate.MarkFlagsMutuallyExclusive("pretend", "try")
 }
 
@@ -49,9 +48,11 @@ var cmdMigrate = &cobra.Command{
 }
 
 var flagMigrate = struct {
-	Pretend bool
-	Verbose bool
-	Try     bool
+	Pretend   bool
+	Verbose   bool
+	Try       bool
+	Bootstrap []string
+	Peer      string
 }{}
 
 func preRunMigrate(cmd *cobra.Command, args []string) error {
@@ -109,6 +110,19 @@ func migrate(_ *cobra.Command, args []string) {
 		checkf(migrateCfg(cfg, cvc, flagMain.WorkDir, "dnn", dn), "dn")
 	}
 
+	peers, err := bootstrapPeers(context.Background())
+	check(err)
+	if len(peers) == 0 {
+		fmt.Fprintln(os.Stderr, color.HiYellowString("No partition bootstrap peers were carried over (CometBFT's persistent peers are not libp2p peers); the node finds peers only through [p2p] bootstrap-peers. Pass --bootstrap <multiaddr> or --peer <url> to name one."))
+	}
+	if cvc.Mode == run.CoreValidatorModeDN || cvc.Mode == run.CoreValidatorModeDual {
+		cvc.DnBootstrapPeers = peers
+	}
+	if cvc.Mode == run.CoreValidatorModeBVN || cvc.Mode == run.CoreValidatorModeDual {
+		cvc.BvnBootstrapPeers = peers
+	}
+	cfg.P2P.BootstrapPeers = addAddrs(cfg.P2P.BootstrapPeers, peers)
+
 	inst, err := run.New(context.Background(), cfg)
 	check(err)
 	cfg2, err := inst.Verify()
@@ -146,6 +160,11 @@ func migrate(_ *cobra.Command, args []string) {
 		b, err := os.ReadFile(filepath.Join(dnDir, "config", "accumulate.toml"))
 		check(err)
 		check(os.WriteFile(filepath.Join(backupDir, "dn-accumulate.toml"), b, 0600))
+	}
+	if existing := filepath.Join(flagMain.WorkDir, "accumulate.toml"); fileExists(existing) {
+		kept, err := backupFile(existing, backupDir)
+		check(err)
+		fmt.Fprintln(os.Stderr, color.HiYellowString("Replacing %s; the original is kept as %s", existing, kept))
 	}
 	check(cfg.Save())
 	if cvc.Mode == run.CoreValidatorModeBVN || cvc.Mode == run.CoreValidatorModeDual {
@@ -185,7 +204,13 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, root, dir 
 	if err != nil {
 		return fmt.Errorf("node key: %w", err)
 	}
-	cfg.P2P.Key = nodeKey
+	// A node is one libp2p identity. Main's `init dual` gave both partitions
+	// one node key; keys that differ cannot be merged without dropping one.
+	if cfg.P2P.Key == nil {
+		cfg.P2P.Key = nodeKey
+	} else if other, ok := cfg.P2P.Key.(*run.RawPrivateKey); !ok || !other.Equal(nodeKey) {
+		return fmt.Errorf("DN and BVN nodes cannot use different node keys: the node has one peer ID")
+	}
 	// old.Accumulate.Healing.Enable is deliberately dropped: healing is
 	// unconditional now — recovery is not something an operator can switch
 	// off (#4138).
@@ -270,34 +295,21 @@ func migrateCfg(cfg *run.Config, cvc *run.CoreValidatorConfiguration, root, dir 
 		fmt.Fprintln(os.Stderr, color.YellowString("(%s) Could not check for legacy [snapshots] config: %v", dir, err))
 	}
 
+	// CometBFT's persistent peers name each peer by its CometBFT node ID,
+	// which is not a libp2p identity: no node can be dialed by it, so none is
+	// carried over. Partition bootstrap peers come from --bootstrap or --peer.
+	if old.P2P.PersistentPeers != "" {
+		fmt.Fprintln(os.Stderr, color.YellowString("(%s) Dropping {tendermint} [p2p].persistent-peers: a CometBFT node ID is not a libp2p peer ID", dir))
+	}
+
 	// DN-/BVN-specific values
 	switch old.Accumulate.NetworkType {
 	case protocol.PartitionTypeBlockValidator:
 		cvc.BVN = old.Accumulate.PartitionId
 		cvc.BvnGenesis = filepath.Join(dir, old.Genesis)
-		if len(old.P2P.PersistentPeers) == 0 {
-			break
-		}
-		for _, p := range strings.Split(old.P2P.PersistentPeers, ",") {
-			addr, err := cometPeerToMultiaddr(p)
-			if err != nil {
-				return fmt.Errorf("{tendermint} [p2p].persistent-peers: %w", err)
-			}
-			cvc.BvnBootstrapPeers = append(cvc.BvnBootstrapPeers, addr)
-		}
 
 	case protocol.PartitionTypeDirectory:
 		cvc.DnGenesis = filepath.Join(dir, old.Genesis)
-		if len(old.P2P.PersistentPeers) == 0 {
-			break
-		}
-		for _, p := range strings.Split(old.P2P.PersistentPeers, ",") {
-			addr, err := cometPeerToMultiaddr(p)
-			if err != nil {
-				return fmt.Errorf("{tendermint} [p2p].persistent-peers: %w", err)
-			}
-			cvc.DnBootstrapPeers = append(cvc.DnBootstrapPeers, addr)
-		}
 
 	default:
 		return fmt.Errorf("migration of [describe].type = '%v' not yet supported", old.Accumulate.NetworkType)
@@ -335,58 +347,107 @@ func urlToListen(scope, s string, offset int) multiaddr.Multiaddr {
 	return multiaddr.StringCast(fmt.Sprintf("/ip4/%s/tcp/%d", addr, port))
 }
 
-// cometPeerToMultiaddr converts a cometbft peer address ({id}@{host}:{port}) to
-// a multiaddr peer address (/dns/{host}/tcp/{port}/p2p/{id}).
-func cometPeerToMultiaddr(s string) (multiaddr.Multiaddr, error) {
-	// Prepend tcp://
-	if !strings.Contains(s, "://") {
-		s = "tcp://" + s
+// bootstrapPeers returns the partition bootstrap peers the operator named:
+// each --bootstrap address, and the node --peer names, by the libp2p identity
+// its API v3 node info reports, on its P2P port.
+func bootstrapPeers(ctx context.Context) ([]multiaddr.Multiaddr, error) {
+	var peers []multiaddr.Multiaddr
+	for _, s := range flagMigrate.Bootstrap {
+		addr, err := multiaddr.NewMultiaddr(s)
+		if err != nil {
+			return nil, fmt.Errorf("--bootstrap %q: %w", s, err)
+		}
+		if _, err := addr.ValueForProtocol(multiaddr.P_P2P); err != nil {
+			return nil, fmt.Errorf("--bootstrap %q names no peer ID (/p2p/...)", s)
+		}
+		peers = append(peers, addr)
+	}
+	if flagMigrate.Peer == "" {
+		return peers, nil
 	}
 
-	// Parse as a URL
-	u, err := url.Parse(s)
+	host, port, err := resolveAddrWithPort(flagMigrate.Peer)
 	if err != nil {
-		return nil, fmt.Errorf("cometbft peer address: %w", err)
+		return nil, fmt.Errorf("--peer: %w", err)
 	}
-
-	// Parse peer ID
-	b, err := hex.DecodeString(u.User.Username())
+	ni, err := jsonrpc.NewClient(fmt.Sprintf("http://%s:%d/v3", host, port+int(config.PortOffsetAccumulateApi))).
+		NodeInfo(ctx, v3.NodeInfoOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("cometbft peer address: %w", err)
+		return nil, fmt.Errorf("--peer: node info: %w", err)
 	}
-
-	// Pad the hash. The result is not a valid hash, but it's sufficient for our
-	// purposes.
-	if len(b) < 32 {
-		b = append(b, make([]byte, 32-len(b))...)
+	proto := "dns"
+	if ip := net.ParseIP(host); ip != nil {
+		proto = "ip6"
+		if ip.To4() != nil {
+			proto = "ip4"
+		}
 	}
-
-	// Build a CID from the hash
-	b, err = multihash.Encode(b, multihash.SHA2_256)
+	addr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/%s/%s/tcp/%d/p2p/%s", proto, host, port+int(config.PortOffsetAccumulateP2P), ni.PeerID))
 	if err != nil {
-		return nil, fmt.Errorf("construct multihash: %w", err)
+		return nil, fmt.Errorf("--peer: %w", err)
 	}
-	id := cid.NewCidV1(uint64(multicodec.Libp2pKey), multihash.Multihash(b)).
-		Encode(multibase.MustNewEncoder(multibase.Base32))
+	return append(peers, addr), nil
+}
 
-	// Domain name or IP?
-	var proto string
-	if ip := net.ParseIP(u.Hostname()); ip == nil {
-		proto = "dns"
-	} else {
-		proto = "ip4"
-	}
-
-	// Format a multiaddr
-	a, err := multiaddr.NewMultiaddr(
-		fmt.Sprintf("/%s/%s/tcp/%s/p2p/%s",
-			proto, u.Hostname(),
-			u.Port(),
-			id))
+// isCometPeer reports whether addr names its peer by a CometBFT node ID
+// zero-padded into a sha256 multihash, as main's `accumulated migrate` (and
+// this tool, until #4490) wrote them. No libp2p node has that identity.
+func isCometPeer(addr multiaddr.Multiaddr) bool {
+	v, err := addr.ValueForProtocol(multiaddr.P_P2P)
 	if err != nil {
-		return nil, fmt.Errorf("construct multiaddr: %w", err)
+		return false
 	}
-	return a, nil
+	id, err := peer.Decode(v)
+	if err != nil {
+		return false
+	}
+	dm, err := multihash.Decode([]byte(id))
+	if err != nil {
+		return false
+	}
+	return dm.Code == multihash.SHA2_256 && len(dm.Digest) == 32 && bytes.Equal(dm.Digest[20:], make([]byte, 12))
+}
+
+// dropCometPeers removes, from a node configuration decoded to a generic
+// document, every bootstrap peer that isCometPeer, and reports whether it
+// removed any.
+func dropCometPeers(doc map[string]any) bool {
+	var changed bool
+	filter := func(m map[string]any, field string) {
+		list, ok := m[field].([]any)
+		if !ok {
+			return
+		}
+		var keep []any
+		for _, v := range list {
+			s, _ := v.(string)
+			if addr, err := multiaddr.NewMultiaddr(s); err == nil && isCometPeer(addr) {
+				fmt.Fprintln(os.Stderr, color.YellowString("Dropping %s %s: a CometBFT node ID is not a libp2p peer ID", field, s))
+				changed = true
+				continue
+			}
+			keep = append(keep, v)
+		}
+		m[field] = keep
+	}
+	if p2p, ok := doc["p2p"].(map[string]any); ok {
+		filter(p2p, "bootstrap-peers")
+	}
+	switch v := doc["configurations"].(type) {
+	case []map[string]any:
+		for _, c := range v {
+			filter(c, "dn-bootstrap-peers")
+			filter(c, "bvn-bootstrap-peers")
+		}
+	case []any:
+		for _, c := range v {
+			if c, ok := c.(map[string]any); ok {
+				filter(c, "dn-bootstrap-peers")
+				filter(c, "bvn-bootstrap-peers")
+			}
+		}
+	}
+	return changed
 }
 
 // warnLegacySnapshotsConfig scans <dir>/config/accumulate.toml for the
@@ -449,6 +510,9 @@ func convertConfigFile(file string) {
 
 	changed, err := convertKeyRefs(doc, filepath.Dir(file))
 	checkf(err, "convert keys")
+	if dropCometPeers(doc) {
+		changed = true
+	}
 	if !changed {
 		color.Green("%s names no CometBFT key file: nothing to convert", file)
 		return
@@ -466,9 +530,28 @@ func convertConfigFile(file string) {
 		return
 	}
 
-	backup := filepath.Join(filepath.Dir(file), "backup")
-	check(os.MkdirAll(backup, 0700))
-	check(os.WriteFile(filepath.Join(backup, "accumulate.toml"), b, 0600))
+	kept, err := backupFile(file, filepath.Join(filepath.Dir(file), "backup"))
+	check(err)
 	check(os.WriteFile(file, out.Bytes(), 0600))
-	color.Green("Keys converted; the original is in %s", backup)
+	color.Green("Keys converted; the original is kept as %s", kept)
+}
+
+// backupFile copies file into dir, under its own name or, when an earlier
+// backup has that name, the first free name.N, and returns the copy's path. A
+// backup is never overwritten: the first is the node's original.
+func backupFile(file, dir string) (string, error) {
+	b, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	err = os.MkdirAll(dir, 0700)
+	if err != nil {
+		return "", err
+	}
+	name := filepath.Base(file)
+	dst := filepath.Join(dir, name)
+	for i := 1; fileExists(dst); i++ {
+		dst = filepath.Join(dir, fmt.Sprintf("%s.%d", name, i))
+	}
+	return dst, os.WriteFile(dst, b, 0600)
 }

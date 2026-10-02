@@ -113,13 +113,43 @@ They ask the peer's node info (at the peer's base port, where its one API is)
 for its libp2p identity and partitions, fetch each partition's genesis from
 that node, and write the layout `init network` writes for a node: one
 `accumulate.toml` with a core-validator (or, with `--follow`, follower)
-configuration — `DN`, `BVN` or, for `init dual`, `Dual` — its node and
+configuration — `DN`, `BVN` or `Dual` — its node and
 validator keys inline, `join-running-network` set, and the genesis snapshots
 beside it (`directory-genesis.snap`, `{bvn}-genesis.snap`). The peer is the
 bootstrap peer, at `/ip4|dns/{host}/tcp/{base+2}/p2p/{id}`. `--genesis-doc`
 (`--dn-genesis-doc`, `--bvn-genesis-doc`) supplies a snapshot from a file
 instead. `init` never overwrites an existing `accumulate.toml`; `--reset`
 removes it first.
+
+**Which partitions.** A DAG-BFT node has one API, so the peer's port no longer
+says which partition is meant (on main it did: the DN and BVN had separate
+base ports). `init node --partition <id>` names it — `Directory` or a BVN's
+ID, in any case. Without it the node runs **every partition the peer runs**:
+the consensus services its node info lists, the Directory and its BVN, which
+is what `init dual` writes; against a peer that runs only a BVN, a `BVN` node.
+Each partition is confirmed by asking the peer's `consensus-status` with that
+partition set, and its type and canonical ID come from the answer; a
+partition the peer does not run is refused at `init`, naming it. `init dual`
+is the default case that insists on both. With `--seed`, the seed proxy's
+`<partition>.<network>` names the partition unless `--partition` does (#4489).
+
+**The node key is the node's identity.** A node's libp2p peer ID is its
+node key (`p2p.key`); `init` writes it inline, so it is the same at every
+start. A configuration that names no node key does not silently start under a
+new one (#4490):
+
+- a **core validator refuses to start**, naming the file: its peer ID is bound
+  in its committee and named in its peers' bootstrap lists, so a new identity
+  would strand both, and a generated key would hide the operator's mistake
+  rather than fix it;
+- a **follower is given one**: the node generates a key, appends it to its
+  TOML configuration as an inline raw key (the operator's text is kept as it
+  was), and logs that it did, so every later start has that identity. Nothing
+  is bound to a follower's identity until it first runs, so making it is safe;
+  a follower with no TOML file to write to refuses, as a validator does;
+- any other configuration (a gateway, a devnet) keeps the transient key it
+  always had, which warns when it is made. An explicit `type = "transient"`
+  key is the operator's choice and is honoured.
 
 A node initialized for CometBFT is converted by the standalone
 `tools/cmd/migrate-legacy` (see "Converting a mainnet node"). A node never
@@ -165,6 +195,28 @@ a core validator or follower with no `p2p.key`, from
 knows neither key type (their numbers, 4 and 5, stay unassigned): a
 configuration that still names one fails to load with a message pointing at
 the tool.
+
+A node is one libp2p identity, so `dnn/` and `bvnn/` must hold the same node
+key (main's `init dual` wrote one); the tool **refuses keys that differ**,
+for node keys as for validator keys, rather than keep one and drop the other.
+**Nothing it replaces is lost**: each partition's `accumulate.toml`, and any
+`<work>/accumulate.toml` it is about to write over, is copied into
+`<work>/backup/` first; a backup is never overwritten (a later one is named
+`accumulate.toml.1`, `.2`, …) (#4490).
+
+**Bootstrap peers are never made up.** CometBFT's `persistent_peers` name
+each peer by its CometBFT node ID, which is not a libp2p identity; main's
+`migrate` zero-padded it into a peer ID that no node has, so every such peer
+failed its identity check on dial. The tool carries none of them over, and
+drops any already written that way from a configuration main's `migrate`
+converted. A node converted from the CometBFT layout gets the partition
+bootstrap peers the operator names (a configuration main's `migrate` wrote
+keeps the real ones it has): `--bootstrap <multiaddr>` (with its `/p2p/` peer ID), or
+`--peer <url>`, a running node whose API v3 node info gives its libp2p
+identity, as `init node` takes it. When there are none, the tool says so;
+the node then finds peers only through `[p2p] bootstrap-peers`, which the
+CometBFT-era `accumulate.toml` already held as libp2p addresses and which are
+kept (#4490).
 
 **The database (future work).** Converting a mainnet node's database to
 what a DAG-BFT node holds is not built. When it is, it belongs here and in

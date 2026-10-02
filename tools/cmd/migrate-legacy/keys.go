@@ -136,6 +136,7 @@ func convertKeyRefs(doc map[string]any, dir string) (bool, error) {
 		}
 		file := filepath.Join(dir, part, "config", "node_key.json")
 		if _, err := os.Stat(file); err != nil {
+			fmt.Fprintf(os.Stderr, "No p2p.key and no %s: the converted configuration names no node key; a validator will refuse to start, a follower will generate one (#4490)\n", file)
 			continue
 		}
 		key, err := readCometKey(file)

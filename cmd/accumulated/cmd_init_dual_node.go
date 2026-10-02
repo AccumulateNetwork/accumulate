@@ -39,8 +39,11 @@ func initDualNode(cmd *cobra.Command, args []string) {
 	}
 
 	flagInitNode.SkipVersionCheck = flagInitDualNode.SkipVersionCheck
-	j, err := joinFromPeer(cmd.Context(), args[0], 0, true, flagInitDualNode.DnGenesis, flagInitDualNode.BvnGenesis)
+	j, err := joinFromPeer(cmd.Context(), args[0], nil, flagInitDualNode.DnGenesis, flagInitDualNode.BvnGenesis)
 	checkf(err, "failed to configure node from peer")
+	if !j.dn || j.bvn == "" {
+		fatalf("%s does not run both the Directory and a BVN", args[0])
+	}
 
 	if flagInit.Reset {
 		resetNodeDir(flagMain.WorkDir)

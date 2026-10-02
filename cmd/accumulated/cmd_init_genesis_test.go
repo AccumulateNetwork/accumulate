@@ -55,19 +55,18 @@ func TestInitNodeTakesGenesisFromTheNodesAPI(t *testing.T) {
 	peer := fmt.Sprintf("/ip4/127.0.0.1/tcp/%d/p2p/%s", basePort+int(config.PortOffsetAccumulateP2P), ni.PeerID)
 
 	for _, c := range []struct {
-		name string
-		typ  protocol.PartitionType
-		dual bool
-		mode run.CoreValidatorMode
-		dn   []byte
-		bvn  []byte
+		name       string
+		partitions []string
+		mode       run.CoreValidatorMode
+		dn         []byte
+		bvn        []byte
 	}{
-		{"Directory", protocol.PartitionTypeDirectory, false, run.CoreValidatorModeDN, dnWant, nil},
-		{"BVN", protocol.PartitionTypeBlockValidator, false, run.CoreValidatorModeBVN, nil, bvnWant},
-		{"Dual", 0, true, run.CoreValidatorModeDual, dnWant, bvnWant},
+		{"Directory", []string{protocol.Directory}, run.CoreValidatorModeDN, dnWant, nil},
+		{"BVN", []string{"BVN1"}, run.CoreValidatorModeBVN, nil, bvnWant},
+		{"Dual", nil, run.CoreValidatorModeDual, dnWant, bvnWant},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			j, err := joinFromPeer(context.Background(), peerURL, c.typ, c.dual, "", "")
+			j, err := joinFromPeer(context.Background(), peerURL, c.partitions, "", "")
 			require.NoError(t, err)
 			require.Equal(t, c.dn, j.dnGenesis, "init did not receive the Directory genesis the node started from")
 			require.Equal(t, c.bvn, j.bvnGenesis, "init did not receive the BVN genesis the node started from")

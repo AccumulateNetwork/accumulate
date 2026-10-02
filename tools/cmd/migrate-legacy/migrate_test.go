@@ -31,9 +31,7 @@ func TestMigrateOld(t *testing.T) {
 
 			[[configurations]]
 			bvn = "Grizzly"
-			bvn-bootstrap-peers = ["/dns/fozzie-bvn0.accumulate.defidevs.io/tcp/16691/p2p/QmVmNTZgZDEfS4NAi4bMKj9BnBLb7R1YdKmfmBH7nPwBKM"]
 			bvn-genesis = "bvnn/config/genesis.json"
-			dn-bootstrap-peers = ["/dns/fozzie-bvn0.accumulate.defidevs.io/tcp/16591/p2p/QmTaoxQm8iW3kunoJzQvDNUmeKBqz8khYKCbR38cqMb3Dq"]
 			dn-genesis = "dnn/config/genesis.json"
 			listen = "/ip4/127.0.2.1/tcp/16591"
 			max-envelopes-per-block = 100
@@ -54,7 +52,7 @@ func TestMigrateOld(t *testing.T) {
 			path = "dnn/config/node_key.json"
 			type = "cometNodeKeyFile"
 			`,
-			applyOld(t, "bvnn",
+			applyOldNodeKey(t, "bvnn", "dnn/config/node_key.json",
 				`max-envelopes-per-block = 100
 
 				[api]
@@ -368,11 +366,17 @@ func testKey(path string) ed25519.PrivateKey {
 
 func writeCometKey(t *testing.T, root, path string) {
 	t.Helper()
+	writeCometKeyAs(t, root, path, path)
+}
+
+// writeCometKeyAs writes, at path, the key the fixture writes for keyOf.
+func writeCometKeyAs(t *testing.T, root, path, keyOf string) {
+	t.Helper()
 	file := filepath.Join(root, path)
 	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0700))
 	b, err := json.Marshal(map[string]any{"priv_key": map[string]any{
 		"type":  "tendermint/PrivKeyEd25519",
-		"value": []byte(testKey(path)),
+		"value": []byte(testKey(keyOf)),
 	}})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(file, b, 0600))
@@ -393,6 +397,14 @@ type applyFunc = func(*run.Config, *run.CoreValidatorConfiguration)
 
 func applyOld(t *testing.T, dir, acc, tm string) applyFunc {
 	t.Helper()
+	return applyOldNodeKey(t, dir, "", acc, tm)
+}
+
+// applyOldNodeKey is applyOld with the partition's node key file holding
+// testKey(nodeKey) instead of its own: main's `init dual` gave both partitions
+// one node key.
+func applyOldNodeKey(t *testing.T, dir, nodeKey, acc, tm string) applyFunc {
+	t.Helper()
 	root := t.TempDir()
 	part := filepath.Join(root, dir)
 	require.NoError(t, os.MkdirAll(filepath.Join(part, "config"), 0700))
@@ -400,7 +412,11 @@ func applyOld(t *testing.T, dir, acc, tm string) applyFunc {
 	require.NoError(t, os.WriteFile(filepath.Join(part, "config", "tendermint.toml"), []byte(tm), 0600))
 	old, err := loadLegacy(part)
 	require.NoError(t, err)
-	writeCometKey(t, root, filepath.Join(dir, old.NodeKey))
+	if nodeKey == "" {
+		writeCometKey(t, root, filepath.Join(dir, old.NodeKey))
+	} else {
+		writeCometKeyAs(t, root, filepath.Join(dir, old.NodeKey), nodeKey)
+	}
 	writeCometKey(t, root, filepath.Join(dir, old.PrivValidatorKey))
 	return func(cfg *run.Config, cvc *run.CoreValidatorConfiguration) {
 		t.Helper()
