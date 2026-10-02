@@ -1389,8 +1389,19 @@ accounts; you can do that for a few blocks to ensure everything is clean, then
 stop applying the blockledger." So for the first blocks after the match the
 node executes each block and takes its block-ledger record: every account the
 record names must end in the state the record gives; where execution differs,
-the record's state stands and the difference is counted and said. After a run
-of clean blocks the node stops taking the records and executes alone. A
+the record's state stands and the difference is counted and said. **"Process
+txs then check the blockledger, over and over. That repairs any errors due to
+staging or anything. Eventually, everything settles out, and processing txs
+matches the blockledger state at every account, and then we are synced after 5
+blocks of perfect matches. If we get a mismatch, we go back to processing the
+blockledgers starting at the mismatch until everything matches again"** (Paul,
+2026-10-02). So a block whose execution differs from its record ends the
+overlap and sends the node back to the block ledger from that block: the root
+watch reports it as a divergence there (`takeMismatch`), the node is demoted,
+repairs from the block ledger, matches its anchor again, hands off, and a new
+overlap begins. After 5 blocks in a row of perfect matches (`OverlapBlocks`)
+the node stops taking the records and executes alone. A staging error is
+repaired by the same loop; nothing at the handoff pulls staging. A
 section loaded from the peers' current state during the overlap cannot make
 the root differ: the records set the states the anchor commits to (#4495).
 
@@ -1470,7 +1481,7 @@ made that the record does not hold, the ledger's own chains, and every block
 after the overlap — a cold load then is repaired as before
 (`TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`). The tests:
 `TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`,
-`TestAnExecutionThatDiffersFromItsRecordIsCountedAndTheRecordStands`,
+`TestAnExecutionThatDiffersFromItsRecordSendsTheNodeBackToTheLedger`,
 `TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired`,
 `TestARestartMidOverlapBeginsTheOverlapAgain` (test/e2e, through the
 production join, executor and API peers), and

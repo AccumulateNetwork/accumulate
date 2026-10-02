@@ -86,7 +86,7 @@ func (j *sectionsJoin) balance(n int, u *url.URL) string {
 	return acct.Balance.String()
 }
 
-// TestAnExecutionThatDiffersFromItsRecordIsCountedAndTheRecordStands: at the
+// TestAnExecutionThatDiffersFromItsRecordSendsTheNodeBackToTheLedger: at the
 // handoff, the fresh node's copy of an account in a section it holds loaded is
 // made wrong behind its executor's back -- its main state, not its leaf, so the
 // proven root still stands -- and a transfer to the account is executed by the
@@ -95,7 +95,7 @@ func (j *sectionsJoin) balance(n int, u *url.URL) string {
 // the difference is counted, the record's state is written, and the node's
 // root is its anchor's: no divergence and no repair. The overlap is held open
 // for the test (SetOverlapBlocks), whatever the number of blocks collected.
-func TestAnExecutionThatDiffersFromItsRecordIsCountedAndTheRecordStands(t *testing.T) {
+func TestAnExecutionThatDiffersFromItsRecordSendsTheNodeBackToTheLedger(t *testing.T) {
 	j := prepareSectionsJoin(t)
 	state := j.part.NodeJoinState(j.fresh)
 	state.SetOverlapBlocks(1 << 20)
@@ -132,8 +132,9 @@ func TestAnExecutionThatDiffersFromItsRecordIsCountedAndTheRecordStands(t *testi
 	require.NotNil(t, target, "the join never handed off")
 	require.True(t, w.done(), "the node did not come to agree with its peers")
 	require.Empty(t, buf.refused)
-	require.Empty(t, w.demoted, "the node's root differed from its anchor: the record did not stand")
 	require.NotZero(t, state.Overlap().Differences, "the difference was not counted")
+	require.NotEmpty(t, state.Overlap().Returns, "the difference did not send the node back to the block ledger")
+	requireOnlyOverlapReturns(t, w.demoted, state, "the node's root differed from its anchor")
 	require.Equal(t, j.balance(0, target), j.balance(j.fresh, target), "the record's state does not stand")
 }
 
@@ -232,5 +233,5 @@ func TestARestartMidOverlapBeginsTheOverlapAgain(t *testing.T) {
 	})
 	require.True(t, w.done(), "the restarted node did not come to agree with its peers")
 	require.Greater(t, again.From, mid.From, "the overlap did not begin again at the restarted join's match")
-	require.Empty(t, w.demoted)
+	requireOnlyOverlapReturns(t, w.demoted, restarted, "the restarted node")
 }

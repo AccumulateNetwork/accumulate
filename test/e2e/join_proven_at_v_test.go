@@ -295,10 +295,41 @@ func (s *provenState) HandedOff(q uint64) {
 
 func (s *provenState) Diverged(ctx context.Context) (uint64, bool, error) {
 	n, d, err := s.steppingState.Diverged(ctx)
-	if d {
+	if d && !overlapReturned(s.State, n) {
 		s.diverged++
 	}
 	return n, d, err
+}
+
+// overlapReturned reports whether a divergence at n was the overlap sending
+// the node back to the block ledger at a block whose execution differed from
+// its record -- the repair Paul's rule makes, not an anchor mismatch.
+func overlapReturned(state any, n uint64) bool {
+	o, ok := state.(interface{ Overlap() join.OverlapStatus })
+	if !ok {
+		return false
+	}
+	for _, r := range o.Overlap().Returns {
+		if r == n {
+			return true
+		}
+	}
+	return false
+}
+
+// requireOnlyOverlapReturns fails if the node was demoted at any block the
+// overlap did not send it back to the block ledger from.
+func requireOnlyOverlapReturns(t testing.TB, demoted []uint64, st interface{ Overlap() join.OverlapStatus }, msg string) {
+	t.Helper()
+	returns := map[uint64]bool{}
+	for _, r := range st.Overlap().Returns {
+		returns[r] = true
+	}
+	for _, n := range demoted {
+		if !returns[n] {
+			t.Fatalf("%s: demoted at %d, not a block the overlap returned to the block ledger from (demoted %v, returns %v)", msg, n, demoted, st.Overlap().Returns)
+		}
+	}
 }
 
 // movingLedger steps the network before every read of the partition ledger.

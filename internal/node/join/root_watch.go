@@ -68,6 +68,17 @@ func (s *PulledState) HandedOff(q uint64) {
 // changed nothing, so its entry is the root after N. A block with no entry
 // after it has not been followed by one yet, and is checked on a later call.
 func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
+	// A block the overlap found executed other than its block-ledger record
+	// is a divergence at that block, whatever its root: the node goes back
+	// to the block ledger from the block before it (executor spec, §3a, "The
+	// handoff is an overlap"; Paul, 2026-10-02).
+	if s.overlap != nil {
+		if n, ok := s.overlap.takeMismatch(); ok {
+			s.RepairFrom(n - 1)
+			return n, true, nil
+		}
+	}
+
 	err := s.readAnchors(ctx)
 	if err != nil {
 		return 0, false, errors.UnknownError.WithFormat("read this partition's anchors: %w", err)

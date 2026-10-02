@@ -69,6 +69,15 @@ type overlap struct {
 	differences int64
 	endedAt     uint64
 
+	// mismatch is the first block of this overlap whose execution left an
+	// account other than its record: the join goes back to the block ledger
+	// from there (takeMismatch). Zero when there is none.
+	mismatch uint64
+
+	// returns is every block at which an overlap sent the node back to the
+	// block ledger, since the process started.
+	returns []uint64
+
 	// held is what settle took for the block being executed, for verify.
 	// Only the goroutine executing blocks touches it.
 	held *settling
@@ -85,12 +94,9 @@ type settling struct {
 }
 
 // OverlapBlocks is how many blocks in a row with no difference end the
-// overlap. Eight: a handoff executes the groups it collected while it pulled
-// before it reaches the frontier, and the run that measured it buffered eight
-// (#4398, run 20260924T052134Z); those are the blocks a section loaded from
-// the peers' current state can be ahead of. Eight blocks also hold at least
-// two anchored blocks at rest, where a partition anchors every fourth.
-const OverlapBlocks = 8
+// overlap: "we are synced after 5 blocks of perfect matches" (Paul,
+// 2026-10-02).
+const OverlapBlocks = 5
 
 // overlapAsk bounds how long a block asks the peers for its record: each is
 // asked once, and a peer that has not produced the block is not waited for.
@@ -623,7 +629,17 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 		o.frontier++
 	}
 	if diffs > 0 {
+		// "If we get a mismatch, we go back to processing the blockledgers
+		// starting at the mismatch until everything matches again" (Paul,
+		// 2026-10-02): the join takes it as a divergence at n
+		// (takeMismatch), repairs from the block ledger there, and the
+		// next match begins the overlap again.
 		o.clean = 0
+		if o.mismatch == 0 {
+			o.mismatch = n
+			o.log.Info("Execution differs from the block ledger; going back to the block ledger from this block",
+				"partition", o.partition, "block", n, "differences", diffs)
+		}
 		return
 	}
 	o.clean++
@@ -636,6 +652,22 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 		"partition", o.partition, "block", n, "proven", o.from, "checked", o.checked, "frontier", o.frontier, "differences", o.differences)
 }
 
+// takeMismatch reports the block at which this overlap's execution first
+// differed from the block ledger, once, and ends the overlap: the node goes
+// back to the block ledger from there.
+func (o *overlap) takeMismatch() (uint64, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	n := o.mismatch
+	if n == 0 {
+		return 0, false
+	}
+	o.mismatch = 0
+	o.active = false
+	o.returns = append(o.returns, n)
+	return n, true
+}
+
 // OverlapStatus is what the overlap has done since the last match.
 type OverlapStatus struct {
 	Active      bool
@@ -644,6 +676,10 @@ type OverlapStatus struct {
 	Checked     int    // blocks settled against their record
 	Frontier    int    // blocks no peer had produced when they were settled
 	Differences int64  // accounts and chains a record settled, since the process started
+	// Returns is every block at which an overlap sent the node back to the
+	// block ledger, since the process started: a demotion at one of these is
+	// the overlap's repair, not an anchor mismatch.
+	Returns []uint64
 }
 
 // SetOverlapBlocks sets how many clean blocks in a row end the overlap, for a
@@ -660,7 +696,7 @@ func (s *PulledState) Overlap() OverlapStatus {
 	o := s.overlap
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return OverlapStatus{Active: o.active, From: o.from, EndedAt: o.endedAt, Checked: o.checked, Frontier: o.frontier, Differences: o.differences}
+	return OverlapStatus{Active: o.active, From: o.from, EndedAt: o.endedAt, Checked: o.checked, Frontier: o.frontier, Differences: o.differences, Returns: append([]uint64(nil), o.returns...)}
 }
 
 // SettleBlock implements [database.BlockSettler].

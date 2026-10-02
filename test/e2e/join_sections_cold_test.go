@@ -45,6 +45,10 @@ func TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord(t *testing.T) {
 	j := prepareSectionsJoin(t)
 	sim := j.sim
 	state := j.part.NodeJoinState(j.fresh)
+	// The deposit lands some blocks after the match; the overlap must still be
+	// running then, or the block is a cold load after the overlap, which the
+	// root watch repairs (TestTheOverlapEndsAfterItsCleanRunAndALaterColdLoadIsRepaired).
+	state.SetOverlapBlocks(20)
 
 	var target *url.URL
 	var deposited uint64
@@ -107,7 +111,7 @@ func TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord(t *testing.T) {
 	require.NotNil(t, target, "the join never handed off")
 	require.Empty(t, buf.refused, "the block that wrote the cold account was held: the handoff could not produce it")
 	require.True(t, w.done(), "the node did not come to agree with its peers within %d rounds", rounds)
-	require.Empty(t, w.demoted, "the node's root differed from its anchor after the block that wrote the cold account: the overlap did not settle it")
+	requireOnlyOverlapReturns(t, w.demoted, state, "the node's root differed from its anchor after the block that wrote the cold account")
 	require.NotZero(t, state.Overlap().Differences, "the overlap found nothing to settle: the cold account's section was not taken as its peers hold it now")
 
 	var got, want *TokenAccount
