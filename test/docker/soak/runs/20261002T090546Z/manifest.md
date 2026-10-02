@@ -113,3 +113,72 @@ Config as run is frozen in `config/` (soak.conf + override.conf, the compose and
 2026-10-02T14:37:28Z DIAGNOSTIC: acc-bvn1-fol1 stopped (docker stop) to copy its BVN1 store for an offline read of the Directory root chain's element-index records
 2026-10-02T14:53:35Z STOP: load generator interrupted (Paul: reset the network and redo the tests on the fix branch); harness tears down
 ```
+
+## Stopped early by stallkill
+
+- stopped (UTC, the decision): 2026-10-02T14:55:25Z
+- evidence capture ended, load generator signalled (UTC): 2026-10-02T14:55:58Z (33 s after the decision)
+- reason: monitor unreachable for 120s
+
+Evidence was captured from the decision on; see the probe-* directory
+written as the capture began. The network ran on, under load and chaos,
+until the capture ended.
+| follower start rejoined (per partition, the add-follower and every restart; same reading as the validators' row) | rejoined 16 of 28 start(s) after the launch, worst 776.7s from container start to executing with its partition (acc-bvn3-fol2 directory); NOT rejoined: acc-bvn1-fol1 bvn1 (gauge ACTIVE at 49.0s; anchor disagrees with its peers: block 10824 root c11fb69a, its peers' 5ee6139b (and 1 more)); acc-bvn1-fol1 bvn1 (gauge ACTIVE at 59.4s; anchor disagrees with its peers: block 11501 root 0603ecea, its peers' 0603ecea (and 3 more)); acc-bvn1-fol1 bvn1 (gauge ACTIVE at 293.5s; anchor disagrees with its peers: block 12477 root 6f2587ac, its peers' cf46e1f2 (and 7 more)); acc-bvn1-fol1 bvn1 (never ACTIVE (BOOTING); silent since 2026-10-02T14:37:21Z: its last answer, 974s before the end, was executed 16894; the partition was at 20316 at the end; anchor agreement not measured: it stated no bvn1 anchor after its start); acc-bvn1-fol1 directory (never ACTIVE (BOOTING); silent since 2026-10-02T14:37:21Z: its last answer, 974s before the end, was executed 16733; the partition was at 19829 at the end; anchor agreement not measured: it stated no directory anchor after its start); acc-bvn2-fol1 bvn2 (gauge ACTIVE at 169.5s; anchor disagrees with its peers: block 10762 root 98d3fdd7, its peers' 98d3fdd7 (and 3 more)); acc-bvn2-fol1 bvn2 (gauge ACTIVE at 53.2s; anchor disagrees with its peers: block 11425 root d7734095, its peers' d7734095 (and 4 more)); acc-bvn2-fol1 bvn2 (gauge ACTIVE at 67.2s; anchor disagrees with its peers: block 12388 root f9fa422e, its peers' c40057bb); acc-bvn3-fol2 bvn3 (gauge ACTIVE at 250.4s; anchor disagrees with its peers: block 11479 root 13ae5078, its peers' 6c0f053b (and 2 more)); acc-bvn3-fol2 bvn3 (gauge ACTIVE at 358.8s; anchor disagrees with its peers: block 12436 root 780a4353, its peers' afdce049 (and 5 more)); not established: acc-bvn3-fol1 bvn3 (gauge ACTIVE at 13.0s; anchor agreement not measured: it stated no bvn3 anchor after its start); acc-bvn3-fol2 bvn3 (gauge ACTIVE at 10.0s; anchor agreement not measured: it stated no bvn3 anchor after its start); superseded: acc-bvn1-fol1 bvn1 (restarted again at 2026-10-02T14:05:48Z, before it was ACTIVE); acc-bvn1-fol1 directory (restarted again at 2026-10-02T14:05:48Z, before it was ACTIVE); 2 started before the monitor's first sample (the network's launch: not judged) |
+
+**Stranded across disturbances (#4364).** The criterion is that the
+figure does not climb between disturbances and that every step is
+attributable to one of them — these counters never clear, so this is
+a cumulative loss, not a level. Two different numbers, so both are
+here: a **step** is what a disturbance cost, and a **creep** is the
+climb in the quiet stretch between two of them. The criterion's
+number is `largest climb between disturbances`.
+
+Settled means the MINIMUM over a window, because the figure jitters
+by whatever is in flight between samples and a single reading is not
+a level. The windows are LOCAL — 120s either
+side of the disturbance, four samples at the 30s cadence and well
+inside the chaos cadence — so a rise in the middle of a quiet
+stretch is a creep and not the next disturbance's step. The
+after-window starts 60s late, because the
+sample at the disturbance's own second still reads the pre-effect
+level: a relay has to time out before it gives up, so the loss
+shows a sample later and a floor taken from that second would
+print the step as 0 and the loss as the creep after it. The sample
+AT the disturbance is in neither window. A window clamped by a
+neighbouring event says so, and there the step and the creep beside
+it are not separable. A pause is dated at its un-pause.
+
+| disturbance | stranded |
+|---|---|
+| stranded across disturbances | chaos off — no disturbances to attribute steps to |
+
+**Per add-follower and remove-follower (#4364).** Each add is read
+over that container's life only, from its `add-follower` line to
+its `remove-follower`; a quantity the life did not record reads
+`not measured`. A removal is judged on the readings
+30s either side of it.
+
+| event | verdict |
+|---|---|
+| 12:10Z remove-follower acc-bvn1-fol1 (removal 1) | not measured (no `follower-removal-1-{before,at,after}.json`) |
+| 12:10Z remove-follower acc-bvn3-fol2 (removal 2) | not measured (no `follower-removal-2-{before,at,after}.json`) |
+| 12:10Z remove-follower acc-bvn2-fol1 (removal 3) | not measured (no `follower-removal-3-{before,at,after}.json`) |
+| 12:10Z add-follower acc-bvn1-fol1 | container start → ACTIVE 60.0s (bvn1 49.0s, directory 60.0s); behind at hand-off BVN1 1, Directory ? blocks (sample 12:11:03Z); first in agreement not measured; NotReady before ACTIVE on 73 read(s): BVN1 query, Directory query; accepted 942, relayed-taken 942 (100.0% of accepted), stranded 0 (as of 12:21:28Z) |
+| 12:10Z add-follower acc-bvn3-fol2 | container start → ACTIVE 65.3s (bvn3 60.0s, directory 65.3s); behind at hand-off BVN3 ?, Directory 0 blocks (sample 12:11:34Z); first in agreement not measured; NotReady before ACTIVE on 76 read(s): BVN3 query, Directory query; accepted 411, relayed-taken 411 (100.0% of accepted), stranded 0 (as of 12:21:28Z) |
+| 12:10Z add-follower acc-bvn2-fol1 | container start → ACTIVE 169.5s (bvn2 169.5s, directory 65.3s); behind at hand-off BVN2 ?, Directory 0 blocks (sample 12:13:07Z); first in agreement not measured; NotReady before ACTIVE on 156 read(s): BVN2 query, Directory query; accepted 765, relayed-taken 765 (100.0% of accepted), stranded 0 (as of 12:21:28Z) |
+| 12:21Z remove-follower acc-bvn1-fol1 (removal 4) | not measured (no `follower-removal-4-{before,at,after}.json`) |
+| 12:21Z remove-follower acc-bvn3-fol2 (removal 5) | not measured (no `follower-removal-5-{before,at,after}.json`) |
+| 12:21Z remove-follower acc-bvn2-fol1 (removal 6) | not measured (no `follower-removal-6-{before,at,after}.json`) |
+| 12:21Z add-follower acc-bvn1-fol1 | container start → ACTIVE 59.4s (bvn1 59.4s, directory 59.4s); behind at hand-off BVN1 1, Directory 0 blocks (sample 12:22:43Z); first in agreement not measured; NotReady before ACTIVE on 79 read(s): BVN1 query, Directory query; accepted 1201, relayed-taken 1201 (100.0% of accepted), stranded 0 (as of 12:37:19Z) |
+| 12:21Z add-follower acc-bvn3-fol2 | container start → ACTIVE 250.4s (bvn3 250.4s, directory 59.4s); behind at hand-off BVN3 0, Directory 0 blocks (sample 12:25:46Z); first in agreement not measured; NotReady before ACTIVE on 141 read(s): BVN3 query, Directory query; accepted 550, relayed-taken 550 (100.0% of accepted), stranded 0 (as of 12:37:19Z) |
+| 12:21Z add-follower acc-bvn2-fol1 | container start → ACTIVE 59.4s (bvn2 53.2s, directory 59.4s); behind at hand-off BVN2 ?, Directory 0 blocks (sample 12:22:43Z); first in agreement not measured; NotReady before ACTIVE on 79 read(s): BVN2 query, Directory query; accepted 697, relayed-taken 697 (100.0% of accepted), stranded 0 (as of 12:37:19Z) |
+| 12:37Z remove-follower acc-bvn1-fol1 (removal 7) | not measured (no `follower-removal-7-{before,at,after}.json`) |
+| 12:37Z remove-follower acc-bvn3-fol2 (removal 8) | not measured (no `follower-removal-8-{before,at,after}.json`) |
+| 12:37Z remove-follower acc-bvn2-fol1 (removal 9) | not measured (no `follower-removal-9-{before,at,after}.json`) |
+| 12:37Z add-follower acc-bvn1-fol1 | container start → ACTIVE 293.5s (bvn1 293.5s, bvn1 12.0s, directory 67.2s, directory 12.0s); behind at hand-off BVN1 0, Directory 0 blocks (sample 12:47:29Z); first in agreement not measured; NotReady before ACTIVE on 308 read(s): BVN1 query, Directory query; accepted 1607, relayed-taken 1607 (100.0% of accepted), stranded 0 (as of 14:36:58Z) |
+| 12:37Z add-follower acc-bvn3-fol2 | container start → ACTIVE 358.8s (bvn3 358.8s, bvn3 10.0s, directory 67.2s, directory 10.0s); behind at hand-off BVN3 0, Directory 0 blocks (sample 12:47:29Z); first in agreement not measured; NotReady before ACTIVE on 261 read(s): BVN3 query, Directory query; accepted 3613, relayed-taken 3516 (97.3% of accepted), stranded 97 (as of 14:53:35Z) |
+| 12:37Z add-follower acc-bvn2-fol1 | container start → ACTIVE 67.2s (bvn2 67.2s, bvn2 11.0s, directory 67.2s, directory 11.0s); behind at hand-off BVN2 0, Directory 0 blocks (sample 12:47:29Z); first in agreement not measured; NotReady before ACTIVE on 197 read(s): BVN2 query, Directory query; accepted 4648, relayed-taken 4648 (100.0% of accepted), stranded 0 (as of 14:53:35Z) |
+
+Full detail in `follower-report.md`; the per-sample series in `follower.csv`.
+
+Raw: `soak.log`, `monitor.csv`, `mem.csv` (every node, with its role), `submissions.csv`, `chaos.log`, `nodestate.csv`, `loadgen-stats.json`, `readprobe.csv` / `readprobe-report.md`, `follower.csv` / `follower-report.md`, `readprobe-follower.csv`, `follower-removal-N-{before,at,after}.json`, `network-definition.json`.
