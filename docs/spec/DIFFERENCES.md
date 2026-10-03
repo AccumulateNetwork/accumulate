@@ -1821,6 +1821,23 @@ upgraded all at once, onto builds that carry it. The entry goes when no
 deployment runs an older build.
 
 
+### C15. A restored or rejoining node catches up in the live protocol
+
+*[#4515](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4515), PLAN R8-2*
+
+consensus.md, "Restart": a restored or rejoining node is in catch-up until
+it is within a round of the frontier. Before that it authors nothing, votes
+on nothing, holds no frontier certificate, and inserts rounds in order on
+one goroutine. The code starts the primary live at once. It authors and
+votes from its restored round, holds gossiped frontier certificates in its
+pending buffer, and inserts from three goroutines: the gossip loop, the
+sync-response goroutine and its own-certificate path. What made that wedge
+for good was a missed release, fixed in the live protocol (`1b2e27224`).
+The burst remains: 197 dropped votes in a restored node's first second.
+Catch-up is built if PLAN R8-1's Docker run shows restart catch-up still slow
+or bursty. Otherwise this entry records a design that is decided and not yet
+needed.
+
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
 *[#4420](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4420)*

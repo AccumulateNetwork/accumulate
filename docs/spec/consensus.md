@@ -532,6 +532,37 @@ sixteen blocks later. A node restarted with a checkpoint more than
 `DAGGCDepth` below the frontier is not seeded this way (DIFFERENCES,
 "Seeding").
 
+**A restored or rejoining node catches up before it takes part** (Paul,
+2026-10-03: "What I think we need to do on boot is to slow down the whole
+process where we focus on serializing steps that in a fully running
+protocol does not require serialization"). After `Node.Restore` or
+`Node.Rejoin` the primary is in **catch-up**, not live:
+
+- **It authors nothing and votes on nothing.** Its last authored round is
+  still never authored again (`RestoreAuthored`).
+- **Gossiped certificates above the round after its own are not held.** A
+  frontier certificate only tells the node how far the frontier is. A node
+  far behind could otherwise fill its pending buffer with certificates it
+  cannot prune, since they are above its round, and refuse the ones it needs.
+- **One goroutine catches up in round order.** It asks for whole rounds from
+  the highest round at which its DAG holds a quorum of certificates, inserts
+  each round's certificates parents-first, asks by digest for any parent a
+  round still lacks, and moves to the next round only when the one before is
+  in. No other path inserts into the DAG while it runs.
+- **It goes live within one round of the frontier.** That is the highest
+  round it has seen certified. From then on it is the protocol above, with
+  gossip, authoring and voting. A frontier more than `DAGGCDepth` rounds
+  ahead cannot be caught up from peers, and the node rejoins from a pulled
+  state as a node with no checkpoint does.
+
+A running node a round or two behind the frontier needs none of this. The
+round catch-up above serves it. Catch-up removes the burst a restart meets: a restored Directory
+node dropped 197 votes in its first second (run `20261003T191744Z`). It also
+removes the frontier filling the buffer. It was not what fixed #4515, which
+was a release missed in the live protocol too (Certificate catch-up). It is
+built only if the Docker proof of that fix (PLAN R8-1) still shows restart
+catch-up slow or bursty (DIFFERENCES, C15).
+
 **What it does not do is execute from there.** A restart is a join
 (executor.md, "Sync"): the node keeps every committed block in a buffer
 instead of executing it, pulls the state a signed anchor proves, takes the
