@@ -178,7 +178,12 @@ type PulledState struct {
 	// noOwnSaid is when Resumable last said the node has no block of its
 	// own to resume from (#4508).
 	noOwnSaid time.Time
-	agreedAt  atomic.Uint64
+	// peersHighest is the highest executed block a joining peer stated in
+	// its refusal during the last peer round (#4501); lowerSaid is when
+	// Resumable last said a peer holds a higher state.
+	peersHighest uint64
+	lowerSaid    time.Time
+	agreedAt     atomic.Uint64
 
 	// checked is executed, for the backfill's lines: the backfill reads it
 	// beside the root watch, which writes executed.
@@ -544,6 +549,13 @@ var mBackfillLeft = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	Name:      "backfill_accounts_left",
 	Help:      "Accounts taken by their chain heads alone and not yet backfilled whole",
 }, []string{"partition"})
+
+// ResumeSlack is how far behind the highest state a peer states a node may
+// stand and still resume from its own block after a whole restart: the bound
+// on how far an executor lags its consensus position (primary
+// DefaultMaxExecutionLag, 8 blocks), which is how far validators' executed
+// blocks differ at a kill while their consensus positions coincide (#4501).
+const ResumeSlack = 8
 
 // stallSayEvery is how often a stall, and a refusal repeated word for word,
 // is said again.
@@ -1522,13 +1534,20 @@ func (s *PulledState) peersBlock(ctx context.Context) (peersAt, error) {
 	var at []named
 	var last error
 	var joining, other int
-	defer func() { s.peersJoining = joining > 0 && uint64(other) < s.signingThreshold() }()
+	var highest uint64
+	defer func() {
+		s.peersJoining = joining > 0 && uint64(other) < s.signingThreshold()
+		s.peersHighest = highest
+	}()
 	for _, src := range srcs {
 		s.wait.on(stepPeersBlock, "peer", src)
 		n, err := ledgerIndexOf(ctx, src, s.partition)
 		switch {
 		case nodestate.IsJoiningRefusal(err):
 			joining++
+			if n, ok := nodestate.JoiningExecuted(err); ok && n > highest {
+				highest = n
+			}
 		case errors.Is(err, errors.NotReady), err == nil:
 			// A peer that answered: with its ledger, or busy. Either is a
 			// peer that is not joining.
@@ -1770,6 +1789,28 @@ func (s *PulledState) Resumable() (uint64, bool) {
 			s.noOwnSaid = now
 			s.log.Info("Fewer of this partition's validators serve than sign an anchor, and this node has no block of its own to resume from: no state can be proven to it; collecting",
 				"partition", s.partition, "block", s.executed)
+		}
+		s.sayMu.Unlock()
+		return 0, false
+	}
+	if s.peersHighest > s.executed+ResumeSlack {
+		// A peer holds a state further ahead than consensus can replay to
+		// this node from its own checkpoint: a node that resumed here would
+		// produce the blocks after its own as if the ones it missed did not
+		// exist, and end at the peers' height with another root
+		// (TestAWholeRestartResumesFromTheHighestState). It waits for the
+		// peers holding the highest to resume, and joins from them
+		// (executor spec, "resumes from its highest signed, validated
+		// state"; #4501). Within ResumeSlack it resumes: that gap is the
+		// executors' lag behind one consensus position at the kill, and the
+		// groups after its checkpoint are replayed to it as to any node
+		// that resumes -- and a peer that has resumed already states a
+		// block that moves on.
+		s.sayMu.Lock()
+		if now := s.clock(); now.Sub(s.lowerSaid) >= stallSayEvery {
+			s.lowerSaid = now
+			s.log.Info("A peer holds a higher state than this node's own; not resuming from this node's block, waiting to join from the peers that hold the highest",
+				"partition", s.partition, "block", s.executed, "peers-highest", s.peersHighest)
 		}
 		s.sayMu.Unlock()
 		return 0, false

@@ -181,7 +181,31 @@ func (s *Querier) servingFor(query api.Query) error {
 		return nil
 	}
 	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), queryCall(query)).Inc()
+	if n, ok := s.ownExecuted(); ok {
+		return nodestate.RefuseJoiningAt(s.partition.PartitionID(), n)
+	}
 	return nodestate.RefuseJoining(s.partition.PartitionID())
+}
+
+// ownExecuted is the block of this node's own execution, when its store is
+// that: the executor's record, and no pull started over it (#4501). A store a
+// pull has written into is no block's state, and states none.
+func (s *Querier) ownExecuted() (uint64, bool) {
+	var n uint64
+	var ok bool
+	_ = s.db.View(func(batch *database.Batch) error {
+		id := s.partition.PartitionID()
+		started, err := batch.SystemData(id).PullStarted().Get()
+		if err == nil && started != 0 {
+			return nil
+		}
+		v, err := batch.SystemData(id).ExecutedBlock().Get()
+		if err == nil && v > 0 {
+			n, ok = v, true
+		}
+		return nil
+	})
+	return n, ok
 }
 
 // queryCall names a query for the not-querying metric by its type, with an

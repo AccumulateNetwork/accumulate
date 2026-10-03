@@ -1580,8 +1580,27 @@ the node holding the highest resumes from its own block and serves; every
 other node takes that state from it, as a join takes a peer's state, and routes
 requests to it until it is synced itself. Whether a peer that does not answer
 counts is no longer the question: a node resumes on its own block only when it
-knows it holds the highest. Not built (#4501); the text below describes the
-code as it is.
+knows it holds the highest.
+
+**Built (#4501), and how far.** A joining node's refusal states the block of
+its own execution — the executor's record, when no pull has started over it
+(`nodestate.RefuseJoiningAt`) — and the round that asks the partition's peers
+for their block records the highest any of them states. A node whose own
+block is more than `ResumeSlack` (8, the bound on how far an executor lags its
+consensus position, `DefaultMaxExecutionLag`) below that does not resume: it
+says so, waits for the peers holding the highest to resume, and joins from
+them. Within the slack it resumes, as before: that gap is the executors' lag
+behind one consensus position at the kill, and the groups after its
+checkpoint are replayed to it; a peer that has already resumed states a block
+that moves on, and comparing against it exactly would hold back a node that
+needs no help (`TestAWholeNetworkRestartUnderLoadWithAnchorsHeldFourValidators`).
+What is stated is the executed block, not the block whose anchor a quorum
+signed: a peer could overstate it and hold a lower node back from resuming,
+which costs liveness, never safety — the join from the peers is proven against
+signed anchors as any join is. A partition where fewer than the signing
+threshold hold the highest is a partition below its quorum ("A partition that
+loses a quorum of its validators' states"). The text below describes the
+per-node exit the rest of the decision still is.
 
 **A partition that restarts as a whole resumes from each validator's own
 block (#4447).** When every validator of a partition stops and starts again

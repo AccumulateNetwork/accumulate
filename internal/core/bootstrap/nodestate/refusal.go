@@ -7,6 +7,7 @@
 package nodestate
 
 import (
+	"encoding/json"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -27,4 +28,41 @@ func RefuseJoining(partition string) error {
 // reached and answered, and has no state of its own to serve.
 func IsJoiningRefusal(err error) bool {
 	return err != nil && errors.Is(err, errors.NotReady) && strings.Contains(err.Error(), joiningRefusal)
+}
+
+// JoiningState is what a joining node's refusal carries: the block of its own
+// execution, when its store is that (no pull has started), so that a node
+// deciding whether to resume after a whole restart knows whether a peer holds
+// a higher state than it does (executor spec, "A partition that restarts as a
+// whole resumes from its highest signed, validated state"; #4501).
+type JoiningState struct {
+	Executed *uint64 `json:"joiningExecuted"`
+}
+
+// RefuseJoiningAt is RefuseJoining stating the refusing node's own executed
+// block.
+func RefuseJoiningAt(partition string, executed uint64) error {
+	e := errors.NotReady.WithFormat("%s %s", partition, joiningRefusal)
+	v := executed
+	e.Data, _ = json.Marshal(JoiningState{Executed: &v})
+	return e
+}
+
+// JoiningExecuted finds the executed block a joining refusal states, the
+// outermost first.
+func JoiningExecuted(err error) (uint64, bool) {
+	var e *errors.Error
+	if !errors.As(err, &e) {
+		return 0, false
+	}
+	for ; e != nil; e = e.Cause {
+		if len(e.Data) == 0 {
+			continue
+		}
+		d := new(JoiningState)
+		if json.Unmarshal(e.Data, d) == nil && d.Executed != nil {
+			return *d.Executed, true
+		}
+	}
+	return 0, false
 }
