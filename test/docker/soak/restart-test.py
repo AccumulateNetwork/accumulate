@@ -11,6 +11,9 @@
     D  two of BVN2's four validators lost  -> BVN2 must stand still and say it
        lost its quorum while BVN1, BVN3 and the Directory produce; then they
        are restored with their stores and keys and BVN2 must resume
+    E  each of the twelve validators restarted alone, one after another,
+       alternating graceful and kill; every node ACTIVE within 5 min of each
+       (#4515, PLAN R8-1)
   stop; write restart-test.md.
 
 Every step and its criteria go to the run's chaos.log. It never clears a
@@ -33,24 +36,56 @@ def heights():
     d = dash() or {}
     return dict(d.get("executedHeights") or d.get("heights") or {})
 
-def not_active():
-    d = dash() or {}
-    return sorted(f"{r['node']}/{r['partition']}" for r in (d.get("nodeState") or {}).get("rows", [])
-                  if r.get("state") != "ACTIVE")
+VALIDATORS = [f"acc-bvn{b}-val{v}" for b in (1, 2, 3) for v in (1, 2, 3, 4)]
 
-def wait_all_active(run, label, minutes=10):
-    deadline = time.time() + minutes * 60
+def not_active(since=None, nodes=None):
+    """Rows not ACTIVE. With since, a row of one of nodes (every node if nodes
+    is None) whose container started before since is stale -- the dashboard
+    has not re-read that node since the restart -- and counts as not ACTIVE.
+    Without this both runs of 2026-10-03 passed "every node ACTIVE" 2-3 s
+    after a whole-network restart, on the state from before it."""
+    d = dash() or {}
+    out = []
+    for r in (d.get("nodeState") or {}).get("rows", []):
+        name = f"{r['node']}/{r['partition']}"
+        if r.get("state") != "ACTIVE":
+            out.append(name)
+        elif since is not None and (nodes is None or r["node"] in nodes):
+            age = r.get("sinceStartS")
+            if age is None or age > time.time() - since + 10:
+                out.append(name + " (stale row)")
+    return sorted(out)
+
+def wait_all_active(run, label, minutes=10, since=None, nodes=None):
+    t0 = time.time()
+    deadline = t0 + minutes * 60
     while time.time() < deadline:
-        na = not_active()
+        na = not_active(since, nodes)
         if not na and dash():
-            record(run, f"{label}: every node ACTIVE")
+            record(run, f"{label}: every node ACTIVE ({time.time() - (since or t0):.0f}s after the restart)")
             return True
-        time.sleep(15)
-    record(run, f"FAIL {label}: not ACTIVE after {minutes} min: {', '.join(not_active())}")
+        time.sleep(5)
+    record(run, f"FAIL {label}: not ACTIVE after {minutes} min: {', '.join(not_active(since, nodes))}")
     return False
 
+def live_heights(must_move=PARTS, timeout=180):
+    """Heights once the dashboard reads live ones: every partition present and
+    every one in must_move higher than 15 s before. The first run of
+    2026-10-03 read its kill dwell's starting heights from a dashboard that
+    had not re-read the nodes and reported 1,000 blocks where monitor.csv
+    shows about 315."""
+    deadline = time.time() + timeout
+    prev = heights()
+    while time.time() < deadline:
+        time.sleep(15)
+        cur = heights()
+        if all((cur.get(p) or 0) > 0 for p in PARTS) and all((cur.get(p) or 0) > (prev.get(p) or 0) for p in must_move):
+            return cur
+        prev = cur
+    return heights()
+
 def dwell(run, label, minutes=5, must_move=PARTS, must_stand=()):
-    h0 = heights(); time.sleep(minutes * 60); h1 = heights()
+    h0 = live_heights(must_move); time.sleep(minutes * 60); h1 = heights()
     moved = {p: (h1.get(p, 0) or 0) - (h0.get(p, 0) or 0) for p in PARTS}
     ok = all(moved[p] > 0 for p in must_move) and all(moved[p] == 0 for p in must_stand)
     record(run, f"{label}: dwell {minutes} min, blocks produced {moved}; must move {list(must_move)}, must stand {list(must_stand)} -> {'ok' if ok else 'FAIL'}")
@@ -67,8 +102,9 @@ def step(run, name, fn):
     return ok
 
 def restart(run, mode):
+    since = time.time()
     sh(f"cd {json.dumps(HERE)} && ./restart-network.sh {json.dumps(run)} {mode}")
-    ok = wait_all_active(run, f"{mode} restart")
+    ok = wait_all_active(run, f"{mode} restart", since=since)
     return dwell(run, f"after the {mode} restart") and ok
 
 def tear(run):
@@ -77,6 +113,7 @@ def tear(run):
     local = os.path.join(SCRATCH, "bvn2-val4-store")
     sh(f"rm -rf {json.dumps(local)}")
     record(run, f"tear: docker stop {c}; copy its BVN2 store out, tear-store it, copy it back, start it")
+    since = time.time()
     bt.docker(f"docker stop -t 30 {c}")
     bt.docker(f"docker cp {c}:{store} {local}")
     out = sh(f"{TEAR} {local} BVN2").strip().splitlines()[-1]
@@ -89,7 +126,7 @@ def tear(run):
         time.sleep(5)
     found = "store is torn" in logs(c)
     record(run, f"tear: {c} {'found the tear and refused to resume' if found else 'did NOT report a torn store'}")
-    ok = wait_all_active(run, "after the tear")
+    ok = wait_all_active(run, "after the tear", since=since, nodes=[c])
     return dwell(run, "after the tear") and ok and found
 
 def quorum_loss(run):
@@ -101,9 +138,35 @@ def quorum_loss(run):
     said = "lost its quorum" in logs("acc-bvn2-val1")
     record(run, f"quorum loss: bvn2-val1 {'said' if said else 'did NOT say'} the partition lost its quorum")
     record(run, f"quorum loss: restoring {' '.join(lost)} with their stores and keys (docker start)")
+    since = time.time()
     bt.docker("docker start " + " ".join(lost))
-    ok = wait_all_active(run, "after the restore")
+    ok = wait_all_active(run, "after the restore", since=since, nodes=lost)
     return dwell(run, "after the restore") and ok and halted and said
+
+def single_restarts(run):
+    """Each of the twelve validators restarted alone, one after another,
+    alternating a graceful stop and a kill; after each, every node ACTIVE
+    with a fresh row within 5 minutes. A Directory validator restarted alone
+    wedged in catch-up about 1 restart in 10 (#4515, PLAN R8-1); one restart
+    proves nothing."""
+    ok, times = True, []
+    for i, c in enumerate(VALIDATORS):
+        kind = "graceful" if i % 2 == 0 else "kill"
+        record(run, f"single restart {i + 1}/12: {c} ({kind})")
+        since = time.time()
+        if kind == "graceful":
+            bt.docker(f"docker stop -t 30 {c}")
+        else:
+            bt.docker(f"docker kill {c}")
+        bt.docker(f"docker start {c}")
+        if wait_all_active(run, f"single restart {i + 1}/12 {c}", minutes=5, since=since, nodes=[c]):
+            times.append(time.time() - since)
+        else:
+            ok = False
+        time.sleep(30)
+    if times:
+        record(run, f"single restarts: {len(times)}/12 ACTIVE; seconds to ACTIVE min {min(times):.0f} max {max(times):.0f}")
+    return dwell(run, "after the single restarts") and ok
 
 def main():
     ap = argparse.ArgumentParser()
@@ -125,7 +188,8 @@ def main():
     for name, fn in (("A graceful whole-network restart", lambda r: restart(r, "graceful")),
                      ("B kill whole-network restart", lambda r: restart(r, "kill")),
                      ("C one validator's store torn", tear),
-                     ("D two of BVN2's four lost, then restored", quorum_loss)):
+                     ("D two of BVN2's four lost, then restored", quorum_loss),
+                     ("E each validator restarted alone, twelve times", single_restarts)):
         step(run, name, fn)
     path = os.path.join(run, "restart-test.md")
     with open(path, "w") as f:
