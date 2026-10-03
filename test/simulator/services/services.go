@@ -77,10 +77,28 @@ func (s Services) Register(id peer.ID, address *api.ServiceAddress, handler Hand
 }
 
 // Unregister withdraws every service the given peer registered: a stopped
-// node answers nothing.
-func (s Services) Unregister(id peer.ID) {
-	for _, m := range s {
+// node answers nothing. It returns what it withdrew, by address, so a node
+// restored with its store and keys can register the same again (Restore).
+func (s Services) Unregister(id peer.ID) map[string]Handler {
+	out := map[string]Handler{}
+	for addr, m := range s {
+		if h, ok := m[id]; ok {
+			out[addr] = h
+		}
 		delete(m, id)
+	}
+	return out
+}
+
+// Restore registers again what Unregister withdrew for the peer.
+func (s Services) Restore(id peer.ID, withdrawn map[string]Handler) {
+	for addr, h := range withdrawn {
+		m, ok := s[addr]
+		if !ok {
+			m = map[peer.ID]Handler{}
+			s[addr] = m
+		}
+		m[id] = h
 	}
 }
 

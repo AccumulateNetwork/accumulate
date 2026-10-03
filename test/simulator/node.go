@@ -50,6 +50,7 @@ type Node struct {
 	pullHook   func()
 	sourceWrap func([]pull.Source) []pull.Source
 	stopped    bool
+	withdrawn  map[string]services.Handler // what StopNode withdrew, for RestoreNode
 	conductor  *crosschain.Conductor
 	synthCache *synthcache.Cache
 	heals      *crosschain.HealCounters

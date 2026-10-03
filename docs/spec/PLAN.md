@@ -206,7 +206,13 @@ them or intervene. Work, in order:
    report 2 of 4, quorum 3).
 3. Rewrite `TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange` as:
    lose two of four (the partition halts and says so; the others run on),
-   restore the two with their keys, the partition resumes.
+   restore the two with their keys, the partition resumes. Done:
+   `TestAPartitionThatLostAQuorumHaltsAndResumesWhenItsValidatorsReturn`
+   (BVN0 stands still with two of four, BVN1 and the Directory run on, the
+   two restored join and BVN0's transfer is delivered). The simulator gained
+   what it needed: a partition below its quorum sits a step out instead of
+   failing the lockstep, and `RestoreNode` brings back a stopped node with
+   its store and keys. Not yet on Docker.
 
 ### R5 — a whole restart resumes from the highest signed, validated state (#4501)
 

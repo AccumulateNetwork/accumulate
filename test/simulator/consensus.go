@@ -52,6 +52,27 @@ func (p *Partition) Submit(envelope *messaging.Envelope, pretend bool) ([]*proto
 func (s *Simulator) Step() error {
 	// TODO Care about s.deterministic
 
+	// A partition below its quorum sits the step out: its nodes hold the
+	// block they cannot complete, and starting another would be an error.
+	// They are taken off the hub for the step and put back after (#4512).
+	var sitOut []*Node
+	for _, p := range s.partitions {
+		if !p.belowQuorum() {
+			continue
+		}
+		for _, n := range p.nodes {
+			if !n.stopped {
+				s.hub.Unregister(n.consensus)
+				sitOut = append(sitOut, n)
+			}
+		}
+	}
+	defer func() {
+		for _, n := range sitOut {
+			s.hub.Register(n.consensus)
+		}
+	}()
+
 	// Execute a block
 	var resp consensus.Capture[*consensus.ExecutedBlock]
 	err := s.hub.With(&resp).Send(&consensus.StartBlock{})
@@ -68,8 +89,16 @@ func (s *Simulator) Step() error {
 		done[r.Network][r.Node] = true
 	}
 
-	// Verify every node completed
+	// Verify every node completed -- of every partition that can complete a
+	// block. A partition with fewer of its validators running than the
+	// consensus threshold cannot, and does not change state: that is the
+	// halt the executor spec decides for a partition that lost its quorum
+	// ("A partition that loses a quorum of its validators' states"), and the
+	// other partitions step on without it (#4512).
 	for _, p := range s.partitions {
+		if p.belowQuorum() {
+			continue
+		}
 		for _, n := range p.nodes {
 			if n.stopped {
 				continue
@@ -88,4 +117,21 @@ func (s *Simulator) Step() error {
 	runtime.Gosched()
 
 	return err
+}
+
+// belowQuorum reports whether fewer of the partition's validators are running
+// than the consensus needs to complete a block: the simulator's consensus
+// completes one when no more than a third of the validators have not voted.
+func (p *Partition) belowQuorum() bool {
+	var total, running int
+	for _, n := range p.nodes {
+		if !n.isValidatorOn(p.Type) {
+			continue
+		}
+		total++
+		if !n.stopped {
+			running++
+		}
+	}
+	return (total-running)*3 > total
 }

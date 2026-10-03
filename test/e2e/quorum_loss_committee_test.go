@@ -9,6 +9,7 @@ package e2e
 import (
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -21,26 +22,16 @@ import (
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
-// TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange — R4-B (#4512;
-// executor spec, "A partition that loses a quorum of its validators'
-// states"). BVN0 has four validators and a signing threshold of three; two
-// of them stop for good. With two left, nothing BVN0 sends the Directory can
-// reach its quorum. The operators then remove the two from BVN0's set on the
-// Directory -- the network definition's next version -- and BVN0 is two of
-// two: its anchors validate, its synthetic transactions are delivered again,
-// and the network runs on.
-func TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange(t *testing.T) {
-	// The mechanism by which a halted partition adopts the committee the
-	// Directory changed is a decision pending with Paul (PLAN R4-B,
-	// "How a halted partition learns its new committee"): with two of four
-	// validators gone BVN0's consensus has no quorum, executes nothing, and
-	// so never executes the Directory anchor that carries the change -- its
-	// committee is updated only by its own executed blocks (simulator
-	// consensus applyValUp; the daemon's WillChangeGlobals). Today the first
-	// submission after the loss fails "no response". Unskip with the fix.
-	t.Skip("R4-B: pending the decision on how a halted partition adopts a committee change (#4512)")
+// TestAPartitionThatLostAQuorumHaltsAndResumesWhenItsValidatorsReturn —
+// #4512 (executor spec, "A partition that loses a quorum of its validators'
+// states"). BVN0 has four validators and a quorum of three; two of them stop.
+// BVN0 cannot complete a block, so it does not change state: its height
+// stands. The other partitions run on -- nothing in theirs waits on BVN0.
+// Then the operators restore the two with their stores and keys: they join
+// from the two that stood, BVN0's committee is whole again, and it resumes,
+// a cross-partition transfer from it delivered.
+func TestAPartitionThatLostAQuorumHaltsAndResumesWhenItsValidatorsReturn(t *testing.T) {
 	alice := url.MustParse("alice")
-	bob := url.MustParse("bob")
 	carol := url.MustParse("carol")
 	aliceKey := acctesting.GenerateKey(alice)
 
@@ -51,63 +42,55 @@ func TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange(t *testing.T) {
 		simulator.IgnoreCommitResults(),
 	)
 	sim.SetRoute(alice, "BVN0")
-	sim.SetRoute(bob, "BVN0")
 	sim.SetRoute(carol, "BVN1")
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
 	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e12)
 	MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 	CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(1e12))
-	MakeIdentity(t, sim.DatabaseFor(bob), bob, acctesting.GenerateKey(bob)[32:])
-	MakeAccount(t, sim.DatabaseFor(bob), &TokenAccount{Url: bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 	MakeIdentity(t, sim.DatabaseFor(carol), carol, acctesting.GenerateKey(carol)[32:])
 	MakeAccount(t, sim.DatabaseFor(carol), &TokenAccount{Url: carol.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
 	var ts uint64
-	sendTo := func(to *url.URL) *TransactionStatus {
+	send := func() *TransactionStatus {
 		ts++
 		return sim.BuildAndSubmitTxnSuccessfully(
 			build.Transaction().For(alice, "tokens").
-				SendTokens(1, 0).To(to, "tokens").
+				SendTokens(1, 0).To(carol, "tokens").
 				SignWith(alice, "book", "1").Version(1).Timestamp(ts).PrivateKey(aliceKey))
 	}
 	for i := 0; i < 3; i++ {
-		st := sendTo(carol)
+		st := send()
 		sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
 	}
 
-	// Two of BVN0's four validators are lost.
-	bvn0 := sim.S.Partition("BVN0")
+	bvn0, bvn1, dn := sim.S.Partition("BVN0"), sim.S.Partition("BVN1"), sim.S.Partition(Directory)
+	height := func(p *simulator.Partition, name string) uint64 {
+		return partitionBlock(t, p.NodeDatabase(0), PartitionUrl(name))
+	}
+
+	// Two of BVN0's four are lost.
 	lost := []int{2, 3}
 	for _, i := range lost {
 		bvn0.StopNode(i)
 	}
+	h0, h1, hd := height(bvn0, "BVN0"), height(bvn1, "BVN1"), height(dn, Directory)
+	sim.StepN(30)
+	require.Equal(t, h0, height(bvn0, "BVN0"), "BVN0 changed state with two of its four validators")
+	require.Greater(t, height(bvn1, "BVN1"), h1, "BVN1 stopped with BVN0: its blocks wait on another partition")
+	require.Greater(t, height(dn, Directory), hd, "the Directory stopped with BVN0: its blocks wait on another partition")
 
-	// Below its quorum, a cross-partition transfer from BVN0 is not
-	// delivered: its anchors never reach the Directory's threshold.
-	stuck := sendTo(carol)
-	sim.StepN(60)
-	require.False(t, deliveredTo(t, sim, stuck), "precondition: BVN0 below its quorum still delivered a synthetic transaction")
-
-	// The operators remove the lost validators from BVN0's set.
-	current := loadDirectoryGlobals(t, sim)
+	// The operators restore the two, stores and keys as they stood.
+	var back []restartTarget
 	for _, i := range lost {
-		key := sim.SignWithNode("BVN0", i).(interface{ Key() []byte }).Key()[32:]
-		current.Network.AddValidator(key, "BVN0", false)
+		bvn0.RestoreNode(i)
+		back = append(back, restartTarget{"BVN0", bvn0, i})
 	}
-	current.Network.Version++
-	b := build.Transaction().For(DnUrl(), Network).
-		Body(&WriteData{Entry: current.FormatNetwork(), WriteToState: true}).
-		SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(sim.SignWithNode(Directory, 0))
-	for i := 1; i < sim.S.Partition(Directory).NodeCount(); i++ {
-		b = b.SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(uint64(i + 1)).Signer(sim.SignWithNode(Directory, i))
-	}
-	st := sim.BuildAndSubmitTxnSuccessfully(b)
-	sim.StepUntil(Txn(st.TxID).Completes())
+	joinRestarted(t, sim, back, 60*time.Second)
 
-	// BVN0 is two of two: what was stuck is delivered, and new transfers are.
-	sim.StepUntil(Txn(stuck.TxID).Produced().Succeeds())
-	next := sendTo(carol)
-	sim.StepUntil(Txn(next.TxID).Succeeds(), Txn(next.TxID).Produced().Succeeds())
+	// BVN0 resumes, and what it sends is delivered.
+	st := send()
+	sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
+	require.Greater(t, height(bvn0, "BVN0"), h0, "BVN0 did not resume once its validators returned")
 }
 
 // deliveredTo reports whether every synthetic transaction st produced has

@@ -242,7 +242,24 @@ func (p *Partition) StopNode(i int) {
 	}
 	n.stopped = true
 	p.sim.hub.Unregister(n.consensus)
-	p.sim.services.Services.Unregister(n.peerID)
+	n.withdrawn = p.sim.services.Services.Unregister(n.peerID)
+}
+
+// RestoreNode brings back a node StopNode stopped, with its store and keys
+// as they stood, as an operator restores a lost validator (executor spec, "A
+// partition that loses a quorum of its validators' states"): it registers
+// with consensus and the services again and restarts as RestartNode does, so
+// it is joining until its join hands off.
+func (p *Partition) RestoreNode(i int) {
+	n := p.nodes[i]
+	if !n.stopped {
+		return
+	}
+	n.stopped = false
+	p.sim.hub.Register(n.consensus)
+	p.sim.services.Services.Restore(n.peerID, n.withdrawn)
+	n.withdrawn = nil
+	p.RestartNode(i)
 }
 
 // Joining reports whether node i is collecting rather than executing.
