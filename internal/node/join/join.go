@@ -19,6 +19,7 @@ package join
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -535,6 +536,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 	}
 	overran := false
 	failures := 0
+	held := heldGaps{}
 	for {
 		if err := ctx.Err(); err != nil {
 			return 0, errors.UnknownError.Wrap(err)
@@ -585,7 +587,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 		}
 		if ok {
 			wait.on("staging the collected blocks and handing off", "block", q)
-			done, err := stageAndHandOff(opts, log, q, &failures)
+			done, err := stageAndHandOff(opts, log, q, &failures, held)
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)
 			}
@@ -613,7 +615,7 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 // its signed anchor, so the node is promoted at q once it is executing. It
 // reports whether the node handed off; false with no error means the join
 // pulls again. failures counts the handoffs that failed.
-func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (bool, error) {
+func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, held heldGaps) (bool, error) {
 	// Staging holds everything collected through q + 1 and nothing after it
 	// (#4398): the gap check asks what q + 1 carries, and a block delivers
 	// the run it can from what is held, so a staging that also held what
@@ -656,8 +658,23 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int) (b
 		for i, g := range gaps {
 			streams[i] = g.String()
 		}
-		log.Info("The next block has a gap; not executing until the peers have delivered what they held", "synced", q, "block", q+1, "gaps", streams)
-		return false, nil
+		if !held.peersHeldOn(gaps, q) {
+			log.Info("The next block has a gap; not executing until the peers have delivered what they held", "synced", q, "block", q+1, "gaps", streams)
+			return false, nil
+		}
+		// The proven state has moved on HeldGapBlocks while every gap's
+		// first missing number stood still: the peers have not delivered
+		// those entries either -- they hold them and cannot run them, as a
+		// Directory holds the anchors of a partition below its quorum
+		// (run 20261002T090546Z: BVN3 halted, and the Directory's joiners
+		// waited on its anchor 6292 for good). Executing q + 1 without
+		// them is executing it as the peers do. Waiting on them made one
+		// partition's sync depend on another's (executor spec, "Nothing in
+		// a partition's restart or sync waits on another partition"). The
+		// entries reach this node the ordinary way once their source runs,
+		// and a node that then differs is caught by the root watch.
+		log.Info("The next block has a gap the peers are held on too; handing off without it",
+			"synced", q, "block", q+1, "gaps", streams, "held-for", HeldGapBlocks)
 	}
 
 	err = opts.Stage.SettleStagingAt(q)
@@ -759,4 +776,45 @@ func findValidators(ctx context.Context, opts Options, log *slog.Logger, retry t
 		log.Info("No validator of this partition has been found yet", "attempt", attempt+1, "of", rounds)
 	}
 	return 0, nil
+}
+
+// HeldGapBlocks is how far the proven state must move on while a gap's first
+// missing number stands still before the gap is taken for one the peers are
+// held on too: a minute of blocks, past any entry that is merely late.
+const HeldGapBlocks = 64
+
+// heldGaps remembers, per stream, the first missing number of its gap and the
+// block it was first seen at.
+type heldGaps map[string]heldGap
+
+type heldGap struct {
+	missing uint64
+	since   uint64
+}
+
+// peersHeldOn reports whether every gap has stood at the same first missing
+// number for HeldGapBlocks of the proven state's progress, and records what
+// it sees.
+func (h heldGaps) peersHeldOn(gaps []StreamGap, q uint64) bool {
+	all := len(gaps) > 0
+	seen := map[string]bool{}
+	for _, g := range gaps {
+		k := fmt.Sprint(g.Stream.Ledger, "|", g.Stream.Source)
+		seen[k] = true
+		cur, ok := h[k]
+		if !ok || cur.missing != g.Missing {
+			h[k] = heldGap{missing: g.Missing, since: q}
+			all = false
+			continue
+		}
+		if q < cur.since+HeldGapBlocks {
+			all = false
+		}
+	}
+	for k := range h {
+		if !seen[k] {
+			delete(h, k)
+		}
+	}
+	return all
 }

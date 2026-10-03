@@ -1694,6 +1694,14 @@ sealed" and "Syncing in a partition should not depend on any other partition
    change made on the Directory reaches a partition the ordinary way, by an
    anchor it executes once it runs.
 3. **Nothing in a partition's restart or sync waits on another partition.**
+   A joiner's gap check ("The next block has a gap") waits for the peers to
+   deliver what they hold; an entry the peers hold and cannot run — the
+   anchor of a partition below its quorum — they never deliver. Once the
+   proven state has moved on `HeldGapBlocks` (64) with a gap's first missing
+   number standing still, the peers are held on it too, executing the next
+   block without it is executing it as they do, and the join hands off
+   without it and says so; the entry arrives the ordinary way once its source
+   runs, and a node that then differs is caught by the root watch.
    Its state, its committee and the anchors that prove a joiner's state are
    its own. An anchor the partition sent that never reached the Directory is
    asked for by healing once both run; one that reached it is already there.

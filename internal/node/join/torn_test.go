@@ -7,14 +7,18 @@
 package join
 
 import (
+	"context"
 	"crypto/sha256"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -99,4 +103,49 @@ func TestANodeAtGenesisNeverTakesTheWholeRestartExit(t *testing.T) {
 	s.peersJoining = true
 	_, ok := s.Resumable()
 	require.False(t, ok, "genesis is not a block of this node's own")
+}
+
+// advancingState is a state pull whose proven block moves on by one each pull.
+type advancingState struct{ synced uint64 }
+
+func (s *advancingState) Pull(context.Context) error { s.synced++; return nil }
+func (*advancingState) Promote(uint64)               {}
+func (*advancingState) Demote(uint64)                {}
+func (*advancingState) Resumable() (uint64, bool)    { return 0, false }
+func (*advancingState) Backfill(context.Context)     {}
+func (*advancingState) Executing(uint64) error       { return nil }
+func (*advancingState) Ready() (uint64, bool)        { return 0, false }
+func (s *advancingState) Matched(context.Context) (uint64, bool, error) {
+	return s.synced, s.synced > 0, nil
+}
+
+// TestJoin_AGapThePeersAreHeldOnDoesNotHoldTheHandoffForGood: a stream's
+// entry the peers hold and cannot run -- a Directory holding the anchor of a
+// partition below its quorum -- leaves the same gap at every block the state
+// is proven at. Waiting for the peers to deliver it waited for good, and made
+// the Directory's sync depend on the halted partition (run 20261002T090546Z,
+// "bvn-BVN3.acme->dn.acme/anchors missing=6292"). Once the proven state has
+// moved on HeldGapBlocks with the gap standing still, the join hands off
+// without it (executor spec, "Nothing in a partition's restart or sync waits
+// on another partition").
+func TestJoin_AGapThePeersAreHeldOnDoesNotHoldTheHandoffForGood(t *testing.T) {
+	const b = 20
+	src := url.MustParse("acc://bvn-BVN3.acme")
+	stream := execute.StreamID{Ledger: protocol.DnUrl().JoinPath(protocol.AnchorPool), Source: src}
+	gap := StreamGap{Stream: stream, Delivered: 6291, Missing: 6292, MissingTo: 6292, Received: 6292}
+	stage := &fakeStage{gaps: map[uint64][]StreamGap{}}
+	// The gap stands at every block the test can reach: a stream held for
+	// good, not one that clears on its own.
+	for n := uint64(b); n < b+20*HeldGapBlocks; n++ {
+		stage.gaps[n] = []StreamGap{gap}
+	}
+	buf := new(fakeBuffer)
+	state := &advancingState{synced: b}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
+
+	_, err := run(t, Options{Partition: "Directory", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Len(t, buf.handoffs, 1, "the join never handed off past a gap the peers are held on")
+	require.GreaterOrEqual(t, buf.handoffs[0], uint64(b+HeldGapBlocks), "it handed off before the gap had stood still for HeldGapBlocks")
+	require.Less(t, buf.handoffs[0], uint64(b+2*HeldGapBlocks), "it waited on the held gap long past HeldGapBlocks")
 }

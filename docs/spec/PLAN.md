@@ -187,7 +187,9 @@ partition revives from each node's last sealed block (the highest leads,
 restart or sync; too few validators means it halts until operators restore
 them or intervene. Work, in order:
 
-1. **Audit for cross-partition dependencies in restart and sync.** Known one:
+1. **Audit for cross-partition dependencies in restart and sync.** First
+   fix landed (a join hands off past a gap its peers are held on too,
+   `HeldGapBlocks`); audit the rest. Known one:
    a joining Directory node will not execute a block whose BVN anchor stream
    has a gap ("The next block has a gap; not executing until the peers have
    delivered what they held … bvn-BVN3.acme->dn.acme/anchors missing=6292",
