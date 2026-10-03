@@ -1612,7 +1612,10 @@ takes one exit from that, and only when both of these hold:
    off — `SystemData.PullStarted`
    is written before a pull writes anything and cleared at the handoff — and
    `SystemData.ExecutedBlock`, which the executor writes with every block,
-   names the block `<partition>/ledger` does. A store holding some of a peer's
+   names the block `<partition>/ledger` does — and that block is past genesis:
+   genesis is no execution of this node's (#4304), so a node at genesis has
+   nothing to resume from, keeps collecting, and says once a minute that fewer
+   validators serve than sign and no state can be proven to it (#4508). A store holding some of a peer's
    accounts is no block's state; such a node waits, and joins from its peers
    once they have resumed. Nor is a store a kill left **torn** — a chain's
    head naming records the store does not hold (a Tail chunk short of its

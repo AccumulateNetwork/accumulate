@@ -73,3 +73,30 @@ func TestATornStoreIsNeverResumedOnto(t *testing.T) {
 	_, ok := s.Resumable()
 	require.False(t, ok, "a torn store is no block's state")
 }
+
+// TestANodeAtGenesisNeverTakesTheWholeRestartExit: a node whose own block is
+// genesis has nothing to resume from. Finding fewer validators serving than
+// sign an anchor, it reports no block to resume from and keeps collecting,
+// rather than taking an exit that loops on "no consensus checkpoint matched
+// block 1" (run 20261002T145702Z, 17:18Z; #4508).
+func TestANodeAtGenesisNeverTakesTheWholeRestartExit(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	db := database.OpenInMemory(nil)
+	db.SetObserver(database.NewDatabaseObserver())
+	t.Cleanup(func() { _ = db.Close() })
+	values, _ := genesisValues(t, 4)
+	putNetwork(t, db, here, values)
+	// The records a resume checks, all saying genesis: the ledger and this
+	// node's own executed block.
+	id, _ := protocol.ParsePartitionUrl(here)
+	batch := db.Begin(true)
+	require.NoError(t, batch.Account(here.JoinPath(protocol.Ledger)).Main().Put(&protocol.SystemLedger{Url: here.JoinPath(protocol.Ledger), Index: protocol.GenesisBlock}))
+	require.NoError(t, batch.SystemData(id).ExecutedBlock().Put(protocol.GenesisBlock))
+	require.NoError(t, batch.Commit())
+
+	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, block: 10}, ExecutedBlock: protocol.GenesisBlock})
+	require.NoError(t, err)
+	s.peersJoining = true
+	_, ok := s.Resumable()
+	require.False(t, ok, "genesis is not a block of this node's own")
+}

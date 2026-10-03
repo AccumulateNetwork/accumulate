@@ -1821,16 +1821,6 @@ upgraded all at once, onto builds that carry it. The entry goes when no
 deployment runs an older build.
 
 
-### C14. A joiner with nothing to resume from takes the whole-restart exit
-
-executor.md, "A partition that restarts as a whole": the exit is for a node
-that holds its own executed block and finds fewer validators serving than
-sign an anchor. The code takes the branch on any node that finds too few
-serving, a node at genesis included, and such a node then loops on "no
-consensus checkpoint matched block 1" (run 20261002T145702Z, 17:18Z; #4508).
-The branch must require an own block to resume from; without one the node
-keeps collecting and says the partition cannot prove a state to it.
-
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
 *[#4420](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4420)*

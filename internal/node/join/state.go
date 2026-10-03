@@ -174,8 +174,11 @@ type PulledState struct {
 	// after that whose root its signed anchor proved, said once (#4483).
 	ownRoot bool
 	// torn is StateOptions.Torn: the store was found torn at start.
-	torn     error
-	agreedAt atomic.Uint64
+	torn error
+	// noOwnSaid is when Resumable last said the node has no block of its
+	// own to resume from (#4508).
+	noOwnSaid time.Time
+	agreedAt  atomic.Uint64
 
 	// checked is executed, for the backfill's lines: the backfill reads it
 	// beside the root watch, which writes executed.
@@ -1752,6 +1755,23 @@ func (s *PulledState) Resumable() (uint64, bool) {
 		return 0, false
 	}
 	if !s.peersJoining || s.pulled || s.sync != nil || s.repairFrom != 0 || s.executed == 0 {
+		return 0, false
+	}
+	if s.executed <= protocol.GenesisBlock {
+		// Genesis is not a block of this node's own (#4304). A node here has
+		// found fewer validators serving than sign an anchor and holds
+		// nothing to resume from: no state can be proven to it until more
+		// of them execute. It keeps collecting and says so, once a minute,
+		// rather than taking an exit it cannot complete (run
+		// 20261002T145702Z, 17:18Z: "no consensus checkpoint matched block
+		// 1", every round; #4508).
+		s.sayMu.Lock()
+		if now := s.clock(); now.Sub(s.noOwnSaid) >= stallSayEvery {
+			s.noOwnSaid = now
+			s.log.Info("Fewer of this partition's validators serve than sign an anchor, and this node has no block of its own to resume from: no state can be proven to it; collecting",
+				"partition", s.partition, "block", s.executed)
+		}
+		s.sayMu.Unlock()
 		return 0, false
 	}
 	id, ok := protocol.ParsePartitionUrl(s.partition)
