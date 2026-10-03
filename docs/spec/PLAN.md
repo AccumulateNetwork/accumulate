@@ -179,6 +179,38 @@ possible:
 - **Done:** the 20261002T145702Z shape on Docker ends with BVN2 at four signers
   and the network healthy, and the operator steps are written down.
 
+#### How a halted partition learns its new committee (2026-10-03; decision pending, Paul)
+
+Simulation first (`TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange`,
+skipped until this is decided): BVN0 with four validators loses two. Its
+consensus has no quorum (the simulator's 2/3 rule, DAG-BFT's 3 of 4), so it
+executes nothing — the first submission fails "no response". The operators'
+change on the Directory is carried to BVN0 by a Directory anchor that BVN0
+would have to execute, and a partition's consensus committee is updated only
+by its own executed blocks (the simulator's `applyValUp`; the daemon's
+`WillChangeGlobals` from the partition's own executor). So the change never
+arrives. In the Docker run BVN2 kept producing only because its two torn
+validators still voted; a quorum truly lost halts the partition.
+
+Two ways for the committee to reach a halted partition:
+
+- **(a) Follow the node's own Directory.** Every validator runs the Directory
+  too; the partition's consensus takes its committee from the Directory state
+  the node itself executed, at the Directory block that changed it. Fast, no
+  operator step — but each node switches at its own moment, and a BFT
+  committee change must happen at a point every member agrees on, or two
+  nodes count the same round's votes against different committees.
+- **(b) Committee change, then restart the survivors.** The operators change
+  the set on the Directory, then restart the partition's surviving
+  validators; at start a node loads its partition's committee from the newest
+  network definition its own Directory holds (not only from its partition's
+  executed state), and all of them start from the same committee — the
+  restart is the agreed boundary. Safe by construction; one operator step;
+  composes with the whole-restart path (#4501, R1) already built.
+
+Recommendation: (b). It is the smallest change that keeps the committee
+boundary agreed, and the restart it needs is the operation already proven.
+
 ### R5 — a whole restart resumes from the highest signed, validated state (#4501)
 
 Spec: executor.md, decided 2026-10-02. Each node states its highest validated
