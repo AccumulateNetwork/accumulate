@@ -137,7 +137,12 @@ func TestAnExecutedBlockThatDivergesIsCaughtWhileABackfillIsInFlight(t *testing.
 			// Caught: the node collects again. Where was the backfill?
 			caughtWhileHeld = checks
 			cancel()
-		case checks > 400:
+		case corruptedAt == 0 && checks > 4000, corruptedAt != 0 && checks > corruptedAt+400:
+			// The budget runs from the corruption, not from the start: the
+			// corruption waits for dave's backfill to be in flight, which
+			// runs on its own goroutine and arrives when it arrives. A
+			// budget counted from the start cancelled runs whose backfill
+			// came late, before the catch could happen (#4513).
 			cancel()
 		}
 	}
