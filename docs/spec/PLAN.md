@@ -179,37 +179,30 @@ possible:
 - **Done:** the 20261002T145702Z shape on Docker ends with BVN2 at four signers
   and the network healthy, and the operator steps are written down.
 
-#### How a halted partition learns its new committee (2026-10-03; decision pending, Paul)
+#### Decided (Paul, 2026-10-03): revive from the last complete block
 
-Simulation first (`TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange`,
-skipped until this is decided): BVN0 with four validators loses two. Its
-consensus has no quorum (the simulator's 2/3 rule, DAG-BFT's 3 of 4), so it
-executes nothing — the first submission fails "no response". The operators'
-change on the Directory is carried to BVN0 by a Directory anchor that BVN0
-would have to execute, and a partition's consensus committee is updated only
-by its own executed blocks (the simulator's `applyValUp`; the daemon's
-`WillChangeGlobals` from the partition's own executor). So the change never
-arrives. In the Docker run BVN2 kept producing only because its two torn
-validators still voted; a quorum truly lost halts the partition.
+Replaces the (a)/(b) options above it and R4-B/R4-C as the design (executor.md,
+"A partition that loses a quorum of its validators' states"). The committee
+for N+1 is the validator set in the state of the last complete block N; blocks
+after N are redone under it; too few validators means the partition halts
+until operators restore nodes or intervene. Work, in order:
 
-Two ways for the committee to reach a halted partition:
+1. **State as of N.** Find whether a node can obtain the partition's state as
+   of an anchored block N from its own store or a peer (the 1,024-block BPT
+   history, "serves-anchored-blocks"), accounts included, not only tree nodes.
+   This decides whether "taken back to N" is a read or a rebuild.
+2. **N, agreed.** A node computes N from the Directory's records (the newest
+   quorum-signed anchor of its partition; the anchor source already tracks it).
+3. **Committee from N.** At revival the partition's consensus committee is
+   loaded from N's validator set (plus the operators' recorded change), not
+   from the node's latest executed state.
+4. **Redo.** Blocks after N re-executed from the committed log or the block
+   ledger records; keep what reproduces, roll back what does not.
+5. **Halt and say why** when N's committee lacks a quorum (consensus already
+   halts; the node states it and the dashboard shows it).
 
-- **(a) Follow the node's own Directory.** Every validator runs the Directory
-  too; the partition's consensus takes its committee from the Directory state
-  the node itself executed, at the Directory block that changed it. Fast, no
-  operator step — but each node switches at its own moment, and a BFT
-  committee change must happen at a point every member agrees on, or two
-  nodes count the same round's votes against different committees.
-- **(b) Committee change, then restart the survivors.** The operators change
-  the set on the Directory, then restart the partition's surviving
-  validators; at start a node loads its partition's committee from the newest
-  network definition its own Directory holds (not only from its partition's
-  executed state), and all of them start from the same committee — the
-  restart is the agreed boundary. Safe by construction; one operator step;
-  composes with the whole-restart path (#4501, R1) already built.
-
-Recommendation: (b). It is the smallest change that keeps the committee
-boundary agreed, and the restart it needs is the operation already proven.
+`TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange` becomes the
+simulation for this once step 3 exists.
 
 ### R5 — a whole restart resumes from the highest signed, validated state (#4501)
 

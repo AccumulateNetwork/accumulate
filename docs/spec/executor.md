@@ -1673,34 +1673,32 @@ because the peers hold what this node lacks, and here no peer holds anything
 it did not execute itself.
 
 **A partition that loses a quorum of its validators' states (Decided, Paul,
-2026-10-02; #4512).** Run 20261002T145702Z: a kill tore two of BVN2's four
-stores; the survivors executed on, their anchors carried two signatures of the
-three required, the Directory held them without bound, and the two lost
-validators could not be re-admitted — no anchor of a two-signer partition
-reaches the threshold, so no state can be proven to a joiner, and the join must
-not pretend otherwise (#4508). Re-executing the committed log from the last
-validated state is not possible past the rescue window. Two ways are
-decided:
+2026-10-03; supersedes the committee-change and state-copy text of
+2026-10-02; #4512).** "We HAVE the block and state of the last complete block
+along with the validator set. So, even if we have to update the committee
+(due to a validator change required due to a node failure), we can form the
+committee for the next block. If there are not enough of the previous
+validators, that's okay. It just means the network doesn't change state, and
+operators can work to restore nodes. Or intervene manually."
 
-- **The design: quorum loss is a committee change.** The operators remove the
-  lost validators from the partition's set on the Directory — the on-chain
-  change that adds and promotes validators today — raising the network
-  definition's version. Anchor signatures are checked against the set *at a
-  version*, so the survivors' anchors validate under the new one; the
-  Directory re-evaluates what it held under the old; the partition's
-  consensus quorum follows the set; joiners can prove the survivors' state;
-  the lost validators return as new members by the same change once synced,
-  a follower first. The operators assert, by that change, that the
-  survivors' state is the partition's — the trust every committee change
-  carries. Until this is built (PLAN R4-B) the stopgap below applies.
-- **The stopgap, by hand: state copy.** Stop every validator of the
-  partition; copy a survivor's store and `consensus/` to the lost nodes (a
-  live copy is no copy: stop first); start all together. Each resumes on the
-  copied block through the whole-restart exit and signs from there. What the
-  Directory held is delivered once the copied nodes' signatures reach it
-  (open: whether they re-sign anchors already held; PLAN R4-C tests it).
+1. **The revival point is the last complete block N**: the newest block of
+   the partition whose anchor the Directory holds signed by a quorum of the
+   partition's validators. It is provable from the Directory's records, so
+   every node agrees on it.
+2. **The committee for N+1 is the validator set in N's state**, with any
+   change the operators record for failed nodes taking effect at that
+   boundary. One boundary, agreed by construction: no node switches committee
+   at a moment of its own.
+3. **Blocks after N are discarded and redone** under that committee —
+   re-executed from the committed log where consensus retains it, otherwise
+   from the block ledger's records through the overlap. A node whose redo
+   reproduces the blocks it executed after N keeps them; a node whose state
+   diverges, or is torn (C13), is taken back to N.
+4. **Too few of N's committee → no state change.** The partition halts and
+   says why; the Directory bounds what it holds for it (#4510); operators
+   restore nodes or intervene. A halt is the safe outcome, not a failure.
 
-Before either, the partition must be seen for what it is: a torn store is
+Before any of it, the partition must be seen for what it is: a torn store is
 detected at resume and not resumed onto (C13, #4507), and the Directory bounds
 what it holds for a partition below its quorum and names it degraded (#4510).
 
