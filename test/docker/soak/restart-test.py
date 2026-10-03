@@ -46,7 +46,14 @@ def not_active(since=None, nodes=None):
     after a whole-network restart, on the state from before it."""
     d = dash() or {}
     out = []
-    for r in (d.get("nodeState") or {}).get("rows", []):
+    rows = (d.get("nodeState") or {}).get("rows", [])
+    if since is not None and nodes is not None:
+        # A node with no row has not been read since it came back: run
+        # 20261003T232435Z passed "every node ACTIVE (0s after the restart)"
+        # on two restored containers whose rows were missing.
+        seen = {r["node"] for r in rows}
+        out += [f"{n} (no row)" for n in nodes if n not in seen]
+    for r in rows:
         name = f"{r['node']}/{r['partition']}"
         if r.get("state") != "ACTIVE":
             out.append(name)
