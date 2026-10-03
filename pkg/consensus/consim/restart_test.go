@@ -113,16 +113,18 @@ func TestRestartDoesNotReauthorARound(t *testing.T) {
 	runRestart(t, 300*time.Millisecond, 0, 1, 3)
 }
 
-// TestRestartAfterTwoNodesStopFirst stops two of BVN1's four validators,
-// lets the other two run on for a moment, then stops them too and restarts
-// all four from their checkpoints. The survivors author the round after
-// the last certified one, with batches, and no vote can certify it; the
-// blocks already ordered are still executed and checkpointed, and before
-// the fix each checkpoint's Retain removed every batch no certificate
-// named -- the restored header came back without its payload, no peer
-// could vote for it, its author could not author the round again, and the
-// partition held at two certificates of the three it needed (run
-// 20261002T090546Z, BVN3 at round 25839, block 12920).
+// TestRestartAfterTwoNodesStopFirst stops two of BVN1's four validators, lets
+// the other two run on for half a second, then stops them too and restarts
+// all four from their checkpoints, under load. The headers authored after the
+// restart re-propose every batch their nodes accumulated while down, hundreds
+// of them, and a voter that asked for one missing batch per rebroadcast took
+// minutes to certify one: this test stalls with that rule and passes with the
+// voter asking for all of them (#4503). It does not reproduce #4502 (a
+// survivor's authored header whose batches a checkpoint deleted): it passes
+// with and without that fix, which rests on
+// TestCheckpointKeepsTheAuthoredHeadersBatches. Until 2026-10-03 the stagger
+// itself was not wired (scheduledRestarts ignored StopFirst) and the test ran
+// a plain simultaneous restart.
 func TestRestartAfterTwoNodesStopFirst(t *testing.T) {
 	runRestartOf(t,
 		Restart{Part: "BVN1", Vals: []int{0, 1, 2, 3}, AtHeight: 40, StopFirst: []int{2, 3}, StopFirstFor: 500 * time.Millisecond},

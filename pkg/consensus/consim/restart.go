@@ -236,8 +236,18 @@ func (s *Sim) scheduledRestarts(logf func(string, ...any)) ([]string, error) {
 			restarted = append(restarted, s.parts...)
 			continue
 		}
-		logf("RESTART %s nodes %v at height %d", r.Part, r.Vals, h)
-		if err := s.restart(s.targets(r.Part, r.Vals), r.ExecutorFirst); err != nil {
+		if r.Lose {
+			logf("LOSE %s nodes %v at height %d, for good", r.Part, r.Vals, h)
+			for _, sn := range s.targets(r.Part, r.Vals) {
+				sn.stopConsume()
+				<-sn.consumeDone
+				sn.n().Stop()
+			}
+			restarted = append(restarted, r.Part)
+			continue
+		}
+		logf("RESTART %s nodes %v at height %d (nodes %v stopped %s before the rest)", r.Part, r.Vals, h, r.StopFirst, r.StopFirstFor)
+		if err := s.restartStaggered(s.targets(r.Part, r.Vals), s.targets(r.Part, r.StopFirst), r.StopFirstFor, r.ExecutorFirst); err != nil {
 			return restarted, err
 		}
 		restarted = append(restarted, r.Part)

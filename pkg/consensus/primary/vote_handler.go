@@ -45,6 +45,7 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 			"author", hexEncode(vote.Author))
 		return
 	}
+	p.noteHeaderSeen(vote.Author, vote.Round)
 
 	p.pendingMu.Lock()
 	defer p.pendingMu.Unlock()
@@ -287,6 +288,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 			"author", hexEncode(header.Author))
 		return
 	}
+	p.noteHeaderSeen(header.Author, header.Round)
 
 	// Don't vote on our own headers
 	pubKey := p.config.KeyPair.Public().(ed25519.PublicKey)

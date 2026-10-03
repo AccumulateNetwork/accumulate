@@ -8,6 +8,7 @@ package primary
 
 import (
 	"crypto/ed25519"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
@@ -77,6 +78,13 @@ type RoundStatus struct {
 	OwnVotes     int  // votes collected for it
 	CertsHere    int  // certificates in the DAG for the round
 	CertsBefore  int  // and for the round before it
+
+	// Authors is how many of the committee this primary has heard producing
+	// at the round in the last HeardWithin: a header or a vote for it, and
+	// itself. Committee and Quorum are the committee's size and
+	// the count a round needs. Authors below Quorum is a partition that has
+	// lost its quorum, not a round that is merely slow (#4512).
+	Authors, Committee, Quorum int
 }
 
 // RoundStatus reports the primary's current round as it holds it.
@@ -88,6 +96,7 @@ func (p *Primary) RoundStatus() RoundStatus {
 	if r > 0 {
 		st.CertsBefore = p.dag.RoundCount(r - 1)
 	}
+	authors := map[string]bool{string(p.config.KeyPair.Public().(ed25519.PublicKey)): true}
 	p.pendingMu.Lock()
 	st.LastAuthored, st.HasAuthored = p.lastAuthoredRound, p.hasAuthored
 	for d, h := range p.ourHeaders {
@@ -97,5 +106,44 @@ func (p *Primary) RoundStatus() RoundStatus {
 		}
 	}
 	p.pendingMu.Unlock()
+	p.seenMu.Lock()
+	now := time.Now()
+	for a, seen := range p.headerSeen {
+		if seen.round >= r && now.Sub(seen.at) <= HeardWithin {
+			authors[a] = true
+		}
+	}
+	p.seenMu.Unlock()
+	st.Authors = len(authors)
+	p.committeeMu.RLock()
+	st.Committee, st.Quorum = p.committee.Len(), p.committee.QuorumCount()
+	p.committeeMu.RUnlock()
 	return st
+}
+
+// HeardWithin is how recently a committee member must have been heard at the
+// current round to count as producing there (RoundStatus.Authors). A live
+// member in a round that does not complete keeps sending: it rebroadcasts its
+// header about once a second, or re-sends its vote on each rebroadcast it
+// sees. A stopped one's last header stays in the DAG and in memory, and
+// counting it made a partition that lost two of four report three producing.
+const HeardWithin = 10 * time.Second
+
+type seenAt struct {
+	round types.Round
+	at    time.Time
+}
+
+// noteHeaderSeen records that a committee member sent a header or a vote for
+// round, now (RoundStatus.Authors).
+func (p *Primary) noteHeaderSeen(author []byte, round types.Round) {
+	p.seenMu.Lock()
+	defer p.seenMu.Unlock()
+	if p.headerSeen == nil {
+		p.headerSeen = map[string]seenAt{}
+	}
+	cur := p.headerSeen[string(author)]
+	if round >= cur.round {
+		p.headerSeen[string(author)] = seenAt{round: round, at: time.Now()}
+	}
 }

@@ -167,7 +167,10 @@ type Restart struct {
 	// can certify, and checkpoint the blocks already ordered.
 	StopFirst    []int
 	StopFirstFor time.Duration
-	done         bool
+	// Lose stops Vals for good instead of restarting them: the partition
+	// loses those validators (#4512).
+	Lose bool
+	done bool
 }
 
 // execCost reports the per-transaction execution cost for one partition.

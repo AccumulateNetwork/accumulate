@@ -229,6 +229,11 @@ type Primary struct {
 	// committee (#4469)
 	verifications atomic.Uint64
 
+	// headerSeen is, per committee member, the highest round it has been seen
+	// to author a header at (RoundStatus.Authors; #4512).
+	seenMu     sync.Mutex
+	headerSeen map[string]seenAt
+
 	// Channel to signal new certificates (for Bullshark)
 	newCerts   chan *types.Certificate
 	newCertsMu sync.Mutex

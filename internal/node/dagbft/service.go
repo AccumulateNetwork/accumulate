@@ -22,6 +22,8 @@ import (
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -782,10 +784,34 @@ func (s *Service) checkBlockLiveness() {
 		rs := node.Primary().RoundStatus()
 		args = append(args, "lastAuthored", rs.LastAuthored, "hasAuthored", rs.HasAuthored,
 			"ownHeader", rs.OwnHeader, "ownVotes", rs.OwnVotes,
-			"certsThisRound", rs.CertsHere, "certsRoundBefore", rs.CertsBefore)
+			"certsThisRound", rs.CertsHere, "certsRoundBefore", rs.CertsBefore,
+			"authors", rs.Authors, "committee", rs.Committee, "quorum", rs.Quorum)
+		if rs.Quorum > 0 && rs.Authors < rs.Quorum {
+			// Fewer of the committee are producing than a round needs: the
+			// partition has lost its quorum, and holds its state -- the
+			// state of its last sealed block -- until enough of its
+			// validators return (executor spec, "A partition that loses a
+			// quorum of its validators' states"; #4512). Said as what it
+			// is, so an operator restores validators rather than hunting a
+			// consensus bug.
+			mBelowQuorum.WithLabelValues(s.config.Partition.ID).Set(1)
+			s.logger.Error("This partition has lost its quorum: fewer of its validators were heard producing at this round in the last 10s than a round needs; it holds its state until enough of them return",
+				"partition", s.config.Partition.ID, "producing", rs.Authors, "committee", rs.Committee, "quorum", rs.Quorum, "lastBlock", lastIndex)
+		} else {
+			mBelowQuorum.WithLabelValues(s.config.Partition.ID).Set(0)
+		}
 	}
 	s.logger.Error("Partition stalled: no block produced", args...)
 }
+
+// mBelowQuorum is 1 while the partition's consensus sees fewer of its
+// committee producing at the current round than a round needs (#4512).
+var mBelowQuorum = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "dagbft",
+	Name:      "partition_below_quorum",
+	Help:      "1 while fewer of the partition's validators are producing at the current consensus round than a round needs: the partition has lost its quorum and holds its state",
+}, []string{"partition"})
 
 // processCommittedGroup executes one committed LEADER's sub-DAG as ONE block.
 //

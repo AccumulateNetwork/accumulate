@@ -238,10 +238,12 @@ func Stats() Counters {
 // destination's word that it executed them. The word is the partition's: it
 // comes from any current validator of the destination, and the partition's
 // Delivered moves when a quorum executes. A validator of the destination that
-// restarted just then lost what it held in staging and pulls it back from
-// this cache before it executes its first block (executor spec, "Sync";
-// #4290); released at once, the entries would be gone by the time it asks,
-// and it could never again execute the block its peers executed. Five
+// restarted just then lost what it held in staging and asks for it again
+// (healing, by span) once it executes; released at once, the entries would
+// be gone by the time it asks. Its restart does not wait on this cache: a
+// restart is a join of its own partition (#4294 removed the pull before the
+// first block that #4290 added; executor spec, "Nothing in a partition's
+// restart or sync waits on another partition"). Five
 // minutes of blocks covers a restart, its catch-up and the pull; what it
 // costs is that many blocks of production held past their release. Anchors
 // the same: the pull rebuilds the anchor streams too, and run
