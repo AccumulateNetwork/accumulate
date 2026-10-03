@@ -172,7 +172,9 @@ type PulledState struct {
 	// ownRoot is whether the node is ACTIVE on a root no anchor verified: it
 	// took the whole-restart exit or started with its network (Executing). agreedAt is the first block
 	// after that whose root its signed anchor proved, said once (#4483).
-	ownRoot  bool
+	ownRoot bool
+	// torn is StateOptions.Torn: the store was found torn at start.
+	torn     error
 	agreedAt atomic.Uint64
 
 	// checked is executed, for the backfill's lines: the backfill reads it
@@ -325,6 +327,11 @@ type StateOptions struct {
 	// It is handed over so the daemon and the join cannot disagree about
 	// where this node stands.
 	ExecutedBlock uint64
+	// Torn is the finding of CheckStore when the node's store was found torn
+	// at start: a chain's head names records the store does not hold. Such
+	// a node never resumes onto its own block (Resumable is false); it joins
+	// from its peers, and says why while it waits (#4507).
+	Torn error
 
 	// AnchorWait is how long a pull complete at a block V holds for V's
 	// signed anchor before going on to the next V. Zero is DefaultAnchorWait.
@@ -344,6 +351,9 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		return nil, errors.BadRequest.With("a join's state needs a partition, a database and peers to pull from")
 	}
 	machine := nodestate.New(opts.Partition)
+	if opts.Torn != nil {
+		mStoreTorn.WithLabelValues(opts.Partition.String()).Set(1)
+	}
 	track, err := tracker.New(opts.Database, opts.Partition)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
@@ -358,6 +368,7 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		gated:      opts.Database,
 		sources:    opts.Sources,
 		machine:    machine,
+		torn:       opts.Torn,
 		tracker:    track,
 		log:        log.With("module", "join"),
 		executed:   opts.ExecutedBlock,
@@ -1734,6 +1745,12 @@ func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source
 //     (PullStarted), and the record the executor writes with every block
 //     names the block the ledger does.
 func (s *PulledState) Resumable() (uint64, bool) {
+	if s.torn != nil {
+		// A torn store is no block's state: the head of some chain names
+		// records the store does not hold, and a node that resumed onto it
+		// failed every block it produced (#4507). It joins instead.
+		return 0, false
+	}
 	if !s.peersJoining || s.pulled || s.sync != nil || s.repairFrom != 0 || s.executed == 0 {
 		return 0, false
 	}

@@ -516,9 +516,22 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// absent series (#4345b). The executor moves it from here on.
 	nodestate.ReportExecuted(s.Partition.ID, lastBlock)
 
+	// A store a kill left torn -- a chain's head naming records the store does
+	// not hold -- is no block's state: a node that resumed onto one failed
+	// every block it produced (run 20261002T145702Z, #4507). Checked before
+	// anything decides to resume; a torn node joins instead and says so.
+	var torn error
+	if lastBlock > protocol.GenesisBlock {
+		torn = join.CheckStore(db, protocol.PartitionUrl(s.Partition.ID), anchorSourcesOf(globals, s.Partition.ID))
+		if torn != nil {
+			slog.Error("This node's store is torn; it will not resume onto it and joins from its peers instead",
+				"module", "join", "partition", s.Partition.ID, "block", lastBlock, "error", torn)
+		}
+	}
+
 	// A store holding only genesis cannot tell the first node of a network
 	// from a node added to a running one; the deployment says which (#4340).
-	joining := nodeMustJoin(lastBlock) || s.JoinRunningNetwork != nil && *s.JoinRunningNetwork
+	joining := nodeMustJoin(lastBlock) || s.JoinRunningNetwork != nil && *s.JoinRunningNetwork || torn != nil
 	// A node that executes from genesis and is not a validator of its
 	// partition -- a follower started with its network -- is checked as a
 	// joined node is: every block it executes against its signed anchor,
@@ -583,6 +596,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			// (#4295).
 			ExecutedBlock: lastBlock,
 			Logger:        slog.Default(),
+			Torn:          torn,
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)
@@ -689,6 +703,25 @@ func joinOptions(partition string, joinState *join.PulledState, buffer join.Buff
 		Peers:     peers,
 		Logger:    slog.Default(),
 	}
+}
+
+// anchorSourcesOf names the partitions whose anchors this partition's anchor
+// pool records: the Directory for a BVN, every BVN for the Directory. They
+// are the anchor chains CheckStore walks.
+func anchorSourcesOf(g *network.GlobalValues, partition string) []string {
+	if !strings.EqualFold(partition, protocol.Directory) {
+		return []string{protocol.Directory}
+	}
+	var out []string
+	if g == nil || g.Network == nil {
+		return out
+	}
+	for _, p := range g.Network.Partitions {
+		if p.Type == protocol.PartitionTypeBlockValidator {
+			out = append(out, p.ID)
+		}
+	}
+	return out
 }
 
 // watchesFromGenesis reports whether a node that executes from genesis is

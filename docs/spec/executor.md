@@ -1607,13 +1607,20 @@ takes one exit from that, and only when both of these hold:
    them (#4466). A restart of some validators while at least the threshold of
    them are `ACTIVE` takes the ordinary path. A node that could resume does
    not start a pull.
-2. **The node's store is its own execution.** No pull has started, in this
-   process or in an earlier one that did not hand off — `SystemData.PullStarted`
+2. **The node's store is its own execution, and its chains are whole.** No
+   pull has started, in this process or in an earlier one that did not hand
+   off — `SystemData.PullStarted`
    is written before a pull writes anything and cleared at the handoff — and
    `SystemData.ExecutedBlock`, which the executor writes with every block,
    names the block `<partition>/ledger` does. A store holding some of a peer's
    accounts is no block's state; such a node waits, and joins from its peers
-   once they have resumed.
+   once they have resumed. Nor is a store a kill left **torn** — a chain's
+   head naming records the store does not hold (a Tail chunk short of its
+   last rewrite, an element never flushed): checked at start for the chains
+   the block path writes (`join.CheckStore`), such a node never resumes; it
+   says so, joins from its peers, and is counted
+   (`accumulate_join_store_torn`). Run 20261002T145702Z: two validators that
+   resumed onto torn stores failed every block they produced (#4507).
 
 Then the node resumes: consensus leaves collecting where the node's own
 checkpoint put it — the position that produced its last block (consensus.md,

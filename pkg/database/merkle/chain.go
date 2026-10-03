@@ -689,3 +689,54 @@ func getMerkleStateIntermediate(m *State, hash []byte, height int64) (left, righ
 	}
 	return nil, nil, fmt.Errorf("no values found at height %d", height)
 }
+
+// CheckRecords verifies that the records the chain's head accounts for are
+// in the store: every Tail chunk of the open mark set holds the hashes the
+// head says it does, and the newest elements, up to newest of them, are
+// present. A kill can leave a store with a head ahead of its records -- a
+// chunk short of its last rewrite, an element never flushed -- and a node that
+// resumes onto such a store fails every block it produces (run
+// 20261002T145702Z, #4507). It reports the first record found wanting, and
+// nil for a store whose head is backed. Reads are of positional records and so
+// reach history when the window does not answer.
+func (m *Chain) CheckRecords(newest int64) error {
+	head, err := m.Head().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("%v: load head: %w", m.key, err)
+	}
+	if head.Count == 0 {
+		return nil
+	}
+	if len(head.HashList) == 0 {
+		// The open mark set lives in Tail chunks: each must start where its
+		// position says and hold every hash up to the head.
+		c := m.chunkSize()
+		lastMark := head.Count &^ m.markMask
+		for base := lastMark; base < head.Count; base += c {
+			k := uint64((base & m.markMask) / c)
+			want := c
+			if base+want > head.Count {
+				want = head.Count - base
+			}
+			chunk, err := m.Tail(k).Get()
+			switch {
+			case err != nil:
+				return errors.InvalidRecord.WithFormat("%v: tail chunk %d is missing: %w", m.key, k, err)
+			case int64(chunk.Index) != base:
+				return errors.InvalidRecord.WithFormat("%v: tail chunk %d is of entry %d, not %d", m.key, k, chunk.Index, base)
+			case int64(len(chunk.Hashes)) < want:
+				return errors.InvalidRecord.WithFormat("%v: tail chunk %d holds %d hashes, the head says %d", m.key, k, len(chunk.Hashes), want)
+			}
+		}
+	}
+	from := head.Count - newest
+	if from < 0 {
+		from = 0
+	}
+	for i := from; i < head.Count; i++ {
+		if _, err := m.Element(uint64(i)).Get(); err != nil {
+			return errors.InvalidRecord.WithFormat("%v: element %d of %d is missing: %w", m.key, i, head.Count, err)
+		}
+	}
+	return nil
+}

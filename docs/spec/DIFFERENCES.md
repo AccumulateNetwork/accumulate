@@ -1821,21 +1821,6 @@ upgraded all at once, onto builds that carry it. The entry goes when no
 deployment runs an older build.
 
 
-### C13. A node resumes onto a store a kill left inconsistent, and fails every block
-
-consensus.md, "Restart", and executor.md, "Sync", have a node resume from its
-own last block when its peers are joining too. Run 20261002T145702Z: a kill
-left two validators' stores with a chain head naming records the permanent
-layer did not hold (one Tail chunk short on each; one element lost outright
-on one). They resumed, and failed every block they produced. The store-side
-defect is BlockchainDB#99; the read that turned a short chunk into a fatal
-miss is fixed (#4507, the adapter reads history for positional records). What
-the spec implies and the code does not do: a node must verify the state it
-resumes onto — at least that each chain's head is backed by its records —
-and a node that fails it joins from its peers instead (#4507, node side;
-#4501's "resume from whichever node has the highest signed, validated
-state"). Until then a torn store is a validator that signs nothing, for ever.
-
 ### C14. A joiner with nothing to resume from takes the whole-restart exit
 
 executor.md, "A partition that restarts as a whole": the exit is for a node
