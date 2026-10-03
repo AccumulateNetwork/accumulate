@@ -1727,6 +1727,20 @@ proof under a known directory root authorizes it outright, because the proof
 depends only on the current directory root, which every synced node has
 (#4056). A historical quorum is never re-gathered.
 
+**A source below its quorum is degraded.** A head held for an anchor below
+its quorum for `DegradedAfterBlocks` (64, a minute of blocks — longer than any
+signature set takes to complete) says its source partition has fewer
+validators signing than its threshold: nothing it sends can validate until
+that changes. The stream is **degraded**: staging holds at most
+`DegradedHoldLimit` (256) entries for it and refuses the rest, counted
+(`accumulate_staging_refused_total{reason="degraded"}`), and says so once
+(`accumulate_staging_stream_degraded`); the head running clears it. The
+refused entries are asked for again by span once the head runs. Run
+20261002T145702Z: the Directory held 2,000 of a two-signer partition's anchors
+and re-decided them every block until it was out of memory (#4510). What
+revives such a partition is "A partition that loses a quorum of its
+validators' states".
+
 **No peer is ever asked what it holds.** The earlier design's step 2 — a
 validator serving its staging as of its last committed block — answered a
 question the node can answer for itself, and answered it from one

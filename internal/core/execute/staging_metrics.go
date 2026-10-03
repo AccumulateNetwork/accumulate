@@ -37,6 +37,24 @@ var mStagingHeldBytes = promauto.NewGaugeVec(prometheus.GaugeOpts{
 // the most a block executes from one stream (the executor's maxRunPerBlock,
 // 1024). Cleared once the backlog is below half of it, so a stream hovering
 // at the line is reported once, not every block.
+// mStreamDegraded is 1 while the stream's head has been held for an anchor
+// below its signature quorum for DegradedAfterBlocks: the source partition is
+// below its signing quorum (#4510).
+var mStreamDegraded = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "staging",
+	Name:      "stream_degraded",
+	Help:      "1 while the stream's head has been held for an anchor below its signature quorum for a minute of blocks: its source partition is below its signing quorum",
+}, []string{"ledger", "source"})
+
+// mStagingRefused counts entries staging refused to hold, by reason.
+var mStagingRefused = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "staging",
+	Name:      "refused_total",
+	Help:      "Entries staging refused to hold, by reason: degraded (the stream's source is below its quorum and the hold is at its bound)",
+}, []string{"ledger", "source", "reason"})
+
 const heldAlarmEntries = 8 * 1024
 
 // heldSize is the message's encoded size, measured once when the entry is
@@ -58,6 +76,17 @@ func (st *streamState) observe(key string) {
 	ledger, source, _ := strings.Cut(key, "|")
 	mStagingHeld.WithLabelValues(ledger, source).Set(float64(st.held))
 	mStagingHeldBytes.WithLabelValues(ledger, source).Set(float64(st.bytes))
+	switch {
+	case !st.degradedOn && st.degraded():
+		st.degradedOn = true
+		mStreamDegraded.WithLabelValues(ledger, source).Set(1)
+		slog.Warn("A stream's source partition is below its signing quorum: its head has been held for an anchor below quorum for a minute of blocks; what is held for it is bounded",
+			"module", "staging", "ledger", ledger, "source", source, "since-block", st.belowSince, "at-block", st.belowAt, "held", st.held, "limit", DegradedHoldLimit)
+	case st.degradedOn && !st.degraded():
+		st.degradedOn = false
+		mStreamDegraded.WithLabelValues(ledger, source).Set(0)
+		slog.Info("A stream's source partition is back at its signing quorum", "module", "staging", "ledger", ledger, "source", source)
+	}
 	switch {
 	case !st.alarmed && st.held > heldAlarmEntries:
 		st.alarmed = true

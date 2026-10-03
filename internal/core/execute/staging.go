@@ -100,6 +100,32 @@ type streamState struct {
 	held    int
 	bytes   int
 	alarmed bool
+
+	// belowSince and belowAt are the first and the latest block at which
+	// the stream's head was held for an anchor below its signature quorum;
+	// zero when it is not. A head held that way for DegradedAfterBlocks
+	// makes the stream degraded: its source partition is below its signing
+	// quorum, nothing it sends can validate, and what is held for it is
+	// bounded at DegradedHoldLimit (executor spec, "A source below its
+	// quorum"; run 20261002T145702Z, #4510).
+	belowSince uint64
+	belowAt    uint64
+	degradedOn bool // the gauge and the log were set
+}
+
+// DegradedAfterBlocks is how long a stream's head may be held for an anchor
+// below quorum before the stream is degraded: a minute of blocks, longer than
+// any signature set takes to complete.
+const DegradedAfterBlocks = 64
+
+// DegradedHoldLimit is how many entries a degraded stream holds: a few blocks'
+// worth, so the head can run the moment its quorum is back, and no more.
+const DegradedHoldLimit = 256
+
+// degraded reports whether the stream's head has been held below quorum for
+// DegradedAfterBlocks.
+func (st *streamState) degraded() bool {
+	return st.belowSince != 0 && st.belowAt-st.belowSince >= DegradedAfterBlocks
 }
 
 var zeroHash [32]byte
@@ -171,6 +197,8 @@ func (st *streamState) release(n uint64, s *Staging) {
 	if n <= st.delivered {
 		return
 	}
+	// The head ran: whatever held it below quorum is over.
+	st.belowSince, st.belowAt = 0, 0
 	drop := n - st.delivered
 	if drop > uint64(len(st.entries)) {
 		for _, h := range st.entries {
@@ -354,6 +382,14 @@ func (t *StagingTxn) Hold(id StreamID, n uint64, h *Held) {
 		if v, ok := base.hash(n); ok && h.Collected && v != h.Hash {
 			disproved = true
 		}
+		if !inBase && base.degraded() && base.held >= DegradedHoldLimit {
+			// The source is below its signing quorum and nothing it sends
+			// can validate: holding more is memory for nothing. The source
+			// is asked for it again once the head runs (pull by span).
+			t.s.mu.Unlock()
+			mStagingRefused.WithLabelValues(id.Ledger.String(), id.Source.String(), "degraded").Inc()
+			return
+		}
 	}
 	t.s.mu.Unlock()
 	if inBase || disproved {
@@ -369,6 +405,47 @@ func (t *StagingTxn) Hold(id StreamID, n uint64, h *Held) {
 	if n > t.sighted[k] {
 		t.sighted[k] = n
 	}
+}
+
+// NoteBelowQuorum records that the stream's head is held at block for an
+// anchor below its signature quorum. Held that way for DegradedAfterBlocks,
+// the stream is degraded (executor spec, "A source below its quorum"). It is
+// recorded on the stage itself, not the transaction: the block that sees the
+// head held is the block that counts, whether or not it commits anything
+// else for the stream.
+func (t *StagingTxn) NoteBelowQuorum(id StreamID, block uint64) {
+	if t == nil {
+		return
+	}
+	k := id.key()
+	t.s.mu.Lock()
+	defer t.s.mu.Unlock()
+	st := t.s.streams[k]
+	if st == nil {
+		return
+	}
+	if st.belowSince == 0 || block < st.belowSince {
+		st.belowSince = block
+	}
+	if block > st.belowAt {
+		st.belowAt = block
+	}
+	if _, ok := t.s.ids[k]; !ok {
+		t.s.ids[k] = id
+	}
+	st.observe(k)
+}
+
+// Degraded reports whether the stream's head has been held below its
+// signature quorum for DegradedAfterBlocks.
+func (t *StagingTxn) Degraded(id StreamID) bool {
+	if t == nil {
+		return false
+	}
+	t.s.mu.Lock()
+	defer t.s.mu.Unlock()
+	st := t.s.streams[id.key()]
+	return st != nil && st.degraded()
 }
 
 // IDOf answers what is held at a number of a stream.

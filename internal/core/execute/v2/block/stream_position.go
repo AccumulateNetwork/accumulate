@@ -130,6 +130,9 @@ func (p *streamPosition) blocker(n uint64) *headBlock {
 				}
 				why.err = err
 				why.reason = headBelowQuorum
+				if p.block.Index > 0 {
+					p.staging.NoteBelowQuorum(p.stream.id(), p.block.Index)
+				}
 				return why.settle()
 			}
 		}
