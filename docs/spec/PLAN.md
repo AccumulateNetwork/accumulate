@@ -179,30 +179,25 @@ possible:
 - **Done:** the 20261002T145702Z shape on Docker ends with BVN2 at four signers
   and the network healthy, and the operator steps are written down.
 
-#### Decided (Paul, 2026-10-03): revive from the last complete block
+#### Decided (Paul, 2026-10-03): revive from the partition's own last sealed state
 
-Replaces the (a)/(b) options above it and R4-B/R4-C as the design (executor.md,
-"A partition that loses a quorum of its validators' states"). The committee
-for N+1 is the validator set in the state of the last complete block N; blocks
-after N are redone under it; too few validators means the partition halts
-until operators restore nodes or intervene. Work, in order:
+Executor.md, "A partition that loses a quorum of its validators' states". A
+partition revives from each node's last sealed block (the highest leads,
+#4501), with the committee in that state; it depends on no other partition to
+restart or sync; too few validators means it halts until operators restore
+them or intervene. Work, in order:
 
-1. **State as of N.** Find whether a node can obtain the partition's state as
-   of an anchored block N from its own store or a peer (the 1,024-block BPT
-   history, "serves-anchored-blocks"), accounts included, not only tree nodes.
-   This decides whether "taken back to N" is a read or a rebuild.
-2. **N, agreed.** A node computes N from the Directory's records (the newest
-   quorum-signed anchor of its partition; the anchor source already tracks it).
-3. **Committee from N.** At revival the partition's consensus committee is
-   loaded from N's validator set (plus the operators' recorded change), not
-   from the node's latest executed state.
-4. **Redo.** Blocks after N re-executed from the committed log or the block
-   ledger records; keep what reproduces, roll back what does not.
-5. **Halt and say why** when N's committee lacks a quorum (consensus already
-   halts; the node states it and the dashboard shows it).
-
-`TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange` becomes the
-simulation for this once step 3 exists.
+1. **Audit for cross-partition dependencies in restart and sync.** Known one:
+   a joining Directory node will not execute a block whose BVN anchor stream
+   has a gap ("The next block has a gap; not executing until the peers have
+   delivered what they held … bvn-BVN3.acme->dn.acme/anchors missing=6292",
+   run 20261002T090546Z: BVN3 halted, so the Directory joiners could never
+   sync). The Directory's validators that were running executed past it; a
+   joiner must be able to as well.
+2. **Halt and say why** when the partition's own committee lacks a quorum.
+3. Rewrite `TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange` as:
+   lose two of four (the partition halts and says so; the others run on),
+   restore the two with their keys, the partition resumes.
 
 ### R5 — a whole restart resumes from the highest signed, validated state (#4501)
 

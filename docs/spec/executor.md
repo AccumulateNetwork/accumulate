@@ -1681,22 +1681,25 @@ committee for the next block. If there are not enough of the previous
 validators, that's okay. It just means the network doesn't change state, and
 operators can work to restore nodes. Or intervene manually."
 
-1. **The revival point is the last complete block N**: the newest block of
-   the partition whose anchor the Directory holds signed by a quorum of the
-   partition's validators. It is provable from the Directory's records, so
-   every node agrees on it.
-2. **The committee for N+1 is the validator set in N's state**, with any
-   change the operators record for failed nodes taking effect at that
-   boundary. One boundary, agreed by construction: no node switches committee
-   at a moment of its own.
-3. **Blocks after N are discarded and redone** under that committee —
-   re-executed from the committed log where consensus retains it, otherwise
-   from the block ledger's records through the overlap. A node whose redo
-   reproduces the blocks it executed after N keeps them; a node whose state
-   diverges, or is torn (C13), is taken back to N.
-4. **Too few of N's committee → no state change.** The partition halts and
-   says why; the Directory bounds what it holds for it (#4510); operators
-   restore nodes or intervene. A halt is the safe outcome, not a failure.
+Clarified (Paul, 2026-10-03): "We don't update accounts UNTIL a block is
+sealed" and "Syncing in a partition should not depend on any other partition
+(i.e. all partitions including the DN need to be able to restart)."
+
+1. **The revival point is each node's last sealed block.** A block's writes
+   reach the accounts only when it is sealed, so a node's store is exactly
+   the state of its last sealed block; nothing is half-applied and nothing is
+   rolled back. Nodes at different sealed blocks follow the highest (#4501).
+2. **The committee for the next block is the validator set in that sealed
+   state** — the partition's own, read from nothing outside it. A committee
+   change made on the Directory reaches a partition the ordinary way, by an
+   anchor it executes once it runs.
+3. **Nothing in a partition's restart or sync waits on another partition.**
+   Its state, its committee and the anchors that prove a joiner's state are
+   its own. An anchor the partition sent that never reached the Directory is
+   asked for by healing once both run; one that reached it is already there.
+4. **Too few of the committee → no state change.** The partition halts and
+   says why; the partitions that receive from it bound what they hold for it
+   (#4510); operators restore its validators (with their keys) or intervene.
 
 Before any of it, the partition must be seen for what it is: a torn store is
 detected at resume and not resumed onto (C13, #4507), and the Directory bounds
