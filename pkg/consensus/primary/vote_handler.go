@@ -226,6 +226,11 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 
 		// Signal for Bullshark
 		p.signalNewCertificate(cert)
+
+		// Release peers' certificates held waiting for this one: they
+		// arrive at the next round, often before it is inserted, and its
+		// gossip copies come back as duplicates (#4515).
+		p.processPendingForParent(cert.Digest())
 	}()
 }
 
@@ -614,13 +619,10 @@ func (p *Primary) requestRoundCatchUp(current, target types.Round) {
 	p.lastRoundPull = time.Now()
 	p.roundSyncMu.Unlock()
 
-	// Request at most MaxSyncRounds rounds, starting from where we are —
+	// Request at most MaxSyncRounds rounds, starting from the oldest gap —
 	// certificates insert parent-first, so pulling the oldest gap first
 	// makes steady forward progress even across a large gap.
-	first := current
-	if first > 0 {
-		first-- // Re-fetch the previous round in case our copy is partial
-	}
+	first := p.catchUpFrom(current)
 	var rounds []types.Round
 	for r := first; r <= target && len(rounds) < gossip.MaxSyncRounds; r++ {
 		rounds = append(rounds, r)
@@ -668,4 +670,35 @@ func (p *Primary) pushCertsForStaleRound(stale, current types.Round) {
 		slog.Debug("Pushed certificates for stale round",
 			"staleRound", stale, "certificates", pushed)
 	}
+}
+
+// catchUpFrom is the first round catch-up asks for: the round before
+// current, or, when the DAG holds no quorum of certificates there, the
+// highest round below it at which it does. A restarted node's round is the
+// last it authored (RestoreAuthored), while its DAG holds what its last
+// checkpoint held, and the rounds between were never asked for: catch-up
+// started at current-1, every certificate it brought named parents in the
+// gap, the pending buffer filled with them, and the node never collected
+// again (#4515: run 20261003T191744Z, a Directory validator restored at
+// round 2098 with its DAG to 2104 asked for 2106-2169 for eleven minutes).
+// The round found is asked for again, since its copy may be partial.
+func (p *Primary) catchUpFrom(current types.Round) types.Round {
+	if current == 0 {
+		return 0
+	}
+	first := current - 1
+	if p.dag.RoundCount(first) >= p.Committee().QuorumCount() {
+		return first
+	}
+	quorum := p.Committee().QuorumCount()
+	found, best := false, types.Round(0)
+	for _, r := range p.dag.Rounds() {
+		if r < first && (!found || r > best) && p.dag.RoundCount(r) >= quorum {
+			found, best = true, r
+		}
+	}
+	if found {
+		return best
+	}
+	return first
 }

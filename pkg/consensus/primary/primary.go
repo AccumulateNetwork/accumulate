@@ -922,11 +922,12 @@ func (p *Primary) recoverFromStall() {
 		}
 	}
 
-	// And pull whatever we are missing around the current round
+	// And pull whatever we are missing, from the oldest gap below the
+	// current round (catchUpFrom; #4515) through the next round
 	if p.certSyncer != nil {
-		rounds := []types.Round{current, current + 1}
-		if current > 0 {
-			rounds = append([]types.Round{current - 1}, rounds...)
+		var rounds []types.Round
+		for r := p.catchUpFrom(current); r <= current+1 && len(rounds) < gossip.MaxSyncRounds; r++ {
+			rounds = append(rounds, r)
 		}
 		p.certSyncer.RequestRounds(rounds)
 	}

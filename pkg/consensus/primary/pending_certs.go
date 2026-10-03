@@ -33,6 +33,7 @@ type PendingCertificates struct {
 	totalBuffered atomic.Uint64
 	totalInserted atomic.Uint64
 	totalPruned   atomic.Uint64
+	totalEvicted  atomic.Uint64
 }
 
 // pendingEntry represents a certificate waiting for its parents.
@@ -70,8 +71,16 @@ func (p *PendingCertificates) Add(cert *types.Certificate, missingParents []type
 		return false
 	}
 
-	// Check buffer size limit
-	if len(p.pending) >= p.maxSize {
+	// Check buffer size limit. A full buffer makes room for a certificate
+	// below the highest round it holds by evicting one at that round: what
+	// the node needs next is the lowest rounds, and frontier certificates
+	// come again (gossip, round catch-up) once it gets there. Without this a
+	// restarted node's buffer filled with frontier certificates it could not
+	// prune (they are above its round) and refused the ones at its round,
+	// whose parents then arrived with nothing left waiting for them; consim
+	// TestRestartOneDirectoryValidatorOfTwelve wedged at round 118 with 240
+	// held from rounds 153-160 (#4515).
+	if len(p.pending) >= p.maxSize && !p.evictAboveLocked(cert.Round()) {
 		return false
 	}
 
@@ -150,17 +159,7 @@ func (p *PendingCertificates) Prune(currentRound types.Round, gcDepth types.Roun
 
 	for digest, entry := range p.pending {
 		if entry.cert.Round() < cutoff {
-			// Remove from waitingFor
-			for parent := range entry.missingParents {
-				if waiters, ok := p.waitingFor[parent]; ok {
-					delete(waiters, digest)
-					if len(waiters) == 0 {
-						delete(p.waitingFor, parent)
-					}
-				}
-			}
-
-			delete(p.pending, digest)
+			p.removeLocked(digest, entry)
 			pruned++
 		}
 	}
@@ -249,4 +248,37 @@ func (p *PendingCertificates) Full() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return len(p.pending) >= p.maxSize
+}
+
+// removeLocked removes one pending certificate and its waits.
+func (p *PendingCertificates) removeLocked(digest types.CertificateDigest, entry *pendingEntry) {
+	for parent := range entry.missingParents {
+		if waiters, ok := p.waitingFor[parent]; ok {
+			delete(waiters, digest)
+			if len(waiters) == 0 {
+				delete(p.waitingFor, parent)
+			}
+		}
+	}
+	delete(p.pending, digest)
+}
+
+// evictAboveLocked evicts one certificate of the highest round held, if that
+// round is above round, and reports whether it did.
+func (p *PendingCertificates) evictAboveLocked(round types.Round) bool {
+	var (
+		victim types.CertificateDigest
+		entry  *pendingEntry
+	)
+	for d, e := range p.pending {
+		if entry == nil || e.cert.Round() > entry.cert.Round() {
+			victim, entry = d, e
+		}
+	}
+	if entry == nil || entry.cert.Round() <= round {
+		return false
+	}
+	p.removeLocked(victim, entry)
+	p.totalEvicted.Add(1)
+	return true
 }

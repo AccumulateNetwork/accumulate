@@ -285,11 +285,24 @@ certificate-sync topic. There are two kinds of request, and both are
 broadcast:
 
 - **By round.** A header more than one round ahead of the node's round asks
-  for every certificate of the rounds from one below the node's round
+  for every certificate of the rounds from where the node's DAG ends
   upward, at most 64 rounds, at most once a second
   (`requestRoundCatchUp`). A node whose round has not advanced for 5 s
   re-shares the certificates of its current and previous round and asks for
-  the rounds either side of its own, at most every 2 s (`recoverFromStall`).
+  the rounds from where its DAG ends through the round after its own, at
+  most every 2 s (`recoverFromStall`).
+- **Where the DAG ends is not the node's round.** It is the round below the
+  node's own if the DAG holds a quorum of certificates there, and otherwise
+  the highest round below it at which it does (`catchUpFrom`). That round is
+  asked for again, since its copy may be partial. A restarted node's round
+  is the last round it authored (`RestoreAuthored`), which can be rounds past
+  the certificates its checkpoint restored. Asked from its round, the rounds
+  between were never requested, and every certificate that arrived waited on
+  parents in them until the buffer was full. A Directory validator restarted
+  alone after a 6 s stop restored round 2098 with its DAG to 2104. It asked
+  for rounds 2106 to 2169 for eleven minutes and never collected again (run
+  `20261003T191744Z`; consim `TestRestartOneDirectoryValidatorOfTwelve`,
+  #4515).
 - **By digest.** A certificate whose parents the node lacks asks for those
   parents, and so does a header it will not vote on for the same reason.
   Digest requests are batched, deduplicated for 5 s and retried up to ten
@@ -308,7 +321,15 @@ requests from a random starting point, so one restarted under the same key
 does not reuse the IDs its peers saw answered before it stopped (#4470).
 What arrives is verified against the committee and inserted. A
 certificate whose parents are missing is held (up to `2 × 10 × committee`
-certificates) until they arrive, and its parents are asked for.
+certificates) until they arrive, and its parents are asked for. A full
+buffer makes room for a certificate below the highest round it holds by
+evicting one at that round: the node needs the lowest rounds next, and a
+frontier certificate comes again, from gossip or round catch-up, once the
+node reaches it. A restarted node's buffer otherwise filled with frontier
+certificates it could not prune, being above its round, and the
+certificates at its round were refused (consim
+`TestRestartOneDirectoryValidatorOfTwelve` wedged at round 118 with the
+buffer's 240 slots held by rounds 153–160; #4515).
 
 **A certificate the buffer will refuse is refused before it is verified.**
 Verification is an ed25519 check per signature, and a certificate already
@@ -333,16 +354,17 @@ the `verified` field of the `Certificate catch-up` line count the
 verifications.
 
 **A certificate the node needs to advance is never refused without asking
-for its parents.** When the buffer is full, a certificate at or below the
-round after the node's own whose parents are missing is not held, but its
-parents are still asked for; catch-up re-delivers it, and it is inserted
+for its parents.** When the buffer is full and holds nothing above it, a
+certificate at or below the round after the node's own whose parents are
+missing is not held, but its parents are still asked for; catch-up re-delivers it, and it is inserted
 once they are in. Certificates further ahead are left to round catch-up.
 This is the common case for a node seeded by `Rejoin` at `P`, not a corner:
 the DAG accepts certificates at `P` and `P + 1` without their parents, but a
 header names as weak links every certificate of the rounds from eight below
 it to two below it, so the certificates at `P + 2` name those of
-`P − 6 … P − 1`, which no round request asks for (round catch-up starts one
-round below the node's own). And a joining node's buffer is already full:
+`P − 6 … P − 1`, which no round request asks for (round catch-up starts
+where the DAG ends, and a node seeded at `P` holds nothing below `P`, so it
+starts one round below its own). And a joining node's buffer is already full:
 until `Rejoin` its floor is zero, so every live certificate gossip delivered
 while it pulled its state waits for parents, and none is pruned, being above
 its round. Refusing without asking left a follower's Directory at `P + 2`

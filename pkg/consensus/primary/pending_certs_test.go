@@ -507,3 +507,36 @@ func TestIntegrationChainedPendingCertificates(t *testing.T) {
 	require.NotNil(t, d.GetByDigest(round3Cert.Digest()))
 	require.Equal(t, 0, p.PendingCertsCount())
 }
+
+// A full buffer makes room for a certificate below the highest round it
+// holds, by evicting one at that round; one at or above it is still refused
+// (#4515).
+func TestPendingCertificatesFullEvictsTheHighestRoundForALowerOne(t *testing.T) {
+	pc := NewPendingCertificates(3)
+	v := newTestValidator(t)
+	var parent types.CertificateDigest
+	copy(parent[:], []byte("shared_parent_digest____"))
+	mk := func(round types.Round) *types.Certificate {
+		h := types.NewHeader(v.pub, round, 1, nil, nil)
+		require.NoError(t, h.Sign(v.priv))
+		return types.NewCertificate(h, nil, nil)
+	}
+
+	frontier := []*types.Certificate{mk(50), mk(51), mk(52)}
+	for _, c := range frontier {
+		require.True(t, pc.Add(c, []types.CertificateDigest{parent}))
+	}
+
+	require.False(t, pc.Add(mk(53), []types.CertificateDigest{parent}), "a certificate above every one held is refused")
+	require.False(t, pc.Add(mk(52), []types.CertificateDigest{parent}), "and so is one at the highest round held")
+
+	needed := mk(10)
+	require.True(t, pc.Add(needed, []types.CertificateDigest{parent}), "a certificate below the frontier the buffer holds is taken")
+	require.Equal(t, 3, pc.Size())
+	require.True(t, pc.Contains(needed.Digest()))
+	require.False(t, pc.Contains(frontier[2].Digest()), "the one at the highest round made room")
+	require.True(t, pc.Contains(frontier[0].Digest()))
+
+	ready := pc.OnParentAvailable(parent)
+	require.Len(t, ready, 3, "the evicted certificate no longer waits on the parent")
+}

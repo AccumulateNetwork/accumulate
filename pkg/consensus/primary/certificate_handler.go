@@ -35,6 +35,10 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 	// Observed without this: 281k duplicate verifications in 3 minutes of
 	// catch-up (#4057).
 	if p.dag.Contains(cert.Digest()) {
+		// Release anything still held waiting for it: a certificate that
+		// reached the DAG by a path that released nothing (#4515) is
+		// released by its next copy, which is the common case.
+		p.processPendingForParent(cert.Digest())
 		return CertDuplicate
 	}
 
@@ -114,6 +118,10 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) Ce
 					if p.requestParents != nil {
 						p.requestParents(missingParents)
 					}
+					// A parent inserted by another goroutine between the
+					// failed insert and the Add released nothing, since this
+					// certificate was not yet held: release it now (#4515).
+					p.releaseInserted(missingParents)
 					return CertBuffered
 				}
 				if p.pendingCerts.Contains(cert.Digest()) {
@@ -559,6 +567,7 @@ func (p *Primary) prunePendingCerts() {
 	currentRound := p.currentRound
 	p.roundMu.Unlock()
 
+	p.releaseInserted(p.pendingCerts.GetAllMissingParents())
 	pruned := p.pendingCerts.Prune(currentRound, DefaultPendingCertsGCDepth)
 	if pruned > 0 {
 		slog.Debug("Pruned old pending certificates",
@@ -575,4 +584,35 @@ func (p *Primary) PendingCertsCount() int {
 // PendingCertsMetrics returns metrics about the pending certificates buffer.
 func (p *Primary) PendingCertsMetrics() (buffered, inserted, pruned uint64) {
 	return p.pendingCerts.Metrics()
+}
+
+// PendingMissingParents returns, for diagnosis, every parent the pending
+// buffer waits on that is held neither in the DAG nor in the buffer itself:
+// what the node lacks, as opposed to what it holds and cannot yet insert.
+func (p *Primary) PendingMissingParents() []types.CertificateDigest {
+	var out []types.CertificateDigest
+	for _, d := range p.pendingCerts.GetAllMissingParents() {
+		if !p.dag.Contains(d) && !p.pendingCerts.Contains(d) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// releaseInserted releases the certificates held waiting for any of parents
+// that is in the DAG. A held certificate waits for a parent until something
+// says the parent arrived, and three paths said nothing (#4515): a parent
+// inserted by another goroutine between a child's failed insert and its Add,
+// this node's own certificates (inserted by the vote path), and certificates
+// restored from a checkpoint. A buffer full of certificates waiting for
+// parents already in the DAG never drains: consim
+// TestRestartOneDirectoryValidatorOfTwelve wedged with 240 held and no parent
+// lacking. It runs on every round tick over everything held, as the
+// backstop, and after each Add for that certificate's parents.
+func (p *Primary) releaseInserted(parents []types.CertificateDigest) {
+	for _, d := range parents {
+		if p.dag.Contains(d) {
+			p.processPendingForParent(d)
+		}
+	}
 }
