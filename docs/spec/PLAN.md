@@ -118,7 +118,7 @@ reason so producers stop filling caches for it.
 - **Done:** on Docker, a partition held at two signers for an hour leaves
   every other node's heap flat (mem.csv) and the Directory producing.
 
-### R4 — revival after losing a quorum (#4512; **Paul: B or C, or C now and B as the design**)
+### R4 — revival after losing a quorum (#4512; decided: C now, B as the design)
 
 The situation: a partition's remaining validators are below its signing
 threshold; their blocks are committed by consensus and executed by them, but
@@ -199,13 +199,16 @@ validator ends with all four at one state.
   concurrent fetches.
 - BlockchainDB#99 (store team): both layers at one commit after SIGKILL.
 
-### Decisions this plan waits on
+### Decisions (Paul, 2026-10-02: "go with your recommendations")
 
-1. **R4: B, C, or C now and B as the design.** My recommendation: C now (it
-   is what we can do tomorrow and it tests R1–R3 on Docker), B as the design
-   the spec commits to.
-2. **R7 #4509**: section as of the node's block, or the repair as the design.
-3. **R6**: the graceful stop as the whole-restart test's normal form.
+1. **R4: C now, B as the design.** The spec says both (executor.md, "A
+   partition that loses a quorum of its validators' states"); R4-C is built
+   and tested first, R4-B is the design the spec commits to.
+2. **#4509: the repair is the design** (executor.md §3a, Decided); the issue
+   is closed by the spec text; the dashboard's count of returns is not a
+   defect signal for a join's first block.
+3. **R6: the graceful stop is the whole-restart test's normal form**; SIGKILL
+   is a named chaos case with R1's torn-store check as its pass criterion.
 
 ## The critical path
 

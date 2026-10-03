@@ -1227,6 +1227,13 @@ that an account does not exist.
   outside it the root check does its job — a root that then differs from its
   anchor is the anchor mismatch of "Two mismatches", 2, repaired from the
   block ledger, and the node moves on.
+  **Decided (Paul, 2026-10-02): this is the design, not a defect.** Peers hold
+  no history (no retention), so a section can only be served as the peer
+  holds it, and the block that first touches one is settled against its
+  record. On run 20261002T145702Z every BVN join repaired its first block
+  this way (`differences=8`, `Repairing the state … own=2..5`) and was in
+  agreement within seconds (#4509). The dashboard counts it as a return to
+  the ledger; a join is judged by its synced time, not by that count.
   This is the case of a cold account — written last before any peer's
   retention window — that a block writes after the peers have executed that
   block: no peer could answer it as of H, and holding the block for it is what
@@ -1635,6 +1642,38 @@ from genesis is not watched: it signs the anchors the check would read.
 This is safe for the reason the join exists: a join takes a peer's state
 because the peers hold what this node lacks, and here no peer holds anything
 it did not execute itself.
+
+**A partition that loses a quorum of its validators' states (Decided, Paul,
+2026-10-02; #4512).** Run 20261002T145702Z: a kill tore two of BVN2's four
+stores; the survivors executed on, their anchors carried two signatures of the
+three required, the Directory held them without bound, and the two lost
+validators could not be re-admitted — no anchor of a two-signer partition
+reaches the threshold, so no state can be proven to a joiner, and the join must
+not pretend otherwise (#4508). Re-executing the committed log from the last
+validated state is not possible past the rescue window. Two ways are
+decided:
+
+- **The design: quorum loss is a committee change.** The operators remove the
+  lost validators from the partition's set on the Directory — the on-chain
+  change that adds and promotes validators today — raising the network
+  definition's version. Anchor signatures are checked against the set *at a
+  version*, so the survivors' anchors validate under the new one; the
+  Directory re-evaluates what it held under the old; the partition's
+  consensus quorum follows the set; joiners can prove the survivors' state;
+  the lost validators return as new members by the same change once synced,
+  a follower first. The operators assert, by that change, that the
+  survivors' state is the partition's — the trust every committee change
+  carries. Until this is built (PLAN R4-B) the stopgap below applies.
+- **The stopgap, by hand: state copy.** Stop every validator of the
+  partition; copy a survivor's store and `consensus/` to the lost nodes (a
+  live copy is no copy: stop first); start all together. Each resumes on the
+  copied block through the whole-restart exit and signs from there. What the
+  Directory held is delivered once the copied nodes' signatures reach it
+  (open: whether they re-sign anchors already held; PLAN R4-C tests it).
+
+Before either, the partition must be seen for what it is: a torn store is
+detected at resume and not resumed onto (C13, #4507), and the Directory bounds
+what it holds for a partition below its quorum and names it degraded (#4510).
 
 **The gap line names what it found** (`join.StreamGap`, #4432). For every
 stream with a gap, `The next block has a gap; not executing until the peers
