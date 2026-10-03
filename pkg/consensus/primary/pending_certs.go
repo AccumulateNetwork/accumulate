@@ -250,3 +250,20 @@ func (p *PendingCertificates) Full() bool {
 	defer p.mu.Unlock()
 	return len(p.pending) >= p.maxSize
 }
+
+// forEach calls fn for every held certificate with the parents it waits on,
+// under the buffer's lock. fn must not call back into the buffer except
+// containsLocked.
+func (p *PendingCertificates) forEach(fn func(types.CertificateDigest, map[types.CertificateDigest]struct{})) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for d, e := range p.pending {
+		fn(d, e.missingParents)
+	}
+}
+
+// containsLocked is Contains for a caller that holds the lock.
+func (p *PendingCertificates) containsLocked(digest types.CertificateDigest) bool {
+	_, ok := p.pending[digest]
+	return ok
+}

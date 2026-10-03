@@ -221,6 +221,9 @@ type Primary struct {
 
 	// pendingCerts buffers certificates that cannot be inserted due to missing parents
 	pendingCerts *PendingCertificates
+	// lastReleaseScan paces the held-certificate release backstop; the round
+	// loop's goroutine alone reads and writes it.
+	lastReleaseScan time.Time
 
 	// certSyncer handles requesting missing certificates from peers
 	certSyncer *CertSyncer

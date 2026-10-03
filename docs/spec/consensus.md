@@ -310,6 +310,31 @@ What arrives is verified against the committee and inserted. A
 certificate whose parents are missing is held (up to `2 × 10 × committee`
 certificates) until they arrive, and its parents are asked for.
 
+**A held certificate is released whenever its parents are in the DAG,
+whoever inserted them** (#4515). A copy of a held certificate is reported
+held without being retried, so a release that never comes is permanent:
+nothing above that certificate is inserted again. Three goroutines insert
+into the DAG: the gossip loop, the sync-response goroutine, and the one that
+inserts each certificate this node forms. So:
+
+- **Inserting this node's own certificate releases** what waits for it. Its
+  peers' certificates of the next round name it and often arrive first.
+- **A copy of a certificate already in the DAG releases** what waits for it.
+- **A certificate just held releases itself** if one of the parents it was
+  held for was inserted between its failed insert and being held.
+- **Once a second, every held certificate whose parents are in the DAG is
+  released**, the backstop that makes any missed release temporary.
+
+Before this, a Directory validator restarted alone after a 6 s stop held
+every certificate it was sent for eleven minutes (`verified=0`) while its
+peers answered every request (run `20261003T191744Z`). consim
+`TestRestartOneDirectoryValidatorOfTwelve` wedged 3 times in 29 with 240
+held, one waiting only on parents already in the DAG and the rest waiting on
+it. It ran 45 times without a wedge after the fix. A wedged Directory
+validator does not vote. Two restored Directory validators that did not vote
+took the Directory below its quorum in run `20261002T145702Z`, probably by
+this defect (#4511, not confirmed from that run's logs).
+
 **A certificate the buffer will refuse is refused before it is verified.**
 Verification is an ed25519 check per signature, and a certificate already
 in the DAG is recognised before it. A certificate that is held, or that the

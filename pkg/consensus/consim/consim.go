@@ -53,10 +53,15 @@ type Config struct {
 	BatchTimeout     time.Duration // worker batch cut interval
 	BatchSize        int           // transactions per batch before an early cut
 	TargetHeight     uint64        // stop with success once every partition executes this height
-	Duration         time.Duration // hard cap on the run
-	StallAfter       time.Duration // no executed-height progress on some partition for this long = stall
-	BatchCollect     time.Duration // CollectBatches bound (0 = library default)
-	Out              io.Writer     // status output; nil = silent
+	// TargetEveryNode stops at TargetHeight only once every node of every
+	// partition executes it, not the furthest node of each: a restarted node
+	// still catching up is then given until Duration, and only one that
+	// stopped short of it fails (#4515).
+	TargetEveryNode bool
+	Duration        time.Duration // hard cap on the run
+	StallAfter      time.Duration // no executed-height progress on some partition for this long = stall
+	BatchCollect    time.Duration // CollectBatches bound (0 = library default)
+	Out             io.Writer     // status output; nil = silent
 
 	// NumWorkers per node. The soak runs 4 (cmd_init_network sets it), and the
 	// batch-store byte budget is divided among them, so a sim on 1 worker is
@@ -840,9 +845,14 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 		allAtTarget := s.cfg.TargetHeight > 0
 		for _, part := range s.parts {
 			maxH, maxR := uint64(0), types.Round(0)
+			minH := ^uint64(0)
 			for _, sn := range s.byPart[part] {
-				if h := sn.height.Load(); h > maxH {
+				h := sn.height.Load()
+				if h > maxH {
 					maxH = h
+				}
+				if h < minH {
+					minH = h
 				}
 				if r := sn.n().CurrentRound(); r > maxR {
 					maxR = r
@@ -853,6 +863,9 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 				lastProgress[part] = time.Now()
 			}
 			if s.cfg.TargetHeight > 0 && maxH < s.cfg.TargetHeight {
+				allAtTarget = false
+			}
+			if s.cfg.TargetEveryNode && minH < s.cfg.TargetHeight {
 				allAtTarget = false
 			}
 			// Lag, the largest block so far and the refused count are what

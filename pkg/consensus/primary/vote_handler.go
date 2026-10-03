@@ -226,6 +226,10 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 
 		// Signal for Bullshark
 		p.signalNewCertificate(cert)
+
+		// Release peers' certificates held waiting for this one: they
+		// arrive at the next round, often before it is inserted (#4515).
+		p.processPendingForParent(cert.Digest())
 	}()
 }
 

@@ -35,6 +35,10 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 	// Observed without this: 281k duplicate verifications in 3 minutes of
 	// catch-up (#4057).
 	if p.dag.Contains(cert.Digest()) {
+		// Release anything still held waiting for it (#4515): a certificate
+		// that reached the DAG by a path that released nothing is released
+		// by its next copy.
+		p.processPendingForParent(cert.Digest())
 		return CertDuplicate
 	}
 
@@ -114,6 +118,10 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) Ce
 					if p.requestParents != nil {
 						p.requestParents(missingParents)
 					}
+					// A parent inserted by another goroutine between the
+					// failed insert and the Add released nothing, since this
+					// certificate was not yet held: release it now (#4515).
+					p.releaseInserted(missingParents)
 					return CertBuffered
 				}
 				if p.pendingCerts.Contains(cert.Digest()) {
@@ -559,6 +567,12 @@ func (p *Primary) prunePendingCerts() {
 	currentRound := p.currentRound
 	p.roundMu.Unlock()
 
+	// The backstop for a missed release, once a second: the round tick is
+	// 50 ms, and the scan allocates every held certificate's parents.
+	if time.Since(p.lastReleaseScan) >= time.Second {
+		p.lastReleaseScan = time.Now()
+		p.releaseInserted(p.pendingCerts.GetAllMissingParents())
+	}
 	pruned := p.pendingCerts.Prune(currentRound, DefaultPendingCertsGCDepth)
 	if pruned > 0 {
 		slog.Debug("Pruned old pending certificates",
@@ -575,4 +589,48 @@ func (p *Primary) PendingCertsCount() int {
 // PendingCertsMetrics returns metrics about the pending certificates buffer.
 func (p *Primary) PendingCertsMetrics() (buffered, inserted, pruned uint64) {
 	return p.pendingCerts.Metrics()
+}
+
+// PendingDiagnosis reports, for diagnosis, how the pending buffer stands:
+// how many certificates it holds, how many of those wait only on parents
+// already in the DAG (a wake-up that never came), and how many parents it
+// waits on that are neither in the DAG nor held (what the node lacks).
+func (p *Primary) PendingDiagnosis() (held, waitingOnInserted, lacking int) {
+	lack := map[types.CertificateDigest]struct{}{}
+	p.pendingCerts.forEach(func(_ types.CertificateDigest, missing map[types.CertificateDigest]struct{}) {
+		held++
+		all := len(missing) > 0
+		for d := range missing {
+			if !p.dag.Contains(d) {
+				all = false
+				if !p.pendingCerts.containsLocked(d) {
+					lack[d] = struct{}{}
+				}
+			}
+		}
+		if all {
+			waitingOnInserted++
+		}
+	})
+	return held, waitingOnInserted, len(lack)
+}
+
+// releaseInserted releases the certificates held waiting for any of parents
+// that is in the DAG. A held certificate waits until a release reaches it,
+// and a copy of it that arrives again is reported held without retrying, so
+// a missed release is permanent. Releases were missed (#4515): this node's
+// own certificates are inserted on a goroutine that released nothing, a
+// duplicate released nothing, and a parent inserted by another goroutine
+// between a child's failed insert and its Add released nothing. consim
+// TestRestartOneDirectoryValidatorOfTwelve wedged with 240 held: one waited
+// only on parents already in the DAG, and the rest waited on it. This runs
+// after each Add for that certificate's parents, and on every round tick
+// over everything held, as the backstop that makes any missed release
+// temporary.
+func (p *Primary) releaseInserted(parents []types.CertificateDigest) {
+	for _, d := range parents {
+		if p.dag.Contains(d) {
+			p.processPendingForParent(d)
+		}
+	}
 }
