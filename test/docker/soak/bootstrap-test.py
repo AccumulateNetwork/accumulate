@@ -111,9 +111,18 @@ def add_followers(run, cycle):
     # a shell string, so nothing is re-parsed on the way (the same sed as
     # soak.sh's add_follower and follower-cycles.sh, which ran 9 cycles).
     inner = (f"rm -rf {clear}; for f in {tomls}; do grep -q join-running-network $f || "
-             'sed -i "/type = \"coreValidator\"/a\\  join-running-network = true" $f; done')
-    subprocess.run(["sg", "docker", "-c", f"{COMPOSE} run --rm --no-deps --entrypoint sh bvn1-fol1 -c '{inner}'"],
-                   cwd=DOCKER_DIR, capture_output=True, text=True)
+             'sed -i "/coreValidator/a\\  join-running-network = true" $f; done; '
+             f"grep -l join-running-network {tomls} | wc -l")
+    r = subprocess.run(["sg", "docker", "-c", f"{COMPOSE} run --rm --no-deps --entrypoint sh bvn1-fol1 -c '{inner}'"],
+                       cwd=DOCKER_DIR, capture_output=True, text=True)
+    # A follower without join-running-network starts as the first node of a
+    # network and replays from genesis: the cycle would test the genesis
+    # watch, not the join (run 20261003T052439Z, cycle 1: the sed pattern's
+    # quotes were stripped by the shells and it matched nothing). Refuse.
+    got = (r.stdout.strip().splitlines() or ["?"])[-1].strip()
+    if got != str(len(dirs)):
+        record(run, f"FAIL: join-running-network is set in {got} of {len(dirs)} follower configs (rc {r.returncode}): {r.stderr.strip()[-300:]}")
+        sys.exit(1)
     subprocess.run(["sg", "docker", "-c", f"{COMPOSE} --profile late-follower create --no-recreate {' '.join(FOLLOWERS)}"],
                    cwd=DOCKER_DIR, capture_output=True, text=True)
     subprocess.run(["sg", "docker", "-c", "docker start " + " ".join(f"acc-{s}" for s in FOLLOWERS)], capture_output=True, text=True)
@@ -131,6 +140,9 @@ def wait_synced(run, t0, timeout_min):
             for p in PARTS:
                 k = (s, p)
                 if k in done and done[k][1] is not None: continue
+                if "it is the first node of a network" in text:
+                    record(run, f"FAIL: {s} started as the first node of a network: it replayed from genesis instead of joining")
+                    return None
                 lines = [l for l in text.splitlines() if f"partition=acc://{p}" in l]
                 active = next((l for l in lines if "it is ACTIVE" in l), None)
                 synced = next((l for l in lines if "The node is synced" in l), None)
