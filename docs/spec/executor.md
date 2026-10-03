@@ -600,6 +600,10 @@ before every account's leaves are pulled (Paul, 2026-10-01). The bound is the pe
 no longer serve as of its block moves the start forward to a block they can,
 and the walk is taken again from there. Pulls run in parallel; a join that
 pulls one account at a time cannot keep up with a partition at 100 tps.
+A pull that fails ends nothing: the join says so, counts it
+(`accumulate_join_pull_failures_total`) and pulls again on its next round. A
+join that returned on a failed pull left the node collecting for good, not
+executing and not trying again (run 20261003T182050Z, bvn1-val3's Directory).
 
 **What the pull takes, it writes, and nothing is proven account by account**
 (the algorithm, step 3; #4438). There is one proof: the whole local root equal

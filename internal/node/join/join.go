@@ -527,11 +527,15 @@ func watchRoots(ctx context.Context, watch RootWatch, buf Buffer, log *slog.Logg
 // pulls before the first match: a node syncing again holds a state that
 // matched once and no longer does.
 func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration, pullFirst bool, wait *waiting) (uint64, error) {
+	pullFailures := 0
 	if pullFirst {
 		wait.on("pulling the state")
 		err := opts.State.Pull(ctx)
 		if err != nil {
-			return 0, errors.UnknownError.WithFormat("pull state: %w", err)
+			if ctx.Err() != nil {
+				return 0, errors.UnknownError.Wrap(ctx.Err())
+			}
+			pullFailed(opts, log, &pullFailures, err)
 		}
 	}
 	overran := false
@@ -599,7 +603,10 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 		wait.on("pulling the state")
 		err = opts.State.Pull(ctx)
 		if err != nil {
-			return 0, errors.UnknownError.WithFormat("pull state: %w", err)
+			if ctx.Err() != nil {
+				return 0, errors.UnknownError.Wrap(ctx.Err())
+			}
+			pullFailed(opts, log, &pullFailures, err)
 		}
 
 		select {
@@ -817,4 +824,23 @@ func (h heldGaps) peersHeldOn(gaps []StreamGap, q uint64) bool {
 		}
 	}
 	return all
+}
+
+// mPullFailures counts pulls that failed and were asked again.
+var mPullFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "pull_failures_total",
+	Help:      "Pulls of the state that failed; the join pulls again",
+}, []string{"partition"})
+
+// pullFailed counts and says a pull that failed. The join does not end on
+// it: a join that returned left the node collecting for good (run
+// 20261003T182050Z: bvn1-val3's Directory, whose store refused every write
+// after a kill, logged "The join did not complete; this node is not
+// executing" and never tried again). It pulls again next round, and says so.
+func pullFailed(opts Options, log *slog.Logger, failures *int, err error) {
+	*failures++
+	mPullFailures.WithLabelValues(opts.Partition).Inc()
+	log.Error("The pull failed; pulling again", "attempt", *failures, "error", err)
 }

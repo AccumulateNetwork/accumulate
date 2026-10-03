@@ -65,6 +65,14 @@ on:
   lag is an operational bound: past it the node refuses user work, because a
   store that cannot keep up with the network is the condition back-pressure
   exists to detect. A slow disk is a growing gap, not a stopped partition.
+- **The adapter resumes at the store's height of record.** On open the
+  BlockchainDB adapter takes its version from the store's block record
+  (`block.json`, BlockchainDB#32), the block the shards accumulate into next,
+  and reads Shard0000's permanent manifest only for a store written before
+  that record existed; the higher of the two stands. After a kill the
+  manifest can stand one block below the record, and an adapter that resumed
+  from it would have every seal refused ("block 865 is already closed; now
+  accumulating block 866") and write nothing (run 20261003T182050Z).
 - **The log's retention is the gap.** The committed log deletes an entry when
   the seal passes its block, so the log is exactly as long as the replay a
   restart would need, plus whatever peers may still ask for

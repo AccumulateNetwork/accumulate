@@ -361,7 +361,7 @@ func Open(path string) (*Database, error) {
 	// must resume where the store stands, not at zero (#4173).  The
 	// manifest records the block currently being accumulated, which is
 	// one past the last version sealed.
-	d.version, err = sealedVersion(filepath.Join(path, permManifest))
+	d.version, err = sealedVersion(path)
 	if err != nil {
 		_ = kv.Close()
 		return nil, errors.UnknownError.WithFormat("read %s: %w", permManifest, err)
@@ -388,22 +388,54 @@ func (d *Database) SetMergeLag(n uint64) error {
 // sealedVersion reads the version the permanent layer was last sealed
 // at.  A store that has never sealed reports zero, as does one that has
 // no manifest yet.
-func sealedVersion(manifest string) (uint64, error) {
-	b, err := os.ReadFile(manifest)
+func sealedVersion(path string) (uint64, error) {
+	// The store records, once for the whole shard set, the block its
+	// shards accumulate into next (block.json; BlockchainDB#32). A shard's
+	// own manifest no longer carries it for a quiet shard, and after a kill
+	// Shard0000's permanent manifest stood at 865 while the store was at
+	// 866: the adapter resumed one block short, the store refused every
+	// seal ("block 865 is already closed; now accumulating block 866"), and
+	// the node could write nothing (run 20261003T182050Z, bvn1-val3's
+	// Directory). The block record is the store's word; the manifest is
+	// read too, for a store written before the record existed, and the
+	// higher of the two is where the store stands.
+	var height uint64
+	for _, f := range []string{filepath.Join(path, blockRecordFile), filepath.Join(path, permManifest)} {
+		h, err := manifestHeight(f)
+		if err != nil {
+			return 0, err
+		}
+		if h > height {
+			height = h
+		}
+	}
+	if height == 0 {
+		return 0, nil
+	}
+	return height - 1, nil
+}
+
+// blockRecordFile is the store's record of the block its shards accumulate
+// into next (BlockchainDB, kv_shard.go blockFileName).
+const blockRecordFile = "block.json"
+
+// manifestHeight reads the blockHeight a store manifest or the block record
+// carries; zero when the file does not exist.
+func manifestHeight(file string) (uint64, error) {
+	b, err := os.ReadFile(file)
 	switch {
 	case stderrors.Is(err, fs.ErrNotExist):
 		return 0, nil
 	case err != nil:
 		return 0, err
 	}
-	var m bcdb.StoreManifest
+	var m struct {
+		BlockHeight uint64 `json:"blockHeight"`
+	}
 	if err := json.Unmarshal(b, &m); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("%s: %w", file, err)
 	}
-	if m.BlockHeight == 0 {
-		return 0, nil
-	}
-	return m.BlockHeight - 1, nil
+	return m.BlockHeight, nil
 }
 
 // loadExceptions restores the dynamic-layer exception set.  The file is
