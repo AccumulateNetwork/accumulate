@@ -54,9 +54,12 @@ def logs(container):
     out = sh(f"sg docker -c 'docker logs {container} 2>&1'", check=False)
     return ANSI.sub("", out)
 
-def preflight():
-    if sh("ps -eo args | grep -c '[b]ash ./soak.sh'", check=False).strip() != "0":
+def preflight(attach):
+    running = sh("ps -eo args | grep -c '[b]ash ./soak.sh'", check=False).strip() != "0"
+    if running and not attach:
         sys.exit("a soak is already running: never two soaks")
+    if attach and not running:
+        sys.exit("--attach names a run, but no soak is running")
     head = sh("git rev-parse --short HEAD").strip()
     dirty = sh("git status --short | grep -v '^??' | wc -l").strip()
     return head, dirty
@@ -211,7 +214,7 @@ def main():
     ap.add_argument("--keep-up", action="store_true", help="do not stop the run at the end")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
-    head, dirty = preflight() if not a.dry_run else (sh("git rev-parse --short HEAD").strip(), "?")
+    head, dirty = preflight(a.attach) if not a.dry_run else (sh("git rev-parse --short HEAD").strip(), "?")
     if a.dry_run:
         print(f"HEAD {head} (dirty files: {dirty}); would: launch soak.sh -c 72h-watch.conf; wait dashboard+load; settle {a.settle_min} min; "
               f"{a.cycles} cycles of [remove 3 followers, clear their dbs+consensus, add, wait synced (<= {a.join_timeout} min), dwell {a.dwell_min} min, count drops]; stop; write bootstrap-test.md")
