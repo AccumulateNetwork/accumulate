@@ -243,16 +243,26 @@ validator ends with all four at one state.
   block, one ahead, so every BVN handoff repairs its first block. Either load
   as of the node's block, or write the repair into the spec as the design.
 - **#4511**: why the two recreated validators' Directory nodes restored their
-  consensus position and did not vote (debugger pass on the live capture's
-  shape; the stall line has the round state).
+  consensus position and did not vote. Probably #4515; see R8.
 - **#4504**: `TestRestartOneNode` — a validator restarted alone stops
-  executing.
+  executing. Probably #4515; see R8.
 - The root watch asks for the newest *delivered* anchor; the reseeded cache
   holds from delivered+1 (`no validator answers anchor N` for hours after any
   restart). Ask for delivered+1, or seed one back.
 - #4503 follow-up: fetch several missing batches per request, or cap
   concurrent fetches.
 - BlockchainDB#99 (store team): both layers at one commit after SIGKILL.
+
+### R8 — a restored validator wedges in catch-up (#4515; review `docs/reviews/restart-catch-up-2026-10-03.md`)
+
+**Done in-process (`1b2e27224`).** A held certificate is released whenever its parents are in the DAG. The cause was a release that never came. Own certificates and duplicates released nothing, and a parent inserted between a child's failed insert and its Add released nothing. A held copy is never retried, so one missed release wedged the node for good. consim `TestRestartOneDirectoryValidatorOfTwelve` wedged 3 times in 29 on unchanged code, and 0 in 45 with the fix.
+
+**#4511 and #4504 are probably the same defect.** Both are a validator restarted alone that stops voting or executing. Close them once R8-1 passes, saying it was not confirmed from their own logs.
+
+1. **R8-1, the Docker proof.** Re-run `restart-test.py` on `1b2e27224`. Add a step of single-validator restarts, about 10 across the Directory's twelve, each requiring every Directory node ACTIVE within its bound. The wedge struck about 1 restart in 10, and one restart proves nothing.
+2. **R8-2, a serialized boot (Paul).** A restored or rejoining node stays in catch-up mode until its DAG reaches the frontier: no authoring, no voting, no frontier certificates held, rounds asked for and inserted in order on one goroutine. Then it switches to the live protocol. Recommendation: spec it, and build it if R8-1 shows restart catch-up still slow or bursty. #4515 itself needed the fix in the live protocol either way.
+3. **R8-3, the harness dwell.** Re-read heights after a restart settles before counting. The first run's kill dwell reported 1,000 blocks where `monitor.csv` shows about 315.
+4. **#4516.** An ACTIVE node logs "The join is waiting" every minute, because of the anchor collector's asks after the handoff.
 
 ### Decisions (Paul, 2026-10-02: "go with your recommendations")
 
