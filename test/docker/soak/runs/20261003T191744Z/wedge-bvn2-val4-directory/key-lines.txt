@@ -1,0 +1,17 @@
+# acc-bvn2-val4 Directory, 19:37:22Z-19:52:30Z, selected lines (#4515)
+acc-bvn2-val4  | 2026-10-03T19:37:23Z INFO Restored consensus position batches=211 block=1048 certificates=432 lastCommit=2096 partition=Directory round=2098
+acc-bvn2-val4  | 2026-10-03T19:37:23Z INFO Starting consensus node numWorkers=1 partition=Directory validatorKey=5fc5f9b4d0aae076
+acc-bvn2-val4  | 2026-10-03T19:37:27Z INFO Pulling the state: the top of the BPT, and every block-ledger record from here on executed=1048 module=join partition=acc://dn.acme start=1053
+acc-bvn2-val4  | 2026-10-03T19:37:26Z WARN Vote channel full, dropping message partition=Directory
+... (197 Vote channel full lines)
+acc-bvn2-val4  | 2026-10-03T19:37:36Z INFO Certificate catch-up buffered=2920 certificates=3153 digestRequests=23 digestsAsked=1613 duplicate=232 inserted=1 partition=Directory responses=44 roundRequests=13 roundsFrom=2097 roundsTo=2126 verified=320
+acc-bvn2-val4  | 2026-10-03T19:37:46Z INFO Certificate catch-up buffered=2065 certificates=2307 digestRequests=6 digestsAsked=497 duplicate=242 partition=Directory responses=28 roundRequests=14 roundsFrom=2106 roundsTo=2144 verified=18
+acc-bvn2-val4  | 2026-10-03T19:37:56Z INFO Certificate catch-up buffered=1075 certificates=1240 duplicate=165 partition=Directory responses=15 roundRequests=14 roundsFrom=2106 roundsTo=2164 verified=0
+acc-bvn2-val4  | 2026-10-03T19:38:06Z INFO Certificate catch-up buffered=1521 certificates=1708 digestRequests=3 digestsAsked=233 duplicate=187 partition=Directory responses=21 roundRequests=14 roundsFrom=2106 roundsTo=2169 verified=0
+...
+acc-bvn2-val4  | 2026-10-03T19:52:16Z INFO Certificate catch-up buffered=1545 certificates=1743 digestRequests=3 digestsAsked=233 duplicate=198 partition=Directory responses=22 roundRequests=14 roundsFrom=2106 roundsTo=2169 verified=0
+acc-bvn2-val4  | 2026-10-03T19:52:26Z INFO Certificate catch-up buffered=1277 certificates=1475 duplicate=198 partition=Directory responses=18 roundRequests=15 roundsFrom=2106 roundsTo=2169 verified=0
+acc-bvn2-val4  | 2026-10-03T19:37:37Z INFO The block after the state has not been collected yet; waiting error={"code":"notReady","codeID":504,"message":"Directory: the state is block 1060 at round 2120 and this node has collected only to round 2104"} block=1061 module=join partition=Directory synced=1060
+...
+acc-bvn2-val4  | 2026-10-03T19:52:28Z INFO The block after the state has not been collected yet; waiting error={"code":"notReady","codeID":504,"message":"Directory: the state is block 1829 at round 3824 and this node has collected only to round 2104"} block=1830 module=join partition=Directory synced=1829
+acc-bvn2-val4  | 2026-10-03T19:52:27Z INFO Consensus stalled - re-sharing certificates partition=Directory round=2107 shared=11

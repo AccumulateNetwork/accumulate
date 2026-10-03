@@ -1,0 +1,37 @@
+2026-10-03T19:17:46Z restart-test.py start: HEAD 949ac13b5
+2026-10-03T19:20:13Z DISABLED for this run (CHAOS=off)
+2026-10-03T19:20:16Z network up; harness says commit 949ac13b5 (HEAD 949ac13b5); dashboard answering
+2026-10-03T19:20:16Z monitor reachable on the tailnet: http://100.75.75.92:8098/
+2026-10-03T19:21:46Z load generator running
+2026-10-03T19:21:46Z settling 5 min under load
+2026-10-03T19:26:46Z === step A graceful whole-network restart begins
+2026-10-03T19:26:46Z DELIBERATE WHOLE-NETWORK RESTART (graceful): docker stop of every node, then start all together: acc-bvn1-val1 acc-bvn1-val2 acc-bvn1-val3 acc-bvn1-val4 acc-bvn2-val1 acc-bvn2-val2 acc-bvn2-val3 acc-bvn2-val4 acc-bvn3-fol1 acc-bvn3-val1 acc-bvn3-val2 acc-bvn3-val3 acc-bvn3-val4 ; heights before: {'Directory': 429, 'BVN1': 423, 'BVN2': 423, 'BVN3': 423}
+2026-10-03T19:26:49Z restart complete (graceful): 13 containers started
+2026-10-03T19:26:49Z graceful restart: every node ACTIVE
+2026-10-03T19:31:49Z after the graceful restart: dwell 5 min, blocks produced {'Directory': 291, 'BVN1': 287, 'BVN2': 287, 'BVN3': 286}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand [] -> ok
+2026-10-03T19:31:49Z === step A graceful whole-network restart PASSED
+2026-10-03T19:31:49Z === step B kill whole-network restart begins
+2026-10-03T19:31:49Z DELIBERATE WHOLE-NETWORK RESTART (KILL, chaos case): docker rm -f of every node, recreated at once on their images: acc-bvn1-val1 acc-bvn1-val2 acc-bvn1-val3 acc-bvn1-val4 acc-bvn2-val1 acc-bvn2-val2 acc-bvn2-val3 acc-bvn2-val4 acc-bvn3-fol1 acc-bvn3-val1 acc-bvn3-val2 acc-bvn3-val3 acc-bvn3-val4 ; heights before: {'Directory': 723, 'BVN1': 713, 'BVN2': 713, 'BVN3': 712}
+2026-10-03T19:31:52Z restart complete (kill): 13 containers started
+2026-10-03T19:32:22Z kill restart: every node ACTIVE
+2026-10-03T19:37:22Z after the kill restart: dwell 5 min, blocks produced {'Directory': 297, 'BVN1': 296, 'BVN2': 294, 'BVN3': 295}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand [] -> ok
+2026-10-03T19:37:22Z === step B kill whole-network restart PASSED
+2026-10-03T19:37:22Z === step C one validator's store torn begins
+2026-10-03T19:37:22Z tear: docker stop acc-bvn2-val4; copy its BVN2 store out, tear-store it, copy it back, start it
+2026-10-03T19:37:23Z tear: tore BVN2 ledger RootChain Tail(0): 8 hashes -> 1 (head count 6820)
+2026-10-03T19:37:28Z tear: acc-bvn2-val4 found the tear and refused to resume
+2026-10-03T19:47:29Z FAIL after the tear: not ACTIVE after 10 min: acc-bvn2-val4/directory
+2026-10-03T19:52:29Z after the tear: dwell 5 min, blocks produced {'Directory': 260, 'BVN1': 299, 'BVN2': 297, 'BVN3': 299}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand [] -> ok
+2026-10-03T19:52:29Z === step C one validator's store torn FAILED
+2026-10-03T19:52:29Z === step D two of BVN2's four lost, then restored begins
+2026-10-03T19:52:29Z quorum loss: docker stop acc-bvn2-val3 acc-bvn2-val4 (two of BVN2's four)
+2026-10-03T19:58:29Z BVN2 below its quorum: dwell 5 min, blocks produced {'Directory': 223, 'BVN1': 290, 'BVN2': 0, 'BVN3': 290}; must move ['Directory', 'BVN1', 'BVN3'], must stand ['BVN2'] -> ok
+2026-10-03T19:58:30Z quorum loss: bvn2-val1 said the partition lost its quorum
+2026-10-03T19:58:30Z quorum loss: restoring acc-bvn2-val3 acc-bvn2-val4 with their stores and keys (docker start)
+2026-10-03T19:58:30Z after the restore: every node ACTIVE
+2026-10-03T20:03:30Z after the restore: dwell 5 min, blocks produced {'Directory': 281, 'BVN1': 292, 'BVN2': 285, 'BVN3': 292}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand [] -> ok
+2026-10-03T20:03:30Z === step D two of BVN2's four lost, then restored PASSED
+2026-10-03T20:03:30Z restart-test.py FAILED; table /home/paul/worktrees/issue-4205-lead/test/docker/soak/runs/20261003T191744Z/restart-test.md
+2026-10-03T20:03:30Z STOP: load generator interrupted (pid 402363); harness tears down
+2026-10-03T20:03:55Z harness exited; network torn down
+2026-10-03T20:03:55Z NEXT: write SUMMARY.md from restart-test.md and chaos.log, commit by name, delete bulk logs by literal path; then PLAN.md's open items (#4511, #4504, #4514)
