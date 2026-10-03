@@ -898,6 +898,17 @@ def assess_progress(heights, now):
     return out
 
 
+def mem_limit_mib():
+    """The container memory limit the harness started the nodes with
+    (ACC_MEM_LIMIT, e.g. 2048m / 2g), in MiB; 0 when unknown."""
+    v = (os.environ.get("ACC_MEM_LIMIT") or "").strip().lower()
+    m = re.match(r"^(\d+)([kmg]?)$", v)
+    if not m:
+        return 0
+    n, u = int(m.group(1)), m.group(2)
+    return {"": n // 1048576, "k": n // 1024, "m": n, "g": n * 1024}[u]
+
+
 def overall_status(api_up, progress):
     """The headline verdict, derived from progress rather than reachability.
 
@@ -2182,6 +2193,7 @@ def heals_from(per):
     proofs = {o: 0 for o in PROOF_OUTCOMES}
     judged = {o: 0 for o in JUDGED}
     held = {}
+    degraded = set()
     seen = set()
     entries = 0
     entries_by = {}
@@ -2218,8 +2230,16 @@ def heals_from(per):
                 h = held.setdefault(key, {"ledger": key[0], "source": key[1], "entries": 0, "bytes": 0})
                 f = "entries" if name.endswith("entries") else "bytes"
                 h[f] = max(h[f], n)
+            elif name == "accumulate_staging_stream_degraded" and n >= 1:
+                # The stream's source partition is below its signing quorum
+                # (#4510): named per source, so the dashboard can say which
+                # partition is degraded instead of "stalled by delivery"
+                # everywhere else.
+                seen.add("degraded")
+                degraded.add(lab.get("source", "?"))
     out = {
         "measured": bool(seen),
+        "degradedSources": sorted(degraded),
         "requests": dict(requests, total=sum(requests.values())) if "requests" in seen else None,
         "byStream": by_stream if "requests" in seen else None,
         "entries": entries if "entries" in seen else None,
@@ -2981,11 +3001,18 @@ def _collect_once(last, hist):
                 fs = ns.get("followerStats") or {}
                 if (fs.get("rssMaxMiB") or 0) > worst:
                     worst, who = fs["rssMaxMiB"], ", ".join(fs.get("nodes") or [])
-                if worst > 3072 and time.time() - _RSS_ALARM.get("t", 0) > 300:
+                # The alarm is against the container's limit, not a fixed
+                # figure: hard-coded at 3072 of 4096 it never fired on run
+                # 20261002T145702Z, where three validators were killed at a
+                # 2048 MiB limit (#4510).
+                limit = mem_limit_mib()
+                upd["memAlarm"] = {"limitMiB": limit, "worstMiB": worst, "node": who,
+                                   "on": bool(limit and worst >= 0.9 * limit)}
+                if limit and worst >= 0.9 * limit and time.time() - _RSS_ALARM.get("t", 0) > 300:
                     _RSS_ALARM["t"] = time.time()
-                    line = "%s RSS ALARM: %s at %dMiB of 4GiB — OOM kill approaching\n" % (
+                    line = "%s RSS ALARM: %s at %dMiB of %dMiB (mem_limit) — OOM kill approaching\n" % (
                         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        who, worst)
+                        who, worst, limit)
                     log(line.strip())
                     with open(os.path.join(RUN_DIR, "soak.log"), "a") as f:
                         f.write(line)
