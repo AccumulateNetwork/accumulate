@@ -38,6 +38,13 @@ Each item is its own issue branch from the previous item's tip.
 
 ## Restart, torn stores and quorum loss (2026-10-02)
 
+Status 2026-10-03 00:35Z: R1 (19263e7fc), R2 (288751546), R3 (496419fcc) built
+with tests that fail without them; R4-C's `revive-partition.sh` and R6's
+`restart-network.sh`, GOMEMLIMIT from data and the RSS alarm (022b3263c,
+4f8c0d913) written, untested on Docker; R0's full gate running on the branch
+(join suite had one timing failure under load, re-check pending); R4-B, R5,
+R7 open.
+
 What two whole-network restarts taught (runs 20261002T090546Z and
 20261002T145702Z; `docs/reviews/restart-redo-2026-10-02.md`), as work. Each
 item: the spec it implements, the test that fails first, what "done" means.
