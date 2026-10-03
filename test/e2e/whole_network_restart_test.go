@@ -161,6 +161,41 @@ func TestAWholeNetworkRestartResumes(t *testing.T) {
 		require.NotZero(t, st.AgreedAt(), "%s node %d resumed and no signed anchor ever proved its root", n.name, n.node)
 	}
 
+	// And it is synced as a joined node is: SyncedHold blocks past the proof
+	// with no regression. Run 20261003T182050Z: acc-bvn3-fol1 resumed, was
+	// proved two seconds later, ran caught up for twenty minutes, and never
+	// said it was synced.
+	for k := 0; k < 4*join.SyncedHold; k++ {
+		synced := true
+		for i, n := range all {
+			if !exits[i] {
+				continue
+			}
+			st := n.part.NodeJoinState(n.node)
+			_, diverged, err := st.Diverged(context.Background())
+			require.NoError(t, err)
+			require.False(t, diverged, "%s node %d diverged after resuming", n.name, n.node)
+			if st.Overlap().SyncedAt == 0 {
+				synced = false
+			}
+		}
+		if synced {
+			break
+		}
+		if k%10 == 0 {
+			send()
+		}
+		sim.StepN(1)
+	}
+	for i, n := range all {
+		if !exits[i] {
+			continue
+		}
+		st := n.part.NodeJoinState(n.node)
+		require.GreaterOrEqual(t, st.Overlap().SyncedAt, st.AgreedAt()+join.SyncedHold,
+			"%s node %d resumed, was proved at %d, and never said it was synced", n.name, n.node, st.AgreedAt())
+	}
+
 	// One validator, alone: its peers are ACTIVE, so it joins from them.
 	alone := target{"BVN0", bvn0, 1}
 	exits = runJoins([]target{alone})

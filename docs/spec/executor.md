@@ -1418,7 +1418,13 @@ and consider it we are still syncing"** (Paul, 2026-10-02). For `SyncedHold`
 (100) proven blocks after the overlap's end, a demotion withdraws the end --
 the node was still syncing (`accumulate_join_overlap_regressions_total`) --
 and the next match begins a new overlap; past the hold the node says it is
-synced, once. A clean run
+synced, once. A node that executes from its own state -- the whole-restart
+exit, or a start with the network -- pulled nothing and has no overlap: the
+hold begins at the first block whose root its signed anchor proves (the
+line "its own root matched its signed anchor"), and past `SyncedHold` blocks
+with no regression it says it is synced the same way (run 20261003T182050Z:
+acc-bvn3-fol1 resumed, was proved, ran caught up, and never said it was
+synced). A clean run
 before every section is loaded is not settled: a block executed alone that
 loads a cold section takes it as its peers hold it after the block and
 diverges (run 20261002T090546Z: BVN1 matched at 10818, ran 5 clean buffered

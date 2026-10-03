@@ -130,6 +130,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 			// line that says a resumed node is in agreement (#4483).
 			s.ownRoot = false
 			s.agreedAt.Store(o.Block)
+			s.overlap.hold(o.Block)
 			s.log.Info("This node is executing in agreement; its own root matched its signed anchor",
 				"block", o.Block, "partition", s.partition)
 		}

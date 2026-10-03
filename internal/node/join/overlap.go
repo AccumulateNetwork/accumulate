@@ -75,6 +75,10 @@ type overlap struct {
 	differences int64
 	endedAt     uint64
 	syncedAt    uint64 // the block the node was synced at: endedAt + SyncedHold, held
+	// ownRoot is set when the hold began at the block a resumed node's own
+	// root was first proved by its signed anchor (hold), not at an overlap's
+	// end; it changes only what the synced line says.
+	ownRoot bool
 
 	// mismatch is the first block of this overlap whose execution left an
 	// account other than its record: the join goes back to the block ledger
@@ -159,7 +163,7 @@ func (o *overlap) start(block uint64) {
 	o.active = true
 	o.from, o.last = block, block
 	o.clean, o.checked, o.frontier = 0, 0, 0
-	o.endedAt, o.syncedAt = 0, 0
+	o.endedAt, o.syncedAt, o.ownRoot = 0, 0, false
 	o.log.Info("The overlap begins: each block is executed and settled against its record",
 		"partition", o.partition, "proven", block, "until-clean", o.blocks)
 }
@@ -195,8 +199,35 @@ func (o *overlap) executed(block uint64) {
 		return
 	}
 	o.syncedAt = block
+	if o.ownRoot {
+		o.log.Info("The node is synced: its own root, proved by its signed anchor, held with no regression",
+			"partition", o.partition, "block", block, "agreed", o.endedAt, "hold", SyncedHold)
+		return
+	}
 	o.log.Info("The node is synced: its overlap's perfect blocks held with no regression",
 		"partition", o.partition, "block", block, "overlap-ended", o.endedAt, "perfect", o.blocks, "hold", SyncedHold)
+}
+
+// hold starts the synced hold at block for a node that executes from its own
+// state -- the whole-restart exit, or a start with the network -- once a
+// signed anchor has proved its root at block. Such a node has no overlap: it
+// pulled nothing, so it has no record to settle against, and the anchor's
+// proof is what an overlap's clean run is for a node that pulled. It is synced
+// as a joined node is, after SyncedHold blocks with no regression; a demotion
+// inside them withdraws it (stop). Without this a node that resumed was ACTIVE
+// and caught up and never said it was synced (run 20261003T182050Z,
+// acc-bvn3-fol1, after the graceful and the kill restart).
+func (o *overlap) hold(block uint64) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.syncedAt != 0 || o.endedAt != 0 {
+		return
+	}
+	o.active = false
+	o.endedAt, o.ownRoot = block, true
 }
 
 // due reports whether block is one the overlap settles.
