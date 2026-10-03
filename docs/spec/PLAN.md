@@ -57,6 +57,19 @@ R6 memory margin and the restart procedure (harness)                            
 R7 the review's smaller items (#4509, #4511, #4504, the cache-boundary noise)             parallel
 ```
 
+### Next run: the follower-bootstrap test, as one script (Paul, 2026-10-03)
+
+`test/docker/soak/bootstrap-test.py --cycles 3 "<note>"`: launches the
+network on HEAD, waits for the dashboard and the load (the monitor on the
+tailnet is checked and must be seen by Paul before load), settles 5 min, then
+three cycles of: remove the three late followers, clear their stores and
+`consensus/`, re-add, wait until all six partition joins are synced (`The
+node is synced`) and caught up (`behind` from the dashboard), dwell 5 min
+counting drops out of agreement; then stops the run and writes
+`bootstrap-test.md` in the run dir. Every step and criterion goes to
+chaos.log. One Opus session runs it and writes the summary; on success the
+next sessions take R4-B, R5 (#4501) and #4513, one each, no orchestration.
+
 ### R0 — land what is fixed
 
 Branch `issue-restart-authored-batches` (lead a6893d6ed + f7350a956 diagnostics,
