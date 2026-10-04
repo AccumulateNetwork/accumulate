@@ -1,0 +1,1 @@
+delivery stalled 509s into BVN1,BVN2,BVN3,Directory; every partition closed a block within 120s (BVN1 2s, BVN2 1s, BVN3 0s, Directory 0s)
