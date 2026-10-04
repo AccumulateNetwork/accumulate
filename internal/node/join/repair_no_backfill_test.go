@@ -155,3 +155,53 @@ func repairWrongGrowth(t *testing.T, held int) {
 	}
 	requireSameChain(t, peer, node, bob, "main")
 }
+
+// TestATransactionTheNodeExecutedEarlyIsAppendedWhenThePeersExecuteIt —
+// #4519 review. A node whose staging differed executed transaction X a block
+// before its peers and appended it to bob's main chain; the root check caught
+// it and the repair took bob as the peers hold him, without X. The block after,
+// the peers execute X and append it, uniquely, as the executor appends every
+// transaction to its principal's main chain. The node must append it too: an
+// element index the repair left pointing at the node's own wrong entry makes
+// the append a duplicate, the node skips it, and its root differs again.
+func TestATransactionTheNodeExecutedEarlyIsAppendedWhenThePeersExecuteIt(t *testing.T) {
+	for _, held := range []int{300, 600} {
+		t.Run(fmt.Sprint(held), func(t *testing.T) {
+			here := protocol.PartitionUrl("BVN0")
+			bob := protocol.AccountUrl("bob", "tokens")
+			peer := openDisk(t, t.TempDir())
+			t.Cleanup(func() { _ = peer.Close() })
+			writeTokenHistory(t, peer, bob, 600)
+			node := openDisk(t, t.TempDir())
+			t.Cleanup(func() { _ = node.Close() })
+			writeTokenHistory(t, node, bob, held)
+
+			// X, executed by the node alone.
+			txn := new(protocol.Transaction)
+			txn.Header.Principal = bob
+			txn.Header.Memo = "executed early"
+			txn.Body = &protocol.SendTokens{To: []*protocol.TokenRecipient{{Url: protocol.AccountUrl("dave", "tokens"), Amount: *big.NewInt(1)}}}
+			x := (&messaging.TransactionMessage{Transaction: txn}).Hash()
+			b := node.Begin(true)
+			require.NoError(t, b.Account(bob).MainChain().Inner().AddEntry(x[:], true))
+			require.NoError(t, b.UpdateBPT())
+			require.NoError(t, b.Commit())
+
+			src := &countingSource{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}}
+			s := diskState(node, here, servedAt{Source: src, db: peer, block: 7})
+			p := newSyncing()
+			p.repair = true
+			require.Equal(t, taken, s.pullOne(context.Background(), p, bob), "bob was not taken: %v", p.retry)
+			requireSameHash(t, peer, node, bob)
+
+			// The next block: the peers execute X, and so does the node.
+			for _, db := range []*database.Database{peer, node} {
+				b := db.Begin(true)
+				require.NoError(t, b.Account(bob).MainChain().Inner().AddEntry(x[:], true))
+				require.NoError(t, b.UpdateBPT())
+				require.NoError(t, b.Commit())
+			}
+			requireSameHash(t, peer, node, bob)
+		})
+	}
+}
