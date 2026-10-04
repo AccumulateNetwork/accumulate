@@ -390,10 +390,19 @@ failure, and the join treats them apart:
    anchor it produces for a block may not match the partition's signed one.
    That does not break the BPT the pull proved: the block ledger names every
    account the block changed (invariant 14), so the node repairs those
-   accounts from the peers, whole — main state, every chain with its entries
-   and the messages behind them, the pending list, the directory; a chain it
-   grew wrongly is replaced, not appended to — and moves on to the next
-   block. Until repair pulls accounts as of the block that mismatched and
+   accounts from the peers as the join takes any account — main state and
+   chain heads, and the window of the accounts taken by their window — and
+   moves on to the next block. **Syncing never backfills** (Paul,
+   2026-10-04: "Syncing should NEVER do backfills. The point of Syncing is
+   to catch up, follow the network, and do backfills in the background").
+   A repaired account is left taken by its heads; its entries, and the
+   messages behind them, come from the background backfill past the match.
+   A chain the node grew wrongly takes the peer's head, and the backfill,
+   finding that the entries it holds do not reproduce that head, takes the
+   peer's below it position by position. An earlier text had the repair take
+   each account whole, its history included, as Paul's rule; it was not his,
+   and at 10 tps it held a repair at the partition's own pace for 10–13
+   minutes (#4519). Until repair pulls accounts as of the block that mismatched and
    the executor reloads what it holds in memory across a repair (the
    globals, the producer cache, staging's settlement), the node stops
    executing to repair and hands off again at the repaired block, as the
@@ -642,14 +651,14 @@ the node stage and execute (steps 4–6).
 (`PulledState.RepairFrom`). The anchor a block produces that is not the
 partition's signed one means execution differed, not that the pull was wrong.
 The node takes the partition's record of that block and its own, and pulls
-every account they name again, **whole**: main state, every chain with every
-entry and the message behind each, the pending list and the directory. A
-chain is taken again from its first entry when the node's is not the peers'
-prefix, or is longer than the peers' (a chain the node grew wrongly is
-replaced, not appended to); the account's chain index becomes the peers';
-and the entries below each chain's open mark set are brought in at once
-(`pull.Backfill`), so a repaired account is held entire. Then it moves on to
-the next block.
+every account they name again **as the join takes any account**: main state,
+chain heads and open mark sets, and the window of an account taken by its
+window. **It backfills nothing** ("Two mismatches", 2: syncing never
+backfills). A repaired account is recorded as taken by its heads, and the
+background backfill brings in its entries once the node is `ACTIVE` again;
+where the entries the node holds do not reproduce the peer's head (a chain
+it grew wrongly) the backfill replaces them position by position. Then it
+moves on to the next block.
 
 **Past the match, every account taken by its heads is brought in whole.** The
 walk and the records take an account by its chain heads and open mark set
@@ -1026,11 +1035,11 @@ from a wrong state appended entries of its own — is taken again whole, from
 its first entry, with its messages: the node's history is not compared with
 the peer's to find where they part, since at an anchored height there is one
 correct chain. A peer that serves fewer entries than the node holds is
-behind, and is asked again — except in a repair, where the node's longer
-chain is its own wrong growth and is replaced by the peers', taken whole from
-the first entry (Paul, "Two mismatches": a chain the node grew wrongly is
-replaced by the peers', not appended to; this settles #4403's
-provisional rule). The retake tracks no orphaned entries.
+behind, and is asked again. In a repair nothing is taken whole: the node's
+longer chain is its own wrong growth, its head is replaced by the peer's,
+and the background backfill replaces the entries below it ("Two
+mismatches", 2: syncing never backfills; #4519). The retake tracks no
+orphaned entries.
 
 **A chain's entries are streamed to the store a page at a time, under a head
 that does not move** (#4446). The head is the peer's — the count and pending

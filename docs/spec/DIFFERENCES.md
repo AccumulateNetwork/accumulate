@@ -558,7 +558,7 @@ departs:
   comparison (the last block that matched, or the block handed off at).
 - **A root mismatch re-pulls only after a repair from the block ledger
   brought no match.** The repair after one that did not match walks the tree
-  again (`startRepair`), taking whole every account whose leaf differs from a
+  again (`startRepair`), pulling again every account whose leaf differs from a
   page's (Paul, 2026-09-25: "the joining node has to pull the accounts
   again"); the spec re-pulls at the first root mismatch.
 - **The join does not request what it lacks between `Delivered` and
