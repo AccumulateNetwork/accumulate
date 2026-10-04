@@ -91,8 +91,13 @@ func TestOverload_BacklogComesBackAHeaderAtATime(t *testing.T) {
 	// so the block size, which is the block's execution time, is the measure.
 	require.LessOrEqual(t, capped.MaxBlockTxs["BVN1"], uint64(4*2*50+50),
 		"with the cap a block is bounded by validators x MaxHeaderBytes")
-	require.Greater(t, uncapped.MaxBlockTxs["BVN1"], capped.MaxBlockTxs["BVN1"]*3/2,
-		"without the cap the backlog comes back in one block")
+	// System traffic is proposed while execution lags (consensus spec;
+	// #4517), so nothing piles up in the store during a refusal window, and
+	// even without the cap there is no backlog to come back in one block.
+	// Before that change the uncapped run's largest block was well over half
+	// again the capped one's; with it, 286 against 284.
+	require.LessOrEqual(t, uncapped.MaxBlockTxs["BVN1"], capped.MaxBlockTxs["BVN1"]*3/2,
+		"system traffic flows during the lag, so no backlog is dumped even uncapped")
 	require.Greater(t, capped.Heights["BVN1"], uint64(0))
 }
 
@@ -138,13 +143,24 @@ func asymmetricOverload(t *testing.T, maxHeaderBytes int) (*Result, error) {
 	return r, err
 }
 
-func TestOverload_UncappedHeadersDoubleTheDumpUntilThePartitionStops(t *testing.T) {
+// Before system traffic was proposed while execution lags, this shape
+// stopped BVN2: the synthetics it could not refuse piled up while its headers
+// were empty and came back as blocks that doubled every cycle, to thousands
+// of transactions. Proposing them during the lag (consensus spec, "System
+// traffic is proposed while execution lags"; #4517) keeps them flowing a
+// header at a time, so even without a header cap BVN2 keeps producing and no
+// block approaches the old dumps. Its lag still drifts past the bound: the
+// inflow exceeds its capacity, and only cross-partition back-pressure can
+// change that (DIFFERENCES C7).
+func TestOverload_UncappedHeadersNoLongerDumpTheBacklog(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the consensus stack for five minutes")
 	}
-	r, _ := asymmetricOverload(t, 1<<30)
-	require.Greater(t, r.MaxBlockTxs["BVN2"], uint64(2000), "the dumped blocks reach thousands of transactions")
-	require.Greater(t, r.MaxLag["BVN2"], 30, "and the lag runs far past the bound")
+	r, err := asymmetricOverload(t, 1<<30)
+	require.NoError(t, err, "without the cap no partition is declared stalled")
+	require.Less(t, r.MaxBlockTxs["BVN2"], uint64(1000), "no block approaches the old dumps of thousands of transactions")
+	require.Greater(t, r.Heights["BVN2"], uint64(200), "and BVN2 keeps producing blocks")
+	require.Greater(t, r.MaxLag["BVN2"], 8, "the overload still drives the lag past the bound (C7)")
 }
 
 func TestOverload_CappedHeadersKeepThePartitionMoving(t *testing.T) {

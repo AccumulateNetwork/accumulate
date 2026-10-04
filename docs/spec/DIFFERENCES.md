@@ -1704,11 +1704,13 @@ under the soak's load, and the destination can neither refuse them nor execute
 them faster than they arrive when the source keeps accepting. Refusing the
 destination's own users changes nothing about that inflow. consim reproduces
 it in five minutes (`pkg/consensus/consim`,
-`TestOverload_UncappedHeadersDoubleTheDumpUntilThePartitionStops`, and the
-command line in PLAN.md "Simulation first"): BVN1 offered 400 user tx/s and
-BVN2 250, each executor good for 400 tx/s, 1.5 synthetics per accepted user
-transaction; BVN2's lag runs to 42 and its dumped blocks double every cycle
-until it stops. With the header cap (`MaxHeaderBytes`, 455a82ee1) the blocks
+`TestOverload_UncappedHeadersNoLongerDumpTheBacklog`, and the command line in
+PLAN.md "Simulation first"): BVN1 offered 400 user tx/s and BVN2 250, each
+executor good for 400 tx/s, 1.5 synthetics per accepted user transaction.
+Before system traffic was proposed while execution lags (#4517), BVN2's lag
+ran to 42 and its dumped blocks doubled every cycle until it stopped. Since
+then, even without the cap, its blocks stay under 300 transactions and it
+keeps producing, but its lag still drifts past the bound (73 on 2026-10-04). With the header cap (`MaxHeaderBytes`, 455a82ee1) the blocks
 stay bounded and BVN2 keeps producing, but its lag still drifts upward — the
 inflow exceeds its capacity. Soak `20260905T144928Z` is the same curve in
 forty-five minutes: BVN2 produced twice BVN1's synthetics (#4220), both BVNs
