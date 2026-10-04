@@ -62,6 +62,7 @@ func (b *BPT) executePending() error {
 			continue
 		}
 		e.applied = true
+		b.noteBefore(e.key.Hash())
 
 		var err error
 		if e.delete {

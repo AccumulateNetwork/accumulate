@@ -340,6 +340,7 @@ func (x *sections) apply(batch *database.Batch, ld *loadedSection) error {
 // write writes a loaded section into a batch: the accounts beneath its
 // records, and the marker swapped for the leaves in its tree.
 func (x *sections) write(batch *database.Batch, ld *loadedSection) error {
+	batch.AddWriter("load")
 	err := batch.WriteBeneath(func(c *database.Batch) error {
 		return pull.WriteStates(c, ld.states)
 	})

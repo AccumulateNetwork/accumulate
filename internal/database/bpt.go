@@ -19,7 +19,11 @@ import (
 )
 
 func newBPT(parent record.Record, logger logging.Logger, store record.Store, key *record.Key, name string) *bpt.BPT {
-	return bpt.New(parent, logger, store, key)
+	t := bpt.New(parent, logger, store, key)
+	if c, ok := parent.(*Batch); ok {
+		traceBPT(c, t)
+	}
+	return t
 }
 
 // GetBptRootHash returns the BPT root hash, after applying updates as necessary

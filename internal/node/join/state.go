@@ -502,6 +502,9 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	}
 	// The handoff is an overlap: the blocks after a match are settled
 	// against their records, in the batch each executes in (§3a; #4495).
+	// Every commit to the node's tree, by the executor and by the join, is
+	// recorded in the write trail a failure is logged with (§3b).
+	opts.Database.SetBPTWriteSink(s.repairLog)
 	s.overlap = &overlap{partition: opts.Partition, label: label, log: s.log, repairs: s.repairLog, peers: s.secs.peers, ask: overlapAsk, blocks: OverlapBlocks}
 	s.overlap.taken = func(urls ...*url.URL) { s.markHeadOnly(urls...) }
 	s.secs.overlap = s.overlap
@@ -1187,7 +1190,11 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 	for i, k := range keep {
 		list[i] = k.st
 	}
-	errs := pull.KeepStates(s.db, list)
+	var at uint64
+	if s.sync != nil {
+		at = s.sync.last
+	}
+	errs := pull.KeepStates(taggedStore{s.db, "keep", at}, list)
 	var headOnly []*url.URL
 	for i, k := range keep {
 		u := k.st.Url

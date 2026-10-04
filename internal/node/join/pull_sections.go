@@ -84,6 +84,7 @@ func (s *PulledState) openSections(p *syncing, secs ...sectionID) {
 	}
 	batch := s.db.Begin(true)
 	defer batch.Discard()
+	batch.TagWrites("open", 0)
 	for _, sec := range open {
 		if err := batch.BPT().Delete(sec.MarkerKey()); err != nil {
 			s.log.Info("A section's marker could not be removed; the sections are not opened", "partition", s.partition, "section", sec, "error", err)
@@ -485,6 +486,7 @@ func (s *PulledState) install(top *bpt.SectionHashes, at uint64, keep map[sectio
 
 	batch := s.db.Begin(true)
 	defer batch.Discard()
+	batch.TagWrites("install", at)
 	for _, c := range changes {
 		for k, l := range c.leaves {
 			if bpt.IsSectionMarker(k) || l.url == nil {

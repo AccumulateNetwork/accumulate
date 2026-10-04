@@ -1571,15 +1571,22 @@ failed. It is repaired by syncing that again, and the node carries on.
 
 **A failure leaves one entry, not a dump.** At each failure above, the node
 logs one line at WARN under `module=repair`. The line holds the kind
-(`section-hash`, `account-diverged`, `unlocated`), the partition, the block
-executed, the section prefix or account, the hash held, the hash expected and
-the peer's, and what the node did about it. For a section, it also holds the
-section's **write trail**: the last eight writes the node made under that
-section since it started. Each write is recorded as who wrote it (`execute`,
-`install`, `load`, `repair`, `record`), at which block, and the section hash
-before and after. The trail is kept in memory, eight entries per section
-touched. It is what a post mortem needs to say which step left the block wrong.
-Without it, the log says only that it is wrong.
+(`section-hash` for a stored block that fails its check, `account-diverged`
+once per block that left accounts or chains other than its record), the
+partition, the block, the prefix or the accounts (the first eight, and how
+many), the hashes held and expected, the peer's root, and what the node did
+about it. A `section-hash` line also holds the stored block's **write trail**:
+the last eight commits that changed it, oldest first. Each is recorded as who
+wrote (`execute`, `install`, `open`, `keep`, `load`, `record`, joined with
+`+` when one batch did several, such as a section loaded into a block's
+batch: `execute+load`), at which block, the hash the root's block records for
+the stored block before and after, and whether the stored block's own record
+was written. Every commit to the node's tree is measured, the executor's
+included (`bpt.SetCommitTrace`, `database.SetBPTWriteSink`). The trail is
+kept in memory for the 256 stored blocks eight levels below the root, each
+covering sixteen sections. A commit whose hash changed but whose record was
+not written, or the reverse, is the write that left a block failing its
+check. Without the trail, the log says only that it does.
 
 **Every failure is also written to the repair log.** The repair log is
 `repairs.jsonl` in the partition's data directory: one JSON object per
@@ -1588,9 +1595,10 @@ the log line. When the repair ends, the outcome (`repaired`, or `failed` with
 the error) is appended as its own object, keyed to the failure. The file is
 node-local: it is not state, it is not hashed, and nothing reads it while the
 node runs. A node that cannot repair itself is repaired offline from it, with
-the node stopped: `accumulated debug repair <data-dir>` reads the failures not
-marked `repaired`, takes each named account and section again from the
-partition's peers, and marks it. The next start then proves the result like
+the node stopped: `accumulated debug repair <data-dir> --partition <id>
+--peer <json-rpc url>` reads the failures not marked `repaired`, takes the
+top of the named peer's tree so the sections under each failing block are
+forgotten and marked not loaded, and appends each outcome. The next start then proves the result like
 any join: the match is still the only proof (§2).
 
 #### 4. Staging is what was collected, minus what the state says executed

@@ -39,6 +39,7 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	} else {
 		block.Batch = x.Database.Begin(true)
 	}
+	block.Batch.TagWrites("execute", params.Index)
 	block.cache = x.synthCache().Begin(params.Index)
 	block.staging = x.staging().Begin()
 	// Staging is published with the index of the block that published it, so

@@ -115,8 +115,14 @@ func (b *BPT) Commit() error {
 		return errors.UnknownError.WithFormat("store params: %w", err)
 	}
 
-	// Commit
-	return b.baseCommit()
+	// Commit, measuring for the write trail what the commit did to each stored
+	// block below the root before the records are written
+	writes := b.measure()
+	err = b.baseCommit()
+	if err == nil && b.trace != nil && len(writes) > 0 {
+		b.trace.fn(writes)
+	}
+	return err
 }
 
 // nodeRecord is a wrapper for [branch] that implements [record.Record].

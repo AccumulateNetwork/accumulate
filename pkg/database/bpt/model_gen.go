@@ -24,6 +24,7 @@ type BPT struct {
 	loadedState *stateData
 	history     *historyConfig
 	view        *historyView
+	trace       *commitTrace
 
 	state values.Value[*stateData]
 	root  *rootRecord

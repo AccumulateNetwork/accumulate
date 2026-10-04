@@ -31,6 +31,8 @@ type Batch struct {
 	nextChildId int64
 	parent      *Batch
 	observer    Observer
+	bptSink     BPTWriteSink
+	bptTag      *BPTWriteTag
 
 	bpt         *bpt.BPT
 	account     map[accountMapKey]*Account

@@ -24,6 +24,11 @@
     pointer: true
   - name: observer
     type: Observer
+  - name: bptSink
+    type: BPTWriteSink
+  - name: bptTag
+    type: BPTWriteTag
+    pointer: true
   attributes:
   - name: BPT
     type: other

@@ -32,6 +32,9 @@ type Database struct {
 	// gates is the section gate this database and its views share
 	// (sections.go; #4485).
 	gates *sectionGates
+
+	// sinks is where batches report their BPT commits (bpt_trail.go).
+	sinks *bptSinks
 }
 
 // New creates a new database using the given key-value store.
@@ -40,6 +43,7 @@ func New(store keyvalue.Beginner, logger logging.Logger) *Database {
 	d.store = store
 	d.observer = NewDatabaseObserver()
 	d.gates = new(sectionGates)
+	d.sinks = new(bptSinks)
 
 	if logger != nil {
 		d.logger = logger.With("module", "database")
@@ -93,6 +97,7 @@ func (d *Database) view(store keyvalue.Beginner) *Database {
 		nextBatchId: atomic.LoadInt64(&d.nextBatchId),
 		observer:    d.observer,
 		gates:       d.gates,
+		sinks:       d.sinks,
 	}
 }
 

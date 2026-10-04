@@ -408,6 +408,7 @@ func (o *overlap) verifySystem(s *settling) error {
 		if local == st.LeafHash {
 			continue
 		}
+		s.batch.AddWriter("record")
 		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleAll); err != nil {
 			return errors.UnknownError.WithFormat("write the record's state of %v: %w", st.Url, err)
 		}
@@ -494,6 +495,7 @@ func (o *overlap) settleNamed(ctx context.Context, s *settling) error {
 		case exists && !differs:
 			continue
 		}
+		s.batch.AddWriter("record")
 		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleNotIndex); err != nil {
 			return errors.UnknownError.WithFormat("write the record's state of %v: %w", u, err)
 		}
@@ -636,6 +638,7 @@ func (o *overlap) settleAhead(ctx context.Context, s *settling, src pull.Source,
 		case st.Main == nil, local == st.LeafHash:
 			continue
 		default:
+			s.batch.AddWriter("record")
 			err := s.batch.WriteBeneath(func(c *database.Batch) error { return pull.WriteStates(c, []*api.AccountState{st}) })
 			if err == nil {
 				err = tree.Insert(key, st.LeafHash[:])

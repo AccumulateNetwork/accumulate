@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -256,4 +257,130 @@ func TestABlockThatLeftAccountsOtherThanItsRecordIsOneRepairEntry(t *testing.T) 
 	require.Contains(t, got[0].Account, "acc://a2.acme")
 	require.Equal(t, got[0].ID, got[1].ID)
 	require.Equal(t, "repaired", got[1].Outcome)
+}
+
+// TestTheWriteTrailSaysWhoChangedAStoredBlockAndWhetherItsRecordWasWritten —
+// #4523, executor spec, "Sync", §3b: every commit to the node's tree records,
+// for each stored block below the root it changed, who wrote it at which
+// block, the hash the root's block holds for it before and after, and
+// whether the block's own record was written. A block loaded into a block's
+// batch is written by both, and the trail says so.
+func TestTheWriteTrailSaysWhoChangedAStoredBlockAndWhetherItsRecordWasWritten(t *testing.T) {
+	db := peerStore(t)
+	r := newRepairs(slog.Default(), "")
+	db.SetBPTWriteSink(r)
+
+	a := protocol.AccountUrl("trail-a", "tokens")
+	prefix := byte(database.SectionOfAccount(a) >> 4)
+	// A second account under the same prefix, so a stored block sits there.
+	var b *url.URL
+	for i := 0; b == nil; i++ {
+		u := protocol.AccountUrl(fmt.Sprintf("trail-b%d", i), "tokens")
+		if byte(database.SectionOfAccount(u)>>4) == prefix {
+			b = u
+		}
+	}
+
+	put := func(who string, block uint64, load bool, u *url.URL, bal int64) {
+		batch := db.Begin(true)
+		batch.TagWrites(who, block)
+		if load {
+			batch.AddWriter("load")
+		}
+		acct := &protocol.TokenAccount{Url: u, TokenUrl: protocol.AcmeUrl()}
+		acct.Balance.SetInt64(bal)
+		require.NoError(t, batch.Account(u).Main().Put(acct))
+		require.NoError(t, batch.UpdateBPT())
+		require.NoError(t, batch.Commit())
+	}
+	// One key under the prefix is a leaf, not a stored block: the trail says
+	// there was none. The second key makes the block.
+	put("genesis", 1, false, a, 1)
+	put("genesis", 2, false, b, 1)
+	put("execute", 42, false, a, 2)
+	put("execute", 43, true, b, 3)
+
+	trail := r.trailOf(prefix)
+	require.Len(t, trail, 4, "%v", trail)
+	require.Equal(t, "genesis@1 00000000->00000000 not written", trail[0])
+	require.Regexp(t, `^genesis@2 00000000->[0-9a-f]{8} written$`, trail[1])
+	require.Regexp(t, `^execute@42 [0-9a-f]{8}->[0-9a-f]{8} written$`, trail[2])
+	require.Regexp(t, `^execute\+load@43 [0-9a-f]{8}->[0-9a-f]{8} written$`, trail[3])
+	// Each write starts where the one before it left the block.
+	for i := 2; i < len(trail); i++ {
+		after := strings.Fields(trail[i-1])[1][10:]
+		before := strings.Fields(trail[i])[1][:8]
+		require.Equal(t, after, before, "write %d does not start where write %d left the block: %v", i, i-1, trail)
+	}
+}
+
+// TestAnOfflineRepairTakesAgainWhatTheRepairLogRecords — #4523, executor
+// spec, "Sync", §3b: "A node that cannot repair itself is repaired offline
+// from it, with the node stopped." A stopped node's store holds a torn block,
+// and its repair log the failure the node recorded and never closed. The
+// offline repair takes the top from a peer, forgets the sections under the
+// block, and closes the failure; the next start stands at the peer's root.
+func TestAnOfflineRepairTakesAgainWhatTheRepairLogRecords(t *testing.T) {
+	const U = 600
+	here := protocol.PartitionUrl("BVN0")
+	values, _ := genesisValues(t, 4)
+	var accounts []*url.URL
+	for i := 0; i < U; i++ {
+		accounts = append(accounts, protocol.AccountUrl(fmt.Sprintf("account%03d", i), "tokens"))
+	}
+	fill := func(db *database.Database, changed *url.URL) {
+		putNetwork(t, db, here, values)
+		putLedger(t, db, here, 10)
+		for _, u := range accounts {
+			bal := int64(5)
+			if u == changed {
+				bal = 7
+			}
+			putTokens(t, db, u, bal)
+		}
+	}
+	byPrefix := map[byte]int{}
+	for _, u := range accounts {
+		byPrefix[byte(database.SectionOfAccount(u)>>4)]++
+	}
+	var victim *url.URL
+	for _, u := range accounts {
+		if byPrefix[byte(database.SectionOfAccount(u)>>4)] >= 3 {
+			victim = u
+			break
+		}
+	}
+	prefix := byte(database.SectionOfAccount(victim) >> 4)
+
+	peerDB, node, other := peerStore(t), peerStore(t), peerStore(t)
+	fill(peerDB, nil)
+	fill(node, nil)
+	fill(other, victim)
+	tornBlock(t, node, other, prefix)
+	requireTorn(t, node, prefix)
+
+	// What the running node recorded before it stopped.
+	logPath := filepath.Join(t.TempDir(), "repairs.jsonl")
+	b := brokenBlocks(t, node)[0]
+	recorded := newRepairs(slog.Default(), logPath)
+	recorded.sectionHash(here, 9, b, nil)
+	open, err := readRepairLog(logPath)
+	require.NoError(t, err)
+	require.Len(t, open, 1, "precondition: the failure is recorded and open")
+
+	peer := apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	res, err := RepairOffline(context.Background(), node, here, peer, logPath, nil)
+	require.NoError(t, err)
+	require.Equal(t, &OfflineRepair{Open: 1, Repaired: 1}, res)
+
+	require.Empty(t, brokenBlocks(t, node), "the torn block is still torn")
+	open, err = readRepairLog(logPath)
+	require.NoError(t, err)
+	require.Empty(t, open, "the failure is still open in the repair log")
+
+	// The next start: the join stands at the peer's root.
+	s, err := NewState(StateOptions{Partition: here, Database: node, Sources: &onePeer{partition: here, querier: peer, block: 10}, ExecutedBlock: 1})
+	require.NoError(t, err)
+	require.NoError(t, s.Pull(context.Background()))
+	require.Equal(t, rootIn(t, peerDB), rootIn(t, node))
 }

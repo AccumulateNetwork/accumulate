@@ -7,6 +7,8 @@
 package join
 
 import (
+	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -18,7 +20,12 @@ import (
 	"sync"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
@@ -53,9 +60,9 @@ type repairs struct {
 	log  *slog.Logger
 	path string
 
-	mu    sync.Mutex
-	open  map[string]RepairEntry // failures logged and not yet closed, by ID
-	trail func(prefix byte) []string
+	mu     sync.Mutex
+	open   map[string]RepairEntry // failures logged and not yet closed, by ID
+	trails map[byte][]string      // the write trail of each stored block below the root
 }
 
 func newRepairs(log *slog.Logger, path string) *repairs {
@@ -94,8 +101,8 @@ func (r *repairs) sectionHash(partition *url.URL, block uint64, b *bpt.Inconsist
 		root := peer.Root()
 		e.Peer = hex.EncodeToString(root[:])
 	}
-	if r.trail != nil && len(b.Prefix) == 1 {
-		e.Trail = r.trail(b.Prefix[0])
+	if len(b.Prefix) == 1 {
+		e.Trail = r.trailOf(b.Prefix[0])
 	}
 	e.ID = repairID(e.Kind, e.Partition, e.Prefix, e.Held, e.Expected)
 	r.record(e)
@@ -198,4 +205,189 @@ func appendRepair(path string, e RepairEntry) error {
 		return fmt.Errorf("append to %s: %w", path, err)
 	}
 	return nil
+}
+
+// taggedStore begins batches that say who they write for, for the write
+// trail.
+type taggedStore struct {
+	db    *database.Database
+	who   string
+	block uint64
+}
+
+func (t taggedStore) Begin(writable bool) *database.Batch {
+	b := t.db.Begin(writable)
+	b.TagWrites(t.who, t.block)
+	return b
+}
+
+// trailDepth is how many writes the trail keeps for each stored block below
+// the root.
+const trailDepth = 8
+
+// BPTWrites records each commit's writes to the stored blocks below the root,
+// keeping the last trailDepth for each: who wrote, at which block, the hash
+// the root's block records for it before and after, and whether the block's
+// own record was written (executor spec, "Sync", §3b). It implements
+// [database.BPTWriteSink].
+func (r *repairs) BPTWrites(who string, block uint64, writes []bpt.BlockWrite) {
+	if who == "" {
+		who = "other"
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.trails == nil {
+		r.trails = map[byte][]string{}
+	}
+	for _, w := range writes {
+		rec := "not written"
+		if w.Written {
+			rec = "written"
+		}
+		line := fmt.Sprintf("%s@%d %x->%x %s", who, block, w.Before[:4], w.After[:4], rec)
+		t := append(r.trails[w.Prefix], line)
+		if len(t) > trailDepth {
+			t = t[len(t)-trailDepth:]
+		}
+		r.trails[w.Prefix] = t
+	}
+}
+
+// trailOf is the trail of the stored block under prefix, oldest first.
+func (r *repairs) trailOf(prefix byte) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.trails[prefix]...)
+}
+
+// readRepairLog reads a repair log, and returns the failures it records that
+// no later entry closes.
+func readRepairLog(path string) ([]RepairEntry, error) {
+	f, err := os.Open(path)
+	switch {
+	case err == nil:
+	case os.IsNotExist(err):
+		return nil, nil
+	default:
+		return nil, err
+	}
+	defer f.Close()
+	var order []string
+	open := map[string]RepairEntry{}
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for sc.Scan() {
+		var e RepairEntry
+		if err := json.Unmarshal(sc.Bytes(), &e); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		switch {
+		case e.Outcome == "repaired":
+			delete(open, e.ID)
+		case e.Kind != "":
+			if _, ok := open[e.ID]; !ok {
+				order = append(order, e.ID)
+			}
+			open[e.ID] = e
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	var out []RepairEntry
+	for _, id := range order {
+		if e, ok := open[id]; ok {
+			out = append(out, e)
+			delete(open, id)
+		}
+	}
+	return out, nil
+}
+
+// OfflineRepair is what RepairOffline did.
+type OfflineRepair struct {
+	Open     int // failures the repair log recorded and no entry had closed
+	Repaired int
+	Failed   int
+}
+
+// RepairOffline repairs, in a stopped node's store, the failures its repair
+// log records and nothing has closed (executor spec, "Sync", §3b). A stored
+// block of the node's own tree that fails its check is repaired the way a
+// running node repairs it: the top of peer's tree is taken, and the sections
+// under the block are forgotten and marked not loaded. The next start loads
+// them, and its match proves the result. Each failure's outcome is appended to
+// the log.
+func RepairOffline(ctx context.Context, db *database.Database, partition *url.URL, peer api.Querier, logPath string, log *slog.Logger) (*OfflineRepair, error) {
+	if log == nil {
+		log = slog.Default()
+	}
+	open, err := readRepairLog(logPath)
+	if err != nil {
+		return nil, fmt.Errorf("read the repair log: %w", err)
+	}
+	out := &OfflineRepair{Open: len(open)}
+	if len(open) == 0 {
+		return out, nil
+	}
+
+	executed, err := readExecutedBlock(db, partition)
+	if err != nil {
+		return nil, err
+	}
+	s, err := NewState(StateOptions{Partition: partition, Database: db, Sources: &onePeerSources{partition: partition, peer: peer}, ExecutedBlock: executed, RepairLog: logPath, Logger: log})
+	if err != nil {
+		return nil, err
+	}
+	s.sync = newSyncing()
+	topErr := s.takeTop(ctx, s.sync)
+
+	batch := db.Begin(false)
+	own, err := localTop(batch.BPT())
+	batch.Discard()
+	if err != nil {
+		return nil, fmt.Errorf("read the node's own tree after the repair: %w", err)
+	}
+	broken := map[string]bool{}
+	for _, b := range own.broken {
+		broken[hex.EncodeToString(b.Prefix)] = true
+	}
+
+	for _, e := range open {
+		closed := RepairEntry{Time: time.Now().UTC(), ID: e.ID, Outcome: "repaired"}
+		switch {
+		case e.Kind != "section-hash":
+			closed.Outcome, closed.Error = "failed", "this kind is repaired by the running node, not offline"
+		case topErr != nil:
+			closed.Outcome, closed.Error = "failed", topErr.Error()
+		case broken[e.Prefix]:
+			closed.Outcome, closed.Error = "failed", "the block under the prefix still fails its check"
+		}
+		if closed.Outcome == "repaired" {
+			out.Repaired++
+		} else {
+			out.Failed++
+		}
+		if err := appendRepair(logPath, closed); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// onePeerSources is the one peer an operator names, for every account of the
+// partition.
+type onePeerSources struct {
+	partition *url.URL
+	peer      api.Querier
+}
+
+func (o *onePeerSources) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
+	return []pull.Source{api.Querier2{Querier: o.peer}}, o.partition, nil
+}
+
+func (o *onePeerSources) Querier(*url.URL) api.Querier { return o.peer }
+
+func (o *onePeerSources) ValidatorsOf(context.Context, *url.URL) ([]anchorsrc.Validator, error) {
+	return nil, errors.NotReady.With("an offline repair reaches no validator")
 }

@@ -67,11 +67,13 @@ func (d *Database) begin(writable, executing bool) *Batch {
 	if gate == nil {
 		b := NewBatch(fmt.Sprint(id), cs, writable, d.logger)
 		b.observer = d.observer
+		b.bptSink, b.bptTag = d.bptSink(), new(BPTWriteTag)
 		return b
 	}
 	g := &gatedChangeSet{ChangeSet: cs, gate: gate}
 	b := NewBatch(fmt.Sprint(id), g, writable, d.logger)
 	b.observer = d.observer
+	b.bptSink, b.bptTag = d.bptSink(), new(BPTWriteTag)
 	if executing {
 		g.batch = b
 		gate.Opened(b)
@@ -99,6 +101,7 @@ func (b *Batch) Begin(writable bool) *Batch {
 	c := new(Batch)
 	c.id = fmt.Sprintf("%s.%d", b.id, b.nextChildId)
 	c.observer = b.observer
+	c.bptSink, c.bptTag = b.bptSink, b.bptTag
 	c.writable = b.writable && writable
 	c.parent = b
 	c.logger = b.logger
