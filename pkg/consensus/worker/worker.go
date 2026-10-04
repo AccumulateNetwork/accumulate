@@ -264,6 +264,11 @@ type lruEntry struct {
 	// it was last proposed has fallen out of the committed leaders' causal
 	// history and must be proposed again.
 	lastQueued time.Time
+	// user marks a batch holding a transaction taken by SubmitUser. While
+	// execution lags, the primary proposes only batches without one: system
+	// traffic is what a lagging executor is often waiting on (consensus spec,
+	// "System traffic is proposed while execution lags"; #4517).
+	user bool
 }
 
 // Worker collects transactions and creates batches for the consensus layer.
@@ -277,6 +282,9 @@ type Worker struct {
 	mu          sync.Mutex
 	pending     [][]byte
 	pendingSize int
+	// pendingUser says pending holds a transaction taken by SubmitUser; the
+	// batch sealed from it is marked user (#4517). Guarded by mu.
+	pendingUser bool
 
 	// Batch storage with LRU eviction
 	batchMu sync.RWMutex
@@ -496,6 +504,9 @@ func (w *Worker) submit(tx []byte, bounded bool) error {
 
 	w.pending = append(w.pending, txCopy)
 	w.pendingSize += len(txCopy)
+	if bounded {
+		w.pendingUser = true
+	}
 
 	// The ordinary batching trigger: a batch is worth making.  Signalled to
 	// the batch loop, and it does not matter if a signal is coalesced.
@@ -1015,7 +1026,7 @@ func (w *Worker) batchLoop() {
 
 // createAndBroadcastBatch creates a batch from pending transactions and broadcasts it.
 func (w *Worker) createAndBroadcastBatch() {
-	batch := w.createBatch()
+	batch, user := w.createBatch()
 	if batch == nil {
 		return
 	}
@@ -1023,6 +1034,9 @@ func (w *Worker) createAndBroadcastBatch() {
 	// Store locally first (eviction is handled by dedicated goroutine)
 	digest := batch.Digest()
 	w.storeOwn(batch)
+	if user {
+		w.markUser(digest)
+	}
 
 	// Update metrics immediately after creating the batch
 	// This must happen before enqueueing to ensure metrics are updated even if shutdown occurs
@@ -1049,6 +1063,12 @@ func (w *Worker) createAndBroadcastBatch() {
 	}
 
 	// This will block if the queue is full (backpressure)
+	if w.ctx == nil {
+		// Not started (Seal on a worker that is not running): queue without
+		// waiting on a context that does not exist.
+		w.availableBatchQueue <- digest
+		return
+	}
 	select {
 	case w.availableBatchQueue <- digest:
 		// Successfully enqueued
@@ -1084,20 +1104,75 @@ func (w *Worker) createAndBroadcastBatch() {
 
 // createBatch creates a new batch from pending transactions.
 // Returns nil if there are no pending transactions.
-func (w *Worker) createBatch() *types.Batch {
+func (w *Worker) createBatch() (*types.Batch, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	if len(w.pending) == 0 {
-		return nil
+		return nil, false
 	}
 
 	// Take all pending transactions
 	transactions := w.pending
+	user := w.pendingUser
+	w.pendingUser = false
 	w.pending = make([][]byte, 0, w.config.BatchSize)
 	w.pendingSize = 0
 
-	return types.NewBatch(transactions)
+	return types.NewBatch(transactions), user
+}
+
+// Seal turns the pending transactions into a batch now and makes it
+// available, as the batch loop would on its next trigger. It is what a
+// caller uses to flush, and what tests use to make a batch from a known
+// submission.
+func (w *Worker) Seal() {
+	w.createAndBroadcastBatch()
+}
+
+// markUser marks a stored batch as holding user work (#4517).
+func (w *Worker) markUser(digest types.BatchDigest) {
+	w.batchMu.Lock()
+	if e, ok := w.batches[digest]; ok {
+		e.user = true
+	}
+	w.batchMu.Unlock()
+}
+
+// ConsumeSystemBatchesWithin is ConsumeAvailableBatchesWithin for a primary
+// whose executor lags consensus: it takes only batches that hold no user
+// transaction, within budget, and leaves every other batch queued for a later
+// header (consensus spec, "System traffic is proposed while execution lags";
+// #4517). A lagging executor is often waiting on that traffic: a Directory
+// anchor below quorum is completed only by copies that are ordered, and
+// proposing nothing kept them from ever being ordered (run 20261003T232435Z).
+func (w *Worker) ConsumeSystemBatchesWithin(budget int) ([]types.BatchDigest, int) {
+	digests := w.proposable(w.drainAvailable())
+	var system, rest []types.BatchDigest
+	w.batchMu.Lock()
+	for _, d := range digests {
+		if e, ok := w.batches[d]; ok && !e.user {
+			system = append(system, d)
+		} else {
+			rest = append(rest, d)
+		}
+	}
+	w.batchMu.Unlock()
+
+	used, take := 0, 0
+	for take < len(system) {
+		size := w.sizeOf(system[take : take+1])
+		if take > 0 && budget > 0 && used+size > budget {
+			break
+		}
+		used += size
+		take++
+	}
+	rest = append(rest, system[take:]...)
+	if len(rest) > 0 {
+		w.RequeueBatches(rest)
+	}
+	return system[:take], used
 }
 
 // handleIncomingBatches listens for batches from other workers and stores them.

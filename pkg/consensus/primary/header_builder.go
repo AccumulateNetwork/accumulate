@@ -48,9 +48,13 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	seen := make(map[types.BatchDigest]bool)
 	// Consensus does not outrun execution (consensus spec, invariant 9):
 	// while the executor is more than MaxExecutionLag blocks behind, the
-	// header carries parents and weak links but no batches — rounds continue,
-	// nothing new is certified, and the batches stay available for a later
-	// header.
+	// header carries parents, weak links and batches of system traffic alone
+	// — rounds continue, no user work is certified, and the user batches stay
+	// available for a later header. System traffic still goes through
+	// because a lagging executor is often waiting on it: a Directory anchor
+	// below quorum is completed only by copies that are ordered, and
+	// proposing nothing kept them from ever being ordered (#4517; run
+	// 20261003T232435Z).
 	lagging := p.executionLagging()
 	// One byte budget for the header, shared by the workers in order: what
 	// built up while the primary was not proposing comes back a header at a
@@ -59,13 +63,19 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// number of validators (#4230).
 	budget := p.headerBudget()
 	for _, w := range p.workers {
-		if lagging || budget <= 0 {
+		if budget <= 0 {
 			break
 		}
 		// Dedup: the requeue (never-certified headers) and re-proposal
 		// (never-committed batches) paths can both re-enqueue a digest, and a
 		// header must not list the same batch twice.
-		digests, used := w.ConsumeAvailableBatchesWithin(budget)
+		var digests []types.BatchDigest
+		var used int
+		if lagging {
+			digests, used = w.ConsumeSystemBatchesWithin(budget)
+		} else {
+			digests, used = w.ConsumeAvailableBatchesWithin(budget)
+		}
 		budget -= used
 		for _, digest := range digests {
 			if seen[digest] {

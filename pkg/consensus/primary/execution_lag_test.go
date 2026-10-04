@@ -16,46 +16,73 @@ import (
 
 // Consensus does not outrun execution (consensus spec, invariant 9): while the
 // executor is more than MaxExecutionLag blocks behind the DAG's commits, a
-// header carries no batches and the batches stay available for a later one;
-// the workers refuse user work meanwhile, and both clear when execution
+// header carries no user work and those batches stay available for a later
+// one; the workers refuse user work meanwhile, and both clear when execution
 // catches up.
+//
+// System traffic is still proposed (#4517). A lagging executor is often
+// waiting on it: a Directory anchor below quorum is completed only by copies
+// that are ordered. Run 20261003T232435Z: BVN2 lagged 13 to 75 blocks while
+// every Directory validator's copy of each anchor after 1,980 sat in its
+// workers, and no anchor after 1,980 ever collected a quorum.
 func TestCreateHeader_CarriesNoBatchesWhileExecutionLags(t *testing.T) {
 	v := newTestValidator(t)
 	committee := newTestCommittee([]*testValidator{v}, 1)
 	d := newTestDAG()
+
 	w := worker.New(worker.Config{ID: 1, Partition: "test", MaxStoredBatchBytes: 1 << 20}, nil)
-	batch := types.NewBatch([][]byte{{1, 2, 3}})
-	require.NoError(t, w.StoreBatch(batch))
-	digest := batch.Digest()
-	w.RequeueBatches([]types.BatchDigest{digest})
+	carried := func(h *types.Header) map[types.BatchDigest]bool {
+		out := map[types.BatchDigest]bool{}
+		for _, e := range h.Payload {
+			out[e.Digest] = true
+		}
+		return out
+	}
+	only := func(t *testing.T) types.BatchDigest {
+		t.Helper()
+		a := w.AvailableBatches()
+		require.Len(t, a, 1)
+		w.RequeueBatches(a)
+		return a[0]
+	}
+
+	// One batch of user work, one of system traffic (an anchor copy, say).
+	require.NoError(t, w.SubmitUser([]byte{1, 2, 3}))
+	w.Seal()
+	user := only(t)
+	require.NoError(t, w.Submit([]byte{4, 5, 6}))
+	w.Seal()
+	all := w.AvailableBatches()
+	require.Len(t, all, 2)
+	w.RequeueBatches(all)
+	var system types.BatchDigest
+	for _, dg := range all {
+		if dg != user {
+			system = dg
+		}
+	}
 
 	lag := 0
 	p := New(Config{Partition: "test", KeyPair: v.priv}, committee, nil, d, []*worker.Worker{w})
 	p.SetExecutionLagSource(func() int { return lag }, 4)
 
-	// Within the bound: the batch is proposed
-	lag = 4
+	// Past the bound: the system batch is proposed, the user batch waits,
+	// and user work is refused.
+	lag = 5
 	header, err := p.CreateHeader()
 	require.NoError(t, err)
-	require.Len(t, header.Payload, 1, "within the bound, the header takes the batch")
-	require.NoError(t, w.SubmitUser([]byte{9}))
-
-	// Past the bound: no batches, the batch stays available, user work refused
-	w.RequeueBatches([]types.BatchDigest{digest})
-	lag = 5
-	header, err = p.CreateHeader()
-	require.NoError(t, err)
-	require.Empty(t, header.Payload, "past the bound, the header carries no batches")
-	require.Len(t, w.AvailableBatches(), 1, "the batch waits for a later header")
+	got := carried(header)
+	require.True(t, got[system], "past the bound, the header still carries system traffic")
+	require.False(t, got[user], "past the bound, the header carries no user work")
+	require.Len(t, w.AvailableBatches(), 1, "the user batch waits for a later header")
+	w.RequeueBatches([]types.BatchDigest{user})
 	require.ErrorIs(t, w.SubmitUser([]byte{9}), worker.ErrExecutionLagging)
 
-	// Caught up: proposing again, accepting again (listing the queue above
-	// drained it, so the batch is requeued as the worker would)
-	w.RequeueBatches([]types.BatchDigest{digest})
+	// Caught up: the user batch is proposed, and user work is accepted.
 	lag = 0
 	header, err = p.CreateHeader()
 	require.NoError(t, err)
-	require.Len(t, header.Payload, 1)
+	require.True(t, carried(header)[user], "caught up, the user batch is proposed")
 	require.NoError(t, w.SubmitUser([]byte{9}))
 }
 
