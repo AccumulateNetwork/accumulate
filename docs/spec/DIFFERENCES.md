@@ -1838,7 +1838,7 @@ Catch-up is built if PLAN R8-1's Docker run shows restart catch-up still slow
 or bursty. Otherwise this entry records a design that is decided and not yet
 needed.
 
-### C16. Anchor delivery stops while the destination lags (two rules not built)
+### C16. Anchor delivery stops while the destination lags (one rule not built)
 
 *[#4517](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4517), PLAN R9*
 
@@ -1846,9 +1846,9 @@ The spec now has three rules the code does not follow yet:
 
 1. Done (R9-1): healing.md, "An anchor stream is asked for whatever the
    lag". The requester's `lagging()` guard skips synthetic streams only.
-2. **healing.md, "An anchor the cache does not hold is answered from the
-   store".** `getAnchorRangeFromCache` answers only from the cache. A miss is
-   "not in the cache", or relayed to a peer.
+2. Done (R9-2): healing.md, "An anchor the cache does not hold is answered
+   from the store". A cache miss reads the `anchor-sequence` chain through a
+   deep view (`Sequencer.storedAnchor`).
 3. **consensus.md, "System traffic is proposed while execution lags".**
    `header_builder.go` takes no batches at all while lagging, and batches
    carry no mark of whether they hold user work.

@@ -307,9 +307,63 @@ func (s *Sequencer) anchorRecord(globals *core.GlobalValues, dst *url.URL, num u
 func (s *Sequencer) getAnchorFromCache(globals *core.GlobalValues, dst *url.URL, num uint64) (*api.MessageRecord[messaging.Message], error) {
 	txn, _, ok := s.cache.Anchor(num)
 	if !ok {
-		return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
+		var err error
+		txn, err = s.storedAnchor(num)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return s.anchorRecord(globals, dst, num, txn)
+}
+
+// storedAnchor reads anchor num this partition produced from its store: the
+// transaction's hash is entry num - 1 of the anchor pool's anchor-sequence
+// chain, and the transaction is the message stored under it (healing spec,
+// "An anchor the cache does not hold is answered from the store"; #4517).
+// A source's anchors are not memory: a node that restarted has an empty cache
+// and the same store, and answering "not in the cache" for what it produced
+// left a destination's anchor stream with nothing to heal from. The read
+// reaches history, since an anchor can be older than the store's window.
+// A number past what the chain holds is NotReady: not produced yet.
+func (s *Sequencer) storedAnchor(num uint64) (*protocol.Transaction, error) {
+	if num == 0 {
+		return nil, errors.BadRequest.With("anchor numbers start at 1")
+	}
+	var txn *protocol.Transaction
+	err := s.deepView(func(batch *database.Batch) error {
+		chain, err := batch.Account(s.partition.AnchorPool()).AnchorSequenceChain().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load anchor sequence chain: %w", err)
+		}
+		if uint64(chain.Height()) < num {
+			return errors.NotReady.WithFormat("anchor %d is not produced yet", num)
+		}
+		hash, err := chain.Entry(int64(num - 1))
+		if err != nil {
+			return errors.UnknownError.WithFormat("load anchor sequence entry %d: %w", num-1, err)
+		}
+		var msg messaging.MessageWithTransaction
+		err = batch.Message2(hash).Main().GetAs(&msg)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load anchor %d: %w", num, err)
+		}
+		txn = msg.GetTransaction()
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return txn, nil
+}
+
+// deepView runs fn against a reader that reaches past the store's window,
+// as the executor's deepView does; on a store with no window it is an
+// ordinary read.
+func (s *Sequencer) deepView(fn func(*database.Batch) error) error {
+	if d, ok := s.db.(interface{ Deep() *database.Database }); ok {
+		return d.Deep().View(fn)
+	}
+	return s.db.View(fn)
 }
 
 // getAnchorRangeFromCache answers anchors start..end, or the prefix of them
@@ -323,14 +377,29 @@ func (s *Sequencer) getAnchorRangeFromCache(globals *core.GlobalValues, dst *url
 	for num := start; num <= end; num++ {
 		txn, block, ok := s.cache.PeekAnchor(num)
 		if !ok {
-			if len(records) > 0 {
-				return records, nil
+			// Not in the cache: a released anchor, or one produced before
+			// this node restarted. The store holds every anchor this
+			// partition produced (#4517). Anything older than the cache is
+			// past the in-flight window, so there is no window to apply.
+			stored, err := s.storedAnchor(num)
+			if err == nil || !errors.Is(err, errors.NotReady) {
+				synthcache.Count("anchor", false) // produced, and not in the cache
 			}
-			if last, ok := s.cache.LastAnchorNumber(); !ok || num > last {
-				return nil, errors.NotReady.WithFormat("anchor %d is not produced yet", num)
+			if err != nil {
+				if len(records) > 0 {
+					return records, nil
+				}
+				return nil, err
 			}
-			synthcache.Count("anchor", false)
-			return nil, errors.NotFound.WithFormat("anchor %d is not in the cache", num)
+			r, err := s.anchorRecord(globals, dst, num, stored)
+			if err != nil {
+				if len(records) > 0 && errors.Is(err, errors.NotReady) {
+					return records, nil
+				}
+				return nil, err
+			}
+			records = append(records, r)
+			continue
 		}
 		synthcache.Count("anchor", true)
 		// The window is the sender's, not this node's mark: it widens by

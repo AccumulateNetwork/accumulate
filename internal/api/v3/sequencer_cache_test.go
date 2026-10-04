@@ -141,8 +141,10 @@ func TestSequencer_AnswersFromTheCache(t *testing.T) {
 	a, err := svc.Sequence(context.Background(), protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool), protocol.DnUrl(), 3, private.SequenceOptions{})
 	require.NoError(t, err)
 	require.True(t, protocol.DnUrl().JoinPath(protocol.AnchorPool).Equal(a.Message.(*messaging.TransactionMessage).Transaction.Header.Principal))
+	// Anchor 4 was never produced: not in the cache, and not in the store
+	// either (#4517), so it is on its way, not missing
 	_, err = svc.Sequence(context.Background(), protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool), protocol.DnUrl(), 4, private.SequenceOptions{})
-	require.ErrorIs(t, err, errors.NotFound)
+	require.ErrorIs(t, err, errors.NotReady)
 }
 
 // A span asked for before the source has produced it is "not yet", and no
