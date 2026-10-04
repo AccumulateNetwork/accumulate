@@ -223,22 +223,30 @@ func gaugeValue(t *testing.T, g prometheus.Gauge) float64 {
 }
 
 // A node lagging consensus -- more than MaxExecutionLag groups behind, the
-// same test the primary makes -- asks for nothing: what it lacks is in its own
-// unexecuted blocks, and a source would answer NotFound for it, a miss that
-// strands the stream for entries that were never missing (#4260). Within the
-// window it asks: healing runs at the block-begin hook, where a working
-// executor is one behind by construction, and a threshold of zero refused
-// every request on a working network and left a real hole permanent (#4284).
+// same test the primary makes -- asks for no synthetics: what it lacks is in
+// its own unexecuted blocks, and a source would answer NotFound for it, a
+// miss that strands the stream for entries that were never missing (#4260).
+// Within the window it asks: healing runs at the block-begin hook, where a
+// working executor is one behind by construction, and a threshold of zero
+// refused every request on a working network and left a real hole permanent
+// (#4284).
+//
+// An anchor stream is asked whatever the lag (#4517). A received Directory
+// anchor is what validates the proofs and receipts the backlog waits on, so a
+// node lagging because its head anchor is below quorum would never catch up
+// if it did not ask. Run 20261003T232435Z: BVN2's Directory anchors stood at
+// 1,980 for eighteen minutes while every heal toward the Directory was
+// skipped as lagging.
 func TestRequester_LaggingNodeDoesNotAsk(t *testing.T) {
 	anchorStream := execute.StreamID{Ledger: protocol.PartitionUrl("BVN0").JoinPath(protocol.AnchorPool), Source: reqSource}
 	const max = 8
 	// One activation on a fresh conductor, so the patience window from an
 	// earlier answer cannot hide an ask: how many requests a node at this lag
 	// makes on sight of a HOLE in an anchor stream -- anchor 3 held, anchor 2
-	// missing. A hole is asked on sight whatever else is true; only the guard
-	// under test can stop it. (An empty anchor stream's probe for the next
-	// anchor waits until it is overdue, #4288, so it is not the vehicle.)
-	asksAt := func(lag int) int {
+	// missing. A hole is asked on sight. (An empty anchor stream's probe for
+	// the next anchor waits until it is overdue, #4288, so it is not the
+	// vehicle.)
+	anchorAsksAt := func(lag int) int {
 		c := testConductor()
 		c.SetExecutionLagSource(func() int { return lag }, max)
 		asks := 0
@@ -253,10 +261,31 @@ func TestRequester_LaggingNodeDoesNotAsk(t *testing.T) {
 		activateStream(c, staged, healCadence, reqSource, ask)
 		return asks
 	}
-	require.Zero(t, asksAt(max+1), "beyond MaxExecutionLag: the gap is in our own backlog")
-	require.Equal(t, 1, asksAt(1), "one behind is what a working node looks like at the hook: asked")
-	require.Equal(t, 1, asksAt(max), "at the threshold, not beyond it: asked")
-	require.Equal(t, 1, asksAt(0), "caught up: a hole is asked on sight")
+	require.Equal(t, 1, anchorAsksAt(max+1), "beyond MaxExecutionLag an anchor stream is still asked: the backlog waits on it")
+	require.Equal(t, 1, anchorAsksAt(1), "one behind: asked")
+	require.Equal(t, 1, anchorAsksAt(0), "caught up: asked")
+
+	// A synthetic stream that has sat empty and still for probeAfter
+	// activations is probed -- unless the node lags.
+	synthAsksAt := func(lag int) int {
+		c := testConductor()
+		c.SetExecutionLagSource(func() int { return lag }, max)
+		asks := 0
+		ask := streamAsk{stream: reqStream, what: "synthetics", healed: func(int) {},
+			ask: func(first, last uint64, _ entryOutcome) (int, uint64, error) {
+				asks++
+				return 0, 0, errors.NotReady.With("not produced yet")
+			}}
+		staged := execute.NewStaging().Begin()
+		defer staged.Discard()
+		for i := uint64(1); i <= probeAfter; i++ {
+			activateStream(c, staged, i*healCadence, reqSource, ask)
+		}
+		return asks
+	}
+	require.Zero(t, synthAsksAt(max+1), "beyond MaxExecutionLag: a synthetic gap is in our own backlog")
+	require.Equal(t, 1, synthAsksAt(max), "at the threshold, not beyond it: probed")
+	require.Equal(t, 1, synthAsksAt(1), "one behind: probed")
 }
 
 // A ranger that answers by node: unaddressed requests come from signer A;

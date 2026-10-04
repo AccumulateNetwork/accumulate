@@ -414,7 +414,15 @@ func (c *Conductor) requestStream(ctx context.Context, staged *execute.StagingTx
 	// that window it asks; a real hole must be asked for or it is permanent,
 	// and a NotFound taken while behind is handled below as not-yet rather
 	// than as a miss (#4284).
-	if c.lagging() {
+	//
+	// That holds for synthetic streams only. An anchor stream is asked
+	// whatever the lag (healing spec, "An anchor stream is asked for whatever
+	// the lag"; #4517): a received Directory anchor is what validates the
+	// proofs and receipts the backlog waits on, so a node lagging because its
+	// head anchor is below quorum would never run its backlog if it did not
+	// ask. Run 20261003T232435Z: BVN2's Directory anchors stood at 1,980 for
+	// eighteen minutes while every heal toward the Directory was skipped here.
+	if c.lagging() && !c.isAnchorStream(a.stream) {
 		mHealRequests.WithLabelValues("lagging", c.Partition.ID, partitionLabel(source)).Inc()
 		return
 	}
@@ -1202,4 +1210,10 @@ func partitionLabel(u *url.URL) string {
 		return id
 	}
 	return u.ShortString()
+}
+
+// isAnchorStream reports whether a stream is one of this partition's inbound
+// anchor streams, as opposed to a synthetic stream.
+func (c *Conductor) isAnchorStream(id execute.StreamID) bool {
+	return id.Ledger != nil && id.Ledger.Equal(c.Url(protocol.AnchorPool))
 }
