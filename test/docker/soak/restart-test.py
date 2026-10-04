@@ -99,8 +99,20 @@ def dwell(run, label, minutes=5, must_move=PARTS, must_stand=()):
     # blocks while cross-partition delivery was stalled for twenty minutes,
     # and every dwell passed (#4517). A partition expected to move must not
     # end the dwell with its inbound delivery stalled longer than the dwell.
-    stalled = {p: round(s) for p, s in ((dash() or {}).get("deliveryStall") or {}).items()
+    d = dash() or {}
+    stalled = {p: round(s) for p, s in (d.get("deliveryStall") or {}).items()
                if p in must_move and s >= 120}
+    # A partition deliberately stopped (must_stand) sends nothing, so the
+    # flows out of it are expected to stall: run 20261004T055059Z failed step
+    # D's quorum-loss dwell on exactly those. A destination is excused only if
+    # every stalled flow into it comes from a partition meant to stand.
+    if must_stand and stalled:
+        flows = ((d.get("matrix") or {}).get("flows") or {})
+        for dst in list(stalled):
+            red = [src for kind in flows.values() for src, row in kind.items()
+                   if (row.get(dst) or {}).get("state") == "red"]
+            if red and all(src in must_stand for src in red):
+                del stalled[dst]
     if stalled:
         ok = False
     record(run, f"{label}: dwell {minutes} min, blocks produced {moved}; must move {list(must_move)}, must stand {list(must_stand)}; delivery stalled {stalled or 'nowhere'} -> {'ok' if ok else 'FAIL'}")
