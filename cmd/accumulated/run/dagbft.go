@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -597,6 +598,10 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			ExecutedBlock: lastBlock,
 			Logger:        slog.Default(),
 			Torn:          torn,
+			// Each failure the join names is appended here, for an operator
+			// to repair offline what the node could not (executor spec,
+			// "Sync", §3b).
+			RepairLog: filepath.Join(inst.path("consensus", strings.ToLower(s.Partition.ID)), "repairs.jsonl"),
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)

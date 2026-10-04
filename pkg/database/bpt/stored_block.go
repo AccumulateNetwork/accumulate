@@ -8,8 +8,10 @@ package bpt
 
 import (
 	"crypto/sha256"
+	"fmt"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
 )
 
 // The BPT is stored in blocks of eight levels (Power = 8): the node at every
@@ -145,13 +147,51 @@ func (b *BPT) storedBlock(prefix []byte) (*StoredBlock, error) {
 	}
 
 	// The slots are the block's own content, so they hash to its hash by the
-	// tree's rule. If they do not, the walk above is wrong, and a wrong answer
-	// here sends a joining node after the wrong accounts.
+	// tree's rule. If they do not, the block's record and the hash its parent
+	// records for it were not written together, and a wrong answer here sends a
+	// joining node after the wrong accounts.
 	if h := HashSlots(out.Slots); h != out.Hash {
-		return nil, errors.InternalError.WithFormat(
-			"the slots of the block under %x hash to %x, but the block's hash is %x", prefix, h[:8], out.Hash[:8])
+		return nil, &InconsistentBlockError{Prefix: out.Prefix, SlotsHash: h, BlockHash: out.Hash}
 	}
 	return out, nil
+}
+
+// InconsistentBlockError is a stored block whose slots do not hash to the hash
+// its parent records for it: the block's record and its parent's were not
+// written together. Everything under Prefix is unreadable as this tree's, and
+// is repaired by taking it again (executor spec, "Sync", §3b).
+type InconsistentBlockError struct {
+	Prefix    []byte
+	SlotsHash [32]byte
+	BlockHash [32]byte
+}
+
+func (e *InconsistentBlockError) Error() string {
+	return fmt.Sprintf("the slots of the block under %x hash to %x, but the block's hash is %x",
+		e.Prefix, e.SlotsHash[:8], e.BlockHash[:8])
+}
+
+// As presents the failure as an [errors.InternalError], as it was reported
+// before it had a type, so a caller reading its status sees the same code.
+func (e *InconsistentBlockError) As(target any) bool {
+	p, ok := target.(**errors.Error)
+	if !ok {
+		return false
+	}
+	*p = errors.InternalError.With(e.Error())
+	return true
+}
+
+// StoredBlockKey is the record key of the stored block under prefix: the record
+// that holds the subtree from the prefix down to the next eighth height.
+func (b *BPT) StoredBlockKey(prefix []byte) (*record.Key, error) {
+	var key [32]byte
+	copy(key[:], prefix)
+	nodeKey, ok := nodeKeyAt(uint64(storedBlockLevels*len(prefix)), key)
+	if !ok {
+		return nil, errors.BadRequest.WithFormat("no stored block under a prefix of %d bytes", len(prefix))
+	}
+	return b.key.Append(nodeKey), nil
 }
 
 // collectSlots appends the non-empty positions under n, which is `level`

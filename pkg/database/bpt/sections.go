@@ -172,8 +172,19 @@ func combinePositions(cur []position) [32]byte {
 // position in the root's block, and the root's block to root; anything else is
 // refused, since the blocks are then not one tree's.
 func SectionHashesFromBlocks(root [32]byte, rootSlots []BlockSlot, below map[byte][]BlockSlot) (*SectionHashes, error) {
+	h, _, err := SectionHashesFromBlocksSkipping(root, rootSlots, below, nil)
+	return h, err
+}
+
+// SectionHashesFromBlocksSkipping is SectionHashesFromBlocks with the positions
+// in skip left out: a block under one of them could not be read as this tree's
+// (an [InconsistentBlockError]), so the sixteen sections under it have no hash
+// here and are returned as condemned, for the caller to take again (executor
+// spec, "Sync", §3b).
+func SectionHashesFromBlocksSkipping(root [32]byte, rootSlots []BlockSlot, below map[byte][]BlockSlot, skip map[byte]bool) (*SectionHashes, []Section, error) {
+	var condemned []Section
 	if h := HashSlots(rootSlots); h != root {
-		return nil, errors.Conflict.WithFormat("the root's block hashes to %x, not the root %x", h[:8], root[:8])
+		return nil, nil, errors.Conflict.WithFormat("the root's block hashes to %x, not the root %x", h[:8], root[:8])
 	}
 	out := new(SectionHashes)
 	for _, s := range rootSlots {
@@ -181,23 +192,29 @@ func SectionHashesFromBlocks(root [32]byte, rootSlots []BlockSlot, below map[byt
 			// One account under the whole position: its hash is its
 			// section's, and the position's other sections are empty.
 			if s.KeyHash[0] != s.Index {
-				return nil, errors.Conflict.WithFormat("the leaf at position %d has key %x", s.Index, s.KeyHash[:4])
+				return nil, nil, errors.Conflict.WithFormat("the leaf at position %d has key %x", s.Index, s.KeyHash[:4])
 			}
 			sec := SectionOf(s.KeyHash)
 			out.Hash[sec], out.Present[sec] = s.Hash, true
 			continue
 		}
+		if skip[s.Index] {
+			for n := 0; n < 16; n++ {
+				condemned = append(condemned, Section(uint16(s.Index)<<4|uint16(n)))
+			}
+			continue
+		}
 		sub, ok := below[s.Index]
 		if !ok {
-			return nil, errors.Conflict.WithFormat("no block under position %d", s.Index)
+			return nil, nil, errors.Conflict.WithFormat("no block under position %d", s.Index)
 		}
 		if h := HashSlots(sub); h != s.Hash {
-			return nil, errors.Conflict.WithFormat("the block under position %d hashes to %x, not %x", s.Index, h[:8], s.Hash[:8])
+			return nil, nil, errors.Conflict.WithFormat("the block under position %d hashes to %x, not %x", s.Index, h[:8], s.Hash[:8])
 		}
 		var nibbles [16][16]position
 		for _, t := range sub {
 			if !t.Branch && (t.KeyHash[0] != s.Index || t.KeyHash[1] != t.Index) {
-				return nil, errors.Conflict.WithFormat("the leaf at position %d.%d has key %x", s.Index, t.Index, t.KeyHash[:4])
+				return nil, nil, errors.Conflict.WithFormat("the leaf at position %d.%d has key %x", s.Index, t.Index, t.KeyHash[:4])
 			}
 			nibbles[t.Index>>4][t.Index&0x0f] = position{t.Hash, true}
 		}
@@ -213,5 +230,5 @@ func SectionHashesFromBlocks(root [32]byte, rootSlots []BlockSlot, below map[byt
 			out.Hash[sec], out.Present[sec] = combinePositions(nibbles[n][:]), true
 		}
 	}
-	return out, nil
+	return out, condemned, nil
 }

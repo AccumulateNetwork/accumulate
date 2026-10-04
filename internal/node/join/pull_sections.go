@@ -8,6 +8,7 @@ package join
 
 import (
 	"context"
+	stderrors "errors"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
@@ -329,7 +330,7 @@ func (s *PulledState) takeTop(ctx context.Context, p *syncing) error {
 		for _, u := range SystemAccounts(s.partition) {
 			keep[database.SectionOfAccount(u)] = true
 		}
-		n, differ, err := s.install(top, keep)
+		n, differ, err := s.install(top, at, keep)
 		if err != nil {
 			return err
 		}
@@ -387,29 +388,50 @@ func slotsOfRecord(rec *api.BptBlockRecord) []bpt.BlockSlot {
 	return out
 }
 
-// localTop is every section's hash in this node's own tree, markers included.
-func localTop(tree *bpt.BPT) (*bpt.SectionHashes, [32]byte, error) {
+// ownTop is this node's own tree read by sections: every section's hash,
+// markers included, and the sections under a stored block that could not be
+// read as this tree's, with what was wrong with each block.
+type ownTop struct {
+	*bpt.SectionHashes
+	root      [32]byte
+	condemned []sectionID
+	broken    []*bpt.InconsistentBlockError
+}
+
+// localTop reads this node's own tree by sections. A block below the root
+// whose slots do not hash to the hash the root records for it condemns the
+// sixteen sections under it rather than the read: they are taken again, and
+// the rest of the tree is read as it is (executor spec, "Sync", §3b).
+func localTop(tree *bpt.BPT) (*ownTop, error) {
 	root, err := tree.GetRootHash()
 	if err != nil {
-		return nil, root, errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
 	top, err := tree.GetStoredBlock(nil)
 	if err != nil {
-		return nil, root, errors.UnknownError.Wrap(err)
+		return nil, errors.UnknownError.Wrap(err)
 	}
+	out := &ownTop{root: root}
 	below := map[byte][]bpt.BlockSlot{}
+	skip := map[byte]bool{}
 	for _, sl := range top.Slots {
 		if !sl.Branch {
 			continue
 		}
 		sub, err := tree.GetStoredBlock([]byte{sl.Index})
-		if err != nil {
-			return nil, root, errors.UnknownError.Wrap(err)
+		var bad *bpt.InconsistentBlockError
+		switch {
+		case err == nil:
+			below[sl.Index] = sub.Slots
+		case stderrors.As(err, &bad):
+			skip[sl.Index] = true
+			out.broken = append(out.broken, bad)
+		default:
+			return nil, errors.UnknownError.Wrap(err)
 		}
-		below[sl.Index] = sub.Slots
 	}
-	h, err := bpt.SectionHashesFromBlocks(root, top.Slots, below)
-	return h, root, err
+	out.SectionHashes, out.condemned, err = bpt.SectionHashesFromBlocksSkipping(root, top.Slots, below, skip)
+	return out, err
 }
 
 // install makes this node's tree the top's: a section whose hash the node
@@ -418,12 +440,19 @@ func localTop(tree *bpt.BPT) (*bpt.SectionHashes, [32]byte, error) {
 // unless the top has it empty, a marker in their place. A section in keep is
 // left as the node holds it and returned among differ, for the pull to load
 // over it. It returns how many sections it replaced.
-func (s *PulledState) install(top *bpt.SectionHashes, keep map[sectionID]bool) (int, []sectionID, error) {
+func (s *PulledState) install(top *bpt.SectionHashes, at uint64, keep map[sectionID]bool) (int, []sectionID, error) {
 	read := s.db.Begin(false)
-	local, _, err := localTop(read.BPT())
+	local, err := localTop(read.BPT())
 	if err != nil {
 		read.Discard()
 		return 0, nil, errors.UnknownError.WithFormat("read this node's own top: %w", err)
+	}
+	for _, b := range local.broken {
+		s.repairLog.sectionHash(s.partition, at, b, top)
+	}
+	condemned := map[sectionID]bool{}
+	for _, sec := range local.condemned {
+		condemned[sec] = true
 	}
 	type change struct {
 		sec    sectionID
@@ -432,13 +461,18 @@ func (s *PulledState) install(top *bpt.SectionHashes, keep map[sectionID]bool) (
 	var changes []change
 	var differ []sectionID
 	for i := 0; i < bpt.Sections; i++ {
-		if local.Present[i] == top.Present[i] && local.Hash[i] == top.Hash[i] {
+		if !condemned[sectionID(i)] && local.Present[i] == top.Present[i] && local.Hash[i] == top.Hash[i] {
 			continue
 		}
 		sec := sectionID(i)
 		if keep[sec] {
+			// Loaded by the pull, over what the node holds -- unless it is
+			// condemned, when what the node holds cannot be read as its own
+			// and is forgotten like any other section (§3b).
 			differ = append(differ, sec)
-			continue
+			if !condemned[sec] {
+				continue
+			}
 		}
 		leaves, err := leavesOf(read.BPT(), sec)
 		if err != nil {
@@ -476,10 +510,16 @@ func (s *PulledState) install(top *bpt.SectionHashes, keep map[sectionID]bool) (
 
 	// Every section but those kept is now the top's.
 	check := s.db.Begin(false)
-	got, _, err := localTop(check.BPT())
+	got, err := localTop(check.BPT())
 	check.Discard()
 	if err != nil {
 		return 0, nil, errors.UnknownError.Wrap(err)
+	}
+	if len(got.broken) > 0 {
+		return 0, nil, errors.InternalError.WithFormat("with the top installed, %v", got.broken[0])
+	}
+	for _, b := range local.broken {
+		s.repairLog.repaired(s.partition, b)
 	}
 	for i := 0; i < bpt.Sections; i++ {
 		if !keep[sectionID(i)] && (got.Present[i] != top.Present[i] || got.Hash[i] != top.Hash[i]) {

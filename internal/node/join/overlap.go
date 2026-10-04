@@ -61,11 +61,16 @@ type overlap struct {
 	// and diverges -- the clean run is a run of blocks with everything loaded.
 	loading func() bool
 
+	// repairs records each block that left accounts other than their record
+	// (executor spec, "Sync", §3b).
+	repairs *repairs
+
 	// blocks is how many clean blocks in a row end the overlap:
 	// OverlapBlocks, unless a test sets it (SetOverlapBlocks).
 	blocks int
 
 	mu          sync.Mutex
+	diverged    map[uint64]*divergedBlock
 	active      bool
 	from        uint64 // the block the state was proven at
 	last        uint64 // the last block settled
@@ -679,6 +684,7 @@ func executedLeaf(batch *database.Batch, u *url.URL) ([32]byte, bool, error) {
 // once per account and step of a block.
 func (o *overlap) said(n uint64, u *url.URL, local, record [32]byte, peer, why string) {
 	o.count()
+	o.noteDiverged(n, u.String())
 	args := []any{"partition", o.partition, "block", n, "account", u,
 		"local", fmt.Sprintf("%x", local[:8]), "record", fmt.Sprintf("%x", record[:8]), "peer", peer}
 	if why != "" {
@@ -691,6 +697,7 @@ func (o *overlap) said(n uint64, u *url.URL, local, record [32]byte, peer, why s
 // says it.
 func (o *overlap) chainSaid(n uint64, chain, why string) {
 	o.count()
+	o.noteDiverged(n, chain)
 	o.log.Warn("A block changed a chain other than its record; the record stands",
 		"partition", o.partition, "block", n, "chain", chain, "why", why)
 }
@@ -706,6 +713,17 @@ func (o *overlap) count() {
 // blocks in a row with no difference. A block settled again -- one that was
 // discarded and executed again -- is not counted twice.
 func (o *overlap) done(n uint64, checked bool, diffs int) {
+	// What the block left other than its record goes to the repair log, which
+	// syncs a file: outside the lock.
+	o.mu.Lock()
+	d := o.diverged[n]
+	delete(o.diverged, n)
+	record := d != nil && o.repairs != nil && o.active && n > o.last
+	o.mu.Unlock()
+	if record {
+		o.repairs.accountsDiverged(o.partition, n, d)
+	}
+
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if !o.active || n <= o.last {
@@ -812,4 +830,32 @@ func (x *sections) VerifyBlock(batch *database.Batch, block uint64) error {
 		return nil
 	}
 	return x.overlap.verify(batch, block)
+}
+
+// divergedBlock is what one block left other than its record: how many
+// accounts and chains, and the first of them, for the repair log.
+type divergedBlock struct {
+	count int
+	first []string
+}
+
+// divergedNamed is how many of a block's diverged accounts and chains the
+// repair log names; the rest are counted.
+const divergedNamed = 8
+
+func (o *overlap) noteDiverged(n uint64, what string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.diverged == nil {
+		o.diverged = map[uint64]*divergedBlock{}
+	}
+	d := o.diverged[n]
+	if d == nil {
+		d = new(divergedBlock)
+		o.diverged[n] = d
+	}
+	d.count++
+	if len(d.first) < divergedNamed {
+		d.first = append(d.first, what)
+	}
 }

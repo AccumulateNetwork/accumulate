@@ -1561,13 +1561,13 @@ failed. It is repaired by syncing that again, and the node carries on.
   rest of the tree is read as it is. A round never fails because one block of
   the node's own tree is wrong.
 - **An account a block left other than its record is taken again.** The
-  record's state stands (§3a, "The handoff is an overlap"), and the account is also owed to the
-  next round's pull, so the node holds the peer's account and not a copy that
-  only the record's hash covers.
-- **A location that finds nothing names its blocks.** When the accounts that
-  differ at a mismatch cannot be named, the sections whose hashes differ from
-  the peer's are condemned, as above. The top is taken again only when no
-  section can be named.
+  record's state stands (§3a, "The handoff is an overlap"): it is the
+  account's state taken whole from the peer, not only the record's hash.
+- **A location that finds nothing takes the top again.** When the accounts
+  that differ at a mismatch cannot be named, the top is taken again, and every
+  section whose hash differs from the peer's, or that sits under a block of
+  the node's own tree that fails its check, is forgotten and loaded again. A
+  torn block cannot stop that, so the fallback cannot loop on it.
 
 **A failure leaves one entry, not a dump.** At each failure above, the node
 logs one line at WARN under `module=repair`. The line holds the kind

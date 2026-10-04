@@ -102,6 +102,10 @@ type PulledState struct {
 	tracker *tracker.Tracker
 	log     *slog.Logger
 
+	// repairLog records the failures this node names and repairs (executor
+	// spec, "Sync", §3b).
+	repairLog *repairs
+
 	// label is the partition as the metrics name it.
 	label string
 
@@ -340,6 +344,11 @@ type StateOptions struct {
 	// signed anchor before going on to the next V. Zero is DefaultAnchorWait.
 	AnchorWait time.Duration
 
+	// RepairLog is the file each failure the node names is appended to, for
+	// an operator to repair offline what the node could not (executor spec,
+	// "Sync", §3b). Empty, failures are only logged.
+	RepairLog string
+
 	Logger *slog.Logger
 }
 
@@ -374,6 +383,7 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		torn:       opts.Torn,
 		tracker:    track,
 		log:        log.With("module", "join"),
+		repairLog:  newRepairs(log, opts.RepairLog),
 		executed:   opts.ExecutedBlock,
 		anchorWait: opts.AnchorWait,
 	}
@@ -492,7 +502,7 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	}
 	// The handoff is an overlap: the blocks after a match are settled
 	// against their records, in the batch each executes in (§3a; #4495).
-	s.overlap = &overlap{partition: opts.Partition, label: label, log: s.log, peers: s.secs.peers, ask: overlapAsk, blocks: OverlapBlocks}
+	s.overlap = &overlap{partition: opts.Partition, label: label, log: s.log, repairs: s.repairLog, peers: s.secs.peers, ask: overlapAsk, blocks: OverlapBlocks}
 	s.overlap.taken = func(urls ...*url.URL) { s.markHeadOnly(urls...) }
 	s.secs.overlap = s.overlap
 	s.overlap.loading = s.secs.AnyNotLoaded
