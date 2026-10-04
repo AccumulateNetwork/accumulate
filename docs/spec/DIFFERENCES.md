@@ -514,6 +514,31 @@ with the section and the names — in the daemon too since #4497, whose API
 services had a database, and so a gate, of their own — but no client of the
 API follows them.
 
+### E27. A failure the node can name stops it, and leaves no trail
+
+*[#4523](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4523)*
+
+**Spec** (executor.md, "Sync", §3b): a section that fails its own hash check
+is condemned and loaded again; an account a block left other than its record
+is also taken again; a location that names nothing condemns the differing
+sections. Each failure logs one `module=repair` line with the section's write
+trail, and is appended to `repairs.jsonl` for offline repair with
+`accumulated debug repair`.
+
+**Code**:
+- `localTop` (`internal/node/join/pull_sections.go`) fails the whole read when
+  one stored block fails `GetStoredBlock`'s check
+  (`pkg/database/bpt/stored_block.go`), so the node cannot take the top again.
+- `locate` falls back to taking the top again (`state.go`), which fails the
+  same way every round. Seen in run `20261004T195558Z`: `acc-bvn1-fol1` was
+  stopped at block 6,995 and retried 115 times in four minutes.
+- An account a block left other than its record keeps the record's state but
+  is not owed to the pull.
+- There is no write trail, no repair log, and no offline repair command.
+
+**Size**: the condemnation in `localTop` and `locate`, the owed accounts, an
+in-memory trail per section, a JSONL writer, and a debug command.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

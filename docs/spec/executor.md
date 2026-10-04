@@ -1540,6 +1540,59 @@ back from the account state." The section is taken as the peers hold it now,
 above; in the overlap the records settle what that changes, and after it the
 root check repairs it.
 
+#### 3b. A failure is repaired where it is, recorded, and leaves a trail
+
+*(Paul, 2026-10-04, after run `20261004T195558Z`, where a BVN1 follower's own
+tree failed its hash check and the node stopped for good: "We should be able to
+repair since we can detect the account(s) that are failing and work through the
+syncing process. We need 1. logging that finds the failure in post mortem, 2.
+we have the broken accounts, so fix them so we can continue, 3. for deployment
+figure out how to log these errors for offline repair.")*
+
+**Nothing the node can name is fatal.** A failure the node detects names what
+failed. It is repaired by syncing that again, and the node carries on.
+
+- **A section that fails its own check is a section not loaded.** The top is
+  read from the node's own stored blocks, and a block whose slots do not hash
+  to its hash ("the slots of the block under P hash to X, but the block's hash
+  is Y") condemns the sections under P, not the read. Their leaves are
+  forgotten, each gets the not-loaded marker of the hash the top says it has,
+  and each is loaded again from a peer as any section not loaded is (§3a). The
+  rest of the tree is read as it is. A round never fails because one block of
+  the node's own tree is wrong.
+- **An account a block left other than its record is taken again.** The
+  record's state stands (§3a, "The handoff is an overlap"), and the account is also owed to the
+  next round's pull, so the node holds the peer's account and not a copy that
+  only the record's hash covers.
+- **A location that finds nothing names its blocks.** When the accounts that
+  differ at a mismatch cannot be named, the sections whose hashes differ from
+  the peer's are condemned, as above. The top is taken again only when no
+  section can be named.
+
+**A failure leaves one entry, not a dump.** At each failure above, the node
+logs one line at WARN under `module=repair`. The line holds the kind
+(`section-hash`, `account-diverged`, `unlocated`), the partition, the block
+executed, the section prefix or account, the hash held, the hash expected and
+the peer's, and what the node did about it. For a section, it also holds the
+section's **write trail**: the last eight writes the node made under that
+section since it started. Each write is recorded as who wrote it (`execute`,
+`install`, `load`, `repair`, `record`), at which block, and the section hash
+before and after. The trail is kept in memory, eight entries per section
+touched. It is what a post mortem needs to say which step left the block wrong.
+Without it, the log says only that it is wrong.
+
+**Every failure is also written to the repair log.** The repair log is
+`repairs.jsonl` in the partition's data directory: one JSON object per
+failure, appended and synced before the repair starts, with the same fields as
+the log line. When the repair ends, the outcome (`repaired`, or `failed` with
+the error) is appended as its own object, keyed to the failure. The file is
+node-local: it is not state, it is not hashed, and nothing reads it while the
+node runs. A node that cannot repair itself is repaired offline from it, with
+the node stopped: `accumulated debug repair <data-dir>` reads the failures not
+marked `repaired`, takes each named account and section again from the
+partition's peers, and marks it. The next start then proves the result like
+any join: the match is still the only proof (§2).
+
 #### 4. Staging is what was collected, minus what the state says executed
 
 A stage holds two lists per stream, indexed from `Delivered + 1`: the entries
