@@ -39,7 +39,7 @@ A restarting node still drops votes, because its single event loop is flooded wh
 
 **What was checked by hand.** For step D, a foreground watch showed both restored Directory nodes BOOTING at 23:57:40Z and ACTIVE at 23:58:40Z. For step E, the separate watcher followed every restarted container's own rows.
 
-The bulk logs `node-logs-live.txt` (186 MB) and `node-logs.txt` (132 MB) are **kept** until #4517 is diagnosed. They are untracked and too large to commit.
+The bulk logs `node-logs-live.txt` (186 MB) and `node-logs.txt` (132 MB) were kept until #4517 was diagnosed, and were deleted on 2026-10-04 after run 20261004T055059Z proved the fix. The findings are on #4517.
 
 Automatic captures:
 - `wedge-20261003T235240Z` and `delivery-stall-20261003T235704Z` fall in step D, while BVN2 was deliberately below its quorum. The stall cleared at 23:58Z.

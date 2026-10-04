@@ -266,6 +266,12 @@ validator ends with all four at one state.
 
 ### R9 — anchor delivery must not wait on the destination's lag (#4517; Paul, 2026-10-04: "let's do it")
 
+**Status 2026-10-04: done.**
+- R9-1 `34fe6205f`, R9-2 `1fbaa6212` and R9-3 `1ef91b5f6` are built, each with a test that fails without it.
+- R9-4 in-process is `a38a66290`.
+- R9-4 on Docker is run 20261004T055059Z: steps A to E with every flow delivering, and twelve single restarts each back in 20 to 31 s. The driver's step D FAILED was its own over-strict delivery check, fixed in `753435139`.
+- DIFFERENCES C16 is removed. Next is the 12-hour acceptance soak with restarts and kills as chaos.
+
 Run 20261003T232435Z, step E. After single restarts, BVN2's Directory anchor stream stopped at 1,980. Every synthetic flow into and out of BVN2 stopped with it, because inbound proofs and outbound receipts both wait on Directory anchors. Two locks held it there. Healing skipped the anchor stream as `lagging`, and lagging headers proposed no batches, so the anchor copies that would have ended the lag were never ordered.
 
 1. **R9-1: ask for anchors whatever the lag.** healing.md. Done when the requester asks an anchor stream while lagging and still skips synthetic streams, with a test that fails without it.

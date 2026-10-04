@@ -1,0 +1,83 @@
+2026-10-04T05:53:54Z wedgewatch: following http://127.0.0.1:8099/data — dump after 120s stalled, max 3 per kind, run dir /home/paul/worktrees/issue-4205-lead/test/docker/soak/runs/20261004T055059Z
+2026-10-04T05:54:04Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=177 empty=47 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T05:55:04Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=400 empty=55 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T05:56:04Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=644 empty=56 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T05:57:04Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=889 empty=59 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T05:58:04Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1111 empty=60 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T05:59:04Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1355 empty=63 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:00:05Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1600 empty=64 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:01:05Z watching: worstStall=10s (BVN2) kind=delivery-stall threshold=120s blocks=118 empty=10 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:02:05Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=363 empty=10 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:03:05Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=608 empty=11 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:04:05Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=832 empty=12 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:05:05Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1077 empty=15 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:06:05Z watching: worstStall=0s (-) kind=wedge threshold=120s blocks=7 empty=3 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:07:06Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=232 empty=14 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:08:06Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=479 empty=18 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:09:06Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=724 empty=20 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:10:06Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=947 empty=20 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:11:06Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1193 empty=20 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:12:06Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1413 empty=22 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:13:06Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1658 empty=24 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:14:07Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1904 empty=25 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:15:07Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=2126 empty=27 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:16:07Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=2372 empty=28 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:17:07Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=2617 empty=32 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:18:07Z watching: worstStall=59s (BVN2,BVN3) kind=delivery-stall threshold=120s blocks=2776 empty=58 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:19:07Z watching: worstStall=120s (BVN1,BVN2,BVN3,Directory) kind=delivery-stall threshold=120s blocks=2945 empty=95 captures wedge=0/3 delivery-stall=0/3
+2026-10-04T06:19:07Z CAPTURE[delivery-stall]: delivery stalled 120s into BVN1,BVN2,BVN3,Directory; every partition closed a block within 120s (BVN1 0s, BVN2 117s, BVN3 1s, Directory 0s) — capturing to /home/paul/worktrees/issue-4205-lead/test/docker/soak/runs/20261004T055059Z/delivery-stall-20261004T061907Z
+2026-10-04T06:19:40Z CAPTURE[delivery-stall]: goroutine dumps from 11 of 12 nodes
+# processCommittedCertificate / batch-collection frames per node
+acc-bvn1-val1            0 frame(s); 309 goroutines
+acc-bvn1-val2            0 frame(s); 308 goroutines
+acc-bvn1-val3            0 frame(s); 309 goroutines
+acc-bvn1-val4            0 frame(s); 312 goroutines
+acc-bvn2-val1            0 frame(s); 308 goroutines
+acc-bvn2-val2            0 frame(s); 308 goroutines
+acc-bvn3-fol1            0 frame(s); 299 goroutines
+acc-bvn3-val1            0 frame(s); 308 goroutines
+acc-bvn3-val2            0 frame(s); 314 goroutines
+acc-bvn3-val3            0 frame(s); 309 goroutines
+acc-bvn3-val4            0 frame(s); 308 goroutines
+2026-10-04T06:19:40Z CAPTURE[delivery-stall]: complete — network left UP on purpose
+2026-10-04T06:19:50Z CAPTURE[wedge]: partitions stalled 162s: BVN1,BVN2,BVN3,Directory -- no block for 160s on BVN2 — capturing to /home/paul/worktrees/issue-4205-lead/test/docker/soak/runs/20261004T055059Z/wedge-20261004T061950Z
+2026-10-04T06:20:22Z CAPTURE[wedge]: goroutine dumps from 11 of 12 nodes
+# processCommittedCertificate / batch-collection frames per node
+acc-bvn1-val1            0 frame(s); 309 goroutines
+acc-bvn1-val2            0 frame(s); 308 goroutines
+acc-bvn1-val3            0 frame(s); 309 goroutines
+acc-bvn1-val4            0 frame(s); 308 goroutines
+acc-bvn2-val1            0 frame(s); 308 goroutines
+acc-bvn2-val2            0 frame(s); 308 goroutines
+acc-bvn3-fol1            0 frame(s); 307 goroutines
+acc-bvn3-val1            0 frame(s); 329 goroutines
+acc-bvn3-val2            0 frame(s); 313 goroutines
+acc-bvn3-val3            0 frame(s); 328 goroutines
+acc-bvn3-val4            0 frame(s); 313 goroutines
+2026-10-04T06:20:22Z CAPTURE[wedge]: complete — network left UP on purpose
+2026-10-04T06:21:12Z watching: worstStall=244s (BVN1,BVN2,BVN3,Directory) kind=wedge threshold=120s blocks=3285 empty=133 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:22:12Z watching: worstStall=305s (BVN1,BVN2,BVN3,Directory) kind=wedge threshold=120s blocks=3456 empty=171 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:23:12Z watching: worstStall=364s (BVN1,BVN2,BVN3,Directory) kind=wedge threshold=120s blocks=3629 empty=192 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:24:12Z watching: worstStall=351s (BVN1) kind=delivery-stall threshold=120s blocks=3828 empty=202 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:25:13Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4068 empty=210 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:26:13Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4292 empty=210 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:27:13Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4538 empty=213 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:28:13Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4760 empty=213 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:29:14Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=5007 empty=215 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:30:14Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=5253 empty=215 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:31:14Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=5478 empty=215 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:32:14Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=5724 empty=215 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:33:14Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4501 empty=136 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:34:14Z watching: worstStall=11s (BVN3) kind=delivery-stall threshold=120s blocks=4748 empty=140 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:35:15Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4324 empty=131 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:36:15Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4565 empty=138 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:37:15Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4163 empty=140 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:38:15Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4408 empty=154 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:39:15Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4631 empty=176 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:40:16Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=4879 empty=191 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:41:16Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=1861 empty=95 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:42:16Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=2106 empty=147 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:43:16Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=2352 empty=174 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:44:16Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=2575 empty=222 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:45:17Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=2820 empty=281 captures wedge=1/3 delivery-stall=1/3
+2026-10-04T06:46:17Z watching: worstStall=0s (-) kind=delivery-stall threshold=120s blocks=3066 empty=346 captures wedge=1/3 delivery-stall=1/3

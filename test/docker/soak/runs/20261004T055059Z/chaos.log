@@ -1,0 +1,65 @@
+2026-10-04T05:51:01Z restart-test.py start: HEAD a38a66290
+2026-10-04T05:53:51Z network up; harness says commit a38a66290 (HEAD a38a66290); dashboard answering
+2026-10-04T05:53:51Z monitor reachable on the tailnet: http://100.75.75.92:8098/
+2026-10-04T05:53:54Z DISABLED for this run (CHAOS=off)
+2026-10-04T05:55:21Z load generator running
+2026-10-04T05:55:21Z settling 5 min under load
+2026-10-04T06:00:21Z === step A graceful whole-network restart begins
+2026-10-04T06:00:21Z DELIBERATE WHOLE-NETWORK RESTART (graceful): docker stop of every node, then start all together: acc-bvn1-val1 acc-bvn1-val2 acc-bvn1-val3 acc-bvn1-val4 acc-bvn2-val1 acc-bvn2-val2 acc-bvn2-val3 acc-bvn2-val4 acc-bvn3-fol1 acc-bvn3-val1 acc-bvn3-val2 acc-bvn3-val3 acc-bvn3-val4 ; heights before: {'Directory': 424, 'BVN1': 418, 'BVN2': 417, 'BVN3': 417}
+2026-10-04T06:00:24Z restart complete (graceful): 13 containers started
+2026-10-04T06:00:39Z graceful restart: every node ACTIVE (18s after the restart)
+2026-10-04T06:05:54Z after the graceful restart: dwell 5 min, blocks produced {'Directory': 297, 'BVN1': 295, 'BVN2': 295, 'BVN3': 295}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand []; delivery stalled nowhere -> ok
+2026-10-04T06:05:54Z === step A graceful whole-network restart PASSED
+2026-10-04T06:05:54Z === step B kill whole-network restart begins
+2026-10-04T06:05:54Z DELIBERATE WHOLE-NETWORK RESTART (KILL, chaos case): docker rm -f of every node, recreated at once on their images: acc-bvn1-val1 acc-bvn1-val2 acc-bvn1-val3 acc-bvn1-val4 acc-bvn2-val1 acc-bvn2-val2 acc-bvn2-val3 acc-bvn2-val4 acc-bvn3-fol1 acc-bvn3-val1 acc-bvn3-val2 acc-bvn3-val3 acc-bvn3-val4 ; heights before: {'Directory': 747, 'BVN1': 737, 'BVN2': 736, 'BVN3': 734}
+2026-10-04T06:05:57Z restart complete (kill): 13 containers started
+2026-10-04T06:06:12Z kill restart: every node ACTIVE (18s after the restart)
+2026-10-04T06:11:27Z after the kill restart: dwell 5 min, blocks produced {'Directory': 298, 'BVN1': 296, 'BVN2': 295, 'BVN3': 295}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand []; delivery stalled nowhere -> ok
+2026-10-04T06:11:27Z === step B kill whole-network restart PASSED
+2026-10-04T06:11:27Z === step C one validator's store torn begins
+2026-10-04T06:11:27Z tear: docker stop acc-bvn2-val4; copy its BVN2 store out, tear-store it, copy it back, start it
+2026-10-04T06:11:28Z tear: tore BVN2 ledger RootChain Tail(0): 8 hashes -> 1 (head count 9011)
+2026-10-04T06:11:33Z tear: acc-bvn2-val4 found the tear and refused to resume
+2026-10-04T06:11:53Z after the tear: every node ACTIVE (27s after the restart)
+2026-10-04T06:17:08Z after the tear: dwell 5 min, blocks produced {'Directory': 296, 'BVN1': 296, 'BVN2': 295, 'BVN3': 295}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand []; delivery stalled nowhere -> ok
+2026-10-04T06:17:08Z === step C one validator's store torn PASSED
+2026-10-04T06:17:08Z === step D two of BVN2's four lost, then restored begins
+2026-10-04T06:17:08Z quorum loss: docker stop acc-bvn2-val3 acc-bvn2-val4 (two of BVN2's four)
+2026-10-04T06:23:24Z BVN2 below its quorum: dwell 5 min, blocks produced {'Directory': 243, 'BVN1': 298, 'BVN2': 0, 'BVN3': 298}; must move ['Directory', 'BVN1', 'BVN3'], must stand ['BVN2']; delivery stalled {'Directory': 293, 'BVN3': 332, 'BVN1': 304} -> FAIL
+2026-10-04T06:23:24Z quorum loss: bvn2-val1 said the partition lost its quorum
+2026-10-04T06:23:24Z quorum loss: restoring acc-bvn2-val3 acc-bvn2-val4 with their stores and keys (docker start)
+2026-10-04T06:25:05Z after the restore: every node ACTIVE (100s after the restart)
+2026-10-04T06:30:20Z after the restore: dwell 5 min, blocks produced {'Directory': 298, 'BVN1': 296, 'BVN2': 296, 'BVN3': 295}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand []; delivery stalled nowhere -> ok
+2026-10-04T06:30:20Z === step D two of BVN2's four lost, then restored FAILED
+2026-10-04T06:30:20Z === step E each validator restarted alone, twelve times begins
+2026-10-04T06:30:20Z single restart 1/12: acc-bvn1-val1 (graceful)
+2026-10-04T06:30:46Z single restart 1/12 acc-bvn1-val1: every node ACTIVE (26s after the restart)
+2026-10-04T06:31:16Z single restart 2/12: acc-bvn1-val2 (kill)
+2026-10-04T06:31:41Z single restart 2/12 acc-bvn1-val2: every node ACTIVE (25s after the restart)
+2026-10-04T06:32:11Z single restart 3/12: acc-bvn1-val3 (graceful)
+2026-10-04T06:32:32Z single restart 3/12 acc-bvn1-val3: every node ACTIVE (21s after the restart)
+2026-10-04T06:33:02Z single restart 4/12: acc-bvn1-val4 (kill)
+2026-10-04T06:33:23Z single restart 4/12 acc-bvn1-val4: every node ACTIVE (21s after the restart)
+2026-10-04T06:33:53Z single restart 5/12: acc-bvn2-val1 (graceful)
+2026-10-04T06:34:14Z single restart 5/12 acc-bvn2-val1: every node ACTIVE (21s after the restart)
+2026-10-04T06:34:44Z single restart 6/12: acc-bvn2-val2 (kill)
+2026-10-04T06:35:09Z single restart 6/12 acc-bvn2-val2: every node ACTIVE (26s after the restart)
+2026-10-04T06:35:39Z single restart 7/12: acc-bvn2-val3 (graceful)
+2026-10-04T06:36:10Z single restart 7/12 acc-bvn2-val3: every node ACTIVE (31s after the restart)
+2026-10-04T06:36:40Z single restart 8/12: acc-bvn2-val4 (kill)
+2026-10-04T06:37:01Z single restart 8/12 acc-bvn2-val4: every node ACTIVE (20s after the restart)
+2026-10-04T06:37:31Z single restart 9/12: acc-bvn3-val1 (graceful)
+2026-10-04T06:38:02Z single restart 9/12 acc-bvn3-val1: every node ACTIVE (31s after the restart)
+2026-10-04T06:38:32Z single restart 10/12: acc-bvn3-val2 (kill)
+2026-10-04T06:38:57Z single restart 10/12 acc-bvn3-val2: every node ACTIVE (26s after the restart)
+2026-10-04T06:39:27Z single restart 11/12: acc-bvn3-val3 (graceful)
+2026-10-04T06:39:48Z single restart 11/12 acc-bvn3-val3: every node ACTIVE (21s after the restart)
+2026-10-04T06:40:18Z single restart 12/12: acc-bvn3-val4 (kill)
+2026-10-04T06:40:39Z single restart 12/12 acc-bvn3-val4: every node ACTIVE (20s after the restart)
+2026-10-04T06:41:09Z single restarts: 12/12 ACTIVE; seconds to ACTIVE min 20 max 31
+2026-10-04T06:46:24Z after the single restarts: dwell 5 min, blocks produced {'Directory': 297, 'BVN1': 295, 'BVN2': 296, 'BVN3': 295}; must move ['Directory', 'BVN1', 'BVN2', 'BVN3'], must stand []; delivery stalled nowhere -> ok
+2026-10-04T06:46:24Z === step E each validator restarted alone, twelve times PASSED
+2026-10-04T06:46:24Z restart-test.py FAILED; table /home/paul/worktrees/issue-4205-lead/test/docker/soak/runs/20261004T055059Z/restart-test.md
+2026-10-04T06:46:24Z STOP: load generator interrupted (pid 2931759); harness tears down
+2026-10-04T06:46:59Z harness exited; network torn down
+2026-10-04T06:46:59Z NEXT: write SUMMARY.md from restart-test.md and chaos.log, commit by name, delete bulk logs by literal path; then PLAN.md's open items (#4511, #4504, #4514)
