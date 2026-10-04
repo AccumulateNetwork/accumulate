@@ -1,24 +1,32 @@
-# Review: restart, rejoin and catch-up, 2026-10-03
+# Review: restart, rejoin and catch-up, 2026-10-03 to 2026-10-04
 
-Paul asked for this on 2026-10-03: "Do a full review. Do we have a plan to fix this?" It covers what the two restart-test runs of 2026-10-03 established, what is fixed, what is not, and the plan.
+Paul asked for this on 2026-10-03: "Do a full review. Do we have a plan to fix this?" It was brought up to date on 2026-10-04 ("document what you are doing"). It covers what four restart-test runs established, what was fixed, how each fix was proven, and what is next.
+
+**Where it stands, 2026-10-04.** Every disturbance the restart test makes recovers on Docker with every cross-partition flow delivering (run `20261004T055059Z`, lead `a38a66290`). The disturbances are: a graceful whole-network restart, a kill, a torn store, the loss and restore of a quorum, and twelve single-validator restarts. #4515 and #4517 are fixed and closed. No claim about long-run behaviour is made: that is the 12-hour acceptance soak, which is next. The branch is `issue-4205-lead` at `903b0745a` and later.
 
 The data comes from these sources:
-- **Docker runs.** `test/docker/soak/runs/20261003T182048Z` on lead `84f951d33`, and `20261003T191744Z` on lead `949ac13b5`. Each has a `SUMMARY.md`, a `chaos.log` and a `restart-test.md`.
+- **Docker runs.** Four runs, each with a `SUMMARY.md`, a `chaos.log` and a `restart-test.md`:
+  - `test/docker/soak/runs/20261003T182048Z` on lead `84f951d33`;
+  - `20261003T191744Z` on `949ac13b5`;
+  - `20261003T232435Z` on `bb77f9222`;
+  - `20261004T055059Z` on `a38a66290`.
 - **The consim reproduction.** `TestRestartOneDirectoryValidatorOfTwelve`, on branch `issue-4515-three-fixes`.
 - **The code read for the review.** `pkg/consensus/primary`, `pkg/consensus/restart.go`, `pkg/consensus/dag`, `internal/node/join` and `pkg/database/keyvalue/bcdb`.
 
 ## 1. What the restart test now shows
 
-| disturbance | first run (`84f951d33`) | re-run (`949ac13b5`) | state |
-|---|---|---|---|
-| graceful whole-network restart | passed | passed | **works**, twice |
-| kill whole-network restart | partitions passed, but bvn1-val3's Directory was lost | passed, every node back within 33 s | **fixed** (`e01819de4`); see 2.1 for what is not proven |
-| one validator's BVN store torn | the tear was found and repaired by a join | the same | **works**, twice |
-| a restored validator's **Directory** after a short stop | rejoined in 5 s | wedged for 15 minutes | **open: #4515** |
-| two of BVN2's four validators lost, then restored | held at 0 blocks, said why, resumed in 11 s | the same | **works**, twice |
-| a node that resumed from its own block says it is synced | it never did | did so 100 blocks after its root was proved | **fixed** (`8baa8e7eb`), confirmed on Docker |
+| disturbance | `182048Z` | `191744Z` | `232435Z` | `055059Z` | state |
+|---|---|---|---|---|---|
+| graceful whole-network restart | passed | passed | passed, 23 s | passed, 18 s | **works** |
+| kill whole-network restart | bvn1-val3's Directory lost | passed | passed, 17 s | passed, 18 s | **fixed**, `e01819de4` (2.1) |
+| one validator's BVN store torn | repaired by a join | repaired, but its Directory wedged | passed, 42 s | passed, 27 s | **works**; the wedge was #4515 (3) |
+| two of BVN2's four lost, then restored | held, said why, resumed | the same | the same | the same, every flow delivering | **works** |
+| twelve single restarts (step E, new in `232435Z`) | — | — | all back, but delivery stopped for good | all back in 20–31 s, every flow delivering | **fixed**: #4515 (3) and #4517 (4) |
+| a node resumed from its own block says it is synced | never did | did | did | did | **fixed**, `8baa8e7eb` (2.2) |
 
-## 2. Fixed today
+Times are seconds from the restart to every node ACTIVE, by fresh dashboard rows (5.1).
+
+## 2. Fixed on 2026-10-03
 
 ### 2.1 The kill left the store adapter one block short (`e01819de4`)
 
@@ -32,7 +40,7 @@ The data comes from these sources:
 
 Only a join's overlap started the 100-block synced hold, and a node that pulled nothing has no overlap. The hold now starts at the first block whose root a signed anchor proves. It was confirmed on Docker in the re-run: acc-bvn3-fol1 was synced at 19:28:37Z, about 100 seconds after its root was proved.
 
-## 3. Open: #4515, a restored Directory validator wedges in catch-up
+## 3. Fixed: #4515, a restored Directory validator wedged in catch-up
 
 ### 3.1 What happens
 
@@ -104,29 +112,70 @@ Also run with the fix:
 - The consim restart and follower tests: pass.
 - The other consensus packages: pass.
 
-**Not yet shown on Docker.** That is plan item 1.
+**On Docker.** Runs `20261003T232435Z` and `20261004T055059Z` restarted single Directory nodes 29 times, in steps C, D and E, with no wedge. Each was back in under 91 s. #4515 is closed. #4511 and #4504 are closed as probably the same defect. Their own evidence could not confirm it.
 
 **A test flaw, found and fixed on the way.** One run failed with the restarted node at height 369 of 400, still catching up. The simulation stopped when the furthest node of each partition reached 400. consim's new `TargetEveryNode` waits for every node, bounded by the run's duration, so only a node that stops short fails.
 
-## 4. Other findings of the day
+## 4. Fixed: #4517, single restarts stopped cross-partition delivery for good
 
-- **A kill-dwell miscount, harness.** The first run's kill dwell reported 1,000 blocks in 5 minutes. `monitor.csv` shows about 1 block per second throughout. The driver read its starting heights from a dashboard that had not yet re-read the nodes. The results are unaffected, but the driver's dwell needs a fresh read before it starts counting.
-- **#4516, a log line.** An ACTIVE node logs "The join is waiting" every minute, because the anchor collector's asks after the handoff set the join's waiting step again.
-- **#4511 is probably #4515.** It is a Directory that froze for three hours in run 20261002T145702Z, after two restored validators stopped voting. That run's live log was deleted, so it cannot be confirmed. It should be closed once item 1 passes, with that caveat.
-- **A burst on restart.** A restored Directory node logged 197 "Vote channel full, dropping message" in its first second. The primary's one event loop takes headers, votes and gossiped certificates, while the frontier floods in. With the release fix nothing is lost for good, because votes are rebroadcast. But the burst is real, and it is what Paul's serialized boot (item 2) would remove.
+### 4.1 What happened
 
-## 5. The plan
+The run `20261003T232435Z` added step E, which restarts each of the twelve validators alone, alternating graceful and kill. Every node came back ACTIVE and every partition kept closing blocks, so the driver passed. But cross-partition delivery stopped at about 00:04Z and never recovered. The worst stall grew to 1,123 s, and seven synthetic flows were frozen at teardown. BVN2's Directory anchor stream stood at 1,980 from 00:07:59Z, right after bvn2-val1 restarted and bvn2-val2 was killed.
 
-1. **Prove #4515's fix on Docker.**
-   - Re-run `restart-test.py` on `1b2e27224`. Step C is the case that failed.
-   - Step C alone restarts one validator once, and on unchanged code the wedge struck about 1 restart in 10. So also add a step that restarts single validators one after another, about 10 times across the Directory's twelve, and requires every Directory node ACTIVE after each.
-   - Done when every step passes and every single-validator restart is ACTIVE within its bound.
-2. **A serialized boot: a decision for Paul.**
-   - **The proposal.** Paul, 2026-10-03: "What I think we need to do on boot is to slow down the whole process where we focus on serializing steps that in a fully running protocol does not require serialization." A restored or rejoining node would be in catch-up mode until its DAG reaches the frontier. In that mode it would author nothing, vote on nothing and hold no frontier certificate. One goroutine would ask for rounds from where its DAG ends and insert them in order. The node would switch to the live protocol within a round or two of the frontier.
-   - **What the evidence says.** #4515's cause was the missed release. Releases were missed on live paths too, the node's own certificate and duplicates, so the fix had to be in the live protocol either way. A serialized boot would not have fixed it alone.
-   - **What it would buy.** No restart burst, and no buffer of frontier certificates the node cannot prune. Its order would also be easier to reason about.
-   - **What it would cost.** A second mode in the primary, and a slower boot.
-   - **My recommendation.** Spec it now, and build it if item 1 shows restart catch-up is still slow or bursty on Docker. Do not build it ahead of that evidence. This is Paul's call.
-3. **Make the harness dwell count correctly.** It should re-read heights after the restart settles, before it starts counting. This is small and goes with item 1.
-4. **Earlier open items, unchanged.** #4514, #4504, BlockchainDB#99 with E13, and #4516.
-5. **The acceptance run.** A 12-hour soak with single-validator restarts and kills as chaos. No claim about restart behaviour stands on runs shorter than that.
+### 4.2 The chain, as Paul's questions took it apart
+
+| Paul asked | what the logs and code showed |
+|---|---|
+| "How can healing fail to fix synthetic flows?" | Healing ran. BVN2 answered "the directory has not receipted the block yet" to 227 of 260 asks. A source may serve a synthetic only once it holds the Directory's receipt, which arrives in a Directory anchor. |
+| (cache) "Just because the cache is wiped out doesn't mean the cache cannot be rebuilt." | Right. Everything a source produced is in its chains, but a source answered anchors only from memory. That became R9-2. |
+| "One validated anchor, the last one, would validate all the past anchors. Why didn't any anchor show up?" | Every heal toward the Directory was skipped as `lagging`: 86, 52 and 22 on three nodes, none sent. The guard's premise, that what a lagging node lacks is in its own backlog, is false when the backlog waits on that stream. It was a deadlock. That became R9-1. |
+| "A later anchor WILL show up with signatures. Why didn't that happen?" | All 12 Directory validators sent their copies. But a lagging primary proposed headers with no batches at all, so copies that landed on lagging BVN2 nodes were never ordered. No anchor after 1,980 reached 8 distinct executed signers. A second deadlock. That became R9-3. |
+| "Are the signatures collected at the DN, or submitted as their own txs?" | Their own transactions. Each validator signs and submits its own copy, and the destination counts distinct signers among executed copies. Since Vandenberg, a signature over the Directory's own copy is also valid on a BVN's copy, so one Directory answer carries the whole quorum. |
+| "Isn't staging for each account independent?" | Staging is. Three things outside it couple streams: the join's hand-off waits on every stream's gap, and both the lag rule and the healing guard act on the whole partition. Executing a Directory anchor is also what proves inbound synthetics and receipts outbound ones, so one stuck anchor stream stops every flow at that BVN. |
+| "Are these signatures in the anchor chain? … an account state the blockledger updates?" | Not in the anchor chain. Each distinct signer is on the anchor pool's signature chain, which the block ledger names and the root chain anchors. The quorum set itself is a record committed only while pending. |
+
+### 4.3 The fixes (PLAN R9; spec `9f29304fb`)
+
+| item | change | proof |
+|---|---|---|
+| R9-1 `34fe6205f` | Anchor streams are asked for whatever the lag. The guard keeps skipping synthetic streams. | `TestRequester_LaggingNodeDoesNotAsk` fails without it |
+| R9-2 `1fbaa6212` | An anchor the cache lacks is answered from the store: the `anchor-sequence` chain, the stored message and the held quorum, through a deep view. | `TestSequencer_AnchorNotInTheCacheIsAnsweredFromTheStore` fails without it |
+| R9-3 `1ef91b5f6` | A batch sealed with a `SubmitUser` transaction is marked user. While lagging, a header takes system batches only. Invariant 9 is aligned. | `TestCreateHeader_CarriesNoBatchesWhileExecutionLags` fails on the old builder |
+| R9-4 `a38a66290` | In-process reproduction: a lagging BVN with Directory anchor 3 below quorum and its copies dropped. | Stuck for 400 steps before R9-1, recovers 5 of 5 after |
+
+**A side effect, `9b8bc734b`.** Two consim overload tests asserted the old pathology, a backlog dumped as one block that doubled until the partition stopped. With R9-3 that no longer forms, even without the header cap: the largest block is about 290 transactions and the partition keeps producing. Lag under that overload still drifts past the bound, which is cross-partition back-pressure, DIFFERENCES C7, unchanged.
+
+**On Docker, run `20261004T055059Z`.** Steps A to E all recovered with every flow delivering. During the twelve single restarts, delivery hiccups cleared within a minute. Which of the three fixes did the work on Docker is not separated. #4517 is closed.
+
+## 5. Other findings, and what became of them
+
+### 5.1 The test driver (`restart-test.py`)
+
+Each of these was found because a run passed or failed for the wrong reason.
+
+| flaw | fix |
+|---|---|
+| A dwell read its starting heights from a dashboard not yet re-read, and reported 1,000 blocks where `monitor.csv` showed 315. | `bb77f9222`: a dwell starts from live heights. |
+| "Every node ACTIVE" passed 2–3 s after a whole-network restart, on stale rows. | `bb77f9222`: a restarted node's row must come from its new container. |
+| It passed "0 s after the restart" on containers whose rows were missing. | `2480f4099`: a missing row is not ACTIVE. |
+| It passed run `232435Z` while delivery was stalled for twenty minutes. | `492184cac`: a dwell fails on a delivery stall. |
+| That check then failed step D on the flows out of the deliberately stopped BVN2. | `753435139`: a stall sourced only from a partition meant to stand is excused. |
+
+### 5.2 Corrections made to the record
+
+- **The kill lost no blocks.** The "about 140 lost blocks" compared a ledger height with BlockchainDB's own block counter. Corrected in run `182048Z`'s summary and on BlockchainDB#99.
+- **#4515's first explanation was wrong.** "Catch-up starts too high" rested on an unsorted round list. It was withdrawn in run `191744Z`'s summary and on #4515.
+- **Anchor copies were ordered.** A note on #4517 said they were never ordered. In fact copies were ordered, just never 8 signers for one anchor.
+
+### 5.3 Still open
+
+- **#4516.** An ACTIVE node logs "The join is waiting" every minute, because the anchor collector's asks after the handoff re-arm the join's waiting step.
+- **BlockchainDB#99 and E13.** The store's block record and manifests are not written as one unit, and durability at the committed log is not built.
+- **#4514.** From the earlier plan, unchanged.
+- **The restart burst.** About 100 to 200 dropped votes per restart, harmless so far. It is what the serialized boot, DIFFERENCES C15, would remove. That boot is deferred, since Docker no longer shows restart catch-up stuck or slow.
+
+## 6. Next
+
+1. **The acceptance run.** A 12-hour soak with single-validator restarts and kills as chaos, the dashboard shown before load. No claim about restart behaviour stands on runs shorter than that.
+2. **Separating the three fixes on Docker,** if the soak raises a question that needs it.
+3. **Cross-partition back-pressure (C7)** stays the known gap under sustained overload.
