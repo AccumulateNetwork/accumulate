@@ -1,0 +1,1651 @@
+{
+  "commits": 2213,
+  "perm": {
+    "PutTotal": 448114,
+    "PutNew": 419253,
+    "PutDuplicate": 28861,
+    "PutConflict": 0,
+    "LookupTotal": 943224,
+    "FilterAbsent": 891764,
+    "FilterWalked": 51460,
+    "FilterMisled": 31,
+    "LiveHit": 0,
+    "HistorySegments": 15,
+    "ActiveSegments": 184,
+    "ResidentBloomBytes": 63588
+  },
+  "dyna": {
+    "PutTotal": 300327,
+    "PutNew": 300327,
+    "PutDuplicate": 0,
+    "PutConflict": 0,
+    "LookupTotal": 651057,
+    "FilterAbsent": 518626,
+    "FilterWalked": 2336,
+    "FilterMisled": 1145,
+    "LiveHit": 130095,
+    "HistorySegments": 8,
+    "ActiveSegments": 2,
+    "ResidentBloomBytes": 231961
+  },
+  "permDuplicatePct": 6.440548610398247,
+  "permConflictPct": 0,
+  "permWalkPct": 5.455756002815874,
+  "misroutedShapes": null,
+  "shapes": {
+    "Account.(url).AnchorChain.bvn1.BPT.Element.(int)": {
+      "layer": "perm",
+      "writes": 2476,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2476,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Head": {
+      "layer": "dyna",
+      "writes": 858,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 2137,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2137,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Index.Head": {
+      "layer": "dyna",
+      "writes": 858,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1683,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 909,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1756,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.BPT.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 948,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Element.(int)": {
+      "layer": "perm",
+      "writes": 2476,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2476,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Head": {
+      "layer": "dyna",
+      "writes": 858,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 2137,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2137,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Index.Head": {
+      "layer": "dyna",
+      "writes": 858,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1683,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 909,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1756,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn1.Root.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 948,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Element.(int)": {
+      "layer": "perm",
+      "writes": 2929,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2929,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Head": {
+      "layer": "dyna",
+      "writes": 876,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 2552,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2552,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Index.Head": {
+      "layer": "dyna",
+      "writes": 876,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1743,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 971,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1820,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.BPT.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1010,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Element.(int)": {
+      "layer": "perm",
+      "writes": 2929,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2929,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Head": {
+      "layer": "dyna",
+      "writes": 876,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 2552,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2552,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Index.Head": {
+      "layer": "dyna",
+      "writes": 876,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1743,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 971,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1820,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn2.Root.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1010,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Element.(int)": {
+      "layer": "perm",
+      "writes": 2852,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2852,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Head": {
+      "layer": "dyna",
+      "writes": 873,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 2562,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2562,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Index.Head": {
+      "layer": "dyna",
+      "writes": 873,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1742,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 970,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1804,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.BPT.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1002,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Element.(int)": {
+      "layer": "perm",
+      "writes": 2852,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2852,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Head": {
+      "layer": "dyna",
+      "writes": 873,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 2562,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 2562,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Index.Head": {
+      "layer": "dyna",
+      "writes": 873,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1742,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 970,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1804,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.bvn3.Root.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1002,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Element.(int)": {
+      "layer": "perm",
+      "writes": 3145,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3145,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Head": {
+      "layer": "dyna",
+      "writes": 919,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 3136,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3136,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.Head": {
+      "layer": "dyna",
+      "writes": 919,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1846,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1074,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1852,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.BPT.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1076,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Element.(int)": {
+      "layer": "perm",
+      "writes": 3145,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3145,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Head": {
+      "layer": "dyna",
+      "writes": 919,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 3136,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3136,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.Head": {
+      "layer": "dyna",
+      "writes": 919,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1846,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1074,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1852,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorChain.directory.Root.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1076,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Element.(int)": {
+      "layer": "perm",
+      "writes": 4113,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3163,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Head": {
+      "layer": "dyna",
+      "writes": 920,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 3163,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3163,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.Head": {
+      "layer": "dyna",
+      "writes": 920,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1853,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1079,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 2796,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.States.(int)": {
+      "layer": "dyna",
+      "writes": 10,
+      "misrouted": 0
+    },
+    "Account.(url).AnchorSequenceChain.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1079,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedger.(int)": {
+      "layer": "perm",
+      "writes": 912,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedgerChain.Element.(int)": {
+      "layer": "perm",
+      "writes": 3461,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedgerChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3461,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedgerChain.Head": {
+      "layer": "dyna",
+      "writes": 920,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedgerChain.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 2098,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedgerChain.States.(int)": {
+      "layer": "dyna",
+      "writes": 8,
+      "misrouted": 0
+    },
+    "Account.(url).BlockLedgerChain.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1113,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Element.(int)": {
+      "layer": "perm",
+      "writes": 3461,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3461,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Head": {
+      "layer": "dyna",
+      "writes": 920,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 3461,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3461,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Index.Head": {
+      "layer": "dyna",
+      "writes": 920,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 2098,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 8,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1113,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 2098,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.States.(int)": {
+      "layer": "dyna",
+      "writes": 8,
+      "misrouted": 0
+    },
+    "Account.(url).BptChain.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1113,
+      "misrouted": 0
+    },
+    "Account.(url).CascadeDeliveryQueue": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).Chains": {
+      "layer": "dyna",
+      "writes": 70,
+      "misrouted": 0
+    },
+    "Account.(url).Directory": {
+      "layer": "dyna",
+      "writes": 44,
+      "misrouted": 0
+    },
+    "Account.(url).DirectoryAnchorBlock": {
+      "layer": "dyna",
+      "writes": 911,
+      "misrouted": 0
+    },
+    "Account.(url).Events.BPT.Root": {
+      "layer": "dyna",
+      "writes": 1,
+      "misrouted": 0
+    },
+    "Account.(url).Events.Backlog.Expired": {
+      "layer": "dyna",
+      "writes": 8,
+      "misrouted": 0
+    },
+    "Account.(url).Events.Major.Blocks": {
+      "layer": "dyna",
+      "writes": 8,
+      "misrouted": 0
+    },
+    "Account.(url).Events.Minor.Blocks": {
+      "layer": "dyna",
+      "writes": 8,
+      "misrouted": 0
+    },
+    "Account.(url).LocalDeliveryQueue": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).Main": {
+      "layer": "dyna",
+      "writes": 3534,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Element.(int)": {
+      "layer": "perm",
+      "writes": 17239,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 13404,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Head": {
+      "layer": "dyna",
+      "writes": 1788,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 5238,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 5246,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.Head": {
+      "layer": "dyna",
+      "writes": 1772,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 4477,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 16,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1983,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 15340,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.States.(int)": {
+      "layer": "dyna",
+      "writes": 59,
+      "misrouted": 0
+    },
+    "Account.(url).MainChain.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 2570,
+      "misrouted": 0
+    },
+    "Account.(url).Pending": {
+      "layer": "dyna",
+      "writes": 42,
+      "misrouted": 0
+    },
+    "Account.(url).RetainedLeaf.(int)": {
+      "layer": "dyna",
+      "writes": 4233,
+      "misrouted": 0
+    },
+    "Account.(url).RetainedMainState.(int)": {
+      "layer": "dyna",
+      "writes": 4233,
+      "misrouted": 0
+    },
+    "Account.(url).RetainedStateReceipt.(int)": {
+      "layer": "dyna",
+      "writes": 4233,
+      "misrouted": 0
+    },
+    "Account.(url).RetainedStateReceiptBlocks": {
+      "layer": "dyna",
+      "writes": 4233,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Element.(int)": {
+      "layer": "perm",
+      "writes": 24310,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.ElementIndex.(bytes)": {
+      "layer": "dyna",
+      "writes": 24300,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Head": {
+      "layer": "dyna",
+      "writes": 921,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 3470,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3471,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.Head": {
+      "layer": "dyna",
+      "writes": 921,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 2099,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 8,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1114,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 23890,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.States.(int)": {
+      "layer": "dyna",
+      "writes": 93,
+      "misrouted": 0
+    },
+    "Account.(url).RootChain.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 2371,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Element.(int)": {
+      "layer": "perm",
+      "writes": 39094,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.ElementIndex.(bytes)": {
+      "layer": "dyna",
+      "writes": 32289,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Head": {
+      "layer": "dyna",
+      "writes": 920,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.Element.(int)": {
+      "layer": "perm",
+      "writes": 3352,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.ElementIndex.(bytes)": {
+      "layer": "perm",
+      "writes": 3352,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.Head": {
+      "layer": "dyna",
+      "writes": 920,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 1871,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.States.(int)": {
+      "layer": "dyna",
+      "writes": 7,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Index.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 1099,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Intermediate.(int).(int)": {
+      "layer": "perm",
+      "writes": 38053,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.States.(int)": {
+      "layer": "dyna",
+      "writes": 148,
+      "misrouted": 0
+    },
+    "Account.(url).SignatureChain.Tail.(int)": {
+      "layer": "dyna",
+      "writes": 2878,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn1)-bpt": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn1)-bpt-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn1)-root": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn1)-root-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn2)-bpt": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn2)-bpt-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn2)-root": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn2)-root-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn3)-bpt": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn3)-bpt-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn3)-root": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(bvn3)-root-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(directory)-bpt": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(directory)-bpt-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(directory)-root": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor(directory)-root-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor-sequence": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.anchor-sequence-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.block-ledger": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.bpt": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.bpt-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.main": {
+      "layer": "dyna",
+      "writes": 30,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.main-index": {
+      "layer": "dyna",
+      "writes": 10,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.root": {
+      "layer": "dyna",
+      "writes": 48,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.root-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.signature": {
+      "layer": "dyna",
+      "writes": 28,
+      "misrouted": 0
+    },
+    "Account.(url).SyncedEntries.signature-index": {
+      "layer": "dyna",
+      "writes": 5,
+      "misrouted": 0
+    },
+    "Account.(url).Transaction.(hash).History": {
+      "layer": "dyna",
+      "writes": 11223,
+      "misrouted": 0
+    },
+    "Account.(url).Transaction.(hash).ValidatorSignatures": {
+      "layer": "dyna",
+      "writes": 12654,
+      "misrouted": 0
+    },
+    "Account.(url).Url": {
+      "layer": "dyna",
+      "writes": 12,
+      "misrouted": 0
+    },
+    "BPT.(hash)": {
+      "layer": "dyna",
+      "writes": 924,
+      "misrouted": 0
+    },
+    "BPT.History.(hash)": {
+      "layer": "dyna",
+      "writes": 912,
+      "misrouted": 0
+    },
+    "BPT.History.(hash).(int)": {
+      "layer": "dyna",
+      "writes": 912,
+      "misrouted": 0
+    },
+    "BPT.History.Earliest": {
+      "layer": "dyna",
+      "writes": 1,
+      "misrouted": 0
+    },
+    "BPT.History.Last": {
+      "layer": "dyna",
+      "writes": 912,
+      "misrouted": 0
+    },
+    "BPT.Root": {
+      "layer": "dyna",
+      "writes": 929,
+      "misrouted": 0
+    },
+    "Message.(hash).Cause": {
+      "layer": "dyna",
+      "writes": 41886,
+      "misrouted": 0
+    },
+    "Message.(hash).Main": {
+      "layer": "perm",
+      "writes": 82336,
+      "misrouted": 0
+    },
+    "Message.(hash).Signers": {
+      "layer": "dyna",
+      "writes": 11223,
+      "misrouted": 0
+    },
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn1.acme": {
+      "layer": "dyna",
+      "writes": 496,
+      "misrouted": 0
+    },
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn2.acme": {
+      "layer": "dyna",
+      "writes": 510,
+      "misrouted": 0
+    },
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn3.acme": {
+      "layer": "dyna",
+      "writes": 513,
+      "misrouted": 0
+    },
+    "SystemData.Directory.AnchorDelivered.acc://dn.acme": {
+      "layer": "dyna",
+      "writes": 453,
+      "misrouted": 0
+    },
+    "SystemData.Directory.ExecutedBlock": {
+      "layer": "dyna",
+      "writes": 913,
+      "misrouted": 0
+    },
+    "SystemData.Directory.HeadOnly": {
+      "layer": "dyna",
+      "writes": 6,
+      "misrouted": 0
+    },
+    "SystemData.Directory.PullStarted": {
+      "layer": "dyna",
+      "writes": 2,
+      "misrouted": 0
+    },
+    "SystemData.Directory.TrustedGlobals": {
+      "layer": "dyna",
+      "writes": 454,
+      "misrouted": 0
+    },
+    "SystemData.Directory.TrustedNetwork": {
+      "layer": "dyna",
+      "writes": 454,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Chains": {
+      "layer": "dyna",
+      "writes": 10552,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Main": {
+      "layer": "perm",
+      "writes": 1,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Produced": {
+      "layer": "dyna",
+      "writes": 29711,
+      "misrouted": 0
+    },
+    "Transaction.(hash).Status": {
+      "layer": "dyna",
+      "writes": 36429,
+      "misrouted": 0
+    }
+  },
+  "stagedCommits": 0,
+  "dynaExceptions": 0,
+  "preImageReads": 4506,
+  "tallySample": 128,
+  "tallyKeys": 0,
+  "tallyCapped": false,
+  "maintenanceErrors": 0,
+  "shallowMisses": {
+    "Account.(url).AnchorChain.bvn1.BPT.Head": 2,
+    "Account.(url).AnchorChain.bvn1.BPT.Index.Head": 2,
+    "Account.(url).AnchorChain.bvn1.BPT.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn1.BPT.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn1.Root.Head": 2,
+    "Account.(url).AnchorChain.bvn1.Root.Index.Head": 2,
+    "Account.(url).AnchorChain.bvn1.Root.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn1.Root.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn2.BPT.Head": 2,
+    "Account.(url).AnchorChain.bvn2.BPT.Index.Head": 2,
+    "Account.(url).AnchorChain.bvn2.BPT.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn2.BPT.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn2.Root.Head": 2,
+    "Account.(url).AnchorChain.bvn2.Root.Index.Head": 2,
+    "Account.(url).AnchorChain.bvn2.Root.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn2.Root.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn3.BPT.Head": 2,
+    "Account.(url).AnchorChain.bvn3.BPT.Index.Head": 2,
+    "Account.(url).AnchorChain.bvn3.BPT.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn3.BPT.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn3.Root.Head": 2,
+    "Account.(url).AnchorChain.bvn3.Root.Index.Head": 2,
+    "Account.(url).AnchorChain.bvn3.Root.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.bvn3.Root.Tail.(int)": 32,
+    "Account.(url).AnchorChain.directory.BPT.Head": 2,
+    "Account.(url).AnchorChain.directory.BPT.Index.Head": 2,
+    "Account.(url).AnchorChain.directory.BPT.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.directory.BPT.Tail.(int)": 32,
+    "Account.(url).AnchorChain.directory.Root.Head": 2,
+    "Account.(url).AnchorChain.directory.Root.Index.Head": 2,
+    "Account.(url).AnchorChain.directory.Root.Index.Tail.(int)": 32,
+    "Account.(url).AnchorChain.directory.Root.Tail.(int)": 32,
+    "Account.(url).AnchorSequenceChain.Head": 2,
+    "Account.(url).AnchorSequenceChain.Index.Head": 2,
+    "Account.(url).AnchorSequenceChain.Index.Tail.(int)": 32,
+    "Account.(url).AnchorSequenceChain.Tail.(int)": 32,
+    "Account.(url).BlockLedgerChain.Element.(int)": 1202,
+    "Account.(url).BlockLedgerChain.ElementIndex.(bytes)": 768,
+    "Account.(url).BlockLedgerChain.Head": 1,
+    "Account.(url).BlockLedgerChain.States.(int)": 1,
+    "Account.(url).BlockLedgerChain.Tail.(int)": 32,
+    "Account.(url).BptChain.Element.(int)": 1208,
+    "Account.(url).BptChain.ElementIndex.(bytes)": 768,
+    "Account.(url).BptChain.Head": 1,
+    "Account.(url).BptChain.Index.Element.(int)": 1218,
+    "Account.(url).BptChain.Index.ElementIndex.(bytes)": 768,
+    "Account.(url).BptChain.Index.Head": 1,
+    "Account.(url).BptChain.Index.States.(int)": 1,
+    "Account.(url).BptChain.Index.Tail.(int)": 32,
+    "Account.(url).BptChain.States.(int)": 1,
+    "Account.(url).BptChain.Tail.(int)": 32,
+    "Account.(url).CascadeDeliveryQueue": 2,
+    "Account.(url).Chains": 2,
+    "Account.(url).Directory": 56,
+    "Account.(url).DirectoryAnchorBlock": 2,
+    "Account.(url).Events.BPT.(hash)": 922,
+    "Account.(url).Events.BPT.Root": 1,
+    "Account.(url).Events.Backlog.Expired": 1,
+    "Account.(url).Events.Major.Blocks": 1,
+    "Account.(url).Events.Minor.Blocks": 1,
+    "Account.(url).LocalDeliveryQueue": 2,
+    "Account.(url).Main": 1,
+    "Account.(url).MainChain.Element.(int)": 2067,
+    "Account.(url).MainChain.ElementIndex.(bytes)": 7869,
+    "Account.(url).MainChain.Index.Element.(int)": 778,
+    "Account.(url).MainChain.Index.ElementIndex.(bytes)": 768,
+    "Account.(url).MainChain.Index.Tail.(int)": 62,
+    "Account.(url).MainChain.Tail.(int)": 62,
+    "Account.(url).Pending": 61,
+    "Account.(url).RetainedStateReceiptBlocks": 5,
+    "Account.(url).RootChain.Element.(int)": 19343,
+    "Account.(url).RootChain.ElementIndex.(bytes)": 11253,
+    "Account.(url).RootChain.Index.Element.(int)": 2107,
+    "Account.(url).RootChain.Index.ElementIndex.(bytes)": 768,
+    "Account.(url).RootChain.Index.States.(int)": 15,
+    "Account.(url).RootChain.Index.Tail.(int)": 31,
+    "Account.(url).RootChain.States.(int)": 1,
+    "Account.(url).RootChain.Tail.(int)": 30,
+    "Account.(url).SignatureChain.Head": 2,
+    "Account.(url).SignatureChain.Index.Head": 2,
+    "Account.(url).SignatureChain.Index.Tail.(int)": 32,
+    "Account.(url).SignatureChain.Tail.(int)": 32,
+    "Account.(url).SyncedEntries.anchor(bvn1)-bpt": 1,
+    "Account.(url).SyncedEntries.anchor(bvn1)-bpt-index": 1,
+    "Account.(url).SyncedEntries.anchor(bvn1)-root": 1,
+    "Account.(url).SyncedEntries.anchor(bvn1)-root-index": 1,
+    "Account.(url).SyncedEntries.anchor(bvn2)-bpt": 1,
+    "Account.(url).SyncedEntries.anchor(bvn2)-bpt-index": 1,
+    "Account.(url).SyncedEntries.anchor(bvn2)-root": 1,
+    "Account.(url).SyncedEntries.anchor(bvn2)-root-index": 1,
+    "Account.(url).SyncedEntries.anchor(bvn3)-bpt": 1,
+    "Account.(url).SyncedEntries.anchor(bvn3)-bpt-index": 1,
+    "Account.(url).SyncedEntries.anchor(bvn3)-root": 1,
+    "Account.(url).SyncedEntries.anchor(bvn3)-root-index": 1,
+    "Account.(url).SyncedEntries.anchor(directory)-bpt": 1,
+    "Account.(url).SyncedEntries.anchor(directory)-bpt-index": 1,
+    "Account.(url).SyncedEntries.anchor(directory)-root": 1,
+    "Account.(url).SyncedEntries.anchor(directory)-root-index": 1,
+    "Account.(url).SyncedEntries.anchor-sequence": 1,
+    "Account.(url).SyncedEntries.anchor-sequence-index": 1,
+    "Account.(url).SyncedEntries.block-ledger": 1,
+    "Account.(url).SyncedEntries.bpt": 1,
+    "Account.(url).SyncedEntries.bpt-index": 1,
+    "Account.(url).SyncedEntries.main": 4,
+    "Account.(url).SyncedEntries.main-index": 2,
+    "Account.(url).SyncedEntries.root": 1,
+    "Account.(url).SyncedEntries.root-index": 1,
+    "Account.(url).SyncedEntries.signature": 1,
+    "Account.(url).SyncedEntries.signature-index": 1,
+    "Account.(url).Transaction.(hash).History": 7254,
+    "Account.(url).Transaction.(hash).Payments": 5805,
+    "Account.(url).Transaction.(hash).ValidatorSignatures": 8688,
+    "Account.(url).Transaction.(hash).Votes": 5805,
+    "BPT.(hash)": 1,
+    "BPT.History.(hash)": 1,
+    "BPT.History.Earliest": 1,
+    "BPT.History.Last": 1,
+    "BPT.Root": 1,
+    "Message.(hash).Cause": 36965,
+    "Message.(hash).Main": 18201,
+    "Message.(hash).Signers": 7254,
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn1.acme": 1,
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn2.acme": 1,
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn3.acme": 1,
+    "SystemData.Directory.AnchorDelivered.acc://dn.acme": 1,
+    "SystemData.Directory.ExecutedBlock": 1,
+    "SystemData.Directory.HeadOnly": 2,
+    "SystemData.Directory.TrustedNetwork": 1,
+    "Transaction.(hash).Chains": 10552,
+    "Transaction.(hash).Main": 18200,
+    "Transaction.(hash).Produced": 29711,
+    "Transaction.(hash).Status": 35516
+  },
+  "historyReads": {
+    "Account.(url).AnchorSequenceChain.States.(int)": {
+      "hits": 0,
+      "misses": 947,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Querier).queryChainEntry:1205": 18
+      }
+    },
+    "Account.(url).BlockLedgerChain.Element.(int)": {
+      "hits": 1167,
+      "misses": 768,
+      "distinct": 950,
+      "hitCallers": {
+        "internal/api/v3.(*Querier).queryChainEntryByIndex:1183": 15,
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 7,
+        "internal/core/bootstrap/pull.(*chainWalk).replay:472": 7
+      },
+      "missCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 24
+      }
+    },
+    "Account.(url).BlockLedgerChain.States.(int)": {
+      "hits": 0,
+      "misses": 767,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Querier).queryChainEntry:1205": 31
+      }
+    },
+    "Account.(url).BptChain.Element.(int)": {
+      "hits": 1208,
+      "misses": 768,
+      "distinct": 987,
+      "hitCallers": {
+        "internal/api/v3.(*Querier).queryChainEntryByIndex:1183": 28,
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 6,
+        "internal/core/bootstrap/pull.(*chainWalk).replay:472": 7,
+        "internal/node/join.rootAfter:461": 2
+      },
+      "missCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 24
+      }
+    },
+    "Account.(url).BptChain.Index.Element.(int)": {
+      "hits": 450,
+      "misses": 768,
+      "distinct": 222,
+      "hitCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 7,
+        "internal/core/bootstrap/pull.(*chainWalk).replay:472": 7
+      },
+      "missCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 23
+      }
+    },
+    "Account.(url).BptChain.Index.States.(int)": {
+      "hits": 0,
+      "misses": 767,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Querier).queryChainEntry:1205": 24
+      }
+    },
+    "Account.(url).BptChain.States.(int)": {
+      "hits": 0,
+      "misses": 767,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Querier).queryChainEntry:1205": 19
+      }
+    },
+    "Account.(url).MainChain.Element.(int)": {
+      "hits": 571,
+      "misses": 2067,
+      "distinct": 1,
+      "hitCallers": {
+        "internal/api/v3.(*Querier).queryChainEntryByIndex:1183": 17
+      },
+      "missCallers": {
+        "cmd/accumulated/run.(*DAGBFTService).loadGenesisIfNeeded:966": 1,
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 64,
+        "internal/core/bootstrap/pull.heldWithoutMessages:1610": 1
+      }
+    },
+    "Account.(url).MainChain.Index.Element.(int)": {
+      "hits": 0,
+      "misses": 780,
+      "distinct": 0,
+      "missCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 24
+      }
+    },
+    "Account.(url).MainChain.Index.States.(int)": {
+      "hits": 0,
+      "misses": 2,
+      "distinct": 0
+    },
+    "Account.(url).MainChain.States.(int)": {
+      "hits": 0,
+      "misses": 4224,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Querier).queryChainEntry:1205": 128
+      }
+    },
+    "Account.(url).RootChain.Element.(int)": {
+      "hits": 8071,
+      "misses": 11273,
+      "distinct": 7424,
+      "hitCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 20,
+        "internal/core/bootstrap/pull.(*chainWalk).replay:472": 232
+      },
+      "missCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 354
+      }
+    },
+    "Account.(url).RootChain.Index.Element.(int)": {
+      "hits": 1323,
+      "misses": 784,
+      "distinct": 223,
+      "hitCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 7,
+        "internal/core/bootstrap/pull.(*chainWalk).replay:472": 7,
+        "internal/core/execute/v2/block.(*Block).close:454": 22
+      },
+      "missCallers": {
+        "internal/core/bootstrap/pull.(*chainWalk).held:307": 24
+      }
+    },
+    "Account.(url).RootChain.Index.States.(int)": {
+      "hits": 0,
+      "misses": 1530,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Querier).queryChainEntry:1205": 46
+      }
+    },
+    "Account.(url).RootChain.States.(int)": {
+      "hits": 0,
+      "misses": 4,
+      "distinct": 0
+    },
+    "Account.(url).SignatureChain.States.(int)": {
+      "hits": 0,
+      "misses": 3514,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Querier).queryChainEntry:1205": 117
+      }
+    },
+    "Account.(url).SyntheticChain.bvn1.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).SyntheticChain.bvn1.Index.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).SyntheticChain.bvn2.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).SyntheticChain.bvn2.Index.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).SyntheticChain.bvn3.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).SyntheticChain.bvn3.Index.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).SyntheticChain.directory.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).SyntheticChain.directory.Index.Head": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Account.(url).Transaction.(hash).History": {
+      "hits": 0,
+      "misses": 4468,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.tryLoad[...]:476": 145
+      }
+    },
+    "Account.(url).Transaction.(hash).Payments": {
+      "hits": 0,
+      "misses": 8243,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.tryLoad[...]:476": 262
+      }
+    },
+    "Account.(url).Transaction.(hash).Signatures": {
+      "hits": 0,
+      "misses": 8243,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.tryLoad[...]:476": 259
+      }
+    },
+    "Account.(url).Transaction.(hash).ValidatorSignatures": {
+      "hits": 0,
+      "misses": 2036,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.(*Sequencer).anchorRecord.func1:287": 69
+      }
+    },
+    "Account.(url).Transaction.(hash).Votes": {
+      "hits": 0,
+      "misses": 8243,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.tryLoad[...]:476": 256
+      }
+    },
+    "Message.(hash).Cause": {
+      "hits": 0,
+      "misses": 4468,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.loadMessage:58": 118
+      }
+    },
+    "Message.(hash).Main": {
+      "hits": 27402,
+      "misses": 0,
+      "distinct": 24031,
+      "hitCallers": {
+        "internal/api/v3.loadMessage:31": 226,
+        "internal/api/v3.loadMessage:68": 114,
+        "internal/api/v3.loadTransactionSignaturesV2.func2:228": 507,
+        "internal/core/execute/v2/block.(*Executor).ownReceipts:187": 1,
+        "internal/core/execute/v2/block.(*Executor).seedProducedAnchors:470": 30
+      }
+    },
+    "Message.(hash).Signers": {
+      "hits": 0,
+      "misses": 4468,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.loadTransactionSignaturesV2:183": 140
+      }
+    },
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn1.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn2.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "SystemData.Directory.AnchorDelivered.acc://bvn-bvn3.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "SystemData.Directory.AnchorDelivered.acc://dn.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "SystemData.Directory.SyntheticDelivered.acc://bvn-bvn1.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "SystemData.Directory.SyntheticDelivered.acc://bvn-bvn2.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "SystemData.Directory.SyntheticDelivered.acc://bvn-bvn3.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "SystemData.Directory.SyntheticDelivered.acc://dn.acme": {
+      "hits": 0,
+      "misses": 1,
+      "distinct": 0
+    },
+    "Transaction.(hash).Main": {
+      "hits": 0,
+      "misses": 13,
+      "distinct": 0
+    },
+    "Transaction.(hash).Produced": {
+      "hits": 0,
+      "misses": 8175,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.loadMessage:50": 275
+      }
+    },
+    "Transaction.(hash).Status": {
+      "hits": 0,
+      "misses": 11665,
+      "distinct": 0,
+      "missCallers": {
+        "internal/api/v3.loadMessage:38": 228,
+        "internal/api/v3.loadTransactionSignaturesV1:104": 119
+      }
+    }
+  }
+}
