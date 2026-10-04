@@ -8,6 +8,7 @@ package join
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"testing"
 
@@ -99,10 +100,18 @@ func TestARepairBackfillsNothing(t *testing.T) {
 // executor spec, "Sync", §3: "In a repair nothing is taken whole: the node's
 // longer chain is its own wrong growth, its head is replaced by the peer's,
 // and the background backfill replaces the entries below it". The node holds
-// the peer's first 300 entries of bob's main chain and 3 of its own after
-// them; the peer holds 600. The repair leaves bob hashing as the peer's, and
+// the peer's first 300 (or all 600) entries of bob's main chain and 3 of its
+// own after them; the peer holds 600. The repair leaves bob hashing as the peer's, and
 // the backfill makes the chain the peer's entry by entry.
 func TestARepairedChainTheNodeGrewWronglyIsReplacedByTheBackfill(t *testing.T) {
+	// Shorter than the peer's after its own entries (300+3 of 600), and
+	// longer (600+3 of 600): a node that executed what the peers did not.
+	for _, held := range []int{300, 600} {
+		t.Run(fmt.Sprint(held), func(t *testing.T) { repairWrongGrowth(t, held) })
+	}
+}
+
+func repairWrongGrowth(t *testing.T, held int) {
 	here := protocol.PartitionUrl("BVN0")
 	bob := protocol.AccountUrl("bob", "tokens")
 	peer := openDisk(t, t.TempDir())
@@ -110,7 +119,7 @@ func TestARepairedChainTheNodeGrewWronglyIsReplacedByTheBackfill(t *testing.T) {
 	writeTokenHistory(t, peer, bob, 600)
 	node := openDisk(t, t.TempDir())
 	t.Cleanup(func() { _ = node.Close() })
-	writeTokenHistory(t, node, bob, 300)
+	writeTokenHistory(t, node, bob, held)
 	b := node.Begin(true)
 	for i := 0; i < 3; i++ {
 		txn := new(protocol.Transaction)
@@ -134,11 +143,15 @@ func TestARepairedChainTheNodeGrewWronglyIsReplacedByTheBackfill(t *testing.T) {
 	requireSameHash(t, peer, node, bob)
 	require.Contains(t, s.headOnly, accountKey(bob), "bob is not left to the background backfill")
 
-	// The first walk finds that the entries the node holds do not reproduce
-	// the peer's head and trusts none of them; the next, which the backfill
-	// runs a few seconds later, takes every entry below the head
-	// (pull.Backfill).
-	require.False(t, s.backfillOne(ctx, bob), "the first walk took the node's own entries as the peer's")
-	require.True(t, s.backfillOne(ctx, bob), "bob was not backfilled")
+	// Below the head (300+3), the first walk finds that the entries the
+	// node holds do not reproduce the peer's head and trusts none of them;
+	// the next, which the backfill runs a few seconds later, takes every
+	// entry below the head (pull.Backfill). Above it (600+3), they are past
+	// the head, where the next append writes.
+	walks := 1
+	for !s.backfillOne(ctx, bob) {
+		walks++
+		require.LessOrEqual(t, walks, 2, "bob was not backfilled in two walks")
+	}
 	requireSameChain(t, peer, node, bob, "main")
 }
