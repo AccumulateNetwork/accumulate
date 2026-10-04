@@ -91,9 +91,12 @@ So a validator holds batches in four places, for four reasons:
    (invariant 4) reports a backlog that no amount of waiting by the
    submitter can drain. So a validator whose executor is more than
    **`MaxExecutionLag` = 8 blocks** behind the DAG's last commit proposes
-   **empty** headers — parents and weak links, no batches; rounds continue,
-   liveness is kept, nothing new is certified — and refuses user work until
-   execution catches up. The bound is a few seconds of traffic and is not a
+   headers with **no user work** — parents, weak links and batches of system
+   traffic alone; rounds continue, liveness is kept, no user transaction is
+   certified — and refuses user work until execution catches up. System
+   traffic still goes through, because a lagging executor is often waiting on
+   it: a Directory anchor below quorum is completed only by copies that are
+   ordered (#4517; "Execution lag"). The bound is a few seconds of traffic and is not a
    buffer to be made bigger. When execution catches up, the batches that
    built up meanwhile come back **a header at a time**: a header carries at
    most `MaxHeaderBytes` of batches and the rest wait for the next. Draining
@@ -221,9 +224,10 @@ the **execution lag** in blocks (`Node.ExecutionLag`,
 `accumulate_dagbft_execution_lag_blocks{partition}`). The header builder asks
 before every header (`Primary.executionLagging`); when the lag exceeds
 `MaxExecutionLag` (8 blocks, `primary.DefaultMaxExecutionLag`, config
-`max_execution_lag`) the header takes no batches from
-`ConsumeAvailableBatches` — it still carries its parents and weak links so
-rounds and the DAG advance, and the batches stay queued for a later header —
+`max_execution_lag`) the header takes no batch that holds a user's
+transaction — it still carries its parents and weak links so rounds and the
+DAG advance, those batches stay queued for a later header, and batches of
+system traffic alone are still proposed (below) —
 and every worker enters refusal with reason `execution-lagging`
 (`Worker.SetExecutionLagging`, `ErrExecutionLagging`, `NotReady` to the
 submitter). Both clear when the lag falls back under the bound. The reasons
@@ -232,6 +236,22 @@ with reason `store-full` or `execution-lagging`, and separate transition log
 lines; `accumulate_dagbft_execution_lagging{partition}` is the state. The
 commit channel's depth is then a consequence of the bound plus the DAG's GC
 depth, not a buffer: it never holds more than the bound allows.
+
+**System traffic is proposed while execution lags** (#4517). A lagging
+partition's executor is often waiting on exactly that traffic: a Directory
+anchor below quorum holds every collection proof and every receipt behind
+it, and its quorum is counted from executed copies. Proposing nothing while
+lagging therefore kept the copies that would end the lag from ever being
+ordered. In run `20261003T232435Z` every Directory validator sent its copy of
+each anchor after 1,980 to BVN2, BVN2 lagged 13 to 75 blocks, and no anchor
+after 1,980 collected a quorum. So a worker marks each batch it seals by
+whether it holds a user's transaction (one taken by `SubmitUser`). While
+lagging, the header takes batches with no user transaction, within its byte
+budget, and leaves the others queued. User work is refused at the worker
+meanwhile, so the batches sealed during the lag are all system traffic.
+System traffic is bounded by what the other partitions produce, not by
+users, so the bound on how far consensus outruns execution still holds for
+the work it exists to hold back.
 
 ### The DAG facts the rest of the specification relies on
 

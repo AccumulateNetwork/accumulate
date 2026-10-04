@@ -183,6 +183,23 @@ is remembered like a not-yet answer and asked again after the backlog has
 run. Stranding is decided on misses taken while caught up, where the answer
 means what it says.
 
+**An anchor stream is asked for whatever the lag** (#4517). The rule above
+assumes that what a lagging node lacks is in its own backlog, and that the
+backlog will run. Neither holds for the Directory's anchors to a BVN. A
+received Directory anchor is executed, and with it every collection proof
+waiting on that Directory block. Its receipts are what let the BVN serve and
+prove its own synthetics. A BVN whose head Directory anchor is below quorum
+therefore cannot drain its streams, which is exactly what makes it lag.
+Skipping the ask because it lags makes the lag permanent. Run
+`20261003T232435Z` shows it: BVN2's Directory anchor stream stood at 1,980
+for eighteen minutes, every heal toward the Directory was skipped as
+`lagging` (86, 52 and 22 on three nodes, none sent), no later anchor
+validated, and every synthetic flow into and out of BVN2 stopped. So the
+guard applies to synthetic streams only. An anchor stream is decided and
+asked on every activation whatever the node's lag. A NotFound on it taken
+while lagging is still `lagging-miss`, so stranding stays decided on misses
+taken while caught up.
+
 ### The request
 
 A request is an API call from a selected validator to a validator of the source
@@ -237,6 +254,22 @@ execution lag, because the window belongs to the sender and the answering
 node is not it ([The in-flight window belongs to the
 sender](#the-in-flight-window-belongs-to-the-sender)). A span that is partly ready is answered as
 far as it is ready; the requester remembers only what it was given.
+
+**An anchor the cache does not hold is answered from the store** (#4517).
+A source's anchors are not memory. Each anchor it produced is a stored
+message, its hash at index n − 1 of the anchor pool's `anchor-sequence`
+chain, and the partition's own executed copy of it holds the validator
+quorum (`ValidatorSignatures` under its own anchor pool). A node that
+restarted has an empty cache and the same store. So a cache miss for an
+anchor at or below the newest it produced is read from the store, through a
+view that reaches history (database.md, "Windowed stores"), and answered as
+the cache path answers: the anchor shaped for the destination, the
+answering validator's own signature, and the held quorum. A destination
+since Vandenberg accepts a Directory signature made over the Directory's own
+copy (`BlockAnchor.checkSignature`), so one answer from one Directory
+validator carries the whole quorum. "Not in the cache" is then never the
+answer for an anchor the source produced, and a restart cannot strand a
+destination's anchor stream.
 
 **Only a committee member signs an anchor answer** (#4424). "The answering
 validator's signature" on an anchor is a validator's: a node whose key is not

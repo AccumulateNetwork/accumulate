@@ -264,6 +264,17 @@ validator ends with all four at one state.
 3. **R8-3, the harness dwell.** Re-read heights after a restart settles before counting. The first run's kill dwell reported 1,000 blocks where `monitor.csv` shows about 315.
 4. **#4516.** An ACTIVE node logs "The join is waiting" every minute, because of the anchor collector's asks after the handoff.
 
+### R9 — anchor delivery must not wait on the destination's lag (#4517; Paul, 2026-10-04: "let's do it")
+
+Run 20261003T232435Z, step E. After single restarts, BVN2's Directory anchor stream stopped at 1,980. Every synthetic flow into and out of BVN2 stopped with it, because inbound proofs and outbound receipts both wait on Directory anchors. Two locks held it there. Healing skipped the anchor stream as `lagging`, and lagging headers proposed no batches, so the anchor copies that would have ended the lag were never ordered.
+
+1. **R9-1: ask for anchors whatever the lag.** healing.md. Done when the requester asks an anchor stream while lagging and still skips synthetic streams, with a test that fails without it.
+2. **R9-2: answer anchors from the store.** healing.md. Done when a source with an empty cache answers anchor n from its `anchor-sequence` chain with the held quorum, with a test that fails without it.
+3. **R9-3: propose system traffic while lagging.** consensus.md. Done when batches are marked user or system, and a lagging header takes the system ones only, with a test that fails without it.
+4. **R9-4: the proof.** An in-process reproduction first: a BVN lagging past the bound with its Directory anchor copies lost must recover. Then the restart test's step E on Docker with every flow delivering. The driver now fails on a delivery stall.
+
+Already true, and recorded in the spec: one answer from one Directory validator carries the whole quorum, by signature reuse since Vandenberg.
+
 ### Decisions (Paul, 2026-10-02: "go with your recommendations")
 
 1. **R4: C now, B as the design.** The spec says both (executor.md, "A
