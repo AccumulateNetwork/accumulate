@@ -298,13 +298,6 @@ func (s *PulledState) sayBackfillLocked() {
 		"partition", s.partition, "backfilled", s.backfilled, "left", left, "executed", s.checked.Load())
 }
 
-// isEntire is whether this node holds u whole (backfillOne).
-func (s *PulledState) isEntire(u *url.URL) bool {
-	s.backfillMu.Lock()
-	defer s.backfillMu.Unlock()
-	return s.entire[accountKey(u)]
-}
-
 // markHeadOnly records that u was taken by its chain heads alone: in memory,
 // and under SystemData, where no pull reaches, so that a restart before the
 // backfill ends still backfills it. The next pull would not name it again:
@@ -409,12 +402,6 @@ func (s *PulledState) backfillOne(ctx context.Context, u *url.URL) bool {
 		s.log.Info("An account's entries could not be brought in yet", "account", u, "error", err)
 		return false
 	}
-	s.backfillMu.Lock()
-	defer s.backfillMu.Unlock()
-	if s.entire == nil {
-		s.entire = map[[32]byte]bool{}
-	}
-	s.entire[accountKey(u)] = true
 	return true
 }
 

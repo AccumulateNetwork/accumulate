@@ -148,7 +148,7 @@ type PulledState struct {
 	// (RepairFrom; startRepair).
 	repairFrom uint64
 
-	// backfillMu guards headOnly, backfilled, backfillSaid and entire: the
+	// backfillMu guards headOnly, backfilled and backfillSaid: the
 	// backfill runs on a goroutine of its own, beside the root watch and the
 	// pull (Backfill; #4472).
 	backfillMu sync.Mutex
@@ -188,11 +188,6 @@ type PulledState struct {
 	// checked is executed, for the backfill's lines: the backfill reads it
 	// beside the root watch, which writes executed.
 	checked atomic.Uint64
-
-	// entire are the accounts this node holds whole, every entry of every
-	// chain with the message behind it (backfillOne). A whole pull of one
-	// goes on from what it holds, so it stays entire.
-	entire map[[32]byte]bool
 
 	// pageTurn and sourceTurn rotate which peer a walk page and an account
 	// are asked of first, so no one peer answers every time (#4438 threat
@@ -1157,7 +1152,7 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 		// The chains' entries and the messages behind them, to the answer's
 		// heads and no further (pull.TakeChainsAt).
 		window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
-		whole := s.takenWhole(u) || p.repair && !windowed
+		whole := s.takenWhole(u)
 		if whole || windowed {
 			srcs, _, err := s.sourcesFor(ctx, u)
 			if err == nil {
@@ -1198,19 +1193,9 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 		delete(p.retry, accountKey(u))
 		p.servedBy[sourceKey(src)] = true
 		taken[accountKey(u)] = true
-		switch {
-		case p.repair && !k.windowed && !s.takenWhole(u):
-			// A repair takes the account whole, entries included, now, while
-			// the node is not executing. An account already held entire needs
-			// only what was appended.
-			if s.isEntire(u) || s.backfillOne(ctx, u) {
-				s.unmarkHeadOnly(accountKey(u))
-			} else {
-				headOnly = append(headOnly, u)
-			}
-		case !k.whole:
+		if !k.whole {
 			// Taken by its heads, or its window: the rest is backfilled once
-			// the state has matched.
+			// the state has matched, in a repair too (#4519).
 			headOnly = append(headOnly, u)
 		}
 	}
@@ -1375,13 +1360,12 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		return owed
 	}
 
-	// A repair takes every account whole: main state, every chain with its
-	// entries and the messages behind them, pending and directory (executor
-	// spec, "Sync", "Two mismatches").
+	// A repair takes an account as the join takes any: syncing never
+	// backfills (executor spec, "Sync", "Two mismatches", 2; #4519).
 	srcs = s.order(srcs)
 
 	window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
-	whole := s.takenWhole(u) || p.repair && !windowed
+	whole := s.takenWhole(u)
 	mode := pull.ModeStateOnly
 	switch {
 	case whole:
@@ -1427,7 +1411,7 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 		// has matched (backfill). A whole pull goes on from the entries the
 		// node holds, so an account taken by its heads before stays to be
 		// backfilled below them.
-		if err != nil || whole && !p.repair {
+		if err != nil || whole {
 			return
 		}
 		if windowed {
@@ -1438,15 +1422,6 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 				s.markHeadOnly(u)
 			}
 			return
-		}
-		if p.repair {
-			// The repair takes the account whole, entries included, now,
-			// while the node is not executing. An account already held
-			// entire needs only what the whole pull appended.
-			if s.isEntire(u) || s.backfillOne(ctx, u) {
-				s.unmarkHeadOnly(accountKey(u))
-				return
-			}
 		}
 		s.markHeadOnly(u)
 	}()
