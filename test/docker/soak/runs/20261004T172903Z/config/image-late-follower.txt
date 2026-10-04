@@ -1,0 +1,3 @@
+sha256:5ac29cfc093706d1723855020492316f3655f07c3fd2e3ac4d4bc9e4baba205b disoak-bvn1-fol1 acc-bvn1-fol1
+sha256:1b4c5dfb2f167f232ebbe89fe66d79f1effd6ea4b7ba497bcfbcfd94c9885235 disoak-bvn2-fol1 acc-bvn2-fol1
+sha256:11449379c82416f65a4b2a6be3055446208db5c659a3060e134bf6afa931e58c disoak-bvn3-fol2 acc-bvn3-fol2

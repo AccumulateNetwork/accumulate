@@ -1,0 +1,46 @@
+2026-10-04T17:31:13Z armed: one disturbance every 600s + 0-30s jitter
+2026-10-04T17:31:14Z validators: not disturbed (CHAOS_VALIDATORS=off)
+2026-10-04T17:31:14Z followers: acc-bvn1-fol1 (service bvn1-fol1, data bvn1-5) is added and removed with the other late followers, 0 pair(s) (0: unbounded)
+2026-10-04T17:31:14Z followers: acc-bvn2-fol1 (service bvn2-fol1, data bvn2-5) is added and removed with the other late followers, 0 pair(s) (0: unbounded)
+2026-10-04T17:31:14Z followers: acc-bvn3-fol2 (service bvn3-fol2, data bvn3-6) is added and removed with the other late followers, 0 pair(s) (0: unbounded)
+2026-10-04T17:31:14Z sleeping 628s until the next disturbance
+2026-10-04T17:41:43Z add-follower acc-bvn1-fol1 (bvn1-fol1, data bvn1-5; key in no committee; databases cleared; join-running-network)
+2026-10-04T17:41:43Z add-follower acc-bvn2-fol1 (bvn2-fol1, data bvn2-5; key in no committee; databases cleared; join-running-network)
+2026-10-04T17:41:43Z add-follower acc-bvn3-fol2 (bvn3-fol2, data bvn3-6; key in no committee; databases cleared; join-running-network)
+2026-10-04T17:41:43Z sleeping 607s until the next disturbance
+2026-10-04T17:42:34Z follower acc-bvn1-fol1 ACTIVE (bvn1=ACTIVE directory=ACTIVE), 51s after it was added
+2026-10-04T17:42:35Z follower acc-bvn1-fol1 first in agreement (acc://bvn-BVN1.acme block 693 at 2026-10-04T17:42:26Z; acc://dn.acme block 703 at 2026-10-04T17:42:25Z), 52s after it was added
+2026-10-04T17:42:45Z follower acc-bvn3-fol2 first in agreement (acc://bvn-BVN3.acme block 710 at 2026-10-04T17:42:42Z; acc://dn.acme block 703 at 2026-10-04T17:42:25Z), 62s after it was added
+2026-10-04T17:42:55Z follower acc-bvn2-fol1 first in agreement (acc://bvn-BVN2.acme block 719 at 2026-10-04T17:42:51Z; acc://dn.acme block 703 at 2026-10-04T17:42:26Z), 72s after it was added
+2026-10-04T17:42:55Z follower acc-bvn3-fol2 ACTIVE (bvn3=ACTIVE directory=ACTIVE), 72s after it was added
+2026-10-04T17:43:05Z follower acc-bvn2-fol1 ACTIVE (bvn2=ACTIVE directory=ACTIVE), 82s after it was added
+2026-10-04T17:52:21Z remove-follower acc-bvn1-fol1 (removal 1)
+2026-10-04T17:52:21Z remove-follower acc-bvn2-fol1 (removal 1)
+2026-10-04T17:52:21Z remove-follower acc-bvn3-fol2 (removal 1)
+2026-10-04T17:52:52Z follower removal 1, 30s either side: unaffected: cadence blocks/s before->after: BVN1 0.96->0.99, BVN2 1.00->0.96, BVN3 1.00->0.96, Directory 0.93->0.99; 19 streams, 16 advancing before and after, 3 quiet before
+2026-10-04T17:52:52Z sleeping 619s until the next disturbance
+2026-10-04T18:03:12Z add-follower acc-bvn1-fol1 (bvn1-fol1, data bvn1-5; key in no committee; databases cleared; join-running-network)
+2026-10-04T18:03:12Z add-follower acc-bvn2-fol1 (bvn2-fol1, data bvn2-5; key in no committee; databases cleared; join-running-network)
+2026-10-04T18:03:12Z add-follower acc-bvn3-fol2 (bvn3-fol2, data bvn3-6; key in no committee; databases cleared; join-running-network)
+2026-10-04T18:03:13Z sleeping 614s until the next disturbance
+2026-10-04T18:04:35Z follower acc-bvn1-fol1 first in agreement (acc://bvn-BVN1.acme block 1995 at 2026-10-04T18:04:32Z; acc://dn.acme block 2002 at 2026-10-04T18:04:15Z), 83s after it was added
+2026-10-04T18:04:36Z follower acc-bvn3-fol2 ACTIVE (bvn3=ACTIVE directory=ACTIVE), 84s after it was added
+2026-10-04T18:04:36Z follower acc-bvn3-fol2 first in agreement (acc://bvn-BVN3.acme block 2001 at 2026-10-04T18:04:32Z; acc://dn.acme block 2001 at 2026-10-04T18:04:14Z), 84s after it was added
+2026-10-04T18:05:27Z follower acc-bvn2-fol1 first in agreement (acc://bvn-BVN2.acme block 2045 at 2026-10-04T18:05:19Z; acc://dn.acme block 2002 at 2026-10-04T18:04:15Z), 135s after it was added
+2026-10-04T18:05:47Z follower acc-bvn1-fol1 ACTIVE (bvn1=ACTIVE directory=ACTIVE), 155s after it was added
+2026-10-04T18:05:47Z follower acc-bvn2-fol1 ACTIVE (bvn2=ACTIVE directory=ACTIVE), 155s after it was added
+2026-10-04T18:13:57Z remove-follower acc-bvn1-fol1 (removal 2)
+2026-10-04T18:13:57Z remove-follower acc-bvn2-fol1 (removal 2)
+2026-10-04T18:13:57Z remove-follower acc-bvn3-fol2 (removal 2)
+2026-10-04T18:14:28Z follower removal 2, 30s either side: unaffected: cadence blocks/s before->after: BVN1 0.96->1.00, BVN2 0.96->1.00, BVN3 0.96->1.00, Directory 1.00->1.00; 19 streams, 16 advancing before and after, 3 quiet before
+2026-10-04T18:14:28Z sleeping 611s until the next disturbance
+2026-10-04T18:24:41Z add-follower acc-bvn1-fol1 (bvn1-fol1, data bvn1-5; key in no committee; databases cleared; join-running-network)
+2026-10-04T18:24:41Z add-follower acc-bvn2-fol1 (bvn2-fol1, data bvn2-5; key in no committee; databases cleared; join-running-network)
+2026-10-04T18:24:41Z add-follower acc-bvn3-fol2 (bvn3-fol2, data bvn3-6; key in no committee; databases cleared; join-running-network)
+2026-10-04T18:24:41Z sleeping 623s until the next disturbance
+2026-10-04T18:27:17Z follower acc-bvn3-fol2 ACTIVE (bvn3=ACTIVE directory=ACTIVE), 156s after it was added
+2026-10-04T18:27:17Z follower acc-bvn3-fol2 first in agreement (acc://bvn-BVN3.acme block 3338 at 2026-10-04T18:27:10Z; acc://dn.acme block 3283 at 2026-10-04T18:25:48Z), 156s after it was added
+2026-10-04T18:27:27Z follower acc-bvn1-fol1 first in agreement (acc://bvn-BVN1.acme block 3338 at 2026-10-04T18:27:20Z; acc://dn.acme block 3285 at 2026-10-04T18:25:50Z), 166s after it was added
+2026-10-04T18:27:37Z follower acc-bvn2-fol1 ACTIVE (bvn2=ACTIVE directory=ACTIVE), 176s after it was added
+2026-10-04T18:27:37Z follower acc-bvn2-fol1 first in agreement (acc://bvn-BVN2.acme block 3358 at 2026-10-04T18:27:34Z; acc://dn.acme block 3286 at 2026-10-04T18:25:51Z), 176s after it was added
+2026-10-04T18:27:47Z follower acc-bvn1-fol1 ACTIVE (bvn1=ACTIVE directory=ACTIVE), 186s after it was added
