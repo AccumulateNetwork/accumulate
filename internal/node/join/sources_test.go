@@ -65,7 +65,6 @@ func TestQueryPeers_RefusesWithNoPeerButItself(t *testing.T) {
 // point: there is no querier a joining node may pull from, including its own.
 func TestNewState_NeedsPeersNotAQuerier(t *testing.T) {
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, protocol.PartitionUrl("BVN0"), values)
 

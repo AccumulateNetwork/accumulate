@@ -100,11 +100,3 @@ func (s servedAt) QueryAccount(ctx context.Context, u *url.URL, _ *api.DefaultQu
 	r.Receipt.Anchor = root[:]
 	return r, nil
 }
-
-func urlsOf(us []*url.URL) []string {
-	var out []string
-	for _, u := range us {
-		out = append(out, u.String())
-	}
-	return out
-}

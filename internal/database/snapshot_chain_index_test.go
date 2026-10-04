@@ -35,15 +35,13 @@ func TestSnapshot_ChainIndexOfSurvivesRestore(t *testing.T) {
 	ledger.Url = synthetic
 	require.NoError(t, batch.Account(synthetic).Main().Put(ledger))
 
-	var roots, hashes [][]byte
+	var roots [][]byte
 	anchors, err := batch.Account(anchorPool).AnchorChain(protocol.Directory).Root().Get()
 	require.NoError(t, err)
 	for i := 0; i < 5; i++ {
 		r := sha256.Sum256([]byte(fmt.Sprintf("root %d", i)))
-		h := sha256.Sum256([]byte(fmt.Sprintf("hash %d", i)))
-		roots, hashes = append(roots, r[:]), append(hashes, h[:])
+		roots = append(roots, r[:])
 		require.NoError(t, anchors.AddEntry(r[:], false))
-		_ = h
 	}
 	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())

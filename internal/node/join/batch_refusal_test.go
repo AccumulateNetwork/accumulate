@@ -74,7 +74,6 @@ func TestAnAccountWhosePartsDoNotHashToItsLeafIsRefused(t *testing.T) {
 
 	joining := func(srcs ...pull.Source) (*PulledState, *database.Database) {
 		db := database.OpenInMemory(nil)
-		db.SetObserver(database.NewDatabaseObserver())
 		t.Cleanup(func() { _ = db.Close() })
 		values, _ := genesisValues(t, 4)
 		putNetwork(t, db, here, values)
@@ -123,7 +122,6 @@ func TestAMainlessAccountTheRecordsNameDoesNotHoldTheRecords(t *testing.T) {
 	putTokens(t, peerDB, alice, 5)
 
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
@@ -179,7 +177,6 @@ func joiningOne(t *testing.T, peerDB *database.Database, wrap func(api.Querier) 
 	t.Helper()
 	here := protocol.PartitionUrl("BVN0")
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)

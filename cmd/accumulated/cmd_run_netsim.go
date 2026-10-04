@@ -7,8 +7,6 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -78,17 +76,6 @@ func init() {
 	}
 }
 
-var colors = []*color.Color{
-	color.New(color.FgRed),
-	color.New(color.FgGreen),
-	color.New(color.FgYellow),
-	color.New(color.FgBlue),
-	color.New(color.FgMagenta),
-	color.New(color.FgCyan),
-}
-
-var fallbackColor = color.New(color.FgHiBlack)
-
 func runDevNet(cmd *cobra.Command, _ []string) {
 	if flagRun.Debug {
 		testing.EnableDebugFeatures()
@@ -107,82 +94,4 @@ func runDevNet(cmd *cobra.Command, _ []string) {
 		}
 		return true
 	})
-}
-
-var nodeIdLen int
-
-var partitionColor = map[string]*color.Color{}
-
-func newNodeWriter(w io.Writer, format, partition string, node int, color bool) io.Writer {
-	switch format {
-	case "plain":
-		id := fmt.Sprintf("%s.%d", partition, node)
-		if nodeIdLen < len(id) {
-			nodeIdLen = len(id)
-		}
-		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
-		if !color {
-			return &plainNodeWriter{s, w}
-		}
-
-		c, ok := partitionColor[partition]
-		if !ok {
-			c = fallbackColor
-			if len(colors) > 0 {
-				c = colors[0]
-				colors = colors[1:]
-			}
-			partitionColor[partition] = c
-		}
-
-		s = c.Sprint(s)
-		return &plainNodeWriter{s, w}
-
-	case "json":
-		s := fmt.Sprintf(`"partition":"%s","node":%d`, partition, node)
-		return &jsonNodeWriter{s, w}
-
-	default:
-		return w
-	}
-}
-
-type plainNodeWriter struct {
-	s string
-	w io.Writer
-}
-
-func (w *plainNodeWriter) Write(b []byte) (int, error) {
-	c := make([]byte, len(w.s)+len(b))
-	n := copy(c, []byte(w.s))
-	copy(c[n:], b)
-
-	n, err := w.w.Write(c)
-	if n >= len(w.s) {
-		n -= len(w.s)
-	}
-	return n, err
-}
-
-type jsonNodeWriter struct {
-	s string
-	w io.Writer
-}
-
-func (w *jsonNodeWriter) Write(b []byte) (int, error) {
-	if b[0] != '{' {
-		return w.w.Write(b)
-	}
-
-	c := make([]byte, 0, len(w.s)+len(b)+1)
-	c = append(c, '{')
-	c = append(c, []byte(w.s)...)
-	c = append(c, ',')
-	c = append(c, b[1:]...)
-
-	n, err := w.w.Write(c)
-	if n >= len(w.s)+1 {
-		n -= len(w.s) + 1
-	}
-	return n, err
 }

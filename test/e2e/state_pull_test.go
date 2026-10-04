@@ -23,7 +23,6 @@ import (
 // emptyDb is a node's data directory before it has any state.
 func emptyDb() *database.Database {
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 

@@ -138,6 +138,7 @@ func TestAFollowerDispatchesNoAnchor(t *testing.T) {
 	// switch that turns anchoring off.
 	var others int
 	for h, n := range signed {
+		h := h
 		if !bytes.Equal(h[:], followerHash[:]) {
 			others += n
 		}

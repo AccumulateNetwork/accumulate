@@ -482,9 +482,3 @@ func (b *bootstrap) WriteRecords(record ...protocol.Account) {
 		b.urls = append(b.urls, rec.GetUrl())
 	}
 }
-
-func (b *bootstrap) writeDataRecord(account *protocol.DataAccount, url *url.URL, dataRecord DataRecord) {
-	b.records = append(b.records, account)
-	b.urls = append(b.urls, url)
-	b.dataRecords = append(b.dataRecords, dataRecord)
-}

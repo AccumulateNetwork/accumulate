@@ -101,6 +101,7 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 		}
 		keep = append(keep, g)
 		for _, d := range g.digests {
+			d := d
 			delete(committed, hex.EncodeToString(d[:]))
 		}
 	}

@@ -79,7 +79,6 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 			// The peer: a synthetic ledger that has produced into a stream,
 			// with c.peer queued for local delivery at its next block.
 			peerDB := database.OpenInMemory(nil)
-			peerDB.SetObserver(database.NewDatabaseObserver())
 			batch := peerDB.Begin(true)
 			sl := new(protocol.SyntheticLedger)
 			sl.Url = synth
@@ -118,7 +117,6 @@ func TestASyntheticLedgerWithQueuedLocalDeliveriesCanBePulled(t *testing.T) {
 			// The joining node: its own synthetic ledger as its last block
 			// left it.
 			joinDB := database.OpenInMemory(nil)
-			joinDB.SetObserver(database.NewDatabaseObserver())
 			jb := joinDB.Begin(true)
 			defer jb.Discard()
 			for _, id := range c.joiner {

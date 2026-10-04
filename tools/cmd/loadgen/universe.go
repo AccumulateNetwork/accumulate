@@ -269,13 +269,6 @@ func (u *universe) markReady(l *liteAccount) {
 	l.ready = true
 }
 
-// markFunded records that a lite has been sent ACME, so it can distribute.
-func (u *universe) markFunded(l *liteAccount) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	l.funded = true
-}
-
 // randSourceLite returns a random lite that can be a distribution SOURCE: ready
 // (holds credits to sign) and funded (holds ACME to send). nil if none yet.
 func (u *universe) randSourceLite() *liteAccount {

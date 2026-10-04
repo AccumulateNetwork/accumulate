@@ -84,7 +84,6 @@ func TestAPartitionLedgerWithScheduledEventsCanBePulled(t *testing.T) {
 			ctx := context.Background()
 
 			peerDB := database.OpenInMemory(nil)
-			peerDB.SetObserver(database.NewDatabaseObserver())
 			batch := peerDB.Begin(true)
 			ledger := &protocol.SystemLedger{Url: sysLedger, Index: 204}
 			require.NoError(t, batch.Account(sysLedger).Main().Put(ledger))
@@ -109,7 +108,6 @@ func TestAPartitionLedgerWithScheduledEventsCanBePulled(t *testing.T) {
 			batch.Discard()
 
 			joinDB := database.OpenInMemory(nil)
-			joinDB.SetObserver(database.NewDatabaseObserver())
 			jb := joinDB.Begin(true)
 			defer jb.Discard()
 			write(t, jb.Account(sysLedger).Events(), c.joiner)

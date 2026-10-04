@@ -1176,6 +1176,7 @@ func (m *messages) store(batch *database.Batch) error {
 		return nil
 	}
 	for h, msg := range m.kept {
+		h := h
 		if err := batch.Message(h).Main().Put(msg); err != nil {
 			return fmt.Errorf("store message %x: %w", h[:4], err)
 		}

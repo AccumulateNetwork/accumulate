@@ -174,7 +174,6 @@ func (s *dbSource) QueryChainEntries(_ context.Context, u *url.URL, q *api.Chain
 func newObservedDB(t testing.TB) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 

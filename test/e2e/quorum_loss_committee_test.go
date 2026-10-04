@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -91,21 +90,4 @@ func TestAPartitionThatLostAQuorumHaltsAndResumesWhenItsValidatorsReturn(t *test
 	st := send()
 	sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
 	require.Greater(t, height(bvn0, "BVN0"), h0, "BVN0 did not resume once its validators returned")
-}
-
-// deliveredTo reports whether every synthetic transaction st produced has
-// executed at its destination.
-func deliveredTo(t *testing.T, sim *Sim, st *TransactionStatus) bool {
-	t.Helper()
-	r := sim.QueryTransaction(st.TxID, nil)
-	if r.Produced == nil || len(r.Produced.Records) == 0 {
-		return false
-	}
-	for _, p := range r.Produced.Records {
-		pr := sim.QueryTransaction(p.Value, nil)
-		if pr.Status != errors.Delivered {
-			return false
-		}
-	}
-	return true
 }

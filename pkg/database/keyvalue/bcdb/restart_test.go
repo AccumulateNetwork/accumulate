@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -115,6 +115,11 @@ func TestRestart_MisrouteSurvives(t *testing.T) {
 // one. Provoked by closing the store underneath the database: the first
 // Commit after that must fail, not succeed and poison the one after.
 func TestCommit_ReportsItsOwnWriteThroughError(t *testing.T) {
+	// Root writes through a directory's missing write permission, so the
+	// store cannot be made to fail this way under root (as in CI).
+	if os.Geteuid() == 0 {
+		t.Skip("cannot provoke a write-through failure by permissions as root")
+	}
 	dir := filepath.Join(t.TempDir(), "db")
 	db, err := Open(dir)
 	require.NoError(t, err)
@@ -131,7 +136,7 @@ func TestCommit_ReportsItsOwnWriteThroughError(t *testing.T) {
 	lost := record.NewKey("Message", [32]byte{10}, "Main")
 	perm := filepath.Join(db.kv.ShardDir(shardIndexOf(lost)), "perm")
 	require.NoError(t, os.Chmod(perm, 0o555))
-	defer os.Chmod(perm, 0o755)
+	defer func() { require.NoError(t, os.Chmod(perm, 0o755)) }()
 
 	batch := db.Begin(nil, true)
 	require.NoError(t, batch.Put(lost, []byte("lost")))

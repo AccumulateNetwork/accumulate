@@ -201,8 +201,11 @@ func firstIndexFrom(ctx context.Context, src Source, u *url.URL, index *api.Chai
 				if at >= end {
 					break
 				}
+				if r == nil {
+					return 0, nil, fmt.Errorf("the peer served entry %d of %s as no record", at, index.Name)
+				}
 				v, ok := r.Value.(*api.IndexEntryRecord)
-				if r == nil || !ok || v.Value == nil || r.Index != at {
+				if !ok || v.Value == nil || r.Index != at {
 					return 0, nil, fmt.Errorf("the peer served entry %d of %s as no index entry", at, index.Name)
 				}
 				page = append(page, v.Value)

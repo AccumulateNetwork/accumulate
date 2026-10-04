@@ -99,7 +99,6 @@ func TestARestartMidFillResumesFromTheRecord(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		db.SetObserver(database.NewDatabaseObserver())
 		return db
 	}
 	dst := open()

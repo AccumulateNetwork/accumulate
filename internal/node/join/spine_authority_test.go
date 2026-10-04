@@ -22,7 +22,6 @@ func newJoiningNode(t *testing.T, n int) (*PulledState, *database.Database, *cor
 	t.Helper()
 	here := protocol.PartitionUrl("BVN0")
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 
 	values, _ := genesisValues(t, n)
@@ -120,7 +119,6 @@ func TestTheTrustedSetsMoveOnlyAtAMatch(t *testing.T) {
 func TestAPulledNetworkDefinitionIsNotTrustedAfterARestart(t *testing.T) {
 	here := protocol.PartitionUrl("BVN0")
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)

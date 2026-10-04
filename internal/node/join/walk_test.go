@@ -246,7 +246,6 @@ func balanceIn(t *testing.T, db *database.Database, u *url.URL) int64 {
 func joiningAt(t *testing.T, peer *scriptedPeer) (*PulledState, *database.Database) {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, peer.partition, values)
@@ -271,11 +270,9 @@ func TestTheWalkNeverOverwritesWhatARecordWrote(t *testing.T) {
 	alice := protocol.AccountUrl("alice", "tokens")
 
 	behind := database.OpenInMemory(nil) // a peer still at block 10
-	behind.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = behind.Close() })
 	putTokens(t, behind, alice, 5)
 	ahead := database.OpenInMemory(nil) // a peer that has executed block 11
-	ahead.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = ahead.Close() })
 	putTokens(t, ahead, alice, 7)
 
@@ -322,7 +319,6 @@ func TestAWalkPageNewerThanTheRecordsIsCaughtUpByTheRecord(t *testing.T) {
 	alice := protocol.AccountUrl("alice", "tokens")
 
 	peerDB := database.OpenInMemory(nil)
-	peerDB.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = peerDB.Close() })
 	putTokens(t, peerDB, alice, 9)
 

@@ -224,6 +224,7 @@ func (b *Bullshark) GetCommitted() map[string]types.Round {
 	defer b.mu.RUnlock()
 	out := make(map[string]types.Round, len(b.committed))
 	for d, r := range b.committed {
+		d := d
 		out[hex.EncodeToString(d[:])] = r
 	}
 	return out

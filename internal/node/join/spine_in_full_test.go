@@ -49,7 +49,6 @@ func TestFetch_ASpineAccountIsTakenWholeWheneverItIsNamed(t *testing.T) {
 	other := protocol.AccountUrl("alice", "tokens")
 
 	peer := database.OpenInMemory(nil)
-	peer.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = peer.Close() })
 	// Entries with no message behind them: a peer that serves the pool so
 	// has not served it, and the fetch fails.

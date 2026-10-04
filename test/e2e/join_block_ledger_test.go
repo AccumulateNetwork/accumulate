@@ -322,20 +322,3 @@ func TestJoinFollowsTheRecordsAcrossAnyNumberOfBlocks(t *testing.T) {
 		"the node never pulled %v: the records after a pause of %d blocks were not all processed (#4356)",
 		savings, paused)
 }
-
-// balanceOf is the balance a store holds for a token account, or nil if it
-// does not hold the account at all.
-func balanceOf(t *testing.T, db database.Updater, u *url.URL) *big.Int {
-	t.Helper()
-	var bal *big.Int
-	View(t, db, func(batch *database.Batch) {
-		var acct *TokenAccount
-		err := batch.Account(u).Main().GetAs(&acct)
-		if errors.Is(err, errors.NotFound) {
-			return
-		}
-		require.NoError(t, err)
-		bal = new(big.Int).Set(&acct.Balance)
-	})
-	return bal
-}

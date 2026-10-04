@@ -1,4 +1,4 @@
-// Copyright 2025 The Accumulate Authors
+// Copyright 2026 The Accumulate Authors
 //
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file or at
@@ -41,8 +41,6 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -53,6 +51,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
@@ -495,6 +496,7 @@ func appendHashes(path string, hashes [][32]byte) error {
 		return err
 	}
 	for _, h := range hashes {
+		h := h
 		if _, err := f.Write(h[:]); err != nil {
 			_ = f.Close()
 			return err

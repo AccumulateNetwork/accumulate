@@ -90,7 +90,7 @@ func TestBuildRun_AHeldHeadThatMayNotRunIsReported(t *testing.T) {
 		s.b.Time = time.Date(2026, 9, 29, 5, 0, 0, 0, time.UTC)
 
 		m := s.memberWithProof(0, 3)
-		s.process([]messaging.Message{m}, m)
+		_ = s.process([]messaging.Message{m}, m)
 		require.True(t, s.collected(1), "held ahead of its anchor")
 
 		require.Empty(t, s.run())

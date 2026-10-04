@@ -122,7 +122,6 @@ func TestAFillingPeersAnswerIsNoVerdict(t *testing.T) {
 			namedPeer{servedAt{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: loaded, Partition: "BVN0"})}, block: 10}, "loaded"},
 		}}
 		joiner = database.OpenInMemory(nil)
-		joiner.SetObserver(database.NewDatabaseObserver())
 		t.Cleanup(func() { _ = joiner.Close() })
 		values, _ := genesisValues(t, 4)
 		putNetwork(t, joiner, here, values)
@@ -148,7 +147,7 @@ func TestAFillingPeersAnswerIsNoVerdict(t *testing.T) {
 		}
 		markAccountSection(t, filling, alice)
 		counting.calls = map[string]int{}
-		return
+		return loaded, filling, counting, joiner, s, peers
 	}
 
 	t.Run("the next peer is asked", func(t *testing.T) {

@@ -38,7 +38,6 @@ func openDisk(t *testing.T, dir string) *database.Database {
 	t.Helper()
 	db, err := database.OpenLevelDB(dir, nil)
 	require.NoError(t, err)
-	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 
@@ -50,7 +49,6 @@ func openBcdb(t *testing.T, dir string) (*database.Database, *bcdb.Database) {
 	store, err := bcdb.Open(filepath.Join(dir, "db"))
 	require.NoError(t, err)
 	db := database.New(store, nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	return db, store
 }
 

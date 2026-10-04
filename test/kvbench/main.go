@@ -1,3 +1,9 @@
+// Copyright 2026 The Accumulate Authors
+//
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file or at
+// https://opensource.org/licenses/MIT.
+
 // kvbench drives one key-value backend through the keyvalue.Beginner
 // interface with an Accumulate-shaped write mix, paced at a fixed
 // transaction rate, and reports what it cost.  Run it once per backend
@@ -123,7 +129,7 @@ func readRSSMB() float64 {
 	for _, line := range strings.Split(string(st), "\n") {
 		if strings.HasPrefix(line, "VmRSS:") {
 			var kb float64
-			fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(line, "VmRSS:")), "%f", &kb)
+			_, _ = fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(line, "VmRSS:")), "%f", &kb) // an unparsed line leaves 0
 			return kb / 1024
 		}
 	}
@@ -140,7 +146,7 @@ func countFDs() int {
 
 func (m *monitor) diskUsage() (mb float64, files int64) {
 	var bytes int64
-	filepath.Walk(m.dir, func(p string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(m.dir, func(p string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
 			bytes += info.Size()
 			files++
@@ -206,7 +212,9 @@ func (m *monitor) serve(addr string) {
 		}
 		m.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s)
+		if err := json.NewEncoder(w).Encode(s); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 	http.HandleFunc("/samples.csv", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")
@@ -257,7 +265,11 @@ func (m *monitor) serve(addr string) {
 		}
 		fmt.Fprint(w, "</table>")
 	})
-	go http.ListenAndServe(addr, nil)
+	go func() {
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			fmt.Fprintf(os.Stderr, "monitor: %v\n", err)
+		}
+	}()
 }
 
 func main() {
@@ -286,7 +298,10 @@ func main() {
 	if *profiles == "" {
 		*profiles = *dir + "-profiles"
 	}
-	os.MkdirAll(*profiles, 0o755)
+	if err := os.MkdirAll(*profiles, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "profiles: %v\n", err)
+		os.Exit(1)
+	}
 
 	var db keyvalue.Beginner
 	var closer interface{ Close() error }
@@ -468,13 +483,15 @@ func main() {
 
 	disk, files := mon.diskUsage()
 	var ru syscall.Rusage
-	syscall.Getrusage(syscall.RUSAGE_SELF, &ru)
+	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
+		fmt.Fprintf(os.Stderr, "getrusage: %v\n", err)
+	}
 	cpu := float64(ru.Utime.Sec) + float64(ru.Utime.Usec)/1e6 + float64(ru.Stime.Sec) + float64(ru.Stime.Usec)/1e6
 	var hwmKB int64
 	if st, err := os.ReadFile("/proc/self/status"); err == nil {
 		for _, line := range strings.Split(string(st), "\n") {
 			if strings.HasPrefix(line, "VmHWM:") {
-				fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(line, "VmHWM:")), "%d", &hwmKB)
+				_, _ = fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(line, "VmHWM:")), "%d", &hwmKB) // an unparsed line leaves 0
 			}
 		}
 	}
@@ -507,7 +524,10 @@ func main() {
 	}
 	if *out != "" {
 		j, _ := json.MarshalIndent(res, "", "  ")
-		os.WriteFile(*out, j, 0o644)
+		if err := os.WriteFile(*out, j, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "write %s: %v\n", *out, err)
+			os.Exit(1)
+		}
 	}
 	if *monitorAddr != "" {
 		mon.mu.Lock()

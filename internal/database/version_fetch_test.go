@@ -205,6 +205,7 @@ func TestPut_DifferentialAgainstTheRead(t *testing.T) {
 	require.Equal(t, oldRoot, newRoot, "state root")
 	require.Equal(t, len(oldEntries), len(newEntries), "committed keys")
 	for k, v := range oldEntries {
+		k := k
 		require.Equal(t, v, newEntries[k], "committed bytes for %x", k[:4])
 	}
 	require.Less(t, newReads, oldReads, "the version-only path reads less (%d vs %d)", newReads, oldReads)

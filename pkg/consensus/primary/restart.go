@@ -29,7 +29,7 @@ func (p *Primary) SetOnAuthored(fn func(*types.Header) error) {
 // is raised to it, since the node had reached it. Call before Start, after
 // the DAG has been restored.
 func (p *Primary) RestoreAuthored(h *types.Header) {
-	if h == nil || !ed25519.PublicKey(h.Author).Equal(p.config.KeyPair.Public()) {
+	if h == nil || !h.Author.Equal(p.config.KeyPair.Public()) {
 		return
 	}
 	p.roundMu.Lock()

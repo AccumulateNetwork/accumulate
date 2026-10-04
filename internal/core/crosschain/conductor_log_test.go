@@ -167,7 +167,7 @@ func anchorLogGlobals(key ed25519.PublicKey, active bool) *network.GlobalValues 
 			{ID: "BVN1", Type: protocol.PartitionTypeBlockValidator},
 		},
 	}
-	peer := ed25519.PrivateKey(acctesting.GenerateKey("anchor-log", "peer")).Public().(ed25519.PublicKey)
+	peer := acctesting.GenerateKey("anchor-log", "peer").Public().(ed25519.PublicKey)
 	for _, part := range []string{protocol.Directory, "BVN1"} {
 		g.Network.AddValidator(peer, part, true)
 		g.Network.AddValidator(key, part, active)
@@ -201,7 +201,7 @@ func runOneBlockAs(t *testing.T, part *protocol.PartitionInfo, active bool) *cou
 
 	bus := events.NewBus(nil)
 	require.NoError(t, c.Start(bus))
-	globals := anchorLogGlobals(ed25519.PrivateKey(key).Public().(ed25519.PublicKey), active)
+	globals := anchorLogGlobals(key.Public().(ed25519.PublicKey), active)
 	require.NoError(t, bus.Publish(events.WillChangeGlobals{New: globals}))
 	require.NoError(t, bus.Publish(execute.WillBeginBlock{BlockParams: execute.BlockParams{
 		Context: context.Background(),

@@ -21,7 +21,6 @@ import (
 func servingQuerierDB(t *testing.T) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 

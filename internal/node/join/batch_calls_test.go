@@ -80,7 +80,6 @@ func TestARoundCostsCallsPerPageNotPerBlockOrAccount(t *testing.T) {
 
 	counting := &countingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}), calls: map[string]int{}}
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
@@ -204,7 +203,6 @@ func TestAnAccountIsNotTakenTorn(t *testing.T) {
 		},
 	}
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)

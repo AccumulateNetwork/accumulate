@@ -61,7 +61,6 @@ func (s *dbSource) QueryBptPage(_ context.Context, _ *url.URL, query *api.BptPag
 func observedDB(t *testing.T) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	return db
 }
 

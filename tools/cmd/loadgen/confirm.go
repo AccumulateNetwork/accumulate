@@ -225,6 +225,7 @@ func (e *env) syncPage(ctx context.Context, p *keyPage) {
 	// keys; the page holds their hashes, and EntryByKey does that comparison.
 	kept := p.keys[:0]
 	for _, k := range p.keys {
+		k := k
 		if _, _, found := onChain.EntryByKey(k[32:]); found {
 			kept = append(kept, k)
 		}

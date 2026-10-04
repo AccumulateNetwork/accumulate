@@ -419,6 +419,7 @@ func TestTheSyntheticLedgerIsTakenWithItsCompanions(t *testing.T) {
 
 	View(t, part.NodeDatabase(joiner), func(batch *database.Batch) {
 		for h := range companions {
+			h := h
 			var txn *messaging.TransactionMessage
 			err := batch.Message(h).Main().GetAs(&txn)
 			require.NoError(t, err, "the synthetic ledger was taken without the transaction %x a synthetic names", h[:4])

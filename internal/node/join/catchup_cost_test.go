@@ -80,7 +80,6 @@ func bcdbStore(t *testing.T, name string) *database.Database {
 	kv.StatsEvery = 0
 	require.NoError(t, kv.SetMergeLag(20))
 	db := database.New(kv, nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
@@ -197,7 +196,6 @@ func catchUpCost(t *testing.T, u, k int) (walkCalls, walkCommits, recordCalls, r
 
 	commits := 0
 	db := database.New(committingStore{memory.New(nil), &commits}, nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
@@ -237,7 +235,7 @@ func catchUpCost(t *testing.T, u, k int) (walkCalls, walkCommits, recordCalls, r
 	recordCommits = commits
 	t.Logf("%d accounts, %d blocks: the walk asked %d calls and made %d commits; the records round asked %d calls:%v and made %d commits",
 		u, k, walkCalls, walkCommits, recordCalls, timed, recordCommits)
-	return
+	return walkCalls, walkCommits, recordCalls, recordCommits
 }
 
 // TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord — #4461. At
@@ -311,7 +309,6 @@ func TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused(t *testing.T) {
 	q := &omittingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}), victim: bob}
 
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
@@ -371,7 +368,6 @@ func TestAnAnswerStrippedOfItsRecordsIsRefused(t *testing.T) {
 	q := recordlessQuerier{apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
 
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)

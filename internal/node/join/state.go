@@ -1035,6 +1035,7 @@ func coversExactly(named map[[32]byte]*url.URL, answered map[[32]byte]bool) erro
 		}
 	}
 	for k := range answered {
+		k := k
 		if _, ok := named[k]; !ok {
 			return errors.Conflict.WithFormat("the answer serves an account no record names (%x)", k[:8])
 		}

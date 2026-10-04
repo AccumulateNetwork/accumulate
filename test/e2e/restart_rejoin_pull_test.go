@@ -237,21 +237,3 @@ func partitionBlock(t *testing.T, db *database.Database, part *url.URL) uint64 {
 	}
 	return ledger.Index
 }
-
-// directoryAnchoredThrough is the highest block of a partition the Directory
-// has anchored: the frontier a pulled account has to be settled against.
-func directoryAnchoredThrough(t *testing.T, sim *Sim, partition string) uint64 {
-	t.Helper()
-	batch := sim.S.Partition("Directory").NodeDatabase(0).Begin(false)
-	defer batch.Discard()
-	var ledger *AnchorLedger
-	if err := batch.Account(DnUrl().JoinPath(AnchorPool)).Main().GetAs(&ledger); err != nil {
-		return 0
-	}
-	for _, seq := range ledger.Sequence {
-		if seq.Url.Equal(PartitionUrl(partition)) {
-			return seq.Delivered
-		}
-	}
-	return 0
-}

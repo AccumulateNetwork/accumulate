@@ -431,12 +431,6 @@ func (n *lossyNet) seq(num uint64) *messaging.SequencedMessage {
 	return n.seqs[num]
 }
 
-func (n *lossyNet) written(num uint64) int {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return n.writes[num]
-}
-
 // writtenAlone counts the envelopes written that carry num and nothing below
 // it: the dispatched package, not a heal answer that starts at the hole.
 func (n *lossyNet) writtenAlone(num uint64) int {
@@ -465,17 +459,6 @@ func (n *lossyNet) heldCount(num uint64) int {
 		}
 	}
 	return c
-}
-
-func (n *lossyNet) carrying(num uint64) func(*messaging.Envelope) bool {
-	return func(e *messaging.Envelope) bool {
-		for _, m := range n.numbers(e) {
-			if m == num {
-				return true
-			}
-		}
-		return false
-	}
 }
 
 func envelopeOf(r *message.Addressed) *messaging.Envelope {

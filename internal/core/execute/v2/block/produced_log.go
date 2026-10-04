@@ -130,6 +130,7 @@ func (b *Block) noteProducedKinds(produced []*ProducedMessage, dest []*url.URL) 
 	if len(l.reemit) > 0 {
 		var named []string
 		for h, r := range l.reemit {
+			h := h
 			named = append(named, fmt.Sprintf("%s %s before=%d times=%d", hex.EncodeToString(h[:]), r.kind, r.before, r.times))
 		}
 		sort.Strings(named)

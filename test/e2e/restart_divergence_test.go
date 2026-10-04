@@ -8,7 +8,6 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -29,25 +28,6 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
-
-// One validator restarts while its peers continue. Run 20260917T223150Z:
-// every restarted validator signed a different anchor body from its first
-// anchor after the restart and on every anchor after, so each restart took
-// one validator out of the anchor quorum, and the fifth Directory restart
-// took the majority below the threshold and nothing executed anywhere
-// again. A pause did not do this (#4290).
-//
-// The suspect is staging: memory by design, not rebuilt from the store. A
-// restarted node loses the entries it held unexecuted -- received, waiting
-// on a proof -- and its peers execute them at block N when the proof lands
-// while it executes them only once healing has brought them back. Different
-// state at N, different root at N, and the root chain differs forever after.
-//
-// This stands one BVN1 validator where a restarted one stands: its staging
-// emptied while its peers keep what they hold, with entries held on all of
-// them at that moment. Then the anchors that prove those entries arrive, and
-// the three nodes' root chains are compared.
-func itoa(v uint64) string { return fmt.Sprint(v) }
 
 // The join is the production loop's: join.Run, with the simulator's node as
 // its buffer, the executor's stage, the pull addressed at named peers with
@@ -171,7 +151,7 @@ func TestOneValidatorRestartDoesNotDiverge(t *testing.T) {
 		defer tx.Discard()
 		n := 0
 		for _, st := range tx.Streams() {
-			n += int(st.Held)
+			n += st.Held
 		}
 		return n
 	}

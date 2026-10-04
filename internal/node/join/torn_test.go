@@ -66,7 +66,6 @@ func TestCheckStoreNamesATornChain(t *testing.T) {
 func TestATornStoreIsNeverResumedOnto(t *testing.T) {
 	here := protocol.PartitionUrl("BVN0")
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
@@ -86,7 +85,6 @@ func TestATornStoreIsNeverResumedOnto(t *testing.T) {
 func TestANodeAtGenesisNeverTakesTheWholeRestartExit(t *testing.T) {
 	here := protocol.PartitionUrl("BVN0")
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)

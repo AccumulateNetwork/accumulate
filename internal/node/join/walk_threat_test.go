@@ -23,7 +23,6 @@ import (
 func peerStore(t *testing.T) *database.Database {
 	t.Helper()
 	db := database.OpenInMemory(nil)
-	db.SetObserver(database.NewDatabaseObserver())
 	t.Cleanup(func() { _ = db.Close() })
 	return db
 }

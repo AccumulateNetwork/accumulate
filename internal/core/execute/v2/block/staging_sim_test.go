@@ -305,7 +305,7 @@ func (s *stagingSim) run() (executed []uint64) {
 		require.True(s.t, ok, "a staged id is held in staging")
 		loaded := held.Message
 		before := pos.delivered
-		s.process([]messaging.Message{loaded}, loaded)
+		_ = s.process([]messaging.Message{loaded}, loaded)
 		if pos.delivered > before {
 			executed = append(executed, e.number)
 		}

@@ -135,7 +135,7 @@ func (s *PulledState) Diverged(ctx context.Context) (uint64, bool, error) {
 				"block", o.Block, "partition", s.partition)
 		}
 		if s.machine.State() != nodestate.StateActive {
-			s.matched = tracker.Match{Block: o.Block, Anchor: o.Anchor}
+			s.matched = tracker.Match(o)
 			s.Promote(o.Block)
 		}
 	}
@@ -323,14 +323,6 @@ func (s *PulledState) markHeadOnly(urls ...*url.URL) {
 		return
 	}
 	s.writeHeadOnly(add[0], func(set values.Set[*url.URL]) error { return set.Add(add...) })
-	mBackfillLeft.WithLabelValues(s.label).Set(float64(len(s.headOnly)))
-}
-
-// unmarkHeadOnly records that the account keyed k is held whole.
-func (s *PulledState) unmarkHeadOnly(k [32]byte) {
-	s.backfillMu.Lock()
-	defer s.backfillMu.Unlock()
-	s.unmarkHeadOnlyLocked(k)
 	mBackfillLeft.WithLabelValues(s.label).Set(float64(len(s.headOnly)))
 }
 

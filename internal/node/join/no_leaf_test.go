@@ -80,12 +80,3 @@ func TestFetch_DropsANameNoPeerHoldsALeafFor(t *testing.T) {
 			"a name a source did not answer for may be held by that source, so it is asked again")
 	})
 }
-
-// joiningPeer is a peer that is itself BOOTING: its querier refuses every
-// read as NotReady (querier.servingFor), exactly as a second node joining the
-// same partition does.
-type joiningPeer struct{ pull.Source }
-
-func (joiningPeer) QueryAccount(context.Context, *url.URL, *api.DefaultQuery) (*api.AccountRecord, error) {
-	return nil, errors.NotReady.With("the peer is joining and cannot answer for state it has not executed")
-}
