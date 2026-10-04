@@ -95,7 +95,15 @@ def dwell(run, label, minutes=5, must_move=PARTS, must_stand=()):
     h0 = live_heights(must_move); time.sleep(minutes * 60); h1 = heights()
     moved = {p: (h1.get(p, 0) or 0) - (h0.get(p, 0) or 0) for p in PARTS}
     ok = all(moved[p] > 0 for p in must_move) and all(moved[p] == 0 for p in must_stand)
-    record(run, f"{label}: dwell {minutes} min, blocks produced {moved}; must move {list(must_move)}, must stand {list(must_stand)} -> {'ok' if ok else 'FAIL'}")
+    # Blocks are not enough: in run 20261003T232435Z every partition closed
+    # blocks while cross-partition delivery was stalled for twenty minutes,
+    # and every dwell passed (#4517). A partition expected to move must not
+    # end the dwell with its inbound delivery stalled longer than the dwell.
+    stalled = {p: round(s) for p, s in ((dash() or {}).get("deliveryStall") or {}).items()
+               if p in must_move and s >= 120}
+    if stalled:
+        ok = False
+    record(run, f"{label}: dwell {minutes} min, blocks produced {moved}; must move {list(must_move)}, must stand {list(must_stand)}; delivery stalled {stalled or 'nowhere'} -> {'ok' if ok else 'FAIL'}")
     return ok
 
 def step(run, name, fn):
