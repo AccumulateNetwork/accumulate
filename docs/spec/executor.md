@@ -253,11 +253,11 @@ where they disagree with it, this wins.
    record after S named anything in it. **A section's load never overwrites
    a value the records wrote:** an account a block-ledger record has already
    brought current is skipped, because the section's page may be older than
-   that record. The other direction needs no rule: when the page is newer than
-   the records processed so far, the account it wrote was changed by a block
-   the records have not reached yet, and that block's record names it, so it
-   is pulled again when the records get there. Either way every account
-   ends at the state of the last record processed.
+   that record. The other direction does not arise: the section is loaded as
+   of `L` (§3a), so no page is newer than the records processed so far, and
+   every account ends at the state of the last record processed. Both are
+   checked at the write, by the block each state is as of (§3a, "Every
+   account state the node holds is stamped").
 2. **Keep processing the records.** Until the match, every new block's record
    is processed as it comes, in order, so the local tree stays current.
 3. **The match is the proof.** Only when every account is present and current
@@ -581,12 +581,20 @@ not loaded are redirected while it loads; a synced node tries first and
 redirects on a not-loaded failure; a peer asked for a section or a page it does
 not hold redirects to one that holds it. Answers are used when they match the
 cryptography — the signed root, the section's hash, the entry's hash — whoever
-served them. There is no as-of-H load and no retention of pre-change state:
-a section loaded while the node executes is the peer's current state, and a
-root that then differs from its anchor is repaired from the block ledger
-("Two mismatches"); the entries an account is missing are found from its
-chains once it has caught up (DIFFERENCES E26 says what of the redirect is not
-built; E24, the as-of-H load, and E25, validation loading, are built).
+served them. **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
+supersedes 2026-10-02, "no as-of-H load"). A block `h+1` that reads a section
+not loaded takes it as the peers held it at `h`, their BPT history serving the
+leaves (`BptPage.ForHeight`) and the accounts (`AccountStates.ForHeight`); the
+pull takes the sections the records opened as of `L`. Taken as the peer holds
+it now, a section arrives holding the state the blocks after `h` left -- the
+very account the block is about to change among them -- and the block
+executes over it twice: on soak `20261005T043754Z` every late follower was
+demoted within a block or two of every handoff, 12 to 15 times each, until
+every section happened to be loaded. The history's depth bounds how far behind
+a block a load may ask (`bpt-history-depth`, 1024 blocks on the validators).
+The entries an account is missing are found from its chains once it has caught
+up (DIFFERENCES E26 says what of the redirect is not built; E25, validation
+loading, is built).
 
 #### 2. Nothing is proven before the match, and the match is the proof
 
@@ -1014,9 +1022,10 @@ Each round, in this order:
    and in one `AccountStates` call per page every leaf this node does not
    hold, or holds and does not agree with, unless a record has named it: the
    page may be older than that record, and **a section's load never
-   overwrites a value the records wrote**. A page newer than the records wrote
-   an account a later block changed, and that block's record names it, so
-   every account ends at the state of the last record processed.
+   overwrites a value the records wrote**. The sections are loaded as of `L`
+   (§3a), so no page is newer than the records: every account ends at the
+   state of the last record processed, and the load raises no block the
+   records must catch up to.
 
 **The state is complete** when the top is taken, every section opened is
 loaded, nothing is owed, and `L` is at or above the highest `B` any reply was
@@ -1253,8 +1262,28 @@ as a section under a marker is.
 
 **Loading a section** pages the section's leaves from a peer (`BptPage` from
 the section's highest key, until the keys leave the section) and asks for the
-accounts behind them (`AccountStates`), then writes the accounts, deletes the
-marker and inserts the leaves. An account absent from a loaded section does
+accounts behind them (`AccountStates`), both **as of the node's block** -- `h`
+when block `h+1` reads it, `L` in the pull -- then writes the accounts, deletes
+the marker and inserts the leaves. The leaves and the accounts of one load are
+of one block, and no later one than the node's own.
+
+**Every account state the node holds is stamped with the block it is as of**
+(Paul, 2026-10-05: "bookkeeping on account states as we load so we always can
+tell the most recently updated account states in the network, so we always
+know what we can overwrite rather than having rules about which actor can
+write or not write an account state"). The stamp is the account's `StateBlock`,
+outside the hashed state like `SyncedEntries`: no leaf, root or receipt
+depends on it. Whoever writes an account stamps it -- the walk and the top
+with the block the page was as of, a record with the record's block, a section
+load and the fill with the block the section was taken as of, the overlap's
+settle with the block it settles, execution with the block it executes -- and
+**a write older than the state held is dropped**, whoever makes it. A write
+for the block the state is already as of that differs from it is not a race:
+it is the account that failed to have the right state, said with the block
+and both leaves, and the block ledger's state stands. So the invariants "a
+section's load never overwrites a value the records wrote" (§3) and "execution
+must agree with the record that follows it" are facts checked at the write,
+not rules about who is writing. An account absent from a loaded section does
 not exist; **an account absent from a section not loaded is not yet known**:
 the section is loaded and the account looked for again. Only execution decides
 that an account does not exist.

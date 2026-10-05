@@ -529,6 +529,29 @@ unproven only when the peer cannot give one.
   that subtree's pages again -- on a 2.3M-entry chain the bottom subtree is
   2^21 entries -- though nothing proven above it is asked for again.
 
+### E29. Sections are loaded as the peer holds them now, and account states carry no as-of block
+
+*[#4518](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4518)*
+
+**Spec** (executor.md, "Sync", Redirection and §3a): a section is loaded as
+of the node's block -- `h` for block `h+1`, `L` in the pull -- and every
+account state is stamped with the block it is as of; a write older than the
+state held is dropped, and a differing write for the same block is the named
+failure.
+
+**Code** (`internal/node/join/sections.go:486, :552`; `pull_sections.go`):
+`fetch` calls `sectionLeavesAt(..., 0)` and `statesAt(..., 0)`, the peer's
+current view, in a block's load and in the fill; `loadOpened` pages the
+sections the records opened at the peer's current block and raises
+`p.highest`, so the pull's records must catch up to that block. There is no
+`StateBlock`: the pull skips accounts the records brought current, the fill
+drops a section a block touched, and nothing else compares blocks.
+
+Measured: soak `20261005T043754Z`, followers added 08:29 AM CDT: 12 / 15 / 5
+demotions in the first 11 minutes after the BVN handoff, each after a section
+load `peer-block − block` of 0–12 (block = `h+1`); none once every section was
+loaded.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
