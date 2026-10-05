@@ -3304,7 +3304,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 <div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
   <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node); the same columns for every follower. A follower added to the running network goes: downloading state &rarr; proving state &rarr; checking against the ledger (each block executed and compared with its block-ledger record; a mismatch goes back to the ledger) &rarr; holding (20 perfect blocks in a row, every section loaded) &rarr; synced (100 more blocks with no regression; a regression while holding means it was still syncing). A follower started with the network executes from genesis and never joins. Heights are each node&rsquo;s own executed block (its metrics), network = the validators&rsquo; highest. Counts are whole-run and never clear.</div>
-  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>state now</th><th>executed / network (block)</th><th>behind (blocks)</th><th>running for</th><th>time to state proven</th><th>time to synced (20 perfect blocks, then 100 with no regression)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>returns to the ledger (#, run)</th><th>regressions while holding (#, run)</th><th>root mismatches (#, run)</th><th>accounts a repair changed (#, run)</th><th>memory (MiB, now)</th><th>container</th></tr></thead><tbody></tbody></table></div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>state now</th><th>blocks executed with no failure (since the handoff, now)</th><th>running for</th><th>time to state proven</th><th>time to synced (20 perfect blocks, then 100 with no regression)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>returns to the ledger (#, run)</th><th>regressions while holding (#, run)</th><th>root mismatches (#, run)</th><th>accounts a repair changed (#, run)</th><th>memory (MiB, now)</th><th>container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
   <div class=panel data-p=synflow>
@@ -3477,7 +3477,7 @@ function nodestateView(nsd){
 // The Followers panel (followerJoins on /data): one row per follower x
 // partition, from each container's log. Absent is `— not measured`, never 0.
 function followersView(fj,jp,net){
-  const COLS=15;
+  const COLS=14;
   if(!fj||!fj.rows)return `<tr><td class=mut colspan=${COLS}>— not measured: the monitor has not read the followers yet</td></tr>`;
   if(!fj.rows.length)return `<tr><td class=mut colspan=${COLS}>${fj.why||'no follower in this topology'}</td></tr>`;
   const d=s=>s==null?'—':(s<3600?`${Math.floor(s/60)}m ${String(Math.floor(s%60)).padStart(2,'0')}s`:`${Math.floor(s/3600)}h ${String(Math.floor(s%3600/60)).padStart(2,'0')}m`);
@@ -3501,15 +3501,18 @@ function followersView(fj,jp,net){
     const [word,cls]=STATE[key]||[key,'mut'];
     const gone=r.life==='waiting'||r.life==='removed';
     const exec=gone?null:(g.executed??r.height);
-    const network=(net||{})[r.partition]??r.network;
-    const behind=(exec!=null&&network!=null)?Math.max(0,network-exec):null;
+    // Blocks executed since the node last handed off, none of which failed:
+    // its executed height above the block it went ACTIVE at. Blank while it
+    // is not executing -- nothing is counted that is not a block executed.
+    const executing=!gone&&(r.phase==='ACTIVE'||r.phase==='synced')&&exec!=null&&r.activeBlock!=null;
+    const okBlocks=executing?Math.max(0,exec-r.activeBlock):null;
     const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')
       :r.oomKilled?`<span class=red>OOMKilled (exit ${r.exitCode})</span>`
       :r.status!=='running'?`<span class=red>${r.status} (exit ${r.exitCode})</span>`:'running';
     const na=launched?'<span class=mut>— (never joined)</span>':'—';
     return `<tr><td class=name>${r.container} → ${shortP(r.partition)}${launched?' <span class=mut>(started with the network)</span>':''}</td>`
       +`<td class=${cls}>${word}</td>`
-      +`<td>${gone?'—':`${fmt(exec)} / ${fmt(network)}`}</td><td>${gone?'—':n(behind,'yel')}</td>`
+      +`<td>${okBlocks==null?'—':`<span class=grn>${fmt(okBlocks)}</span>`}</td>`
       +`<td>${gone?'—':d(r.sinceAddSec)}</td>`
       +`<td>${launched?na:(r.toProvenSec!=null?d(r.toProvenSec):'—')}</td><td><b>${launched?na:(r.toSyncedSec!=null?d(r.toSyncedSec):'—')}</b></td>`
       +`<td>${gone?'—':n(g.sectionsNotLoaded??0,'yel')}</td><td>${gone?'—':n(g.backfillLeft??0,'yel')}</td>`

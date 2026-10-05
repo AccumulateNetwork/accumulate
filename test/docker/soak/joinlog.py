@@ -31,6 +31,7 @@ import time
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 PART = re.compile(r"\bpartition=(\S+)")
+BLOCK = re.compile(r"\bblock=(\d+)")
 # Order matters: "not executing in agreement" contains "executing in agreement".
 PHASES = (
     ("not executing in agreement", "BOOTING"),
@@ -99,7 +100,11 @@ def new_partition():
     return {"phase": "not started", "phaseAt": None, "firstActiveAt": None,
             "firstWalkedAt": None, "firstProvenAt": None, "firstSyncedAt": None,
             "rootMisses": 0, "repairs": 0, "repairChanged": 0, "drops": 0,
-            "overlapReturns": 0, "sectionsLoaded": 0, "regressions": 0}
+            "overlapReturns": 0, "sectionsLoaded": 0, "regressions": 0,
+            # The block the node last went ACTIVE at, None while it is not:
+            # the blocks it has executed since, with no failure, are its
+            # executed height above this (Paul, 2026-10-05).
+            "activeBlock": None}
 
 
 class Reader:
@@ -158,6 +163,11 @@ class Reader:
                         p["firstProvenAt"] = at
                     if phase == "BOOTING":
                         p["drops"] += 1
+                        p["activeBlock"] = None
+                    if phase == "ACTIVE":
+                        b = BLOCK.search(ln)
+                        if b:
+                            p["activeBlock"] = int(b.group(1))
                     break
             for key, field in COUNTS:
                 if key in ln:
@@ -278,6 +288,7 @@ def rows(followers, reader, heights, lives, state, mem, now):
                 "sectionsLoaded": lp["sectionsLoaded"] > 0,
                 "rootMisses": lp["rootMisses"], "repairs": lp["repairs"],
                 "repairChanged": lp["repairChanged"], "drops": lp["drops"],
+                "activeBlock": lp["activeBlock"],
                 "memMiB": mem.get(c),
                 "status": st["status"] if st else None,
                 "exitCode": st["exitCode"] if st else None,

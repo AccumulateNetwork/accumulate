@@ -55,6 +55,18 @@ class ThePhaseAndCounts(unittest.TestCase):
         self.assertEqual("BOOTING", r.parts["f"]["bvn1"]["phase"])
         self.assertIsNone(r.parts["f"]["bvn1"]["firstActiveAt"])
 
+    def test_the_active_block_is_the_latest_active_line_and_a_drop_clears_it(self):
+        r = joinlog.Reader()
+        r.feed("f", LOG)
+        # Every fixture line says block=9; the last ACTIVE line sets it, and
+        # the BOOTING between cleared the earlier one.
+        bvn = r.parts["f"]["bvn1"]
+        self.assertEqual("ACTIVE", bvn["phase"])
+        self.assertEqual(9, bvn["activeBlock"])
+        r2 = joinlog.Reader()
+        r2.feed("f", [LOG[8]])
+        self.assertIsNone(r2.parts["f"]["bvn1"]["activeBlock"])
+
     def test_a_line_already_read_is_not_counted_again(self):
         # `docker logs --since` returns the line at the boundary again.
         r = joinlog.Reader()
@@ -139,10 +151,17 @@ class ThePanelRenders(unittest.TestCase):
              "status": "exited", "exitCode": 137, "oomKilled": True},
             {"container": "acc-bvn2-fol1", "partition": "BVN2", "life": "waiting",
              "phase": "not added", "rootMisses": 0, "repairs": 0, "repairChanged": 0,
-             "drops": 0, "status": None}]})
+             "drops": 0, "status": None},
+            {"container": "acc-bvn3-fol2", "partition": "BVN3", "life": "added",
+             "phase": "ACTIVE", "height": 120, "activeBlock": 100, "sinceAddSec": 300,
+             "toActiveSec": 140, "rootMisses": 0, "repairs": 0, "repairChanged": 0,
+             "drops": 0, "status": "running", "exitCode": 0, "oomKilled": False}]})
         self.assertIn("acc-bvn1-fol1 → DN", html)
         self.assertIn("repairing: root ≠ anchor", html)
-        self.assertIn("5 / 9", html)
+        # Blocks executed with no failure: the executed height above the block
+        # the node went ACTIVE at, green; nothing while it is not executing.
+        self.assertIn('<span class=grn>20</span>', html)
+        self.assertNotIn("5 / 9", html)
         self.assertIn("2m 05s", html)
         self.assertIn("OOMKilled (exit 137)", html)
         self.assertIn("812", html)
