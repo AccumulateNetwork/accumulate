@@ -54,6 +54,9 @@ type sectionsJoin struct {
 	// it executed anything.
 	notLoadedAtHandoff, notLoadedAtMatch int
 
+	// roundsToMatch is how many pull rounds the join took to its first match.
+	roundsToMatch int
+
 	alice, bob *url.URL
 	aliceKey   []byte
 	ts         uint64
@@ -64,6 +67,10 @@ type sectionsJoin struct {
 	spread bool
 	k      int
 	buf    join.Buffer
+	// depositsPerRound is how many deposits each round of the join submits
+	// without waiting for them, to execute in the blocks the round's hook
+	// steps; zero is one awaited send every fifth round.
+	depositsPerRound int
 }
 
 const sectionsAccounts = 600
@@ -200,7 +207,12 @@ func (j *sectionsJoin) run() {
 	state := j.part.NodeJoinState(j.fresh)
 	stepping := &steppingState{cancel: cancel, State: state, leaveBackfill: true, step: func(round int) {
 		if j.notLoadedAtHandoff < 0 || state.Machine().State() != nodestate.StateActive {
-			if j.spread || round%5 == 0 {
+			switch {
+			case j.depositsPerRound > 0:
+				for i := 0; i < j.depositsPerRound; i++ {
+					j.submitDeposit()
+				}
+			case j.spread || round%5 == 0:
 				j.send()
 			}
 			j.sim.StepN(3)
@@ -246,6 +258,7 @@ func (c *countingAtHandoff) Matched(ctx context.Context) (uint64, bool, error) {
 	q, ok, err := c.steppingState.Matched(ctx)
 	if ok && c.j.notLoadedAtMatch < 0 {
 		c.j.notLoadedAtMatch = c.j.part.NodeJoinState(c.j.fresh).SectionsNotLoaded()
+		c.j.roundsToMatch = c.steppingState.round
 	}
 	return q, ok, err
 }
@@ -262,6 +275,18 @@ func (j *sectionsJoin) send() {
 			SendTokens(1, 0).To(to).
 			SignWith(j.alice, "book", "1").Version(1).Timestamp(j.ts).PrivateKey(j.aliceKey))
 	j.sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
+}
+
+// submitDeposit submits one deposit into the next of many without waiting
+// for it: it executes in whatever block comes next.
+func (j *sectionsJoin) submitDeposit() {
+	j.ts++
+	to := j.many[j.k%len(j.many)]
+	j.k++
+	j.sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(j.alice, "tokens").
+			SendTokens(1, 0).To(to).
+			SignWith(j.alice, "book", "1").Version(1).Timestamp(j.ts).PrivateKey(j.aliceKey))
 }
 
 // notLoaded is whether the fresh node holds the account's section by its hash
@@ -399,8 +424,32 @@ func TestABlockExecutedBehindThePeersLoadsASectionAsOfItsOwnBlock(t *testing.T) 
 	// not exercised otherwise.
 	left := j.part.NodeJoinState(j.fresh).SectionsNotLoaded()
 	require.Less(t, left, j.notLoadedAtMatch, "precondition: no block executed after the match loaded a section (%d not loaded, %d at the match)", left, j.notLoadedAtMatch)
-	t.Logf("matched with %d sections not loaded; the blocks executed since loaded %d", j.notLoadedAtMatch, j.notLoadedAtMatch-left)
+	t.Logf("matched after %d pull rounds with %d sections not loaded; the blocks executed since loaded %d", j.roundsToMatch, j.notLoadedAtMatch, j.notLoadedAtMatch-left)
 	j.agree("after joining under deposits into sections not loaded")
+}
+
+// TestThePullMatchesWhileEveryBlockOpensSections — #4518, soak
+// 20261005T043754Z: the BVN pull took twenty minutes. A record naming an
+// account in a section not loaded opens the section, and the pull loads it;
+// loaded as the peer holds it now, the load is of a block past L, the pull is
+// complete only once the records reach that block, and those records open
+// more sections. At ten deposits a round into sections not loaded, the pull
+// never matches; loading every opened section as of L, it matches in a round
+// or two whatever the blocks do.
+func TestThePullMatchesWhileEveryBlockOpensSections(t *testing.T) {
+	j := prepareSectionsJoinBy(t, true)
+	j.spread = true
+	j.depositsPerRound = 10
+	// The partition moves WHILE the node pulls, as a real one does: the
+	// round's deposits into sections not loaded execute in a block between
+	// two of the pull's reads (Partition.SetPullHook). Standing still, every
+	// read of a round is of one block and no load can be past L.
+	j.part.SetPullHook(j.fresh, func() { j.sim.Step() })
+	defer j.part.SetPullHook(j.fresh, nil)
+	j.run()
+	require.LessOrEqual(t, j.roundsToMatch, 5, "the pull took %d rounds to match: it chased the blocks", j.roundsToMatch)
+	t.Logf("matched after %d pull rounds with %d sections not loaded", j.roundsToMatch, j.notLoadedAtMatch)
+	j.agree("after a join under deposits into sections not loaded every block")
 }
 
 // TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchanged

@@ -132,7 +132,7 @@ func openedLoaded(p *syncing) bool {
 }
 
 // loadOpened loads every section the pull opened and has not loaded: the
-// section's leaves from a peer's current view, and every account they name
+// section's leaves from a peer as of L, and every account they name
 // that this node does not hold or holds differently, unless a record brought
 // it current -- the page may be older than the record. The node's own leaves
 // in the section that the page does not name are asked of every peer, and
@@ -175,7 +175,10 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 	for i := 0; i < 2*len(srcs); i++ {
 		turn := (s.pageTurn + i) % len(srcs)
 		src := srcs[turn]
-		page, err := src.QueryBptPage(ctx, s.partition, &api.BptPageQuery{StartHash: todo[0].ScanStart(), Count: sectionPage})
+		// As of L, the records' end: what the page shows is then what the
+		// records left, and the load raises no block the records must
+		// catch up to (executor spec, "Sync", §3a; #4518).
+		page, err := src.QueryBptPage(ctx, s.partition, &api.BptPageQuery{StartHash: todo[0].ScanStart(), Count: sectionPage, ForHeight: p.last})
 		if err != nil {
 			s.log.Info("A peer could not page a section; the next is asked", "partition", s.partition, "peer", sourceKey(src), "section", todo[0], "error", err)
 			continue
@@ -216,7 +219,7 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 			}
 		}
 		if n == 0 {
-			leaves, urls, block, err := sectionLeavesAt(ctx, src, s.partition, todo[0], 0)
+			leaves, urls, block, err := sectionLeavesAt(ctx, src, s.partition, todo[0], p.last)
 			if err != nil || block < p.start {
 				s.log.Info("A peer could not page a large section; the next is asked", "partition", s.partition, "peer", sourceKey(src), "section", todo[0], "block", block, "error", err)
 				continue
