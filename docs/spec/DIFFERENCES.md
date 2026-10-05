@@ -514,35 +514,20 @@ with the section and the names — in the daemon too since #4497, whose API
 services had a database, and so a gate, of their own — but no client of the
 API follows them.
 
-### E28. The backfill asks the store which entries it holds, and pages by 100
+### E28. A page inside a larger subtree has no receipt
 
 *[#4493](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4493)*
 
-**Spec** (executor.md, "Sync", "Past the match"): each chain's
-`SyncedEntries` is the full description of what the node is missing -- a list
-of gaps, each a range and whether entries or only messages are missing --
-written by the pull that takes a chain by its head (and by a retake or a
-refetch), closed by each backfill page in its own commit; the backfill asks
-for exactly the gaps, without asking the store, 200 entries a request; a peer
-answers at most 200 entries and 50,000 bytes and says how many it returned.
+**Spec** (executor.md, "Sync", "Past the match"): a page inside a larger
+subtree is proven by a receipt from the peer as it arrives, and held
+unproven only when the peer cannot give one.
 
-**Code** (`internal/core/bootstrap/pull/backfill.go`, `internal/api/v3`):
-- `SyncedEntries` holds `Synced`, unfinished walks' spans and `Refetch`, not
-  the gaps: nothing records what the pull left missing, and the walk starts
-  at the chain's current head and infers what is missing by reading the
-  store.
-- `chainWalk.page` reads every entry between the floor and its position
-  (`held`: the element, and on a chain that carries messages the message
-  behind it) before asking a peer: up to 512 store reads per page.
-- The backfill pages by 256, and the server clamps every range to 100
-  (`maxPageSize`), so a page is at least three answers; there is no byte cap.
-- Entries are proven only at the end: the walk writes pages unproven and
-  replays them against the head once it stops; no page is checked against the
-  head's pending roots, nor by a receipt, as it arrives, and pages do not keep
-  to subtree boundaries.
-- The backfill is serial: one account, one chain, one page at a time.
-
-Measured: run `20261005T020412Z`, about 2.5–2.7 accounts a second (#4493).
+**Code** (`internal/core/bootstrap/pull/backfill.go`):
+- No page is asked for with a receipt: every page inside a subtree larger
+  than a page is held unproven, in its gap, until the whole subtree is in and
+  replays to its root. An attempt that fails inside a large subtree asks for
+  that subtree's pages again -- on a 2.3M-entry chain the bottom subtree is
+  2^21 entries -- though nothing proven above it is asked for again.
 
 ### E11. A node cannot sync from the running protocol
 

@@ -34,6 +34,13 @@ import (
 const defaultPageSize = 50
 const maxPageSize = 100
 
+// A range of a chain's entries is answered with at most maxChainEntries
+// entries and, once it holds one, stops before it passes maxChainEntryBytes
+// (executor spec, "Sync", "Past the match"; #4493). Records says how many it
+// holds; the asker asks again from the entry after the last.
+const maxChainEntries = 200
+const maxChainEntryBytes = 50_000
+
 // What a joining node refused to answer, by the call (#4297). It is the
 // querier's half of accumulate_node_not_serving_total, which counts the
 // sequencer's.
@@ -102,7 +109,7 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 
 	switch query := query.(type) {
 	case *api.ChainQuery:
-		fixRange(query.Range)
+		fixRangeTo(query.Range, maxChainEntries)
 	case *api.DataQuery:
 		fixRange(query.Range)
 	case *api.DirectoryQuery:
@@ -294,7 +301,7 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		}
 
 		if query.Range != nil {
-			r, err := s.queryChainEntryRange(ctx, batch, record, query.Range)
+			r, err := s.queryChainEntryRange(ctx, batch, record, query.Range, maxChainEntryBytes)
 			if r != nil {
 				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
 			}
@@ -1334,7 +1341,10 @@ func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, rec
 	return r, nil
 }
 
-func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batch, record *database.Chain2, opts *api.RangeOptions) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+// queryChainEntryRange answers a range of record's entries. With maxBytes, the
+// answer stops at the first entry that would take it past maxBytes, holding
+// at least one.
+func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batch, record *database.Chain2, opts *api.RangeOptions, maxBytes int) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
 	head, err := record.Head().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get head: %w", err)
@@ -1344,6 +1354,7 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 	r.Total = uint64(head.Count)
 	allocRange(r, opts, zeroBased)
 
+	var size int
 	for i := range r.Records {
 		var expand bool
 		if opts.Expand != nil {
@@ -1352,6 +1363,18 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand, nil)
 		if err != nil {
 			return nil, errors.UnknownError.WithFormat("get entry %d: %w", r.Start+uint64(i), err)
+		}
+		if maxBytes <= 0 {
+			continue
+		}
+		b, err := r.Records[i].MarshalBinary()
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("measure entry %d: %w", r.Start+uint64(i), err)
+		}
+		size += len(b)
+		if size > maxBytes && i > 0 {
+			r.Records = r.Records[:i]
+			break
 		}
 	}
 	return r, nil

@@ -92,7 +92,7 @@ func TestTheMaxSyncedEntryIsNotState(t *testing.T) {
 	var before hashedView
 	View(t, db, func(batch *database.Batch) { before = viewHashed(t, batch, tokens) })
 
-	mark := &database.SyncedEntries{Synced: 7, Spans: []*database.SyncedSpan{{Top: 11, Low: 9}}}
+	mark := &database.SyncedEntries{Gaps: []*database.SyncedGap{{Low: 9, High: 11}, {Low: 0, High: 7}}, HeadCount: 11}
 	Update(t, db, func(batch *database.Batch) {
 		require.NoError(t, batch.Account(tokens).SyncedEntries("main").Put(mark))
 		require.NoError(t, batch.Account(tokens).SyncedEntries("signature").Put(mark))

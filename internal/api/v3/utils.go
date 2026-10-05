@@ -15,14 +15,19 @@ import (
 )
 
 func fixRange(opts *api.RangeOptions) {
+	fixRangeTo(opts, maxPageSize)
+}
+
+// fixRangeTo defaults a range's count and clamps it to most.
+func fixRangeTo(opts *api.RangeOptions, most uint64) {
 	if opts == nil {
 		return
 	}
 	if opts.Count == nil {
 		opts.Count = new(uint64)
 		*opts.Count = defaultPageSize
-	} else if *opts.Count > maxPageSize {
-		*opts.Count = maxPageSize
+	} else if *opts.Count > most {
+		*opts.Count = most
 	}
 }
 

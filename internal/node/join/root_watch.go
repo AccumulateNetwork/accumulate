@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
@@ -179,6 +180,11 @@ func (s *PulledState) RepairFrom(block uint64) {
 	s.repairFrom = block
 }
 
+// backfillWorkers is how many accounts the backfill brings in at once
+// (#4493). Each asks one page at a time; a peer that is busy answers
+// NotReady and the page is asked of the next (pull.Backfill).
+const backfillWorkers = 4
+
 // backfillPause is how long the backfill waits before it asks again for the
 // accounts it could not bring in, and how often it looks whether the node is
 // ACTIVE yet.
@@ -209,14 +215,7 @@ func (s *PulledState) Backfill(ctx context.Context) {
 		if len(left) == 0 {
 			return
 		}
-		for _, u := range left {
-			if ctx.Err() != nil || s.machine.State() != nodestate.StateActive {
-				break
-			}
-			if s.backfillOne(ctx, u) {
-				s.backfillDone(u)
-			}
-		}
+		s.backfillAll(ctx, left)
 		if s.BackfillLeft() == 0 {
 			return
 		}
@@ -225,6 +224,33 @@ func (s *PulledState) Backfill(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// backfillAll brings in the accounts left, backfillWorkers at a time, each
+// account by one worker. A worker stops taking accounts once the node is not
+// ACTIVE.
+func (s *PulledState) backfillAll(ctx context.Context, left []*url.URL) {
+	next := make(chan *url.URL)
+	var wg sync.WaitGroup
+	for range min(backfillWorkers, len(left)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for u := range next {
+				if s.backfillOne(ctx, u) {
+					s.backfillDone(u)
+				}
+			}
+		}()
+	}
+	for _, u := range left {
+		if ctx.Err() != nil || s.machine.State() != nodestate.StateActive {
+			break
+		}
+		next <- u
+	}
+	close(next)
+	wg.Wait()
 }
 
 type backfillKey struct{}

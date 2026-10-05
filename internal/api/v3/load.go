@@ -439,7 +439,7 @@ func (s *Querier) loadAnchoredBlocks(ctx context.Context, batch *database.Batch,
 	count := end - start + 1
 
 	expand := true
-	anchors, err := s.queryChainEntryRange(ctx, batch, batch.Account(s.partition.AnchorPool()).MainChain(), &api.RangeOptions{Start: start, Count: &count, Expand: &expand})
+	anchors, err := s.queryChainEntryRange(ctx, batch, batch.Account(s.partition.AnchorPool()).MainChain(), &api.RangeOptions{Start: start, Count: &count, Expand: &expand}, 0)
 	if err != nil {
 		return nil, nil //nolint // Bad, but ignore
 	}

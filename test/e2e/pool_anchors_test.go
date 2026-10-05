@@ -39,8 +39,10 @@ func readPoolAnchors(ctx context.Context, querier api.Querier, pool, producer *u
 	case err != nil:
 		return verified, refused, err
 	}
+	// An answer holds what fits (at most 200 entries and 50,000 bytes,
+	// #4493): the next page starts after the last entry answered.
 	const size = 64
-	for start := uint64(0); start < chain.Count; start += size {
+	for start := uint64(0); start < chain.Count; {
 		count, expand := uint64(size), true
 		var page *api.RecordRange[*api.ChainEntryRecord[api.Record]]
 		for i := 0; i < tries; i++ {
@@ -55,6 +57,10 @@ func readPoolAnchors(ctx context.Context, querier api.Querier, pool, producer *u
 		if err != nil {
 			return verified, refused, err
 		}
+		if len(page.Records) == 0 {
+			return verified, refused, errors.NotFound.WithFormat("the pool answered no entry at %d", start)
+		}
+		start += uint64(len(page.Records))
 		for _, entry := range page.Records {
 			v, ok := entry.Value.(*api.MessageRecord[messaging.Message])
 			if !ok || v.Message == nil {

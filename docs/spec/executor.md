@@ -668,19 +668,14 @@ walk and the records take an account by its chain heads and open mark set
 points that close their sets, and the message behind every entry. It
 writes nothing at or above a chain's head, so it does not race the blocks the
 node executes. It streams as the pull does, a page at a time, each page
-written and dropped before the next is asked for (#4446), and holds the
-entries to the node's own head once the walk has stopped: replayed locally
-from the last mark point at or below where it stopped, they and the node's
-open set must reproduce the head, and the replay writes the mark points and
-intermediates the elements alone do not. Entries that do not reproduce it are
-not trusted again: the record says so, and the next walk asks for every entry
-below the head, overwriting position by position; what that walk brings in
-is trusted, so a refetch interrupted in turn resumes like any walk
-(`TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain`). **The backfill
-runs from the newest entry to the oldest, and never asks for an entry the
-database already holds; a resync stops at the first entry that exists**
-(Paul, 2026-10-02): a retry after a failure, or a restart, resumes with what
-is held and asks only for what is not, so no attempt discards an earlier one.
+written and dropped before the next is asked for (#4446), and proves what it
+brings in against the head the chain was taken at, a subtree at a time
+(below). **The backfill runs from the newest entry to the oldest, and never
+asks for an entry the database already holds; a resync stops at the first
+entry that exists** (Paul, 2026-10-02): it knows what it holds from the
+record, not by reading the store, so a retry after a failure, or a restart,
+resumes from the record and asks only for what is still in it, and no
+attempt discards what an earlier one proved.
 **Each account carries a max-synced-entry value in its state that is not
 hashed and not part of the persisted, hashed state; updating the account does
 not update it** (Paul, 2026-10-02). The backfill alone writes it, as it works
@@ -732,10 +727,18 @@ only once it is proven:
   sibling hashes from the page to that subtree's root, checked as it
   arrives; a peer that cannot give one has the page held as not yet proven,
   in the gap, until the whole subtree is in and hashes to its root;
-- a message is proven by hashing to its entry.
+- a message is proven by hashing to its entry. A range missing only its
+  messages is asked for first, newest first, and its pages need not keep to
+  a subtree: each message is proven alone, and an entry served with it must
+  be the one the node holds.
 
-So nothing below the head is trusted on a peer's word at any point. A page
-that fails its proof is that peer's answer refused, and is asked of the next.
+So nothing below the head is trusted on a peer's word at any point. A
+subtree whose entries do not hash to its root is not trusted at all -- a
+peer's page may be wrong, or the node's own entries, as where a repaired
+chain grew wrongly (#4519) -- and is recorded missing whole, entries
+missing: the next attempt asks for every entry of it, of the next peer
+(`TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain`,
+`TestARepairedChainTheNodeGrewWronglyIsReplacedByTheBackfill`).
 The backfill asks for exactly what the gaps name, without asking the store
 which entries it holds, and the chain is whole when its list is empty. A retry or a restart reads the same
 list and asks only for what is still in it
@@ -776,8 +779,10 @@ starts it after each handoff and ends it, and waits until it has ended,
 before the node is demoted and pulls again, and when the join itself ends: a
 pull or a repair rewrites the very accounts the backfill writes, so the two
 never run at once, and the backfill does nothing while the node is not
-`ACTIVE`. An account it cannot bring in is asked for again a few seconds
-later. The accounts
+`ACTIVE`. It brings in four accounts at once, each account by one worker
+walking its chains a page at a time (#4493); one account at a time brought
+in about 2.5 accounts a second on run `20261005T020412Z`. An account it cannot bring in is asked
+for again a few seconds later. The accounts
 left to backfill are recorded under `SystemData(partition).HeadOnly` as they
 are taken and cleared as they are backfilled, so a restart before the
 backfill ends still backfills them: the next join finds their leaves equal to

@@ -28,11 +28,47 @@ func syncedOf(t testing.TB, db *database.Database, u *url.URL) *database.SyncedE
 	return v
 }
 
+// requireGaps fails unless the record of u's main chain names exactly want
+// missing, as {low, high, messages only}.
+func requireGaps(t testing.TB, db *database.Database, u *url.URL, want ...database.SyncedGap) {
+	t.Helper()
+	got := syncedOf(t, db, u).Gaps
+	ok := len(got) == len(want)
+	for i := 0; ok && i < len(got); i++ {
+		ok = got[i].Equal(&want[i])
+	}
+	if !ok {
+		var s []database.SyncedGap
+		for _, g := range got {
+			s = append(s, *g)
+		}
+		t.Fatalf("the record names %+v missing, want %+v", s, want)
+	}
+}
+
+// askedTwiceOutside fails if an entry outside [low, high) was asked for more
+// than once: within it lies the subtree a walk was filling when it stopped,
+// whose pages were held unproven and are asked for again.
+func askedTwiceOutside(t testing.TB, s *pagedSource, low, high uint64) {
+	t.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for idx, n := range s.asked {
+		if n > 1 && (idx < low || idx >= high) {
+			t.Fatalf("entry %d, outside the unproven subtree [%d, %d), was asked for %d times", idx, low, high, n)
+		}
+	}
+}
+
 // TestABackfillInterruptedMidChainResumesWhereItStopped — #4493 defect 1. On
 // Docker a retry restarted a 2.3M-entry chain from entry 0, hours of pages
-// discarded. The backfill runs from the head down and records how far it has
-// got; asked again after a failure half-way it asks for no entry it already
-// holds, and ends holding the chain whole.
+// discarded. The backfill runs from the head down, a subtree of the head at a
+// time, and closes each subtree's gap once it is proven; asked again after a
+// failure half-way it asks again only for the subtree it was filling, and
+// ends holding the chain whole.
+//
+// 5000 entries are the subtrees [0,4096), [4096,4608), [4608,4864) and the
+// open set from 4864: the walk is interrupted inside [0,4096).
 func TestABackfillInterruptedMidChainResumesWhereItStopped(t *testing.T) {
 	const n = 5000 // 20 pages of 256
 	u := protocol.DnUrl().JoinPath("anchors")
@@ -51,6 +87,7 @@ func TestABackfillInterruptedMidChainResumesWhereItStopped(t *testing.T) {
 	if err := Backfill(context.Background(), []Source{s}, dst, u, 256, nil); err == nil {
 		t.Fatal("the interruption did not interrupt")
 	}
+	requireGaps(t, dst, u, database.SyncedGap{Low: 0, High: 4096})
 	s.mu.Lock()
 	s.before = nil
 	s.mu.Unlock()
@@ -65,10 +102,7 @@ func TestABackfillInterruptedMidChainResumesWhereItStopped(t *testing.T) {
 	if err := Backfill(context.Background(), []Source{s}, dst, u, 256, progress); err != nil {
 		t.Fatal(err)
 	}
-	pages, twice := s.count()
-	if twice != 0 {
-		t.Fatalf("the retry asked again for %d entries the node already held (%d pages in all)", twice, pages)
-	}
+	askedTwiceOutside(t, s, 0, 4096)
 	if len(said) == 0 || said[len(said)-1] != 0 {
 		t.Fatalf("the progress did not reach the first entry: %v", said)
 	}
@@ -78,15 +112,13 @@ func TestABackfillInterruptedMidChainResumesWhereItStopped(t *testing.T) {
 		}
 	}
 	requireWhole(t, src, dst, u)
-	if got := syncedOf(t, dst, u); got.Synced != n || len(got.Spans) != 0 {
-		t.Fatalf("the record of a chain held whole is %+v", got)
-	}
+	requireGaps(t, dst, u)
 }
 
 // TestARestartMidFillResumesFromTheRecord — #4493. The process ends half-way
 // through a chain; the chain grows meanwhile and the node takes its new heads.
-// The next process fills what is new above, steps over what the first process
-// brought in -- the record says where -- and asks for no entry held.
+// The next process fills what is new above, asks for nothing the first process
+// proved -- the record says what is missing -- and ends holding it whole.
 func TestARestartMidFillResumesFromTheRecord(t *testing.T) {
 	const n = 5000
 	u := protocol.DnUrl().JoinPath("anchors")
@@ -114,10 +146,7 @@ func TestARestartMidFillResumesFromTheRecord(t *testing.T) {
 	if err := Backfill(context.Background(), []Source{s}, dst, u, 256, nil); err == nil {
 		t.Fatal("the interruption did not interrupt")
 	}
-	rec := syncedOf(t, dst, u)
-	if len(rec.Spans) != 1 || rec.Spans[0].Top != n || rec.Spans[0].Low == 0 || rec.Spans[0].Low >= n {
-		t.Fatalf("the record of a walk stopped half-way is %+v", rec)
-	}
+	requireGaps(t, dst, u, database.SyncedGap{Low: 0, High: 4096})
 	if err := dst.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -128,6 +157,13 @@ func TestARestartMidFillResumesFromTheRecord(t *testing.T) {
 	dst = open()
 	defer dst.Close()
 	takeHeads(t, src, dst, u)
+	// 5700 entries, the open set from 5632: what lies between the old head
+	// and the new open set is missing whole, the open set's messages, and
+	// what the first process never proved.
+	requireGaps(t, dst, u,
+		database.SyncedGap{Low: 5632, High: 5700, MessagesOnly: true},
+		database.SyncedGap{Low: 5000, High: 5632},
+		database.SyncedGap{Low: 0, High: 4096})
 
 	s.mu.Lock()
 	s.before = nil
@@ -135,21 +171,19 @@ func TestARestartMidFillResumesFromTheRecord(t *testing.T) {
 	if err := Backfill(context.Background(), []Source{s}, dst, u, 256, nil); err != nil {
 		t.Fatal(err)
 	}
-	pages, twice := s.count()
-	if twice != 0 {
-		t.Fatalf("the restarted backfill asked again for %d entries the node already held (%d pages in all)", twice, pages)
-	}
+	// Every entry from 4096 to the old head was proven or taken by the
+	// first process, and asked for at most once, by it.
+	askedTwiceOutside(t, s, 0, 4096)
 	requireWhole(t, src, dst, u)
-	if got := syncedOf(t, dst, u); got.Synced != n+700 {
-		t.Fatalf("the record of a chain held whole is %+v", got)
-	}
+	requireGaps(t, dst, u)
 }
 
 // TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists — #4493, Paul
 // 2026-10-02: "When resyncing, one stops once the first entry exists." A node
-// that held a chain whole -- by executing it, so with no record, and then by a
-// backfill that wrote one -- restarts, takes the account's new heads, and
-// asks for one page: the entries it does not hold. Everything older is held.
+// that held a chain whole -- taken whole, so with no gap -- restarts, takes the
+// account's new heads, and asks only for what the take left missing: the
+// entries between its old head and the new open set, and the open set's
+// messages. Everything older is held.
 func TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists(t *testing.T) {
 	const n = 3000
 	u := protocol.DnUrl().JoinPath("anchors")
@@ -166,8 +200,13 @@ func TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	requireGaps(t, dst, u)
 	s := newPagedSource(src)
 	held := n
+	// 3100: entries [3000,3072) and the open set's messages, one page each.
+	// 3300: the open set from 3072 is taken with its entries; the messages
+	// from the old head up are missing, one page.
+	wantPages := []int{2, 1}
 	for i, grow := range []int{100, 200} {
 		growChain(t, src, u, held, grow, 0x43)
 		takeHeads(t, src, dst, u)
@@ -175,9 +214,9 @@ func TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists(t *testing.T) {
 		if err := Backfill(context.Background(), []Source{s}, dst, u, 256, nil); err != nil {
 			t.Fatal(err)
 		}
-		pages, _ := s.count()
-		if pages != 1 {
-			t.Fatalf("resync %d: %d pages asked for %d entries the node did not hold", i+1, pages, grow)
+		pages, twice := s.count()
+		if pages != wantPages[i] || twice != 0 {
+			t.Fatalf("resync %d: %d pages (%d entries twice) asked for %d entries the node did not hold", i+1, pages, twice, grow)
 		}
 		for idx := range s.asked {
 			if idx < uint64(held) {
@@ -187,17 +226,15 @@ func TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists(t *testing.T) {
 		requireWhole(t, src, dst, u)
 		held += grow
 	}
-	if got := syncedOf(t, dst, u); got.Synced != uint64(held) {
-		t.Fatalf("the record of a chain held whole is %+v", got)
-	}
+	requireGaps(t, dst, u)
 }
 
 // TestAnUnfinishedWalkBelowExecutedEntriesIsStillFinished — #4493. A walk is
 // interrupted; the node then executes blocks that append to the chain, and
 // later restarts and takes newer heads. Above the unfinished walk now lie
-// entries the node executed: they exist, but the chain is not whole below
-// them, so the walk does not stop there -- it steps over them and the earlier
-// walk's span and goes on to the entries it never had.
+// entries the node executed: the record keeps the gap below them, and the
+// walk asks for it and for what the new take left missing, and not for what
+// the node executed.
 func TestAnUnfinishedWalkBelowExecutedEntriesIsStillFinished(t *testing.T) {
 	const n = 3000
 	u := protocol.DnUrl().JoinPath("anchors")
@@ -216,6 +253,9 @@ func TestAnUnfinishedWalkBelowExecutedEntriesIsStillFinished(t *testing.T) {
 	if err := Backfill(context.Background(), []Source{s}, dst, u, 256, nil); err == nil {
 		t.Fatal("the interruption did not interrupt")
 	}
+	// 3000 entries: the open set's messages and [2560,2816) were brought in
+	// and proven; the walk stopped inside [2048,2560).
+	requireGaps(t, dst, u, database.SyncedGap{Low: 0, High: 2560})
 
 	// The node executes 300 entries as its peers do.
 	growChain(t, src, u, n, 300, 0x44)
@@ -238,6 +278,7 @@ func TestAnUnfinishedWalkBelowExecutedEntriesIsStillFinished(t *testing.T) {
 		}
 	}
 	requireWhole(t, src, dst, u)
+	requireGaps(t, dst, u)
 }
 
 // mixedSource serves another chain's entries below below and the node's own
@@ -266,10 +307,11 @@ func (s *mixedSource) QueryChainEntries(ctx context.Context, u *url.URL, q *api.
 }
 
 // TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain — #4493. A peer serves
-// another chain below the node's open set: the entries replayed do not
-// reproduce the head, and the walk fails. What it wrote is not trusted: the
-// next walk asks for every entry again -- and when that walk is interrupted
-// in turn, the one after asks only for what the refetch had not reached.
+// another chain below the node's open set: the first subtree it fills does
+// not hash to the head's root, and the walk fails. What it wrote is not
+// trusted -- the gap stays -- and the next walk asks for every entry below the
+// open set again; when that walk is interrupted in turn, the one after asks
+// only for what the refetch had not proven.
 func TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain(t *testing.T) {
 	const n = 2000
 	u := protocol.DnUrl().JoinPath("anchors")
@@ -285,9 +327,7 @@ func TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain(t *testing.T) {
 	if err == nil {
 		t.Fatal("entries that do not reproduce the head were kept")
 	}
-	if !syncedOf(t, dst, u).Refetch {
-		t.Fatal("the record does not say what is held is not trusted")
-	}
+	requireGaps(t, dst, u, database.SyncedGap{Low: 0, High: n &^ 255})
 
 	s := newPagedSource(src)
 	s.before = func(page int, _, _ uint64) error {
@@ -308,11 +348,9 @@ func TestEntriesThatDoNotReproduceTheHeadAreAskedForAgain(t *testing.T) {
 	if _, twice := s.count(); twice != 0 {
 		t.Fatalf("the refetch asked for %d entries twice", twice)
 	}
-	if len(s.asked) != n {
-		t.Fatalf("the refetch asked for %d entries of %d", len(s.asked), n)
+	if len(s.asked) != n&^255 {
+		t.Fatalf("the refetch asked for %d entries of the %d below the open set", len(s.asked), n&^255)
 	}
 	requireWhole(t, src, dst, u)
-	if got := syncedOf(t, dst, u); got.Refetch || got.Synced != n {
-		t.Fatalf("the record of a chain held whole is %+v", got)
-	}
+	requireGaps(t, dst, u)
 }

@@ -8,6 +8,7 @@ package pull
 
 import (
 	"context"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"testing"
 	"time"
 
@@ -117,24 +118,23 @@ func TestAPageNoPeerServesFailsTheChainAndTheNextAttemptResumes(t *testing.T) {
 	if !errors.Is(err, errors.NotFound) {
 		t.Fatalf("a page no peer serves did not fail the chain: %v", err)
 	}
-	rec := syncedOf(t, dst, u)
-	if len(rec.Spans) != 1 || rec.Spans[0].Low == 0 {
-		t.Fatalf("the record kept nothing of what was written: %+v", rec)
-	}
+	// 3000 entries: [2048,2560) and [2560,2816) were proven before the walk
+	// reached the page no peer serves, inside [0,2048).
+	requireGaps(t, dst, u, database.SyncedGap{Low: 0, High: 2048})
 
 	gone = false
 	if err := Backfill(context.Background(), []Source{a, b}, dst, u, 256, nil); err != nil {
 		t.Fatal(err)
 	}
-	pa, ta := a.count()
-	pb, tb := b.count()
-	if ta != 0 || tb != 0 {
-		t.Fatalf("the next attempt asked again for entries held (%d, %d)", ta, tb)
-	}
+	pa, _ := a.count()
+	pb, _ := b.count()
+	askedTwiceOutside(t, a, 0, 2048)
+	askedTwiceOutside(t, b, 0, 2048)
 	for idx := range a.asked {
-		if b.asked[idx] > 0 {
+		if idx >= 2048 && b.asked[idx] > 0 {
 			t.Fatalf("entry %d was asked of both peers (%d and %d pages)", idx, pa, pb)
 		}
 	}
 	requireWhole(t, src, dst, u)
+	requireGaps(t, dst, u)
 }

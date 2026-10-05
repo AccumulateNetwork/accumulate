@@ -395,6 +395,16 @@ func writeChains(account *database.Account, st *api.AccountState, changed bool, 
 			continue
 		}
 		head := &merkle.State{Count: int64(c.Count), Pending: c.State}
+		prev, err := chain.Inner().Head().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("%v: chain %s: load the head: %w", u, c.Name, err)
+		}
+		// Taken by its head alone: the open mark set came without messages
+		// (executor spec, "Past the match").
+		held := c.Count - uint64(len(open[c.Name]))
+		if err := recordTaken(account, c.Name, c.Type, uint64(prev.Count), head, held, c.Count); err != nil {
+			return errors.UnknownError.WithFormat("%v: chain %s: %w", u, c.Name, err)
+		}
 		if err := chain.Inner().RestoreHead(head, open[c.Name]); err != nil {
 			return errors.Conflict.WithFormat("%v: chain %s: %w", u, c.Name, err)
 		}

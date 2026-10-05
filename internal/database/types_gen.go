@@ -97,24 +97,26 @@ type SignatureSetEntry struct {
 	extraData []byte
 }
 
-// SyncedEntries is how much of one chain the backfill holds (executor spec, "Past the match";.
+// SyncedEntries is the full description of what this node is missing of one chain (executor spec, "Past the match";.
 type SyncedEntries struct {
 	fieldsSet []bool
-	// Synced is the max synced entry, as a count -- every entry below it is held, with the message behind it, and was held to a head.
-	Synced uint64 `json:"synced,omitempty" form:"synced" query:"synced" validate:"required"`
-	// Spans are the runs of entries walks not yet finished have brought in, newest first. A walk that ends before it meets the one below it leaves both.
-	Spans []*SyncedSpan `json:"spans,omitempty" form:"spans" query:"spans" validate:"required"`
-	// Refetch is set when the entries a walk brought in did not reproduce the head -- the next walk asks for every entry below the head again rather than trusting what is held.
-	Refetch   bool `json:"refetch,omitempty" form:"refetch" query:"refetch" validate:"required"`
-	extraData []byte
+	// Gaps are the ranges of the chain this node is missing, newest first, and what is missing in each.
+	Gaps []*SyncedGap `json:"gaps,omitempty" form:"gaps" query:"gaps" validate:"required"`
+	// HeadCount is the count of the head the chain was taken at by the pull, whose pending roots prove the entries below its open mark set.
+	HeadCount uint64 `json:"headCount,omitempty" form:"headCount" query:"headCount" validate:"required"`
+	// HeadPending are the pending roots of that head, by height; an empty one is absent.
+	HeadPending [][]byte `json:"headPending,omitempty" form:"headPending" query:"headPending" validate:"required"`
+	extraData   []byte
 }
 
-// SyncedSpan is a run of a chain's entries a backfill walk brought in -- every entry from Low up to Top is held.
-type SyncedSpan struct {
+// SyncedGap is a range of a chain's entries this node is missing, Low up to High.
+type SyncedGap struct {
 	fieldsSet []bool
-	Top       uint64 `json:"top,omitempty" form:"top" query:"top" validate:"required"`
 	Low       uint64 `json:"low,omitempty" form:"low" query:"low" validate:"required"`
-	extraData []byte
+	High      uint64 `json:"high,omitempty" form:"high" query:"high" validate:"required"`
+	// MessagesOnly is set when the entries are held and only the messages behind them are missing.
+	MessagesOnly bool `json:"messagesOnly,omitempty" form:"messagesOnly" query:"messagesOnly" validate:"required"`
+	extraData    []byte
 }
 
 type TransactionChainEntry struct {
@@ -354,15 +356,19 @@ func (v *SignatureSetEntry) CopyAsInterface() interface{} { return v.Copy() }
 func (v *SyncedEntries) Copy() *SyncedEntries {
 	u := new(SyncedEntries)
 
-	u.Synced = v.Synced
-	u.Spans = make([]*SyncedSpan, len(v.Spans))
-	for i, v := range v.Spans {
+	u.Gaps = make([]*SyncedGap, len(v.Gaps))
+	for i, v := range v.Gaps {
 		v := v
 		if v != nil {
-			u.Spans[i] = (v).Copy()
+			u.Gaps[i] = (v).Copy()
 		}
 	}
-	u.Refetch = v.Refetch
+	u.HeadCount = v.HeadCount
+	u.HeadPending = make([][]byte, len(v.HeadPending))
+	for i, v := range v.HeadPending {
+		v := v
+		u.HeadPending[i] = encoding.BytesCopy(v)
+	}
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -373,11 +379,12 @@ func (v *SyncedEntries) Copy() *SyncedEntries {
 
 func (v *SyncedEntries) CopyAsInterface() interface{} { return v.Copy() }
 
-func (v *SyncedSpan) Copy() *SyncedSpan {
-	u := new(SyncedSpan)
+func (v *SyncedGap) Copy() *SyncedGap {
+	u := new(SyncedGap)
 
-	u.Top = v.Top
 	u.Low = v.Low
+	u.High = v.High
+	u.MessagesOnly = v.MessagesOnly
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -386,7 +393,7 @@ func (v *SyncedSpan) Copy() *SyncedSpan {
 	return u
 }
 
-func (v *SyncedSpan) CopyAsInterface() interface{} { return v.Copy() }
+func (v *SyncedGap) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *TransactionChainEntry) Copy() *TransactionChainEntry {
 	u := new(TransactionChainEntry)
@@ -659,29 +666,37 @@ func (v *SignatureSetEntry) Equal(u *SignatureSetEntry) bool {
 }
 
 func (v *SyncedEntries) Equal(u *SyncedEntries) bool {
-	if !(v.Synced == u.Synced) {
+	if len(v.Gaps) != len(u.Gaps) {
 		return false
 	}
-	if len(v.Spans) != len(u.Spans) {
-		return false
-	}
-	for i := range v.Spans {
-		if !((v.Spans[i]).Equal(u.Spans[i])) {
+	for i := range v.Gaps {
+		if !((v.Gaps[i]).Equal(u.Gaps[i])) {
 			return false
 		}
 	}
-	if !(v.Refetch == u.Refetch) {
+	if !(v.HeadCount == u.HeadCount) {
 		return false
+	}
+	if len(v.HeadPending) != len(u.HeadPending) {
+		return false
+	}
+	for i := range v.HeadPending {
+		if !(bytes.Equal(v.HeadPending[i], u.HeadPending[i])) {
+			return false
+		}
 	}
 
 	return true
 }
 
-func (v *SyncedSpan) Equal(u *SyncedSpan) bool {
-	if !(v.Top == u.Top) {
+func (v *SyncedGap) Equal(u *SyncedGap) bool {
+	if !(v.Low == u.Low) {
 		return false
 	}
-	if !(v.Low == u.Low) {
+	if !(v.High == u.High) {
+		return false
+	}
+	if !(v.MessagesOnly == u.MessagesOnly) {
 		return false
 	}
 
@@ -1311,9 +1326,9 @@ func (v *SignatureSetEntry) IsValid() error {
 }
 
 var fieldNames_SyncedEntries = []string{
-	1: "Synced",
-	2: "Spans",
-	3: "Refetch",
+	1: "Gaps",
+	2: "HeadCount",
+	3: "HeadPending",
 }
 
 func (v *SyncedEntries) MarshalBinary() ([]byte, error) {
@@ -1326,16 +1341,18 @@ func (v *SyncedEntries) MarshalBinary() ([]byte, error) {
 
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Synced == 0) {
-		writer.WriteUint(1, v.Synced)
-	}
-	if !(len(v.Spans) == 0) {
-		for _, v := range v.Spans {
-			writer.WriteValue(2, v.MarshalBinary)
+	if !(len(v.Gaps) == 0) {
+		for _, v := range v.Gaps {
+			writer.WriteValue(1, v.MarshalBinary)
 		}
 	}
-	if !(!v.Refetch) {
-		writer.WriteBool(3, v.Refetch)
+	if !(v.HeadCount == 0) {
+		writer.WriteUint(2, v.HeadCount)
+	}
+	if !(len(v.HeadPending) == 0) {
+		for _, v := range v.HeadPending {
+			writer.WriteBytes(3, v)
+		}
 	}
 
 	_, _, err := writer.Reset(fieldNames_SyncedEntries)
@@ -1354,19 +1371,19 @@ func (v *SyncedEntries) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Synced is missing")
-	} else if v.Synced == 0 {
-		errs = append(errs, "field Synced is not set")
+		errs = append(errs, "field Gaps is missing")
+	} else if len(v.Gaps) == 0 {
+		errs = append(errs, "field Gaps is not set")
 	}
 	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
-		errs = append(errs, "field Spans is missing")
-	} else if len(v.Spans) == 0 {
-		errs = append(errs, "field Spans is not set")
+		errs = append(errs, "field HeadCount is missing")
+	} else if v.HeadCount == 0 {
+		errs = append(errs, "field HeadCount is not set")
 	}
 	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
-		errs = append(errs, "field Refetch is missing")
-	} else if !v.Refetch {
-		errs = append(errs, "field Refetch is not set")
+		errs = append(errs, "field HeadPending is missing")
+	} else if len(v.HeadPending) == 0 {
+		errs = append(errs, "field HeadPending is not set")
 	}
 
 	switch len(errs) {
@@ -1379,12 +1396,13 @@ func (v *SyncedEntries) IsValid() error {
 	}
 }
 
-var fieldNames_SyncedSpan = []string{
-	1: "Top",
-	2: "Low",
+var fieldNames_SyncedGap = []string{
+	1: "Low",
+	2: "High",
+	3: "MessagesOnly",
 }
 
-func (v *SyncedSpan) MarshalBinary() ([]byte, error) {
+func (v *SyncedGap) MarshalBinary() ([]byte, error) {
 	if v == nil {
 		return []byte{encoding.EmptyObject}, nil
 	}
@@ -1394,14 +1412,17 @@ func (v *SyncedSpan) MarshalBinary() ([]byte, error) {
 
 	writer := encoding.NewWriter(buffer)
 
-	if !(v.Top == 0) {
-		writer.WriteUint(1, v.Top)
-	}
 	if !(v.Low == 0) {
-		writer.WriteUint(2, v.Low)
+		writer.WriteUint(1, v.Low)
+	}
+	if !(v.High == 0) {
+		writer.WriteUint(2, v.High)
+	}
+	if !(!v.MessagesOnly) {
+		writer.WriteBool(3, v.MessagesOnly)
 	}
 
-	_, _, err := writer.Reset(fieldNames_SyncedSpan)
+	_, _, err := writer.Reset(fieldNames_SyncedGap)
 	if err != nil {
 		return nil, encoding.Error{E: err}
 	}
@@ -1413,18 +1434,23 @@ func (v *SyncedSpan) MarshalBinary() ([]byte, error) {
 	return result, nil
 }
 
-func (v *SyncedSpan) IsValid() error {
+func (v *SyncedGap) IsValid() error {
 	var errs []string
 
 	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
-		errs = append(errs, "field Top is missing")
-	} else if v.Top == 0 {
-		errs = append(errs, "field Top is not set")
-	}
-	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
 		errs = append(errs, "field Low is missing")
 	} else if v.Low == 0 {
 		errs = append(errs, "field Low is not set")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field High is missing")
+	} else if v.High == 0 {
+		errs = append(errs, "field High is not set")
+	}
+	if len(v.fieldsSet) > 2 && !v.fieldsSet[2] {
+		errs = append(errs, "field MessagesOnly is missing")
+	} else if !v.MessagesOnly {
+		errs = append(errs, "field MessagesOnly is not set")
 	}
 
 	switch len(errs) {
@@ -1929,18 +1955,22 @@ func (v *SyncedEntries) UnmarshalBinary(data []byte) error {
 func (v *SyncedEntries) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
-	if x, ok := reader.ReadUint(1); ok {
-		v.Synced = x
-	}
 	for {
-		if x := new(SyncedSpan); reader.ReadValue(2, x.UnmarshalBinaryFrom) {
-			v.Spans = append(v.Spans, x)
+		if x := new(SyncedGap); reader.ReadValue(1, x.UnmarshalBinaryFrom) {
+			v.Gaps = append(v.Gaps, x)
 		} else {
 			break
 		}
 	}
-	if x, ok := reader.ReadBool(3); ok {
-		v.Refetch = x
+	if x, ok := reader.ReadUint(2); ok {
+		v.HeadCount = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(3); ok {
+			v.HeadPending = append(v.HeadPending, x)
+		} else {
+			break
+		}
 	}
 
 	seen, err := reader.Reset(fieldNames_SyncedEntries)
@@ -1955,21 +1985,24 @@ func (v *SyncedEntries) UnmarshalBinaryFrom(rd io.Reader) error {
 	return nil
 }
 
-func (v *SyncedSpan) UnmarshalBinary(data []byte) error {
+func (v *SyncedGap) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
 
-func (v *SyncedSpan) UnmarshalBinaryFrom(rd io.Reader) error {
+func (v *SyncedGap) UnmarshalBinaryFrom(rd io.Reader) error {
 	reader := encoding.NewReader(rd)
 
 	if x, ok := reader.ReadUint(1); ok {
-		v.Top = x
-	}
-	if x, ok := reader.ReadUint(2); ok {
 		v.Low = x
 	}
+	if x, ok := reader.ReadUint(2); ok {
+		v.High = x
+	}
+	if x, ok := reader.ReadBool(3); ok {
+		v.MessagesOnly = x
+	}
 
-	seen, err := reader.Reset(fieldNames_SyncedSpan)
+	seen, err := reader.Reset(fieldNames_SyncedGap)
 	if err != nil {
 		return encoding.Error{E: err}
 	}
@@ -2123,15 +2156,16 @@ func init() {
 	}, "SignatureSetEntry", "signatureSetEntry")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
-		encoding.NewTypeField("synced", "uint64"),
-		encoding.NewTypeField("spans", "SyncedSpan[]"),
-		encoding.NewTypeField("refetch", "bool"),
+		encoding.NewTypeField("gaps", "SyncedGap[]"),
+		encoding.NewTypeField("headCount", "uint64"),
+		encoding.NewTypeField("headPending", "bytes[]"),
 	}, "SyncedEntries", "syncedEntries")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
-		encoding.NewTypeField("top", "uint64"),
 		encoding.NewTypeField("low", "uint64"),
-	}, "SyncedSpan", "syncedSpan")
+		encoding.NewTypeField("high", "uint64"),
+		encoding.NewTypeField("messagesOnly", "bool"),
+	}, "SyncedGap", "syncedGap")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("account", "string"),
@@ -2335,19 +2369,22 @@ func (v *SignatureSetEntry) MarshalJSON() ([]byte, error) {
 
 func (v *SyncedEntries) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Synced    uint64                         `json:"synced,omitempty"`
-		Spans     encoding.JsonList[*SyncedSpan] `json:"spans,omitempty"`
-		Refetch   bool                           `json:"refetch,omitempty"`
-		ExtraData *string                        `json:"$epilogue,omitempty"`
+		Gaps        encoding.JsonList[*SyncedGap] `json:"gaps,omitempty"`
+		HeadCount   uint64                        `json:"headCount,omitempty"`
+		HeadPending encoding.JsonList[*string]    `json:"headPending,omitempty"`
+		ExtraData   *string                       `json:"$epilogue,omitempty"`
 	}{}
-	if !(v.Synced == 0) {
-		u.Synced = v.Synced
+	if !(len(v.Gaps) == 0) {
+		u.Gaps = v.Gaps
 	}
-	if !(len(v.Spans) == 0) {
-		u.Spans = v.Spans
+	if !(v.HeadCount == 0) {
+		u.HeadCount = v.HeadCount
 	}
-	if !(!v.Refetch) {
-		u.Refetch = v.Refetch
+	if !(len(v.HeadPending) == 0) {
+		u.HeadPending = make(encoding.JsonList[*string], len(v.HeadPending))
+		for i, x := range v.HeadPending {
+			u.HeadPending[i] = encoding.BytesToJSON(x)
+		}
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -2642,21 +2679,31 @@ func (v *SignatureSetEntry) UnmarshalJSON(data []byte) error {
 
 func (v *SyncedEntries) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Synced    uint64                         `json:"synced,omitempty"`
-		Spans     encoding.JsonList[*SyncedSpan] `json:"spans,omitempty"`
-		Refetch   bool                           `json:"refetch,omitempty"`
-		ExtraData *string                        `json:"$epilogue,omitempty"`
+		Gaps        encoding.JsonList[*SyncedGap] `json:"gaps,omitempty"`
+		HeadCount   uint64                        `json:"headCount,omitempty"`
+		HeadPending encoding.JsonList[*string]    `json:"headPending,omitempty"`
+		ExtraData   *string                       `json:"$epilogue,omitempty"`
 	}{}
-	u.Synced = v.Synced
-	u.Spans = v.Spans
-	u.Refetch = v.Refetch
+	u.Gaps = v.Gaps
+	u.HeadCount = v.HeadCount
+	u.HeadPending = make(encoding.JsonList[*string], len(v.HeadPending))
+	for i, x := range v.HeadPending {
+		u.HeadPending[i] = encoding.BytesToJSON(x)
+	}
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
 	}
-	v.Synced = u.Synced
-	v.Spans = u.Spans
-	v.Refetch = u.Refetch
+	v.Gaps = u.Gaps
+	v.HeadCount = u.HeadCount
+	v.HeadPending = make([][]byte, len(u.HeadPending))
+	for i, x := range u.HeadPending {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding HeadPending: %w", err)
+		} else {
+			v.HeadPending[i] = x
+		}
+	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

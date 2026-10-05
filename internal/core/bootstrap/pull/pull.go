@@ -882,6 +882,16 @@ func pullChainHeads(ctx context.Context, src Source, batch *database.Batch, u *u
 		if err != nil {
 			return fmt.Errorf("chain %s/%s: open mark set: %w", u, c.Name, err)
 		}
+		prev, err := inner.Head().Get()
+		if err != nil {
+			return fmt.Errorf("chain %s/%s: load the head: %w", u, c.Name, err)
+		}
+		// Taken by its head alone: the open mark set came without messages
+		// (executor spec, "Past the match").
+		held := uint64(want.Count) - uint64(len(open))
+		if err := recordTaken(batch.Account(u), c.Name, c.Type, uint64(prev.Count), want, held, uint64(want.Count)); err != nil {
+			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
+		}
 		if err := inner.RestoreHead(want, open); err != nil {
 			return fmt.Errorf("chain %s/%s: %w", u, c.Name, err)
 		}
@@ -1310,6 +1320,15 @@ func (s *streamedChains) restore(batch *database.Batch, u *url.URL) error {
 			c, err := batch.Account(u).ChainByName(t.c.Name)
 			if err != nil {
 				return err
+			}
+			prev, err := c.Inner().Head().Get()
+			if err != nil {
+				return fmt.Errorf("chain %s/%s: load the head: %w", u, t.c.Name, err)
+			}
+			// Taken whole, or by its window from t.from, with the messages
+			// behind its entries: nothing from t.from up is missing.
+			if err := recordTaken(batch.Account(u), t.c.Name, t.c.Type, uint64(prev.Count), t.head, t.from, t.from); err != nil {
+				return fmt.Errorf("chain %s/%s: %w", u, t.c.Name, err)
 			}
 			if err := c.Inner().RestoreHead(t.head, t.open); err != nil {
 				return fmt.Errorf("chain %s/%s: %w", u, t.c.Name, err)
