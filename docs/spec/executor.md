@@ -689,38 +689,42 @@ is in no leaf, no root and no anchor, and a node's agreement does not depend
 on how much history it holds. It is the account's `SyncedEntries` record, one
 per chain (internal/database model.yml): `Synced`, the max synced entry as a
 count -- every entry below it is held, with the message behind it, and was
-held to a head -- and the spans unfinished walks have brought in. No account
+held to a head -- `Taken`, the count the pull took the chain at by its head,
+at and above which every entry is held, and the spans unfinished walks have
+brought in. No account
 hash reads it (`TestTheMaxSyncedEntryIsNotState`: written and committed
 through the BPT update it changes no leaf, root or receipt, and an executed
 block leaves it as it was).
 
-A chain is walked from its head down, a page at a time. An entry is held when
-its element is, and on a chain that carries messages the message behind it:
-the open mark set a node took with the head holds elements and no messages,
-so its messages are asked for. Before a page is asked for, the store is
-asked which of its entries it holds, and a peer is asked only for the rest,
-in runs. The record is written with each page: the walk's own span, joined
-with every earlier span it has stepped over. The walk stops
+**The record says what is missing; the store is not asked** (Paul,
+2026-10-05, #4493). When the pull takes an account by its heads, it records in
+each chain's `SyncedEntries` the count it took the chain at (`Taken`): the
+bottom of the open mark set it pulled. Every entry at or above `Taken` is held
+from then on -- the open mark set came with the head, and execution appends
+only above it. Every entry below `Synced` is held. What is missing is exactly
+what lies between them, outside the record's spans, and the backfill asks for
+all of it without asking the store which entries it holds. A follower starting
+from scratch has `Synced` zero and no spans: everything below `Taken` is
+missing. On a chain that carries messages, the open mark set came without
+them, so its messages are asked for too.
 
-- at the record's max synced entry: everything below it is held;
-- at the first entry that exists below an entry the walk found missing, when
-  no unfinished walk's span lies below it: everything older is held. Entries
-  the node executed above a walk interrupted earlier exist too, and the chain
-  is not whole below them, so with a span below the walk steps over what
-  exists and goes on (`TestAnUnfinishedWalkBelowExecutedEntriesIsStillFinished`);
-- at the first entry, otherwise.
+The walk runs from `Taken` down, **200 entries a request**. The record is
+written with each page -- the walk's own span, joined with every earlier span
+it has stepped over -- and a span the walk reaches is stepped over at once. It
+stops at `Synced`, which then moves to where the spans and `Synced` meet. So a
+retry asks for nothing the first attempt brought in
+(`TestABackfillInterruptedMidChainResumesWhereItStopped`), and a restart
+resumes from the record after taking newer heads
+(`TestARestartMidFillResumesFromTheRecord`). An account the join never took by
+its heads has no `Taken` and is never backfilled: it is whole, by execution.
 
-A span the walk reaches is stepped over at once, without a read. So a retry
-asks for nothing the first attempt brought in
-(`TestABackfillInterruptedMidChainResumesWhereItStopped`), a restart resumes
-from the record after taking newer heads
-(`TestARestartMidFillResumesFromTheRecord`), and a chain held whole -- by
-execution, with no record, or by an earlier backfill -- is resynced with one
-page for one page of new entries
-(`TestAResyncOfAChainHeldWholeStopsAtTheFirstEntryThatExists`). In process, a
-50,000-entry chain interrupted at its half-way page is backfilled with 197
-page requests, against 293 when a retry started from entry 0
-(`BenchmarkBackfill50k`) (#4493).
+**An answer is at most 200 entries and 50,000 bytes, and says how many it
+holds** (Paul, 2026-10-05). A peer answering a range of a chain's entries adds
+entries, with the messages behind them when asked, until it has 200 or the
+answer reaches 50,000 bytes, whichever comes first. It always answers at least
+one entry, and the answer carries the entries it returned. The node takes what
+it was given and asks again from the entry after the last one, so entries
+larger than expected cost more answers, not a larger one.
 
 A page is asked first of the peer that served the last. **A peer's capacity
 refusal is not a NotFound** (Paul, 2026-10-02, #4493): a validator answers

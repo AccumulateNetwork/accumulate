@@ -514,6 +514,28 @@ with the section and the names — in the daemon too since #4497, whose API
 services had a database, and so a gate, of their own — but no client of the
 API follows them.
 
+### E28. The backfill asks the store which entries it holds, and pages by 100
+
+*[#4493](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4493)*
+
+**Spec** (executor.md, "Sync", "Past the match"): the pull records `Taken`
+when it takes a chain by its head; the backfill asks for everything between
+`Synced` and `Taken` outside the spans, without asking the store, 200 entries
+a request; a peer answers at most 200 entries and 50,000 bytes and says how
+many it returned.
+
+**Code** (`internal/core/bootstrap/pull/backfill.go`, `internal/api/v3`):
+- `SyncedEntries` has no `Taken`, and the walk starts at the chain's current
+  head.
+- `chainWalk.page` reads every entry between the floor and its position
+  (`held`: the element, and on a chain that carries messages the message
+  behind it) before asking a peer: up to 512 store reads per page.
+- The backfill pages by 256, and the server clamps every range to 100
+  (`maxPageSize`), so a page is at least three answers; there is no byte cap.
+- The backfill is serial: one account, one chain, one page at a time.
+
+Measured: run `20261005T020412Z`, about 2.5–2.7 accounts a second (#4493).
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
