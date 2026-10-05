@@ -305,11 +305,13 @@ func deploy() error {
   enable-snapshots = false
 
   dn-bootstrap-peers = [
-    "/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"
+    "/dns/bootstrap.accumulatenetwork.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr",
+    "/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr"
   ]
 
   bvn-bootstrap-peers = [
-    "/dns/bootstrap.accumulate.defidevs.io/tcp/16693/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx"
+    "/dns/bootstrap.accumulatenetwork.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr",
+    "/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr"
   ]
 
 [logging]

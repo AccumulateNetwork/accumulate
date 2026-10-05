@@ -490,16 +490,17 @@ func createNodeArchive(nodeDir, outputFile, nodeType string) error {
 }
 
 func getDefaultBootstrapPeers(network, partition string) []interface{} {
-	// Current bootstrap peers for mainnet
-	// Cyclops is the main validator - more peers will be added as they register with bootstrap server
+	// The mainnet bootstrap servers (pkg/accumulate.BootstrapServers): both
+	// partitions find their peers through them.
 	peers := map[string]map[string][]interface{}{
 		"mainnet": {
 			"dn": {
-				"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx",
+				"/dns/bootstrap.accumulatenetwork.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr",
+				"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr",
 			},
 			"bvn": {
-				// Cyclops is the block validator for mainnet
-				"/dns/bootstrap.accumulate.defidevs.io/tcp/16693/p2p/12D3KooWDgqY8C7deYWzgTQ7qauanMkvn47TPLtrT1TfzETQW3Gx",
+				"/dns/bootstrap.accumulatenetwork.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr",
+				"/dns/bootstrap.accumulate.defidevs.io/tcp/16593/p2p/12D3KooWQaWn1L63nJUxfidDomh6W6o1jXJ1VHykzEEdKASSbURr",
 			},
 		},
 		"testnet": {
