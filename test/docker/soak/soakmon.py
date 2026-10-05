@@ -3303,8 +3303,8 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 </div>
 <div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
-  <div class=note>One row per follower &times; partition (a container runs a Directory node and its BVN node); the same columns for every follower. A follower added to the running network goes: downloading state &rarr; proving state &rarr; checking against the ledger (each block executed and compared with its block-ledger record; a mismatch goes back to the ledger) &rarr; holding (20 perfect blocks in a row, every section loaded) &rarr; synced (100 more blocks with no regression; a regression while holding means it was still syncing). A follower started with the network executes from genesis and never joins. Heights are each node&rsquo;s own executed block (its metrics), network = the validators&rsquo; highest. Counts are whole-run and never clear.</div>
-  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th>follower → partition</th><th>state now</th><th>blocks executed with no failure (since the handoff, now)</th><th>running for</th><th>time to state proven</th><th>time to synced (20 perfect blocks, then 100 with no regression)</th><th>state-tree sections not yet loaded (#, now)</th><th>accounts whose history is not yet backfilled (#, now)</th><th>returns to the ledger (#, run)</th><th>regressions while holding (#, run)</th><th>root mismatches (#, run)</th><th>accounts a repair changed (#, run)</th><th>memory (MiB, now)</th><th>container</th></tr></thead><tbody></tbody></table></div>
+  <div class=note>One row per follower &times; partition. A follower added to the network goes pulling &rarr; proving &rarr; checking &rarr; holding &rarr; synced; one started with the network executes from genesis. Hover a heading or a state for what it means. Counts are whole-run.</div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th title="the follower's container, and the partition this row is about">follower</th><th title="what the node is doing now; hover the state for its meaning">state</th><th title="blocks executed with no failure since the node last handed off, now">ok blocks</th><th title="time since the follower was added, or since it started">up</th><th title="time from the add to the state proven against its signed anchor">proven</th><th title="time from the add to synced: 20 perfect blocks, then 100 with no regression">synced</th><th title="sections of the state tree not yet loaded, now">sections</th><th title="accounts whose history is not yet backfilled, now">backfill</th><th title="returns to the ledger over the run: a block whose execution differed from its record">returns</th><th title="regressions while holding, over the run">regress</th><th title="root mismatches over the run: an executed block's root was not its anchored root">root&ne;</th><th title="accounts a repair changed, over the run">repaired</th><th title="memory in MiB, now">MiB</th><th title="the container's status">container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
   <div class=panel data-p=synflow>
@@ -3483,22 +3483,29 @@ function followersView(fj,jp,net){
   const d=s=>s==null?'—':(s<3600?`${Math.floor(s/60)}m ${String(Math.floor(s%60)).padStart(2,'0')}s`:`${Math.floor(s/3600)}h ${String(Math.floor(s%3600/60)).padStart(2,'0')}m`);
   const n=(v,col)=>v==null?'—':`<span class="${v&&col?col:''}">${fmt(v)}</span>`;
   // One plain state per row, the same vocabulary for every follower.
+  // One word per state; the meaning is the hover.
   const STATE={
-    'not added':['not added yet','mut'], 'removed':['removed','mut'],
-    'genesis':['executing from genesis (started with the network)','grn'],
-    'not started':['starting','mut'], 'pulling':['downloading state','yel'],
-    'walked':['proving state','yel'], 'proven':['proving state','yel'],
-    'handed off':['checking against the ledger','yel'], 'ACTIVE':['checking against the ledger','yel'],
-    'overlap':['checking against the ledger','yel'], 'back to ledger':['mismatch: back to the ledger','yel'],
-    'BOOTING':['repairing: root ≠ anchor','red'], 'holding':['synced pending: holding 100 blocks','yel'],
-    'synced':['synced','grn'],
+    'not added':['waiting','not added to the network yet','mut'],
+    'removed':['removed','removed from the network','mut'],
+    'genesis':['genesis','started with the network: executes from genesis and never joins','grn'],
+    'not started':['starting','container up; the join has not started','mut'],
+    'pulling':['pulling','downloading the state: the top of the tree, the block-ledger records, the spine','yel'],
+    'walked':['proving','state complete; proving it against its signed anchor','yel'],
+    'proven':['proving','state proven; handing off','yel'],
+    'handed off':['checking','executing: each block compared with its block-ledger record','yel'],
+    'ACTIVE':['checking','executing: each block compared with its block-ledger record','yel'],
+    'overlap':['checking','executing: each block compared with its block-ledger record','yel'],
+    'back to ledger':['mismatch','a block differed from its record: back to the ledger from there','yel'],
+    'BOOTING':['repairing','an executed root was not its anchored root: syncing again','red'],
+    'holding':['holding','20 perfect blocks in a row; holding 100 more with no regression','yel'],
+    'synced':['synced','100 blocks with no regression','grn'],
   };
   return fj.rows.map(r=>{
     const g=((jp||{})[r.container]||{})[r.partition]||{};
     const launched=r.life==='launched';
     let key=r.life==='waiting'?'not added':(r.life==='removed'?'removed':r.phase);
     if(launched&&(r.phase==='not started'))key='genesis';
-    const [word,cls]=STATE[key]||[key,'mut'];
+    const [word,why,cls]=STATE[key]||[key,key,'mut'];
     const gone=r.life==='waiting'||r.life==='removed';
     const exec=gone?null:(g.executed??r.height);
     // Blocks executed since the node last handed off, none of which failed:
@@ -3507,11 +3514,11 @@ function followersView(fj,jp,net){
     const executing=!gone&&(r.phase==='ACTIVE'||r.phase==='synced')&&exec!=null&&r.activeBlock!=null;
     const okBlocks=executing?Math.max(0,exec-r.activeBlock):null;
     const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')
-      :r.oomKilled?`<span class=red>OOMKilled (exit ${r.exitCode})</span>`
-      :r.status!=='running'?`<span class=red>${r.status} (exit ${r.exitCode})</span>`:'running';
-    const na=launched?'<span class=mut>— (never joined)</span>':'—';
-    return `<tr><td class=name>${r.container} → ${shortP(r.partition)}${launched?' <span class=mut>(started with the network)</span>':''}</td>`
-      +`<td class=${cls}>${word}</td>`
+      :r.oomKilled?`<span class=red title="killed by the kernel for memory (OOMKilled), exit ${r.exitCode}">OOM ${r.exitCode}</span>`
+      :r.status!=='running'?`<span class=red title="container ${r.status}, exit ${r.exitCode}">${r.status} ${r.exitCode}</span>`:'running';
+    const na=launched?'<span class=mut title="started with the network; never joined">—</span>':'—';
+    return `<tr><td class=name title="${r.container}${launched?', started with the network':''}">${r.container.replace(/^acc-/,'')} ${shortP(r.partition)}</td>`
+      +`<td class=${cls} title="${why}">${word}</td>`
       +`<td>${okBlocks==null?'—':`<span class=grn>${fmt(okBlocks)}</span>`}</td>`
       +`<td>${gone?'—':d(r.sinceAddSec)}</td>`
       +`<td>${launched?na:(r.toProvenSec!=null?d(r.toProvenSec):'—')}</td><td><b>${launched?na:(r.toSyncedSec!=null?d(r.toSyncedSec):'—')}</b></td>`

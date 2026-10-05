@@ -156,17 +156,19 @@ class ThePanelRenders(unittest.TestCase):
              "phase": "ACTIVE", "height": 120, "activeBlock": 100, "sinceAddSec": 300,
              "toActiveSec": 140, "rootMisses": 0, "repairs": 0, "repairChanged": 0,
              "drops": 0, "status": "running", "exitCode": 0, "oomKilled": False}]})
-        self.assertIn("acc-bvn1-fol1 → DN", html)
-        self.assertIn("repairing: root ≠ anchor", html)
+        self.assertIn("bvn1-fol1 DN", html)
+        # One word, the meaning on hover.
+        self.assertIn(">repairing<", html)
+        self.assertIn('title="an executed root was not its anchored root: syncing again"', html)
         # Blocks executed with no failure: the executed height above the block
         # the node went ACTIVE at, green; nothing while it is not executing.
         self.assertIn('<span class=grn>20</span>', html)
         self.assertNotIn("5 / 9", html)
         self.assertIn("2m 05s", html)
-        self.assertIn("OOMKilled (exit 137)", html)
+        self.assertIn("OOM 137", html)
         self.assertIn("812", html)
-        self.assertIn("acc-bvn2-fol1 → BVN2", html)
-        self.assertIn("not added", html)
+        self.assertIn("bvn2-fol1 BVN2", html)
+        self.assertIn(">waiting<", html)
         self.assertIn("not created", html)
 
 
