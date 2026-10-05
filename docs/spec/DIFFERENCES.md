@@ -529,28 +529,29 @@ unproven only when the peer cannot give one.
   that subtree's pages again -- on a 2.3M-entry chain the bottom subtree is
   2^21 entries -- though nothing proven above it is asked for again.
 
-### E29. Sections are loaded as the peer holds them now, and account states carry no as-of block
+### E29. Account states carry no as-of block
 
 *[#4518](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4518)*
 
-**Spec** (executor.md, "Sync", Redirection and §3a): a section is loaded as
-of the node's block -- `h` for block `h+1`, `L` in the pull -- and every
-account state is stamped with the block it is as of; a write older than the
-state held is dropped, and a differing write for the same block is the named
-failure.
+**Spec** (executor.md, "Sync", §3a, "Every account state the node holds is
+stamped with the block it is as of"): every writer stamps the account with
+the block its state is as of; a write older than the state held is dropped,
+and a differing write for the same block is the named failure.
 
-**Code** (`internal/node/join/sections.go:486, :552`; `pull_sections.go`):
-`fetch` calls `sectionLeavesAt(..., 0)` and `statesAt(..., 0)`, the peer's
-current view, in a block's load and in the fill; `loadOpened` pages the
-sections the records opened at the peer's current block and raises
-`p.highest`, so the pull's records must catch up to that block. There is no
-`StateBlock`: the pull skips accounts the records brought current, the fill
-drops a section a block touched, and nothing else compares blocks.
+**Code**: there is no `StateBlock`. The pull skips accounts the records
+brought current, the fill drops a section a block touched, and the as-of
+loads (built: `sections.fetch` as of the committed block for a block's load
+and the fill, `loadOpened` and `askStates` as of `L` in the pull) keep every
+load at or below the node's block -- but nothing compares blocks at the
+write, so an older write would not be dropped and a same-block difference
+would not be named.
 
-Measured: soak `20261005T043754Z`, followers added 08:29 AM CDT: 12 / 15 / 5
-demotions in the first 11 minutes after the BVN handoff, each after a section
-load `peer-block − block` of 0–12 (block = `h+1`); none once every section was
-loaded.
+**Built, 2026-10-05:** the loads as of the node's block.
+`TestABlockExecutedBehindThePeersLoadsASectionAsOfItsOwnBlock` (46 handoffs
+without, 1 with) and `TestThePullMatchesWhileEveryBlockOpensSections` (62
+pull rounds without, 1 with). Soak `20261005T043754Z` measured the loop
+before: 12 / 15 / 5 demotions per late follower in the first 11 minutes after
+the BVN handoff.
 
 ### E11. A node cannot sync from the running protocol
 
