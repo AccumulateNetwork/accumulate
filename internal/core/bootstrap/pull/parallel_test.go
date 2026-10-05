@@ -73,7 +73,7 @@ func TestAChainsPagesAreFetchedInParallelAcrossThePeers(t *testing.T) {
 	counting[0].busy = func() bool { return asks.Add(1)%3 == 0 }
 
 	dst := newObservedDB(t)
-	ctx := WithPeers(context.Background(), peers)
+	ctx := WithPeers(context.Background(), peers, 0)
 	err := Account(ctx, peers[0], nil, u, Options{Mode: ModeFullSpine, Store: dst})
 	require.NoError(t, err)
 	requireWhole(t, src, dst, u)

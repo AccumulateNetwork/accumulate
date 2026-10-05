@@ -32,19 +32,31 @@ var streamPause = struct{ first, most time.Duration }{250 * time.Millisecond, 10
 
 type peersKey struct{}
 
-// WithPeers names the peers a pull may spread a chain's pages across: the
-// source it is pulling from and the others that serve the account.
-func WithPeers(ctx context.Context, peers []Source) context.Context {
-	return context.WithValue(ctx, peersKey{}, peers)
+// withPeers is the peers a pull may spread a chain's pages across, and which
+// of them it is pulling from.
+type withPeers struct {
+	peers []Source
+	turn  int
+}
+
+// WithPeers names the peers a pull may spread a chain's pages across, and
+// which of them, by index, is the source it pulls from. A Source is an
+// interface and not every one is comparable, so the source is named by its
+// place, never compared.
+func WithPeers(ctx context.Context, peers []Source, turn int) context.Context {
+	return context.WithValue(ctx, peersKey{}, withPeers{peers, turn})
 }
 
 // peersOf is the peers a stream from src spreads its pages across: src
 // first, then the others WithPeers named.
 func peersOf(ctx context.Context, src Source) []Source {
 	out := []Source{src}
-	others, _ := ctx.Value(peersKey{}).([]Source)
-	for _, p := range others {
-		if p != src {
+	w, ok := ctx.Value(peersKey{}).(withPeers)
+	if !ok {
+		return out
+	}
+	for i, p := range w.peers {
+		if i != w.turn {
 			out = append(out, p)
 		}
 	}

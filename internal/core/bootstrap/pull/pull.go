@@ -496,11 +496,10 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	}
 	var refusals []error
 	noLeaf := 0
-	// A chain's pages are spread across every source that serves the
-	// account (fetchEntries).
-	ctx = WithPeers(ctx, srcs)
 	for i, src := range srcs {
-		p, err := Fetch(ctx, src, batch, u, opts, opts.WithReceipt)
+		// A chain's pages the source answers busy go to the other sources
+		// (fetchEntries).
+		p, err := Fetch(WithPeers(ctx, srcs, i), src, batch, u, opts, opts.WithReceipt)
 		if ctx.Err() != nil {
 			if p != nil {
 				p.Discard()

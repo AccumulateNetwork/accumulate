@@ -465,7 +465,12 @@ func (c *Collector) lastProduced(ctx context.Context) (uint64, error) {
 			c.OnAsk(0, fmt.Sprint(p))
 		}
 		start := time.Now()
-		rec, err := p.QueryAccount(ctx, u, nil)
+		// Bounded as a validator's call is: a peer that is itself joining
+		// is dialed for the connect timeout, and the newest number is any
+		// peer's to give (#4528).
+		cctx, cancel := context.WithTimeout(ctx, c.callTimeout())
+		rec, err := p.QueryAccount(cctx, u, nil)
+		cancel()
 		if c.OnCall != nil {
 			c.OnCall(0, fmt.Sprint(p), time.Since(start))
 		}
