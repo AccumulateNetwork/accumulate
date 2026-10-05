@@ -534,7 +534,11 @@ answers the anchor it produced, signed with its own key (#4424: committee
 members only; a validator that also holds a quorum of the partition's own
 copy adds it). Answers are grouped by the sequenced message they carry and
 signatures are counted within a group, never across, by the rule above; an
-answer under another number than the one asked is refused. The first read
+answer under another number than the one asked is refused. **A validator that
+does not answer within the call's time is set aside for the rest of the read
+and asked last in the next** (#4528): asked for every anchor, one that hangs
+-- a node that is itself joining, dialed for the p2p connect timeout -- made
+a Directory join that should take three minutes take fifteen. The first read
 starts at the newest anchor P's anchor ledger names (`MinorBlockSequenceNumber`,
 read from a peer: it positions the read and decides nothing) and every read
 goes forward from where the last stopped, to the first number no validator

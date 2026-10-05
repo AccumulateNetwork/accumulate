@@ -96,11 +96,49 @@ type Collector struct {
 	// anchor, or, with anchor zero, to a peer for its ledger's newest number.
 	// A read that lasts is one of these, and this says which (#4524).
 	OnCall func(anchor uint64, who string, took time.Duration)
+	// CallTimeout bounds one call to a validator for an anchor. A validator
+	// that does not answer within it is set aside for the rest of the read
+	// and asked last in the next: one that hangs -- a node that is itself
+	// joining, dialed for the p2p connect timeout -- otherwise costs its
+	// timeout on every anchor of every read, and a Directory join that
+	// should take three minutes took fifteen (#4528). Zero means
+	// DefaultCallTimeout.
+	CallTimeout time.Duration
 
 	mu     sync.Mutex
-	next   uint64 // the next sequence number to collect; zero until positioned
-	newest uint64 // the newest number the ledger named when the read was positioned
+	aside  map[string]bool // validators set aside for the rest of this read
+	slow   map[string]bool // validators asked last in the next read
+	next   uint64          // the next sequence number to collect; zero until positioned
+	newest uint64          // the newest number the ledger named when the read was positioned
 	stall  *Stall
+}
+
+// DefaultCallTimeout is CallTimeout when none is set.
+const DefaultCallTimeout = 3 * time.Second
+
+func (c *Collector) callTimeout() time.Duration {
+	if c.CallTimeout > 0 {
+		return c.CallTimeout
+	}
+	return DefaultCallTimeout
+}
+
+// orderValidators begins a read: the validators set aside in the last read
+// are asked last, and none is set aside yet.
+func (c *Collector) orderValidators(vals []Validator) []Validator {
+	c.aside = map[string]bool{}
+	if len(c.slow) == 0 {
+		return vals
+	}
+	var first, last []Validator
+	for _, v := range vals {
+		if c.slow[v.Name] {
+			last = append(last, v)
+		} else {
+			first = append(first, v)
+		}
+	}
+	return append(first, last...)
 }
 
 // collectBackfill is how many anchors before the newest the first read starts
@@ -188,6 +226,7 @@ func (c *Collector) Read(ctx context.Context) error {
 	if len(vals) == 0 {
 		return errors.NotReady.WithFormat("no validator of %v other than this node was found", c.Producer)
 	}
+	vals = c.orderValidators(vals)
 
 	askedLedgers := false
 	for i := 0; i < maxAnchorsPerRead && ctx.Err() == nil; i++ {
@@ -255,12 +294,18 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 	var lastErr error
 	produced := false
 	for _, v := range vals {
+		if c.aside[v.Name] {
+			continue
+		}
 		asked = append(asked, v.Name)
 		if c.OnAsk != nil {
 			c.OnAsk(n, v.Name)
 		}
 		start := time.Now()
-		ans, err := v.Sequencer.Sequence(ctx, src, dst, n, private.SequenceOptions{})
+		cctx, cancel := context.WithTimeout(ctx, c.callTimeout())
+		ans, err := v.Sequencer.Sequence(cctx, src, dst, n, private.SequenceOptions{})
+		timedOut := cctx.Err() != nil
+		cancel()
 		if c.OnCall != nil {
 			c.OnCall(n, v.Name, time.Since(start))
 		}
@@ -268,12 +313,21 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 			if ctx.Err() != nil {
 				return false, false, false, errors.UnknownError.Wrap(ctx.Err())
 			}
-			if errors.Is(err, errors.NotReady) {
+			if timedOut {
+				// Did not answer within the call's time: set aside for the
+				// rest of this read, asked last in the next (#4528).
+				c.aside[v.Name] = true
+				if c.slow == nil {
+					c.slow = map[string]bool{}
+				}
+				c.slow[v.Name] = true
+			} else if errors.Is(err, errors.NotReady) {
 				notYet = true
 			}
 			lastErr = err
 			continue
 		}
+		delete(c.slow, v.Name)
 		rec, err := anchorOf(ans)
 		if err == nil && rec.Sequence.Number != n {
 			err = errors.Conflict.WithFormat("asked for anchor %d, it answered anchor %d", n, rec.Sequence.Number)

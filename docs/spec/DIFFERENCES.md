@@ -529,6 +529,29 @@ unproven only when the peer cannot give one.
   that subtree's pages again -- on a 2.3M-entry chain the bottom subtree is
   2^21 entries -- though nothing proven above it is asked for again.
 
+### E30. The validators asked for anchors are every peer serving the sequencer, joining followers included
+
+*[#4528](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4528)*
+
+**Spec** (executor.md, "Sync", "The anchor is collected from the partition's
+own validators"): the join asks each of P's validators for anchor n.
+
+**Code** (`internal/node/join/sources.go`, `ValidatorsOf`): the peers found
+serving the partition's sequencer service, this node dropped. A joining
+follower serves the sequencer too, so two followers joining together each
+ask the other; a node that is itself joining answers only after the p2p
+connect timeout. The collector now sets such a peer aside for the read
+(spec, same paragraph), which makes the cost one call a read instead of one
+a anchor; it does not stop a joining node being asked as a validator. The
+fix needs a decision: advertise the sequencer only from ACTIVE validators of
+the partition, or filter the found peers by the partition's validator set
+(which names keys, not peer ids).
+
+Measured: attach run `20261005T152855Z`, followers added 15:48Z -- the
+Directory join of acc-bvn2-fol1 and acc-bvn3-fol2 spent 7 and 10 minutes
+reading anchors at six a minute, each waiting 10 s per anchor on the other;
+acc-bvn1-fol1, whose list had neither, was proven in 189 s.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*

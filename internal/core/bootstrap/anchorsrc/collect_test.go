@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
@@ -415,4 +416,52 @@ func TestTheCollectorWaitsForAnAnchorNotProducedYet(t *testing.T) {
 	upTo = 21
 	require.NoError(t, c.Read(ctx))
 	require.Contains(t, got, uint64(21), "the anchor that was not produced yet was skipped")
+}
+
+// hanging is a validator's sequencer that never answers: a node that is
+// itself joining, dialed for the connect timeout.
+type hanging struct{ asks *int }
+
+func (h hanging) Sequence(ctx context.Context, _, _ *url.URL, _ uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	*h.asks++
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// TestTheCollectorSetsAsideAValidatorThatHangs — #4528, attach run
+// 20261005T152855Z: two joining followers each found the other among the
+// Directory's sequencers, and every anchor waited the connect timeout on it,
+// six anchors a minute against one a second. A validator that does not
+// answer within the call's time is asked once a read, not once an anchor, and
+// last in the next read; the read takes its anchors from the ones that answer.
+func TestTheCollectorSetsAsideAValidatorThatHangs(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1) // threshold 3 of 4
+	const last = 24
+	asks := 0
+	vals := validatorList{{Name: "hangs", Sequencer: hanging{&asks}}}
+	for i := 0; i < 3; i++ {
+		answers := map[uint64]*api.MessageRecord[messaging.Message]{}
+		for n := uint64(1); n <= last; n++ {
+			answers[n] = f.signedBy(t, n, root(byte(n)), i)
+		}
+		vals = append(vals, Validator{Name: fmt.Sprintf("v%d", i), Sequencer: answering{answers: answers}})
+	}
+	c, got := collectorOver(t, f, vals, last)
+	c.CallTimeout = 20 * time.Millisecond
+
+	start := time.Now()
+	require.NoError(t, c.Read(ctx))
+	took := time.Since(start)
+	require.Len(t, got, collectBackfill+1, "the read did not take the anchors the three answering validators signed: got %d", len(got))
+	require.Equal(t, 1, asks, "the validator that hangs was asked %d times in one read", asks)
+	require.Less(t, took, 500*time.Millisecond, "the read waited on the validator that hangs for %v", took)
+
+	// The next read asks it last, and once.
+	asks = 0
+	var order []string
+	c.OnAsk = func(_ uint64, who string) { order = append(order, who) }
+	require.NoError(t, c.Read(ctx))
+	require.Equal(t, 1, asks)
+	require.Equal(t, "hangs", order[3], "the validator that hung was not asked last: %v", order[:4])
 }
