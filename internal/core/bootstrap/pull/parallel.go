@@ -11,6 +11,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,10 +28,10 @@ import (
 // small and spread, not large and on one peer.
 const parallelPages = 4
 
-// streamPause is how long a page waits once every peer has refused it,
-// doubling from first up to most, and give, how long it waits in all: a page
-// every peer still refuses then is the chain's refusal from these peers
-// (#4533).
+// streamPause is how long a page waits once every peer has failed it and one
+// was busy, doubling from first up to most, and give, how long it waits in
+// all: a page every peer still fails then is the chain's failure from these
+// peers (#4533).
 type streamPauses struct{ first, most, give time.Duration }
 
 var streamPause = streamPauses{250 * time.Millisecond, 10 * time.Second, 15 * time.Second}
@@ -145,13 +146,47 @@ func fetchEntries(ctx context.Context, peers []Source, pages Store, u *url.URL, 
 	return errors.UnknownError.Wrap(ctx.Err())
 }
 
+// busyRefusal is what a validator's query gate says when its slots are taken
+// (internal/api/v3, gate.go; executor spec, "Sync"): the one failure of a page
+// that clears by itself in a moment.
+const busyRefusal = "query capacity exhausted"
+
+func isBusy(err error) bool {
+	return errors.Is(err, errors.NotReady) && strings.Contains(err.Error(), busyRefusal)
+}
+
+// isUnreachable says the peer could not be dialed: the transport names a
+// failed dial by the address it dialed (pkg/api/v3/message,
+// RoutedTransport.dial: "dial /p2p/...: connection failed").
+func isUnreachable(err error) bool {
+	return strings.Contains(err.Error(), "dial /p2p/")
+}
+
+// passable says a page's failure says nothing about the entries -- the peer
+// was busy, could not be reached, or refused as a node does while it joins
+// (NotReady) -- so the page is asked of the next peer. Any other answer is
+// the peer's, and wrong: it fails the attempt, and the source is refused as
+// it always was.
+func passable(err error) bool {
+	return errors.Is(err, errors.NotReady) || isUnreachable(err)
+}
+
 // fetchChunk takes [start, end) of a chain from the peer at turn, or from
-// the ones after it when it is busy, as fetchEntries says.
+// the ones after it when that one does not serve it, as fetchEntries says.
+// A peer that is busy, unreachable or joining is passed for the next
+// (passable); once every peer has failed the page, it is asked again only
+// when one of them was busy, after a pause that doubles, and for
+// streamPause.give in all. Otherwise the page is the chain's failure from
+// these peers, and the attempt fails for the caller to ask the next source
+// (#4533: a follower's Directory pull waited on one peer's refusal for as
+// long as the pull lasted; then, every source spreading its pages across a
+// peer that could not be dialed, every source failed the chain).
 func fetchChunk(ctx context.Context, peers []Source, turn int, pages Store, u *url.URL, name string, start, end uint64, bodies bool) error {
 	pause := streamPause.first
 	var waited time.Duration
 	for ctx.Err() == nil {
-		var refusals []error
+		var failures []error
+		busy := false
 		for k := range peers {
 			i := (turn + k) % len(peers)
 			src := peers[i]
@@ -162,19 +197,20 @@ func fetchChunk(ctx context.Context, peers []Source, turn int, pages Store, u *u
 			if ctx.Err() != nil {
 				return errors.UnknownError.Wrap(ctx.Err())
 			}
-			if !errors.Is(err, errors.NotReady) {
+			if !passable(err) {
 				return fmt.Errorf("entries %d..%d of %s: %s: %w", start, end-1, name, sourceName(i, src), err)
 			}
-			refusals = append(refusals, fmt.Errorf("%s: %w", sourceName(i, src), err))
+			if isBusy(err) {
+				busy = true
+			}
+			failures = append(failures, fmt.Errorf("%s: %w", sourceName(i, src), err))
 		}
-		// Every peer refused it. Busy ones clear in a moment: wait, and ask
-		// again. A page they all still refuse once the pauses are spent is
-		// the chain's refusal from these peers -- a peer holds the anchor
-		// unsigned, or is joining -- and the attempt fails as any other
-		// refusal does, for the caller to ask the next source (#4533).
+		if !busy {
+			return fmt.Errorf("entries %d..%d of %s: no peer served them: %w", start, end-1, name, stderrors.Join(failures...))
+		}
 		if waited+pause > streamPause.give {
-			return errors.NotReady.WithCauseAndFormat(stderrors.Join(refusals...),
-				"entries %d..%d of %s: every peer refused them for %v", start, end-1, name, waited)
+			return errors.NotReady.WithCauseAndFormat(stderrors.Join(failures...),
+				"entries %d..%d of %s: every peer was busy for %v", start, end-1, name, waited)
 		}
 		waited += pause
 		t := time.NewTimer(pause)

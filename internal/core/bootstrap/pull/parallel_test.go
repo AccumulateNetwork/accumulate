@@ -31,9 +31,13 @@ type countingSource struct {
 	inflight *atomic.Int64
 	most     *atomic.Int64
 	busy     func() bool
+	fail     error // answered to every page, when set: a peer that cannot be reached
 }
 
 func (s *countingSource) QueryChainEntries(ctx context.Context, u *url.URL, q *api.ChainQuery) (*api.RecordRange[*api.ChainEntryRecord[api.Record]], error) {
+	if s.fail != nil {
+		return nil, s.fail
+	}
 	if s.busy != nil && s.busy() {
 		return nil, errors.NotReady.With("query capacity exhausted, retry later")
 	}
@@ -209,7 +213,7 @@ func TestARefusalEveryPeerKeepsUpFailsTheChainsAttempt(t *testing.T) {
 		require.Error(t, err)
 		require.True(t, errors.Is(err, errors.NotReady), "the refusal was not passed up: %v", err)
 	case <-time.After(5 * time.Second):
-		t.Fatal("the pull waited on the refusing peer past its pauses")
+		t.Fatal("the pull waited on the busy peer past its pauses")
 	}
 
 	dst2 := newObservedDB(t)
@@ -260,4 +264,39 @@ func TestTheSpineAccountsChainsSpreadAcrossThePeersToo(t *testing.T) {
 	requireWhole(t, src, dst, u)
 	require.Positive(t, counting[1].pages.Load(), "no page of the spine account went to the second peer")
 	require.GreaterOrEqual(t, most.Load(), int64(2), "the pages were asked for one at a time")
+}
+
+// TestAPeerThatCannotBeReachedIsPassedForTheNext — #4533, run
+// 20261005T183032Z: the Directory's sources held two followers that were
+// joining and could not be dialed, and with every source spreading its pages
+// across them, every source failed the anchor pool's chain ("connection
+// failed" is no NotReady). A peer that fails a page in any way is passed for
+// the next; only a page every peer fails is the chain's failure, and one
+// nobody was busy for fails at once, with no pause.
+func TestAPeerThatCannotBeReachedIsPassedForTheNext(t *testing.T) {
+	defer func(p streamPauses) { streamPause = p }(streamPause)
+	streamPause = streamPauses{time.Second, time.Second, 10 * time.Second}
+
+	u := protocol.DnUrl().JoinPath("anchors")
+	src := newObservedDB(t)
+	buildChain(t, src, u, 1200, 0x56)
+	var inflight, most atomic.Int64
+	dial := errors.UnknownError.With("dial /p2p/12D3KooWdead/acc-svc/query:directory: connection failed")
+	dead := &countingSource{dbSource: &dbSource{db: src}, name: "dead", inflight: &inflight, most: &most, fail: dial}
+	server := &countingSource{dbSource: &dbSource{db: src}, name: "server", inflight: &inflight, most: &most}
+
+	dst := newObservedDB(t)
+	ctx := WithPeers(context.Background(), []Source{server, dead}, 0)
+	require.NoError(t, Account(ctx, server, nil, u, Options{Mode: ModeFullSpine, Store: dst}))
+	requireWhole(t, src, dst, u)
+	require.Zero(t, dead.pages.Load())
+
+	dst2 := newObservedDB(t)
+	begun := time.Now()
+	ctx = WithPeers(context.Background(), []Source{dead}, 0)
+	err := Account(ctx, dead, nil, u, Options{Mode: ModeFullSpine, Store: dst2})
+	require.Error(t, err)
+	require.False(t, errors.Is(err, errors.NotReady), "an unreachable peer was taken for a busy one: %v", err)
+	require.Contains(t, err.Error(), "connection failed")
+	require.Less(t, time.Since(begun), streamPause.first, "the pull paused for a peer nobody was busy for")
 }
