@@ -43,13 +43,25 @@ func chainOf(t *testing.T, db *database.Database, u *url.URL, n, size int) {
 // their size.
 func entriesFrom(t *testing.T, q *Querier, u *url.URL, start, count uint64, expand bool) (int, int) {
 	t.Helper()
+	n, size, _ := entriesOf(t, q, u, &api.RangeOptions{Start: start, Count: &count, Expand: &expand})
+	return n, size
+}
+
+// entriesOf asks for a range of u's main chain entries and returns how many
+// were answered, their size, and the first index answered.
+func entriesOf(t *testing.T, q *Querier, u *url.URL, opts *api.RangeOptions) (int, int, uint64) {
+	t.Helper()
+	start := opts.Start
 	r, err := q.Query(context.Background(), u, &api.ChainQuery{
 		Name:  "main",
-		Range: &api.RangeOptions{Start: start, Count: &count, Expand: &expand},
+		Range: opts,
 	})
 	require.NoError(t, err)
 	rr, ok := r.(*api.RecordRange[*api.ChainEntryRecord[api.Record]])
 	require.True(t, ok, "answered a %T", r)
+	if opts.FromEnd {
+		start = rr.Start
+	}
 	var size int
 	for i, e := range rr.Records {
 		require.Equal(t, start+uint64(i), e.Index, "the answer is not the entries from the start")
@@ -57,7 +69,7 @@ func entriesFrom(t *testing.T, q *Querier, u *url.URL, start, count uint64, expa
 		require.NoError(t, err)
 		size += len(b)
 	}
-	return len(rr.Records), size
+	return len(rr.Records), size, rr.Start
 }
 
 // TestAChainEntryRangeIsAtMost200EntriesAnd50000Bytes — #4493, Paul
@@ -88,8 +100,17 @@ func TestAChainEntryRangeIsAtMost200EntriesAnd50000Bytes(t *testing.T) {
 	require.Less(t, n, 100, "a range of 2 kB entries was answered past 50,000 bytes")
 	require.Greater(t, n, 1)
 	require.LessOrEqual(t, size, maxChainEntryBytes)
+	// Asked from the end, an answer that does not fit keeps the newest
+	// entries and says where it starts: the explorer's newest-first lists
+	// lost the newest entries when it kept the oldest.
+	count, expand := uint64(100), true
+	m, size, first := entriesOf(t, q, large, &api.RangeOptions{Count: &count, Expand: &expand, FromEnd: true})
+	require.Less(t, m, 100)
+	require.LessOrEqual(t, size, maxChainEntryBytes)
+	require.Equal(t, uint64(100-m), first, "the answer from the end does not end at the newest entry")
+
 	// The next answer starts where this one stopped.
-	m, _ := entriesFrom(t, q, large, uint64(n), 100, true)
+	m, _ = entriesFrom(t, q, large, uint64(n), 100, true)
 	require.Greater(t, m, 0)
 
 	huge := protocol.DnUrl().JoinPath("huge")

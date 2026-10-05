@@ -1354,11 +1354,18 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 	r.Total = uint64(head.Count)
 	allocRange(r, opts, zeroBased)
 
+	var expand bool
+	if opts.Expand != nil {
+		expand = *opts.Expand
+	}
+	// Filled from the end a range is asked from: a range asked from the end
+	// that does not fit keeps its newest entries, and starts later.
 	var size int
-	for i := range r.Records {
-		var expand bool
-		if opts.Expand != nil {
-			expand = *opts.Expand
+	n := len(r.Records)
+	for k := 0; k < n; k++ {
+		i := k
+		if opts.FromEnd {
+			i = n - 1 - k
 		}
 		r.Records[i], err = s.queryChainEntryByIndex(ctx, batch, record, r.Start+uint64(i), expand, nil)
 		if err != nil {
@@ -1372,10 +1379,16 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 			return nil, errors.UnknownError.WithFormat("measure entry %d: %w", r.Start+uint64(i), err)
 		}
 		size += len(b)
-		if size > maxBytes && i > 0 {
-			r.Records = r.Records[:i]
-			break
+		if size <= maxBytes || k == 0 {
+			continue
 		}
+		if opts.FromEnd {
+			r.Records = r.Records[i+1:]
+			r.Start += uint64(i + 1)
+		} else {
+			r.Records = r.Records[:i]
+		}
+		break
 	}
 	return r, nil
 }

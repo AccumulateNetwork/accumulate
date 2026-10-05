@@ -758,7 +758,9 @@ it was given and asks again from the entry after the last one, so entries
 larger than expected cost more answers, not a larger one. **The cap is the
 API's, for every client** (Paul, 2026-10-05), not only a syncing node: a
 client pages by the entries an answer holds, never by the count it asked
-for.
+for. A range asked for from the end is filled from the newest entry down: an
+answer that does not fit keeps the newest entries, and its Start says where
+it begins.
 
 A page is asked first of the peer that served the last. **A peer's capacity
 refusal is not a NotFound** (Paul, 2026-10-02, #4493): a validator answers
