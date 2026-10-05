@@ -55,6 +55,13 @@ type sectionsJoin struct {
 	alice, bob *url.URL
 	aliceKey   []byte
 	ts         uint64
+
+	// spread sends each deposit to the next of many, so the blocks the
+	// joiner executes touch sections it has not loaded; buf, when set, is
+	// the join's buffer.
+	spread bool
+	k      int
+	buf    join.Buffer
 }
 
 const sectionsAccounts = 600
@@ -159,7 +166,7 @@ func (j *sectionsJoin) run() {
 	state := j.part.NodeJoinState(j.fresh)
 	stepping := &steppingState{cancel: cancel, State: state, leaveBackfill: true, step: func(round int) {
 		if j.notLoadedAtHandoff < 0 || state.Machine().State() != nodestate.StateActive {
-			if round%5 == 0 {
+			if j.spread || round%5 == 0 {
 				j.send()
 			}
 			j.sim.StepN(3)
@@ -171,9 +178,13 @@ func (j *sectionsJoin) run() {
 	j.notLoadedAtHandoff = -1
 	settler, ok := j.part.NodeExecutor(j.fresh).(join.Settler)
 	require.True(t, ok)
+	buf := j.buf
+	if buf == nil {
+		buf = &handoffCounting{Buffer: j.part.NodeJoin(j.fresh)}
+	}
 	outcome, err := join.Run(ctx, join.Options{
 		Partition: "BVN0",
-		Buffer:    &handoffCounting{Buffer: j.part.NodeJoin(j.fresh)},
+		Buffer:    buf,
 		Stage:     &join.ExecutorStage{Settler: settler, Staging: j.part.NodeStaging(j.fresh), Database: j.part.NodeDatabase(j.fresh)},
 		State:     &countingAtHandoff{steppingState: stepping, j: j},
 		Peers:     &join.APIPeers{Partition: "BVN0", Client: j.sim.S.Services(), Network: t.Name()},
@@ -199,9 +210,14 @@ func (c *countingAtHandoff) HandedOff(q uint64) {
 
 func (j *sectionsJoin) send() {
 	j.ts++
+	to := j.bob.JoinPath("tokens")
+	if j.spread {
+		to = j.many[j.k%len(j.many)]
+		j.k++
+	}
 	st := j.sim.BuildAndSubmitTxnSuccessfully(
 		build.Transaction().For(j.alice, "tokens").
-			SendTokens(1, 0).To(j.bob, "tokens").
+			SendTokens(1, 0).To(to).
 			SignWith(j.alice, "book", "1").Version(1).Timestamp(j.ts).PrivateKey(j.aliceKey))
 	j.sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
 }
@@ -317,6 +333,27 @@ func TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt(t *testing.T) {
 	require.Equal(t, want.Balance.String(), got.Balance.String())
 	require.Equal(t, "8", got.Balance.String(), "the deposit was not executed onto the account's loaded state")
 	j.agree("after the block that loaded a section")
+}
+
+// TestABlockExecutedBehindThePeersLoadsASectionAsOfItsOwnBlock — #4518, soak
+// 20261005T043754Z. After the handoff the node executes the blocks it
+// buffered while the validators move on, so every block it executes is behind
+// them. A block that loads a section must take it as of its own block: taken
+// as a peer holds it now, the section holds what the later blocks did to the
+// account the block is about to change, the block changes it again, the root
+// differs from the proven root and the node is demoted -- on the soak, within
+// a block or two of every handoff, until every section was loaded. Here every
+// block of the join deposits into an account only the validators held, in a
+// section the joiner has not loaded, and the node must hand off once.
+func TestABlockExecutedBehindThePeersLoadsASectionAsOfItsOwnBlock(t *testing.T) {
+	j := prepareSectionsJoin(t)
+	j.spread = true
+	buf := &countingBuffer{Buffer: j.part.NodeJoin(j.fresh)}
+	j.buf = buf
+	j.run()
+	require.Positive(t, j.notLoadedAtHandoff, "precondition: every section was loaded at the handoff")
+	require.Len(t, buf.handoffs, 1, "the node handed off %d times (collected again %d times): a block it executed behind the peers diverged", len(buf.handoffs), buf.starts)
+	j.agree("after joining under deposits into sections not loaded")
 }
 
 // TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchanged

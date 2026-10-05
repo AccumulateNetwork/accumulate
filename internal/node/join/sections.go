@@ -292,9 +292,14 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 		ld, verified, last = x.fetch(ctx, s, h, want, true)
 		if last == nil {
 			if !verified {
+				// As of h the section should hash to its marker: nothing in
+				// it changed since the top was taken, or a record would have
+				// opened it. One that does not is taken as of h all the same
+				// -- that is the state block h+1 executes over -- and said,
+				// for the root check to decide.
 				x.unverified.Add(1)
-				x.log.Info("A section a block reads was taken as a peer holds it after this node's block; the root check decides",
-					"partition", x.partition, "section", s, "block", h+1, "peer-block", ld.block)
+				x.log.Warn("A section a block reads does not hash to its marker as of this node's block; taken as of the block, and the root check decides",
+					"partition", x.partition, "section", s, "block", h+1, "as-of", ld.block)
 			}
 			return x.apply(batch, ld)
 		}
@@ -483,7 +488,7 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		if ctx.Err() != nil {
 			break
 		}
-		leaves, urls, block, err := sectionLeavesAt(ctx, src, x.partition, s, 0)
+		leaves, urls, block, err := sectionLeavesAt(ctx, src, x.partition, s, h)
 		if err != nil {
 			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
 			// A peer that has not loaded the section names peers that may
@@ -495,7 +500,7 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		}
 		got, ok := bpt.SectionHash(leaves)
 		if ok && got == want {
-			ld, err := x.statesFor(ctx, src, s, block, got, leaves, urls)
+			ld, err := x.statesFor(ctx, src, s, block, h, got, leaves, urls)
 			if err == nil {
 				return ld, true, nil
 			}
@@ -508,7 +513,7 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		}
 	}
 	if fallback != nil {
-		ld, err := x.statesFor(ctx, fallback.src, s, fallback.block, fallback.hash, fallback.leaves, fallback.urls)
+		ld, err := x.statesFor(ctx, fallback.src, s, fallback.block, h, fallback.hash, fallback.leaves, fallback.urls)
 		if err == nil {
 			return ld, false, nil
 		}
@@ -546,10 +551,10 @@ func (x *sections) redirect(srcs []pull.Source, asked map[peer.ID]bool, err erro
 	return srcs
 }
 
-// statesFor asks one peer for the accounts behind a section's leaves, as it
-// holds them now, and checks each against its leaf.
-func (x *sections) statesFor(ctx context.Context, src pull.Source, s bpt.Section, block uint64, hash [32]byte, leaves []bpt.SectionLeaf, urls []*url.URL) (*loadedSection, error) {
-	states, err := statesAt(ctx, src, x.partition, urls, 0)
+// statesFor asks one peer for the accounts behind a section's leaves, as of
+// block h, and checks each against its leaf.
+func (x *sections) statesFor(ctx context.Context, src pull.Source, s bpt.Section, block, h uint64, hash [32]byte, leaves []bpt.SectionLeaf, urls []*url.URL) (*loadedSection, error) {
+	states, err := statesAt(ctx, src, x.partition, urls, h)
 	if err != nil {
 		return nil, err
 	}
