@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -90,6 +91,11 @@ type Collector struct {
 	// nothing that answers, so this is the one way to say which question a
 	// read that lasts is on (#4484).
 	OnAsk func(anchor uint64, who string)
+
+	// OnCall, if set, is told how long each call took: to a validator for an
+	// anchor, or, with anchor zero, to a peer for its ledger's newest number.
+	// A read that lasts is one of these, and this says which (#4524).
+	OnCall func(anchor uint64, who string, took time.Duration)
 
 	mu     sync.Mutex
 	next   uint64 // the next sequence number to collect; zero until positioned
@@ -183,12 +189,25 @@ func (c *Collector) Read(ctx context.Context) error {
 		return errors.NotReady.WithFormat("no validator of %v other than this node was found", c.Producer)
 	}
 
+	askedLedgers := false
 	for i := 0; i < maxAnchorsPerRead && ctx.Err() == nil; i++ {
-		done, answered, err := c.collect(ctx, vals, c.next)
+		done, answered, notYet, err := c.collect(ctx, vals, c.next)
 		if err != nil {
 			return err
 		}
+		if !done && !answered && notYet {
+			// Not produced yet: a wait, not a number to skip. A live
+			// partition's ledgers name an anchor before its validators
+			// serve it; skipping it and asking the ledgers again for every
+			// number ran the collector past every signed anchor, asking
+			// some 39 times a second (#4524). The next read asks again.
+			return nil
+		}
 		if !done && !answered && c.next >= c.newest {
+			if askedLedgers {
+				return nil // The ledgers are asked once a read
+			}
+			askedLedgers = true
 			// Not answered, at or past the newest the ledgers named when
 			// the read was positioned: not produced yet -- or no longer
 			// held, if the producer has moved on since. A collector read
@@ -222,7 +241,7 @@ func (c *Collector) Read(ctx context.Context) error {
 // collect asks every validator for anchor number n and takes it when a quorum
 // signed it. It reports whether it took it, and whether any validator answered
 // it at all: one that none answered is not produced yet, or no longer held.
-func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (taken, answered bool, err error) {
+func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (taken, answered, notYet bool, err error) {
 	src := c.Producer.JoinPath(protocol.AnchorPool)
 	dst := protocol.DnUrl()
 	producer, _ := protocol.ParsePartitionUrl(c.Producer)
@@ -240,10 +259,17 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 		if c.OnAsk != nil {
 			c.OnAsk(n, v.Name)
 		}
+		start := time.Now()
 		ans, err := v.Sequencer.Sequence(ctx, src, dst, n, private.SequenceOptions{})
+		if c.OnCall != nil {
+			c.OnCall(n, v.Name, time.Since(start))
+		}
 		if err != nil {
 			if ctx.Err() != nil {
-				return false, false, errors.UnknownError.Wrap(ctx.Err())
+				return false, false, false, errors.UnknownError.Wrap(ctx.Err())
+			}
+			if errors.Is(err, errors.NotReady) {
+				notYet = true
 			}
 			lastErr = err
 			continue
@@ -284,7 +310,7 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 			c.stall = &Stall{Entry: n, Asked: asked, Err: errors.NotFound.WithFormat(
 				"no validator answers anchor %d, the newest the peers' ledgers name: %v", n, lastErr)}
 		}
-		return false, false, nil
+		return false, false, notYet, nil
 	}
 
 	// Every group a quorum signed is observed, not only the first: a group
@@ -314,11 +340,11 @@ func (c *Collector) collect(ctx context.Context, vals []Validator, n uint64) (ta
 		if n > c.newest {
 			c.newest = n
 		}
-		return true, true, nil
+		return true, true, notYet, nil
 	}
 
 	c.stall = &Stall{Entry: n, Asked: asked, Err: lastErr}
-	return false, true, nil
+	return false, true, notYet, nil
 }
 
 // isOwn refuses an answer that is not the producer's own anchor: sent by the
@@ -384,7 +410,11 @@ func (c *Collector) lastProduced(ctx context.Context) (uint64, error) {
 		if c.OnAsk != nil {
 			c.OnAsk(0, fmt.Sprint(p))
 		}
+		start := time.Now()
 		rec, err := p.QueryAccount(ctx, u, nil)
+		if c.OnCall != nil {
+			c.OnCall(0, fmt.Sprint(p), time.Since(start))
+		}
 		if err != nil {
 			last = err
 			continue

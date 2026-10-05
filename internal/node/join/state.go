@@ -460,6 +460,16 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		}
 		s.wait.on(stepAnchors, "anchor", n, "validator", who)
 	}
+	collector.OnCall = func(n uint64, who string, took time.Duration) {
+		if took < slowCall {
+			return
+		}
+		what := "the newest anchor number"
+		if n != 0 {
+			what = fmt.Sprintf("anchor %d", n)
+		}
+		s.log.Warn("A call for this partition's anchors was slow", "partition", s.partition, "asked", what, "of", who, "took", took.Round(time.Millisecond))
+	}
 	collector.OnRefused = s.anchorRefused
 	collector.OnRootChain = s.observeRootChain
 	s.anchors = collector
@@ -656,6 +666,9 @@ func (s *PulledState) Sources() Sources { return s.sources }
 // what an earlier round could not take. Everything it pulls it writes; the
 // match is the one proof (Matched).
 func (s *PulledState) Pull(ctx context.Context) error {
+	round := newRoundTimer()
+	defer round.report(s.log, s.partition)
+
 	// The anchors first: they are what the match is judged against.
 	//
 	// A failure here ends the round, never the join. Every read is addressed
@@ -664,6 +677,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	// certainty. Returning an error reaches join.Run, which returns, and the
 	// daemon then abandons the join for good.
 	err := s.readAnchors(ctx)
+	round.mark("anchors")
 	if err != nil && !(errors.Is(err, errors.NotReady) && s.spineStalled()) {
 		// A read held at an entry every peer refuses is the stall, said
 		// once a minute by readAnchors, not once a round here.
@@ -684,6 +698,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	}
 
 	peer, err := s.peersBlock(ctx)
+	round.mark("peers-block")
 	s.wait.on("pulling the state")
 	if err != nil {
 		// No peer could say where the partition is. Nothing is lost by
@@ -767,7 +782,9 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	// records' end T. Every account is marked current as the records name
 	// it, whether or not it is taken this round, so the walk never writes
 	// over it.
+	round.mark("top+spine")
 	s.processRecords(ctx, p, peer)
+	round.mark("records")
 
 	// 2. What an earlier round could not take, once each this round,
 	// whoever named it.
@@ -782,9 +799,12 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		s.takeAccounts(ctx, p, s.partitionSources(ctx), list)
 	}
 
+	round.mark("owed")
+
 	// 3. The sections opened: each one's leaves, and every account they name
 	// the records have not brought current.
 	s.loadOpened(ctx, p)
+	round.mark("sections")
 
 	// With the top taken, every section opened loaded, nothing owed and L at
 	// or above the highest block any reply was read at, every loaded section

@@ -352,3 +352,67 @@ func TestTheCollectorSaysWhoItAsks(t *testing.T) {
 	require.Equal(t, []string{"1 v0", "1 v1", "1 v2"}, asked[1:4], "each validator is named as it is asked")
 	require.Contains(t, asked, "7 v2")
 }
+
+// producing answers anchor n signed by one validator while n is at or below
+// *upTo, and above it what the sequencer answers: NotReady, not produced yet.
+type producing struct {
+	upTo   *uint64
+	signer int
+	f      *netFixture
+	t      *testing.T
+}
+
+func (p producing) Sequence(_ context.Context, _, _ *url.URL, n uint64, _ private.SequenceOptions) (*api.MessageRecord[messaging.Message], error) {
+	if n > *p.upTo {
+		return nil, errors.NotReady.WithFormat("anchor %d is not produced yet", n)
+	}
+	return p.f.signedBy(p.t, n, root(byte(n)), p.signer), nil
+}
+
+// aheadLedger is a peer's anchor ledger that names one anchor more than the
+// validators have produced, and moves on by one every time it is read: a live
+// partition, whose ledger counts an anchor before the validators serve it.
+type aheadLedger struct {
+	upTo  *uint64
+	reads *int
+}
+
+func (l aheadLedger) QueryAccount(_ context.Context, scope *url.URL, _ *api.DefaultQuery) (*api.AccountRecord, error) {
+	*l.reads++
+	return &api.AccountRecord{Account: &protocol.AnchorLedger{Url: scope, MinorBlockSequenceNumber: *l.upTo + 1 + uint64(*l.reads)}}, nil
+}
+
+// TestTheCollectorWaitsForAnAnchorNotProducedYet — #4524: an anchor the
+// validators answer as not produced yet is a wait, not a number to skip. A
+// live partition's ledgers name an anchor before its validators serve it;
+// a collector that skipped it and asked the ledgers again for each number
+// ran ahead of every signed anchor and asked about 39 times a second (run
+// 20261004T195558Z). One read asks the ledgers once, holds at the first
+// number not produced yet, and takes it once it is.
+func TestTheCollectorWaitsForAnAnchorNotProducedYet(t *testing.T) {
+	ctx := context.Background()
+	f := newNet(t, 4, 1)
+	upTo := uint64(20)
+	reads := 0
+	var vals validatorList
+	for i := 0; i < 3; i++ {
+		vals = append(vals, Validator{Name: fmt.Sprintf("v%d", i), Sequencer: producing{upTo: &upTo, signer: i, f: f, t: t}})
+	}
+	c, err := NewCollector(bvn0(), f.authority(t), vals, func(context.Context) ([]AccountReader, error) {
+		return []AccountReader{aheadLedger{&upTo, &reads}}, nil
+	})
+	require.NoError(t, err)
+	got := observed{}
+	c.OnAnchor = got.record
+
+	require.NoError(t, c.Read(ctx))
+	require.Contains(t, got, uint64(20), "the collector did not take the newest anchor produced")
+	first := reads
+	require.NoError(t, c.Read(ctx))
+	require.LessOrEqual(t, reads-first, 1, "one read asked the ledgers %d times", reads-first)
+
+	// The validators produce the next anchor: it is taken, not skipped.
+	upTo = 21
+	require.NoError(t, c.Read(ctx))
+	require.Contains(t, got, uint64(21), "the anchor that was not produced yet was skipped")
+}
