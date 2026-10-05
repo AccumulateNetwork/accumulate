@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"math/big"
 	"testing"
@@ -49,8 +50,9 @@ type sectionsJoin struct {
 	daveKey []byte
 
 	// notLoadedAtHandoff is how many sections the node had not loaded when
-	// it handed off.
-	notLoadedAtHandoff int
+	// it handed off; notLoadedAtMatch, when its state first matched, before
+	// it executed anything.
+	notLoadedAtHandoff, notLoadedAtMatch int
 
 	alice, bob *url.URL
 	aliceKey   []byte
@@ -78,7 +80,14 @@ func joinWithSectionsNotLoaded(t *testing.T) *sectionsJoin {
 
 // prepareSectionsJoin builds the network and the reinstalled joiner, and
 // restarts it, but does not run its join.
-func prepareSectionsJoin(t *testing.T) *sectionsJoin {
+func prepareSectionsJoin(t *testing.T) *sectionsJoin { return prepareSectionsJoinBy(t, false) }
+
+// prepareSectionsJoinBy is prepareSectionsJoin; byBlocks creates the many
+// token accounts by transactions, so the validators' BPT history covers them
+// as it covers every account of a live network, rather than writing them into
+// the validators' stores outside any block, which no history can serve as of
+// a block.
+func prepareSectionsJoinBy(t *testing.T, byBlocks bool) *sectionsJoin {
 	j := &sectionsJoin{t: t, fresh: 3}
 	j.alice = url.MustParse("alice")
 	j.bob = url.MustParse("bob")
@@ -117,14 +126,39 @@ func prepareSectionsJoin(t *testing.T) *sectionsJoin {
 	for i := 0; i < sectionsAccounts; i++ {
 		j.many = append(j.many, j.alice.JoinPath(fmt.Sprintf("t%d", i)))
 	}
+	if byBlocks {
+		// Lite token accounts, created by deposits as a live network's are
+		// (an identity may not hold this many accounts): twenty a
+		// transaction, each transaction executed before the next batch.
+		j.many = j.many[:0]
+		for i := 0; i < sectionsAccounts; i++ {
+			h := sha256.Sum256([]byte(fmt.Sprintf("%s many %d", t.Name(), i)))
+			u, err := LiteTokenAddressFromHash(h[:], "ACME")
+			require.NoError(t, err)
+			j.many = append(j.many, u)
+		}
+		for i := 0; i < len(j.many); i += 20 {
+			end := min(i+20, len(j.many))
+			j.ts++
+			b := build.Transaction().For(j.alice, "tokens").SendTokens(1, 0).To(j.many[i])
+			for _, u := range j.many[i+1 : end] {
+				b = b.And(1, 0).To(u)
+			}
+			st := j.sim.BuildAndSubmitTxnSuccessfully(b.SignWith(j.alice, "book", "1").Version(1).Timestamp(j.ts).PrivateKey(j.aliceKey))
+			sim.StepUntil(Txn(st.TxID).Succeeds(), Txn(st.TxID).Produced().Succeeds())
+		}
+		sim.StepN(3)
+	}
 	for n := 0; n < j.part.NodeCount(); n++ {
 		if n == j.fresh {
 			continue
 		}
 		db := j.part.NodeDatabase(n)
 		b := db.Begin(true)
-		for _, u := range j.many {
-			require.NoError(t, b.Account(u).Main().Put(&TokenAccount{Url: u, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1)}))
+		if !byBlocks {
+			for _, u := range j.many {
+				require.NoError(t, b.Account(u).Main().Put(&TokenAccount{Url: u, TokenUrl: AcmeUrl(), Balance: *big.NewInt(1)}))
+			}
 		}
 		require.NoError(t, b.UpdateBPT())
 		require.NoError(t, b.Commit())
@@ -175,7 +209,7 @@ func (j *sectionsJoin) run() {
 			cancel()
 		}
 	}}
-	j.notLoadedAtHandoff = -1
+	j.notLoadedAtHandoff, j.notLoadedAtMatch = -1, -1
 	settler, ok := j.part.NodeExecutor(j.fresh).(join.Settler)
 	require.True(t, ok)
 	buf := j.buf
@@ -206,6 +240,14 @@ type countingAtHandoff struct {
 func (c *countingAtHandoff) HandedOff(q uint64) {
 	c.steppingState.HandedOff(q)
 	c.j.notLoadedAtHandoff = c.j.part.NodeJoinState(c.j.fresh).SectionsNotLoaded()
+}
+
+func (c *countingAtHandoff) Matched(ctx context.Context) (uint64, bool, error) {
+	q, ok, err := c.steppingState.Matched(ctx)
+	if ok && c.j.notLoadedAtMatch < 0 {
+		c.j.notLoadedAtMatch = c.j.part.NodeJoinState(c.j.fresh).SectionsNotLoaded()
+	}
+	return q, ok, err
 }
 
 func (j *sectionsJoin) send() {
@@ -346,13 +388,18 @@ func TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt(t *testing.T) {
 // block of the join deposits into an account only the validators held, in a
 // section the joiner has not loaded, and the node must hand off once.
 func TestABlockExecutedBehindThePeersLoadsASectionAsOfItsOwnBlock(t *testing.T) {
-	j := prepareSectionsJoin(t)
+	j := prepareSectionsJoinBy(t, true)
 	j.spread = true
 	buf := &countingBuffer{Buffer: j.part.NodeJoin(j.fresh)}
 	j.buf = buf
 	j.run()
 	require.Positive(t, j.notLoadedAtHandoff, "precondition: every section was loaded at the handoff")
 	require.Len(t, buf.handoffs, 1, "the node handed off %d times (collected again %d times): a block it executed behind the peers diverged", len(buf.handoffs), buf.starts)
+	// The blocks executed behind the peers did load sections: the walk is
+	// not exercised otherwise.
+	left := j.part.NodeJoinState(j.fresh).SectionsNotLoaded()
+	require.Less(t, left, j.notLoadedAtMatch, "precondition: no block executed after the match loaded a section (%d not loaded, %d at the match)", left, j.notLoadedAtMatch)
+	t.Logf("matched with %d sections not loaded; the blocks executed since loaded %d", j.notLoadedAtMatch, j.notLoadedAtMatch-left)
 	j.agree("after joining under deposits into sections not loaded")
 }
 
