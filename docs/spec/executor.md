@@ -755,7 +755,10 @@ entries, with the messages behind them when asked, until it has 200 or the
 answer reaches 50,000 bytes, whichever comes first. It always answers at least
 one entry, and the answer carries the entries it returned. The node takes what
 it was given and asks again from the entry after the last one, so entries
-larger than expected cost more answers, not a larger one.
+larger than expected cost more answers, not a larger one. **The cap is the
+API's, for every client** (Paul, 2026-10-05), not only a syncing node: a
+client pages by the entries an answer holds, never by the count it asked
+for.
 
 A page is asked first of the peer that served the last. **A peer's capacity
 refusal is not a NotFound** (Paul, 2026-10-02, #4493): a validator answers
