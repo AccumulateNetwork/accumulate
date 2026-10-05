@@ -536,6 +536,10 @@ answers at most 200 entries and 50,000 bytes and says how many it returned.
   behind it) before asking a peer: up to 512 store reads per page.
 - The backfill pages by 256, and the server clamps every range to 100
   (`maxPageSize`), so a page is at least three answers; there is no byte cap.
+- Entries are proven only at the end: the walk writes pages unproven and
+  replays them against the head once it stops; no page is checked against the
+  head's pending roots, nor by a receipt, as it arrives, and pages do not keep
+  to subtree boundaries.
 - The backfill is serial: one account, one chain, one page at a time.
 
 Measured: run `20261005T020412Z`, about 2.5–2.7 accounts a second (#4493).

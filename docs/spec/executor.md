@@ -716,9 +716,28 @@ fills them:
   the gap it fills, in the same commit, so the record never says a range is
   held before it is.
 
-The backfill asks for exactly what the gaps name, newest first, **200
-entries a request**, without asking the store which entries it holds, and the
-chain is whole when its list is empty. A retry or a restart reads the same
+**The backfill runs from the head down to entry 0, so every entry it takes is
+proven against the head** (Paul, 2026-10-05). The head -- the chain's count
+`C` and its pending roots, in the account state the match proved -- is the
+root of one perfect subtree for each bit of `C`: for `C = 1000`, the ranges
+`[0,512)`, `[512,768)`, `[768,896)`, `[896,960)`, `[960,992)` and `[992,1000)`.
+Walking down, the backfill meets them newest and smallest first. Entries are
+asked for **200 a request**, a request never crossing a subtree's boundary,
+and a range is held -- taken out of its gap, in the commit that writes it --
+only once it is proven:
+
+- a range that is a whole subtree is proven when its entries hash to that
+  subtree's pending root;
+- a page inside a larger subtree is proven by a receipt from the peer, the
+  sibling hashes from the page to that subtree's root, checked as it
+  arrives; a peer that cannot give one has the page held as not yet proven,
+  in the gap, until the whole subtree is in and hashes to its root;
+- a message is proven by hashing to its entry.
+
+So nothing below the head is trusted on a peer's word at any point. A page
+that fails its proof is that peer's answer refused, and is asked of the next.
+The backfill asks for exactly what the gaps name, without asking the store
+which entries it holds, and the chain is whole when its list is empty. A retry or a restart reads the same
 list and asks only for what is still in it
 (`TestABackfillInterruptedMidChainResumesWhereItStopped`,
 `TestARestartMidFillResumesFromTheRecord`). A follower starting from scratch
