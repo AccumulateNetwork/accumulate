@@ -298,7 +298,7 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 				// -- that is the state block h+1 executes over -- and said,
 				// for the root check to decide.
 				x.unverified.Add(1)
-				x.log.Warn("A section a block reads does not hash to its marker as of this node's block; taken as of the block, and the root check decides",
+				x.log.Warn("A section a block reads was not verified as of this node's block; the root check decides",
 					"partition", x.partition, "section", s, "block", h+1, "as-of", ld.block)
 			}
 			return x.apply(batch, ld)
@@ -473,6 +473,7 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		leaves []bpt.SectionLeaf
 		urls   []*url.URL
 		block  uint64
+		at     uint64
 		hash   [32]byte
 	}
 	var fallback *candidate
@@ -488,7 +489,19 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		if ctx.Err() != nil {
 			break
 		}
-		leaves, urls, block, err := sectionLeavesAt(ctx, src, x.partition, s, h)
+		// As of h, the state block h+1 executes over (executor spec, "Sync",
+		// §3a; #4518). A peer that cannot answer as of h -- it retains no
+		// history for the block, or none for an account in it -- is asked
+		// for its current state, which is of a block past h: the load is
+		// not verified, and the root check decides (DIFFERENCES E29).
+		at := h
+		leaves, urls, block, err := sectionLeavesAt(ctx, src, x.partition, s, at)
+		if err != nil && at != 0 {
+			if _, notLoaded := database.NotLoadedOf(err); !notLoaded {
+				at = 0
+				leaves, urls, block, err = sectionLeavesAt(ctx, src, x.partition, s, 0)
+			}
+		}
 		if err != nil {
 			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
 			// A peer that has not loaded the section names peers that may
@@ -500,20 +513,35 @@ func (x *sections) fetch(ctx context.Context, s bpt.Section, h uint64, want [32]
 		}
 		got, ok := bpt.SectionHash(leaves)
 		if ok && got == want {
-			ld, err := x.statesFor(ctx, src, s, block, h, got, leaves, urls)
+			ld, err := x.statesFor(ctx, src, s, block, at, got, leaves, urls)
 			if err == nil {
-				return ld, true, nil
+				return ld, at == h, nil
+			}
+			if at != 0 {
+				// The leaves as of h, and an account in them the peer did
+				// not retain as of h: its current state, as above.
+				leaves, urls, block, err = sectionLeavesAt(ctx, src, x.partition, s, 0)
+				if err == nil {
+					if got, ok = bpt.SectionHash(leaves); ok && got == want {
+						ld, err = x.statesFor(ctx, src, s, block, 0, got, leaves, urls)
+						if err == nil {
+							return ld, false, nil
+						}
+					} else if later && fallback == nil {
+						fallback = &candidate{src, leaves, urls, block, 0, got}
+					}
+				}
 			}
 			last = errors.UnknownError.WithFormat("%s: %w", sourceKey(src), err)
 			continue
 		}
 		last = errors.Conflict.WithFormat("%s: the leaves of section %d as of block %d hash to %x, not to its marker %x", sourceKey(src), s, block, got[:8], want[:8])
 		if later && fallback == nil {
-			fallback = &candidate{src, leaves, urls, block, got}
+			fallback = &candidate{src, leaves, urls, block, at, got}
 		}
 	}
 	if fallback != nil {
-		ld, err := x.statesFor(ctx, fallback.src, s, fallback.block, h, fallback.hash, fallback.leaves, fallback.urls)
+		ld, err := x.statesFor(ctx, fallback.src, s, fallback.block, fallback.at, fallback.hash, fallback.leaves, fallback.urls)
 		if err == nil {
 			return ld, false, nil
 		}

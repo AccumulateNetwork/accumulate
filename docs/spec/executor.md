@@ -592,6 +592,12 @@ executes over it twice: on soak `20261005T043754Z` every late follower was
 demoted within a block or two of every handoff, 12 to 15 times each, until
 every section happened to be loaded. The history's depth bounds how far behind
 a block a load may ask (`bpt-history-depth`, 1024 blocks on the validators).
+A peer that cannot answer as of the block -- it retains no history for it, or
+none for an account in the section, as for an account last written before
+the history began -- answers its current state, of a block past the node's:
+in a block the load is not verified and said, and the root check decides; in
+the pull the records catch up to that block before the state is complete
+(DIFFERENCES E29).
 The entries an account is missing are found from its chains once it has caught
 up (DIFFERENCES E26 says what of the redirect is not built; E25, validation
 loading, is built).

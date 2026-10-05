@@ -1306,12 +1306,19 @@ func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source
 			inChunk[accountKey(u)] = true
 		}
 		var cursor []byte
+		asOf := p.last
 		p.part = nil
 		for ctx.Err() == nil {
 			// As of L: an account a record through L named, or a loaded
 			// section's page as of L showed, is taken as it stood at L
-			// (executor spec, "Sync", §3a; #4518).
-			rec, err := src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk, Cursor: cursor, ForHeight: p.last})
+			// (executor spec, "Sync", §3a; #4518). A peer that cannot
+			// answer as of L answers its current state, of a block past L,
+			// and the records catch up to that block (DIFFERENCES E29).
+			rec, err := src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk, Cursor: cursor, ForHeight: asOf})
+			if err != nil && asOf != 0 && cursor == nil {
+				asOf = 0
+				rec, err = src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk})
+			}
 			if err != nil {
 				s.log.Info("A peer did not answer for accounts; they are asked of another",
 					"partition", s.partition, "peer", sourceKey(src), "accounts", len(chunk), "error", err)

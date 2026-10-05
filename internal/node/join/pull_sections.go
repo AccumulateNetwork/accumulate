@@ -179,6 +179,12 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 		// records left, and the load raises no block the records must
 		// catch up to (executor spec, "Sync", §3a; #4518).
 		page, err := src.QueryBptPage(ctx, s.partition, &api.BptPageQuery{StartHash: todo[0].ScanStart(), Count: sectionPage, ForHeight: p.last})
+		if err != nil && p.last != 0 {
+			// A peer that cannot answer as of L answers its current state,
+			// of a block past L, and the records catch up to it
+			// (DIFFERENCES E29).
+			page, err = src.QueryBptPage(ctx, s.partition, &api.BptPageQuery{StartHash: todo[0].ScanStart(), Count: sectionPage})
+		}
 		if err != nil {
 			s.log.Info("A peer could not page a section; the next is asked", "partition", s.partition, "peer", sourceKey(src), "section", todo[0], "error", err)
 			continue
@@ -220,6 +226,9 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 		}
 		if n == 0 {
 			leaves, urls, block, err := sectionLeavesAt(ctx, src, s.partition, todo[0], p.last)
+			if err != nil && p.last != 0 {
+				leaves, urls, block, err = sectionLeavesAt(ctx, src, s.partition, todo[0], 0)
+			}
 			if err != nil || block < p.start {
 				s.log.Info("A peer could not page a large section; the next is asked", "partition", s.partition, "peer", sourceKey(src), "section", todo[0], "block", block, "error", err)
 				continue

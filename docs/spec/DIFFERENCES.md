@@ -546,7 +546,11 @@ load at or below the node's block -- but nothing compares blocks at the
 write, so an older write would not be dropped and a same-block difference
 would not be named.
 
-**Built, 2026-10-05:** the loads as of the node's block.
+**Built, 2026-10-05:** the loads as of the node's block, with the current
+state as the fallback when a peer cannot answer as of it (the unit tests'
+hand-built peers retain no history; a live network's accounts written before
+the history began have none either). The fallback is the old behaviour, with
+the old cost: an unverified load in a block, a records catch-up in the pull.
 `TestABlockExecutedBehindThePeersLoadsASectionAsOfItsOwnBlock` (46 handoffs
 without, 1 with) and `TestThePullMatchesWhileEveryBlockOpensSections` (62
 pull rounds without, 1 with). Soak `20261005T043754Z` measured the loop
