@@ -1146,6 +1146,7 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 	taken := map[[32]byte]bool{}
 	type keeping struct {
 		st              *api.AccountState
+		block           uint64
 		whole, windowed bool
 	}
 	var keep []keeping
@@ -1203,18 +1204,19 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 				continue
 			}
 		}
-		keep = append(keep, keeping{st, whole, windowed})
+		keep = append(keep, keeping{st, block, whole, windowed})
 	}
 
 	list := make([]*api.AccountState, len(keep))
+	asOf := make([]uint64, len(keep))
 	for i, k := range keep {
-		list[i] = k.st
+		list[i], asOf[i] = k.st, k.block
 	}
 	var at uint64
 	if s.sync != nil {
 		at = s.sync.last
 	}
-	errs := pull.KeepStates(taggedStore{s.db, "keep", at}, list)
+	errs := pull.KeepStates(taggedStore{s.db, "keep", at}, list, asOf)
 	var headOnly []*url.URL
 	for i, k := range keep {
 		u := k.st.Url

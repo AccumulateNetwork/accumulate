@@ -9,7 +9,11 @@ package pull
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"log/slog"
 	"strings"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
@@ -185,9 +189,59 @@ func openEntries(st *api.AccountState) map[string][][]byte {
 
 // KeepState writes a served account state, checked by CheckState, into the
 // store in a batch of its own, with the BPT, and commits it (KeepStates).
-func KeepState(store Store, st *api.AccountState) error {
-	return KeepStates(store, []*api.AccountState{st})[0]
+// asOf is the block the state is of.
+func KeepState(store Store, st *api.AccountState, asOf uint64) error {
+	return KeepStates(store, []*api.AccountState{st}, []uint64{asOf})[0]
 }
+
+// ErrStaleState is a served state dropped at the write: the node holds the
+// account as of a later block (executor spec, "Sync", §3a, "Every account
+// state the node holds is stamped"; #4518). A writer that meets it has
+// nothing to do for that account.
+var ErrStaleState = stderrors.New("the state held is of a later block")
+
+// stampedWrite checks a served state against the block the node holds the
+// account as of: older is dropped (ErrStaleState); the same block with a
+// different leaf is the account that failed to have the right state, said,
+// and the served state -- the block ledger's -- stands. It returns the stamp
+// to write with the state.
+func stampedWrite(batch *database.Batch, account *database.Account, st *api.AccountState, asOf uint64) error {
+	if asOf == 0 {
+		return nil
+	}
+	held, err := account.StateBlock().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("%v: load the state block: %w", st.Url, err)
+	}
+	switch {
+	case held > asOf:
+		mStaleStateWrites.Inc()
+		return ErrStaleState
+	case held == asOf:
+		local, err := batch.BPT().Get(account.Key())
+		if err == nil && len(local) == 32 && [32]byte(local) != st.LeafHash {
+			mStateDiffers.Inc()
+			slog.Warn("An account failed to have the right state; the block ledger's state stands",
+				"account", st.Url, "block", asOf, "local", fmt.Sprintf("%x", local[:8]), "record", fmt.Sprintf("%x", st.LeafHash[:8]))
+		}
+	}
+	return nil
+}
+
+var (
+	// mStaleStateWrites counts served states dropped because the node held
+	// the account as of a later block.
+	mStaleStateWrites = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "pull", Name: "stale_state_writes_total",
+		Help: "Served account states dropped at the write: the node held the account as of a later block",
+	})
+	// mStateDiffers counts accounts whose served state, of the block the node
+	// held them as of, differed from what the node held.
+	mStateDiffers = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "pull", Name: "state_differs_total",
+		Help: "Accounts whose state as of the block the node held them at differed from the block ledger's",
+	})
+)
 
 // KeepStates writes served account states, each checked by CheckState, into
 // the store in one batch, with the BPT, and commits it once: one commit per
@@ -201,7 +255,7 @@ func KeepState(store Store, st *api.AccountState) error {
 // refused is written not at all -- each is written in a batch nested in the
 // one committed -- and the others are written. If the commit fails, every
 // account is refused with its error.
-func KeepStates(store Store, states []*api.AccountState) []error {
+func KeepStates(store Store, states []*api.AccountState, blocks []uint64) []error {
 	errs := make([]error, len(states))
 	batch := store.Begin(true)
 	defer batch.Discard()
@@ -211,12 +265,19 @@ func KeepStates(store Store, states []*api.AccountState) []error {
 			errs[i] = err
 			continue
 		}
+		var asOf uint64
+		if i < len(blocks) {
+			asOf = blocks[i]
+		}
 		one := batch.Begin(true)
-		err := writeState(one, st)
+		err := writeState(one, st, asOf)
 		if err == nil {
 			err = one.Commit()
 		}
 		one.Discard()
+		if stderrors.Is(err, ErrStaleState) {
+			continue // Held as of a later block: nothing to write
+		}
 		if err != nil {
 			errs[i] = err
 			continue
@@ -247,17 +308,20 @@ func KeepStates(store Store, states []*api.AccountState) []error {
 // beneath the batch a block executes in, and swaps the section's marker for
 // the leaves itself (executor.md, "Sync", §3a; #4485). The first state that
 // cannot be written is the error, and nothing of it is written.
-func WriteStates(batch *database.Batch, states []*api.AccountState) error {
+func WriteStates(batch *database.Batch, states []*api.AccountState, asOf uint64) error {
 	for _, st := range states {
 		if err := CheckState(st); err != nil {
 			return err
 		}
 		one := batch.Begin(true)
-		err := writeState(one, st)
+		err := writeState(one, st, asOf)
 		if err == nil {
 			err = one.Commit()
 		}
 		one.Discard()
+		if stderrors.Is(err, ErrStaleState) {
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -285,17 +349,20 @@ const (
 // holds as served is left as it is -- a chain written is a chain the block
 // changed, and the block's record names it -- and only the parts named
 // (executor.md, "Sync", §3a, "The handoff is an overlap"; #4495).
-func SettleStates(batch *database.Batch, states []*api.AccountState, parts SettleParts) error {
+func SettleStates(batch *database.Batch, states []*api.AccountState, parts SettleParts, asOf uint64) error {
 	for _, st := range states {
 		if err := CheckState(st); err != nil {
 			return err
 		}
 		one := batch.Begin(true)
-		err := writeStateWith(one, st, true, parts)
+		err := writeStateWith(one, st, true, parts, asOf)
 		if err == nil {
 			err = one.Commit()
 		}
 		one.Discard()
+		if stderrors.Is(err, ErrStaleState) {
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -304,8 +371,8 @@ func SettleStates(batch *database.Batch, states []*api.AccountState, parts Settl
 }
 
 // writeState writes one checked account state into the batch.
-func writeState(batch *database.Batch, st *api.AccountState) error {
-	return writeStateWith(batch, st, false, SettleAll)
+func writeState(batch *database.Batch, st *api.AccountState, asOf uint64) error {
+	return writeStateWith(batch, st, false, SettleAll, asOf)
 }
 
 // sameHead is whether the chain's head is count and pending already.
@@ -324,7 +391,7 @@ func sameHead(chain *database.Chain2, count uint64, pending [][]byte) bool {
 
 // writeStateWith writes the parts of one checked account state into the
 // batch; changed leaves alone each chain whose head is already the one served.
-func writeStateWith(batch *database.Batch, st *api.AccountState, changed bool, parts SettleParts) error {
+func writeStateWith(batch *database.Batch, st *api.AccountState, changed bool, parts SettleParts, asOf uint64) error {
 	leaf, err := retainedLeaf(st)
 	if err != nil {
 		return errors.Conflict.WithFormat("%v: %w", st.Url, err)
@@ -334,6 +401,9 @@ func writeStateWith(batch *database.Batch, st *api.AccountState, changed bool, p
 	account := batch.Account(u)
 	if parts == SettleIndex {
 		return writeChains(account, st, changed, parts)
+	}
+	if err := stampedWrite(batch, account, st, asOf); err != nil {
+		return err
 	}
 	if err := account.Main().Put(st.Main); err != nil {
 		return errors.UnknownError.WithFormat("%v: store main: %w", u, err)
@@ -373,6 +443,11 @@ func writeStateWith(batch *database.Batch, st *api.AccountState, changed bool, p
 		}
 	}
 
+	if asOf != 0 {
+		if err := account.StateBlock().Put(asOf); err != nil {
+			return errors.UnknownError.WithFormat("%v: stamp the state block: %w", u, err)
+		}
+	}
 	return writeChains(account, st, changed, parts)
 }
 

@@ -33,6 +33,7 @@ type Batch struct {
 	observer    Observer
 	bptSink     BPTWriteSink
 	bptTag      *BPTWriteTag
+	block       uint64
 
 	bpt         *bpt.BPT
 	account     map[accountMapKey]*Account
@@ -305,6 +306,7 @@ type Account struct {
 	directory                  values.Set[*url.URL]
 	directoryAnchorBlock       values.Value[uint64]
 	syncedEntries              map[accountSyncedEntriesMapKey]values.Value[*SyncedEntries]
+	stateBlock                 values.Value[uint64]
 	events                     *AccountEvents
 	blockLedger                map[accountBlockLedgerMapKey]values.Value[*BlockLedger]
 	blockLedgerChain           *Chain2
@@ -521,6 +523,14 @@ func (c *Account) SyncedEntries(chain string) values.Value[*SyncedEntries] {
 
 func (c *Account) newSyncedEntries(k accountSyncedEntriesKey) values.Value[*SyncedEntries] {
 	return values.NewValue(c.logger.L, c.store, c.key.Append("SyncedEntries", k.Chain), true, values.Struct[SyncedEntries]())
+}
+
+func (c *Account) StateBlock() values.Value[uint64] {
+	return values.GetOrCreate(c, &c.stateBlock, (*Account).newStateBlock)
+}
+
+func (c *Account) newStateBlock() values.Value[uint64] {
+	return values.NewValue(c.logger.L, c.store, c.key.Append("StateBlock"), true, values.Wrapped(values.UintWrapper))
 }
 
 func (c *Account) Events() *AccountEvents {
@@ -759,6 +769,8 @@ func (c *Account) Resolve(key *record.Key) (record.Record, *record.Key, error) {
 		}
 		v := c.SyncedEntries(chain)
 		return v, key.SliceI(2), nil
+	case "StateBlock":
+		return c.StateBlock(), key.SliceI(1), nil
 	case "Events":
 		return c.Events(), key.SliceI(1), nil
 	case "BlockLedger":
@@ -908,6 +920,9 @@ func (c *Account) IsDirty() bool {
 			return true
 		}
 	}
+	if values.IsDirty(c.stateBlock) {
+		return true
+	}
 	if values.IsDirty(c.events) {
 		return true
 	}
@@ -1040,6 +1055,7 @@ func (c *Account) Walk(opts record.WalkOptions, fn record.WalkFunc) error {
 	values.WalkField(&err, c.directory, c.newDirectory, opts, fn)
 	values.WalkField(&err, c.directoryAnchorBlock, c.newDirectoryAnchorBlock, opts, fn)
 	values.WalkMap(&err, c.syncedEntries, c.newSyncedEntries, nil, opts, fn)
+	values.WalkField(&err, c.stateBlock, c.newStateBlock, opts, fn)
 	values.WalkField(&err, c.events, c.newEvents, opts, fn)
 	values.WalkMap(&err, c.blockLedger, c.newBlockLedger, c.getBlockLedgerKeys, opts, fn)
 	values.WalkField(&err, c.blockLedgerChain, c.newBlockLedgerChain, opts, fn)
@@ -1090,6 +1106,7 @@ func (c *Account) baseCommit() error {
 	for _, v := range c.syncedEntries {
 		values.Commit(&err, v)
 	}
+	values.Commit(&err, c.stateBlock)
 	values.Commit(&err, c.events)
 	for _, v := range c.blockLedger {
 		values.Commit(&err, v)

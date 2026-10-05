@@ -154,6 +154,10 @@ func (b *Batch) ForgetAccount(u *url.URL) error {
 	if err := a.Pending().Put(nil); err != nil {
 		return errors.UnknownError.WithFormat("clear the pending list of %v: %w", u, err)
 	}
+	// Forgotten is of no block: what loads it next stamps it.
+	if err := a.StateBlock().Put(0); err != nil {
+		return errors.UnknownError.WithFormat("clear the state block of %v: %w", u, err)
+	}
 	if err := b.kvs().Delete(record.NewKey("Account", u, "Main")); err != nil {
 		return errors.UnknownError.WithFormat("delete the main state of %v: %w", u, err)
 	}

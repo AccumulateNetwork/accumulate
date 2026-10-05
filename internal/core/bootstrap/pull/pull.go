@@ -418,7 +418,14 @@ func Fetch(ctx context.Context, src Source, batch *database.Batch, u *url.URL, o
 		p.batch, p.owned = opts.Store.Begin(true), true
 	}
 	sub := p.batch
-	if err := storeMain(ctx, src, sub, u, rec, withReceipt); err != nil {
+	err = storeMain(ctx, src, sub, u, rec, withReceipt, p.Block)
+	if stderrors.Is(err, ErrStaleState) {
+		// The node holds the account as of a later block than the answer:
+		// nothing of the answer is written, and the account is taken as it
+		// stands (executor spec, "Sync", §3a; #4518).
+		return p, nil
+	}
+	if err != nil {
 		return fail(errors.UnknownError.WithFormat("main %s: %w", u, err))
 	}
 	if err := pullDirectory(ctx, src, sub, u, pageSize); err != nil {
@@ -585,10 +592,28 @@ func queryMain(ctx context.Context, src Source, u *url.URL, wantReceipt bool) (*
 }
 
 // storeMain writes the account body queryMain took, and the rest of the leaf
-// the receipt-bearing answer carries.
-func storeMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, rec *api.AccountRecord, wantReceipt bool) error {
-	if err := batch.Account(u).Main().Put(rec.Account); err != nil {
+// the receipt-bearing answer carries, stamped with asOf, the block the answer
+// is of. An account the node holds as of a later block is not written
+// (ErrStaleState; executor spec, "Sync", §3a; #4518).
+func storeMain(ctx context.Context, src Source, batch *database.Batch, u *url.URL, rec *api.AccountRecord, wantReceipt bool, asOf uint64) error {
+	account := batch.Account(u)
+	if asOf != 0 {
+		held, err := account.StateBlock().Get()
+		if err != nil {
+			return errors.UnknownError.WithFormat("load the state block: %w", err)
+		}
+		if held > asOf {
+			mStaleStateWrites.Inc()
+			return ErrStaleState
+		}
+	}
+	if err := account.Main().Put(rec.Account); err != nil {
 		return errors.UnknownError.WithFormat("store main: %w", err)
+	}
+	if asOf != 0 {
+		if err := account.StateBlock().Put(asOf); err != nil {
+			return errors.UnknownError.WithFormat("stamp the state block: %w", err)
+		}
 	}
 	if wantReceipt {
 		// The answer that carries a receipt carries the rest of the leaf the

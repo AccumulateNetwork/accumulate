@@ -347,7 +347,7 @@ func (x *sections) apply(batch *database.Batch, ld *loadedSection) error {
 func (x *sections) write(batch *database.Batch, ld *loadedSection) error {
 	batch.AddWriter("load")
 	err := batch.WriteBeneath(func(c *database.Batch) error {
-		return pull.WriteStates(c, ld.states)
+		return pull.WriteStates(c, ld.states, ld.block)
 	})
 	if err != nil {
 		return errors.UnknownError.WithFormat("write section %d: %w", ld.section, err)

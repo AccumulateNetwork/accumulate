@@ -347,7 +347,7 @@ func (o *overlap) verify(batch *database.Batch, n uint64) error {
 		if local == st.LeafHash {
 			continue
 		}
-		if err := pull.SettleStates(batch, []*api.AccountState{st}, pull.SettleIndex); err != nil {
+		if err := pull.SettleStates(batch, []*api.AccountState{st}, pull.SettleIndex, n); err != nil {
 			return errors.UnknownError.WithFormat("write the record's index chains of %v: %w", st.Url, err)
 		}
 		after, _, err := executedLeaf(batch, st.Url)
@@ -409,7 +409,7 @@ func (o *overlap) verifySystem(s *settling) error {
 			continue
 		}
 		s.batch.AddWriter("record")
-		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleAll); err != nil {
+		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleAll, s.n); err != nil {
 			return errors.UnknownError.WithFormat("write the record's state of %v: %w", st.Url, err)
 		}
 		o.keepMessages(ctx, s, st)
@@ -496,7 +496,7 @@ func (o *overlap) settleNamed(ctx context.Context, s *settling) error {
 			continue
 		}
 		s.batch.AddWriter("record")
-		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleNotIndex); err != nil {
+		if err := pull.SettleStates(s.batch, []*api.AccountState{st}, pull.SettleNotIndex, s.n); err != nil {
 			return errors.UnknownError.WithFormat("write the record's state of %v: %w", u, err)
 		}
 		o.keepMessages(ctx, s, st)
@@ -522,7 +522,7 @@ func preCloseLeaf(batch *database.Batch, st *api.AccountState) ([32]byte, bool, 
 	}
 	scratch := batch.Begin(true)
 	defer scratch.Discard()
-	if err := pull.SettleStates(scratch, []*api.AccountState{st}, pull.SettleIndex); err != nil {
+	if err := pull.SettleStates(scratch, []*api.AccountState{st}, pull.SettleIndex, 0); err != nil {
 		return local, false, true, err
 	}
 	h, _, err := executedLeaf(scratch, st.Url)
@@ -639,7 +639,7 @@ func (o *overlap) settleAhead(ctx context.Context, s *settling, src pull.Source,
 			continue
 		default:
 			s.batch.AddWriter("record")
-			err := s.batch.WriteBeneath(func(c *database.Batch) error { return pull.WriteStates(c, []*api.AccountState{st}) })
+			err := s.batch.WriteBeneath(func(c *database.Batch) error { return pull.WriteStates(c, []*api.AccountState{st}, s.n) })
 			if err == nil {
 				err = tree.Insert(key, st.LeafHash[:])
 			}

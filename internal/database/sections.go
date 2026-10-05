@@ -121,6 +121,9 @@ type BlockSettler interface {
 // nothing. It is called after the block's transactions, before its chains
 // are anchored.
 func (b *Batch) SettleBlock(block uint64) error {
+	// The block this batch executes: every account it changed is as of it
+	// (UpdateBPT; executor spec, "Sync", §3a; #4518).
+	b.block = block
 	if s := b.settler(); s != nil {
 		return s.SettleBlock(b, block)
 	}

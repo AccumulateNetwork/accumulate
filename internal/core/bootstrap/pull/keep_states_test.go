@@ -48,7 +48,7 @@ func TestKeepStatesWritesAnAnswerInOneCommitAndNoneOfARefusedAccount(t *testing.
 	rec.States[1].OpenEntries[0].Entries[0][0] ^= 1
 
 	dst := newObservedDB(t)
-	errs := KeepStates(dst, rec.States)
+	errs := KeepStates(dst, rec.States, nil)
 	require.NoError(t, errs[0])
 	require.Error(t, errs[1], "a state whose open mark set does not rebuild its head was kept")
 	require.NoError(t, errs[2])
@@ -67,4 +67,59 @@ func TestKeepStatesWritesAnAnswerInOneCommitAndNoneOfARefusedAccount(t *testing.
 	require.Error(t, err, "the refused account's body was written")
 	_, err = db.BPT().Get(db.Account(accounts[1]).Key())
 	require.Error(t, err, "the refused account has a leaf")
+}
+
+// TestAnOlderStateIsNotWrittenOverANewerOne — #4518, executor spec "Sync" §3a,
+// "Every account state the node holds is stamped" (Paul, 2026-10-05:
+// "bookkeeping on account states as we load so we always can tell the most
+// recently updated account states ... so we always know what we can
+// overwrite"). A state kept as of block 10 is not overwritten by one served
+// as of block 8, whoever serves it; one as of block 12 replaces it.
+func TestAnOlderStateIsNotWrittenOverANewerOne(t *testing.T) {
+	peerDB := newObservedDB(t)
+	u := protocol.AccountUrl("stamped", "tokens")
+	q := v3impl.NewQuerier(v3impl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	serve := func(balance int64) *api.AccountState {
+		b := peerDB.Begin(true)
+		require.NoError(t, b.Account(u).Main().Put(&protocol.TokenAccount{Url: u, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(balance)}))
+		require.NoError(t, b.UpdateBPT())
+		require.NoError(t, b.Commit())
+		rec, err := api.Querier2{Querier: q}.QueryAccountStates(context.Background(), protocol.PartitionUrl("BVN0"), &api.AccountStatesQuery{Accounts: []*url.URL{u}})
+		require.NoError(t, err)
+		require.Len(t, rec.States, 1)
+		return rec.States[0]
+	}
+	five, three := serve(5), serve(3)
+
+	dst := newObservedDB(t)
+	held := func() (int64, uint64) {
+		b := dst.Begin(false)
+		defer b.Discard()
+		var acct *protocol.TokenAccount
+		require.NoError(t, b.Account(u).Main().GetAs(&acct))
+		at, err := b.Account(u).StateBlock().Get()
+		require.NoError(t, err)
+		return acct.Balance.Int64(), at
+	}
+	require.NoError(t, KeepStates(dst, []*api.AccountState{five}, []uint64{10})[0])
+	bal, at := held()
+	require.Equal(t, int64(5), bal)
+	require.Equal(t, uint64(10), at, "the state was not stamped with the block it is of")
+
+	// Older: dropped, and not an error -- the writer has nothing to do.
+	require.NoError(t, KeepStates(dst, []*api.AccountState{three}, []uint64{8})[0])
+	bal, at = held()
+	require.Equal(t, int64(5), bal, "a state of block 8 overwrote the state of block 10")
+	require.Equal(t, uint64(10), at)
+
+	// Newer: written.
+	require.NoError(t, KeepStates(dst, []*api.AccountState{three}, []uint64{12})[0])
+	bal, at = held()
+	require.Equal(t, int64(3), bal)
+	require.Equal(t, uint64(12), at)
+
+	// Of no block (a writer that does not know): written, unstamped checks skipped.
+	require.NoError(t, KeepStates(dst, []*api.AccountState{five}, nil)[0])
+	bal, _ = held()
+	require.Equal(t, int64(5), bal)
 }

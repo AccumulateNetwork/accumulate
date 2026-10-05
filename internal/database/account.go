@@ -9,6 +9,8 @@ package database
 import (
 	"bytes"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/values"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -205,6 +207,11 @@ func (b *Batch) UpdateBPT() error {
 	}
 	for _, a := range b.account {
 		if a.IsDirty() {
+			if b.block != 0 {
+				if err := a.stampBlock(b.block); err != nil {
+					return errors.UnknownError.WithFormat("stamp %v: %w", a.Url(), err)
+				}
+			}
 			err := a.Commit()
 			if err != nil {
 				return errors.UnknownError.WithFormat("commit %v: %w", a.Url(), err)
@@ -218,6 +225,34 @@ func (b *Batch) UpdateBPT() error {
 	}
 	return nil
 }
+
+// stampBlock records that the account's state is as of block, the block the
+// batch executes: whoever writes an account stamps it (executor spec, "Sync",
+// §3a, "Every account state the node holds is stamped"; #4518). An account
+// held as of a later block is said: the block executed over state from after
+// it, which no load as of the block should have left.
+func (a *Account) stampBlock(block uint64) error {
+	held, err := a.StateBlock().Get()
+	if err != nil {
+		return errors.UnknownError.WithFormat("load the state block: %w", err)
+	}
+	if held > block {
+		mAccountsAheadOfBlock.Inc()
+		a.parent.logger.Error("A block executed over an account whose state is of a later block",
+			"account", a.Url(), "block", block, "state-block", held)
+	}
+	return a.StateBlock().Put(block)
+}
+
+// mAccountsAheadOfBlock counts accounts a block executed over whose state was
+// stamped with a later block. Any non-zero count is a defect: a load brought
+// in state from after the block (#4518).
+var mAccountsAheadOfBlock = promauto.NewCounter(prometheus.CounterOpts{
+	Namespace: "accumulate",
+	Subsystem: "database",
+	Name:      "accounts_ahead_of_block_total",
+	Help:      "Accounts a block executed over whose state was as of a later block",
+})
 
 func compareSignatureByKey(a, b protocol.KeySignature) int {
 	return bytes.Compare(a.GetPublicKey(), b.GetPublicKey())
