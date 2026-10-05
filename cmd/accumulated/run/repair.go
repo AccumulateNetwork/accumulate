@@ -32,7 +32,14 @@ func OpenPartitionStore(ctx context.Context, dataDir, partition string) (keyvalu
 		return nil, "", nil, errors.UnknownError.Wrap(err)
 	}
 
-	svc := findStorage(cfg.Services, partition)
+	// A node's config may describe it by a configuration (coreValidator,
+	// follower, devnet) that is expanded into services when the node starts:
+	// the storage is looked for in the expansion.
+	expanded, err := inst.Verify()
+	if err != nil {
+		return nil, "", nil, errors.UnknownError.WithFormat("expand the node's config: %w", err)
+	}
+	svc := findStorage(expanded.Services, partition)
 	if svc == nil || svc.Storage == nil {
 		return nil, "", nil, errors.NotFound.WithFormat("the node under %s has no storage for %s", dataDir, partition)
 	}
