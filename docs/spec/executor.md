@@ -687,36 +687,45 @@ not update it** (Paul, 2026-10-02). The backfill alone writes it, as it works
 back from the head, and reads it to resume; execution never touches it, so it
 is in no leaf, no root and no anchor, and a node's agreement does not depend
 on how much history it holds. It is the account's `SyncedEntries` record, one
-per chain (internal/database model.yml): `Synced`, the max synced entry as a
-count -- every entry below it is held, with the message behind it, and was
-held to a head -- `Taken`, the count the pull took the chain at by its head,
-at and above which every entry is held, and the spans unfinished walks have
-brought in. No account
+per chain (internal/database model.yml), and it is **the full description of
+what the node is missing of that chain** (Paul, 2026-10-05): a list of gaps,
+each a range of entries `[Low, High)` and what is missing in it -- the entries
+themselves (their elements, the message behind each on a chain that carries
+messages, and the mark points and intermediates they imply), or only the
+messages behind entries the node holds. A chain whose list is empty is held
+whole. `Synced`, the max synced entry, is what the list implies: every entry
+below the lowest gap is held. No account
 hash reads it (`TestTheMaxSyncedEntryIsNotState`: written and committed
 through the BPT update it changes no leaf, root or receipt, and an executed
 block leaves it as it was).
 
 **The record says what is missing; the store is not asked** (Paul,
-2026-10-05, #4493). When the pull takes an account by its heads, it records in
-each chain's `SyncedEntries` the count it took the chain at (`Taken`): the
-bottom of the open mark set it pulled. Every entry at or above `Taken` is held
-from then on -- the open mark set came with the head, and execution appends
-only above it. Every entry below `Synced` is held. What is missing is exactly
-what lies between them, outside the record's spans, and the backfill asks for
-all of it without asking the store which entries it holds. A follower starting
-from scratch has `Synced` zero and no spans: everything below `Taken` is
-missing. On a chain that carries messages, the open mark set came without
-them, so its messages are asked for too.
+2026-10-05, #4493). The gaps are written by what makes them, and closed by what
+fills them:
 
-The walk runs from `Taken` down, **200 entries a request**. The record is
-written with each page -- the walk's own span, joined with every earlier span
-it has stepped over -- and a span the walk reaches is stepped over at once. It
-stops at `Synced`, which then moves to where the spans and `Synced` meet. So a
-retry asks for nothing the first attempt brought in
-(`TestABackfillInterruptedMidChainResumesWhereItStopped`), and a restart
-resumes from the record after taking newer heads
-(`TestARestartMidFillResumesFromTheRecord`). An account the join never took by
-its heads has no `Taken` and is never backfilled: it is whole, by execution.
+- **The pull takes a chain by its head** at count `C`, with the open mark set
+  from `B` (§3): it records the gap `[0, B)`, entries missing, and, on a chain
+  that carries messages, `[B, C)`, messages missing -- the open mark set came
+  without them. A node that already held part of the chain (a restart, a
+  repair) records only what its own record does not already show held.
+- **A chain taken again whole** from its first entry, or one whose entries
+  did not reproduce the head (above), is recorded missing from `0` to its
+  head, entries missing: nothing below is trusted.
+- **Execution adds no gap.** It appends above the head, with every message.
+- **The backfill closes them.** Each page it writes takes its range out of
+  the gap it fills, in the same commit, so the record never says a range is
+  held before it is.
+
+The backfill asks for exactly what the gaps name, newest first, **200
+entries a request**, without asking the store which entries it holds, and the
+chain is whole when its list is empty. A retry or a restart reads the same
+list and asks only for what is still in it
+(`TestABackfillInterruptedMidChainResumesWhereItStopped`,
+`TestARestartMidFillResumesFromTheRecord`). A follower starting from scratch
+has, for each chain it took by its head, one gap below the open mark set and,
+on a chain that carries messages, one more for the open set's messages. An
+account the join never took by its heads has no gaps and is never backfilled:
+it is whole, by execution.
 
 **An answer is at most 200 entries and 50,000 bytes, and says how many it
 holds** (Paul, 2026-10-05). A peer answering a range of a chain's entries adds

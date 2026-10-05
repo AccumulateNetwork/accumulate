@@ -518,15 +518,19 @@ API follows them.
 
 *[#4493](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4493)*
 
-**Spec** (executor.md, "Sync", "Past the match"): the pull records `Taken`
-when it takes a chain by its head; the backfill asks for everything between
-`Synced` and `Taken` outside the spans, without asking the store, 200 entries
-a request; a peer answers at most 200 entries and 50,000 bytes and says how
-many it returned.
+**Spec** (executor.md, "Sync", "Past the match"): each chain's
+`SyncedEntries` is the full description of what the node is missing -- a list
+of gaps, each a range and whether entries or only messages are missing --
+written by the pull that takes a chain by its head (and by a retake or a
+refetch), closed by each backfill page in its own commit; the backfill asks
+for exactly the gaps, without asking the store, 200 entries a request; a peer
+answers at most 200 entries and 50,000 bytes and says how many it returned.
 
 **Code** (`internal/core/bootstrap/pull/backfill.go`, `internal/api/v3`):
-- `SyncedEntries` has no `Taken`, and the walk starts at the chain's current
-  head.
+- `SyncedEntries` holds `Synced`, unfinished walks' spans and `Refetch`, not
+  the gaps: nothing records what the pull left missing, and the walk starts
+  at the chain's current head and infers what is missing by reading the
+  store.
 - `chainWalk.page` reads every entry between the floor and its position
   (`held`: the element, and on a chain that carries messages the message
   behind it) before asking a peer: up to 512 store reads per page.
