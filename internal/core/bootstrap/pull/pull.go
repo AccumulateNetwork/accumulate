@@ -496,6 +496,9 @@ func FetchFrom(ctx context.Context, srcs []Source, batch *database.Batch, u *url
 	}
 	var refusals []error
 	noLeaf := 0
+	// A chain's pages are spread across every source that serves the
+	// account (fetchEntries).
+	ctx = WithPeers(ctx, srcs)
 	for i, src := range srcs {
 		p, err := Fetch(ctx, src, batch, u, opts, opts.WithReceipt)
 		if ctx.Err() != nil {
@@ -1448,14 +1451,12 @@ func streamChain(ctx context.Context, src Source, pages Store, u *url.URL, c *ap
 	if err := fetchHeldMessages(ctx, src, pages, u, c, runs, pageSize); err != nil {
 		return nil, err
 	}
-	err = streamEntries(ctx, src, pages, u, c.Name, uint64(from), c.Count, pageSize, bodies, func(page *database.Batch, _ *messages, index uint64, entry []byte) error {
-		pc, err := page.Account(u).ChainByName(c.Name)
-		if err != nil {
-			return err
-		}
-		return pc.Inner().PutBelow(st, entry, false)
-	})
-	if err != nil {
+	// The pages parallelPages at a time across the peers, then the state
+	// built over them in order (#4529).
+	if err := fetchEntries(ctx, peersOf(ctx, src), pages, u, c.Name, uint64(from), c.Count, pageSize, bodies); err != nil {
+		return nil, err
+	}
+	if err := replayEntries(pages, u, c.Name, st, uint64(from), c.Count); err != nil {
 		return nil, err
 	}
 

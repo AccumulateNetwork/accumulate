@@ -1107,9 +1107,21 @@ that does not move** (#4446). The head is the peer's — the count and pending
 hashes the account's leaf is hashed from — and nothing the pull writes
 replays through it. Each page of entries (256) is asked for with the messages
 behind them, and written in a batch of its own that is committed before the
-next page is asked for: the elements, their index entries, the intermediate
-hashes and mark points the entries imply (exactly what appending them wrote on
-the peer), the messages, and what executing a signature entry wrote beside it.
+page is dropped: the elements, their index entries, the messages, and what
+executing a signature entry wrote beside it. **A chain's pages are asked for
+four at a time** (Paul, 2026-10-05, #4529: "fetch in parallel/batched"),
+every page of the source first; a page the source answers busy -- a validator
+admits four queries at a time, and a partition's followers join together --
+is asked of the next peer, and once every peer is busy the page waits a pause
+that doubles. Any other refusal of a page is the source's and fails the pull
+from it: a peer that lies is refused as a source and the next is tried alone,
+never mixed with it. The pages are written in no order; once the chain's
+entries are all held, its state is built over them in order -- the
+intermediate hashes and mark points the entries imply, exactly what appending
+them wrote on the peer -- and held to the peer's head
+(`TestAChainsPagesAreFetchedInParallelAcrossThePeers`). Pages into a batch
+rather than the store stay one at a time: a batch is not written from two
+goroutines.
 The page is then dropped, and **no view of the store is open while a page is
 written**: the account's own batch (body, directory, pending, chain heads) is
 begun only once its chains have streamed, and what the node holds is read in

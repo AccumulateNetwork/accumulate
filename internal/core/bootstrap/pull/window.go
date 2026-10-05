@@ -12,7 +12,6 @@ import (
 	stderrors "errors"
 	"fmt"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -275,15 +274,13 @@ func streamChainFrom(ctx context.Context, src Source, pages Store, u *url.URL, c
 		}
 	}
 
+	// The window's pages, parallelPages at a time across the peers, then the
+	// state built over them in order (#4529).
 	bodies := carriesMessages(c)
-	err := streamEntries(ctx, src, pages, u, c.Name, start, c.Count, pageSize, bodies, func(page *database.Batch, _ *messages, index uint64, entry []byte) error {
-		pc, err := page.Account(u).ChainByName(c.Name)
-		if err != nil {
-			return err
-		}
-		return pc.Inner().PutBelow(st, entry, false)
-	})
-	if err != nil {
+	if err := fetchEntries(ctx, peersOf(ctx, src), pages, u, c.Name, start, c.Count, pageSize, bodies); err != nil {
+		return nil, err
+	}
+	if err := replayEntries(pages, u, c.Name, st, start, c.Count); err != nil {
 		return nil, err
 	}
 	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
