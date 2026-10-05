@@ -1120,8 +1120,16 @@ four at a time of every peer serving the account** (Paul, 2026-10-05, #4529
 and #4532: "fetch in parallel/batched"), each page of the next peer in turn;
 a page a peer answers busy -- a validator admits four queries at a time, and
 a partition's followers join together -- is asked of the one after, and once
-every peer is busy the page waits a pause that doubles. Any other refusal of a
-page fails the pull. The pages are written in no order; once the chain's
+every peer is busy the page waits a pause that doubles, from 250 ms to 10 s,
+for 15 s in all. A page every peer still refuses then is the chain's refusal
+from these peers -- a peer holds the anchor unsigned, or is joining, and
+`NotReady` is what it says for those too -- and the attempt fails as any other
+refusal of a page does, for the next source to be asked (#4533: a follower's
+Directory pull waited thirteen minutes on one peer's refusal, the page asked
+again after every pause; `TestARefusalEveryPeerKeepsUpFailsTheChainsAttempt`).
+This holds for the spine accounts' chains as for whole accounts
+(`TestTheSpineAccountsChainsSpreadAcrossThePeersToo`). The pages are written
+in no order; once the chain's
 entries are all held, its state is built over them in order -- the
 intermediate hashes and mark points the entries imply, exactly what appending
 them wrote on the peer -- and held to the peer's head. A stream that does not

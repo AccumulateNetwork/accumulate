@@ -177,3 +177,87 @@ func addSignatureEntry(t testing.TB, b *database.Batch, u *url.URL, i int) [32]b
 	require.NoError(t, b.Account(u).SignatureChain().Inner().AddEntry(h[:], false))
 	return h
 }
+
+// TestARefusalEveryPeerKeepsUpFailsTheChainsAttempt — #4533, run
+// 20261005T175916Z: a follower's Directory pull waited on one peer's NotReady
+// for eight minutes, the page asked again after every pause. A NotReady is
+// not only the gate's "busy": a peer refuses an anchor it holds unsigned, a
+// BPT block not yet on the ledger's chain, everything while it joins. A page
+// every peer still refuses once the pauses are spent is the chain's refusal
+// from these peers: the attempt fails, as any other refusal does, and the
+// caller asks the next source. Beside a peer that serves, the refuser's
+// pages spill over and the account is taken.
+func TestARefusalEveryPeerKeepsUpFailsTheChainsAttempt(t *testing.T) {
+	defer func(p streamPauses) { streamPause = p }(streamPause)
+	streamPause = streamPauses{time.Millisecond, 4 * time.Millisecond, 20 * time.Millisecond}
+
+	u := protocol.DnUrl().JoinPath("anchors")
+	src := newObservedDB(t)
+	buildChain(t, src, u, 600, 0x54)
+	var inflight, most atomic.Int64
+	refuser := &countingSource{dbSource: &dbSource{db: src}, name: "refuser", inflight: &inflight, most: &most, busy: func() bool { return true }}
+	server := &countingSource{dbSource: &dbSource{db: src}, name: "server", inflight: &inflight, most: &most}
+
+	dst := newObservedDB(t)
+	done := make(chan error, 1)
+	go func() {
+		ctx := WithPeers(context.Background(), []Source{refuser}, 0)
+		done <- Account(ctx, refuser, nil, u, Options{Mode: ModeFullSpine, Store: dst})
+	}()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+		require.True(t, errors.Is(err, errors.NotReady), "the refusal was not passed up: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the pull waited on the refusing peer past its pauses")
+	}
+
+	dst2 := newObservedDB(t)
+	ctx := WithPeers(context.Background(), []Source{refuser, server}, 0)
+	require.NoError(t, Account(ctx, refuser, nil, u, Options{Mode: ModeFullSpine, Store: dst2}))
+	requireWhole(t, src, dst2, u)
+	require.Positive(t, server.pages.Load(), "the refuser's pages did not spill to the peer beside it")
+}
+
+// TestTheSpineAccountsChainsSpreadAcrossThePeersToo — #4533: the spine
+// accounts' chains (anchors, ledger, synthetic: TakeChainsAt, the pages the
+// spreading was for) were taken from one source at a time with no peers
+// named, so no page of theirs ever went to another peer.
+func TestTheSpineAccountsChainsSpreadAcrossThePeersToo(t *testing.T) {
+	const n = 3000
+	u := protocol.DnUrl().JoinPath("anchors")
+	src := newObservedDB(t)
+	// Built with its leaf, as execution leaves it: UpdateBPT hashes the
+	// accounts its own batch changed.
+	b := src.Begin(true)
+	require.NoError(t, b.Account(u).Main().Put(&protocol.DataAccount{Url: u}))
+	for i := 0; i < n; i++ {
+		addTransactionEntry(t, b, u, i, 0x55)
+	}
+	require.NoError(t, b.UpdateBPT())
+	require.NoError(t, b.Commit())
+	var inflight, most atomic.Int64
+	var peers []Source
+	var counting []*countingSource
+	for i := 0; i < 2; i++ {
+		c := &countingSource{dbSource: &dbSource{db: src}, name: string(rune('a' + i)), inflight: &inflight, most: &most}
+		counting = append(counting, c)
+		peers = append(peers, c)
+	}
+	// The account's state as a peer serves it; the join takes the chains to
+	// its heads (TakeChainsAt), then keeps the state, heads included.
+	q := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: "Directory"})}
+	rec, err := q.QueryAccountStates(context.Background(), protocol.DnUrl(), &api.AccountStatesQuery{Accounts: []*url.URL{u}})
+	require.NoError(t, err)
+	require.Len(t, rec.States, 1)
+	st := rec.States[0]
+
+	dst := newObservedDB(t)
+	i, err := TakeChainsAt(context.Background(), peers, dst, st, 0, true, false, 0)
+	require.NoError(t, err)
+	require.Equal(t, 0, i)
+	require.NoError(t, KeepState(dst, st, 0))
+	requireWhole(t, src, dst, u)
+	require.Positive(t, counting[1].pages.Load(), "no page of the spine account went to the second peer")
+	require.GreaterOrEqual(t, most.Load(), int64(2), "the pages were asked for one at a time")
+}

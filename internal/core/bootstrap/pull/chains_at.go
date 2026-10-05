@@ -54,7 +54,9 @@ func TakeChainsAt(ctx context.Context, srcs []Source, store Store, st *api.Accou
 	}
 	var refusals []error
 	for i, src := range srcs {
-		err := takeChainsAt(ctx, src, store, st, records, byName, block, whole, held, window)
+		// A chain's pages go to every source, the busy ones passed for the
+		// next (fetchEntries); the one asked first is answerable for them.
+		err := takeChainsAt(WithPeers(ctx, srcs, i), src, store, st, records, byName, block, whole, held, window)
 		if err == nil {
 			return i, nil
 		}

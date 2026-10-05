@@ -27,9 +27,13 @@ import (
 // small and spread, not large and on one peer.
 const parallelPages = 4
 
-// streamPause is how long a page waits once every peer has answered busy,
-// doubling up to streamPauseMost.
-var streamPause = struct{ first, most time.Duration }{250 * time.Millisecond, 10 * time.Second}
+// streamPause is how long a page waits once every peer has refused it,
+// doubling from first up to most, and give, how long it waits in all: a page
+// every peer still refuses then is the chain's refusal from these peers
+// (#4533).
+type streamPauses struct{ first, most, give time.Duration }
+
+var streamPause = streamPauses{250 * time.Millisecond, 10 * time.Second, 15 * time.Second}
 
 type peersKey struct{}
 
@@ -145,6 +149,7 @@ func fetchEntries(ctx context.Context, peers []Source, pages Store, u *url.URL, 
 // the ones after it when it is busy, as fetchEntries says.
 func fetchChunk(ctx context.Context, peers []Source, turn int, pages Store, u *url.URL, name string, start, end uint64, bodies bool) error {
 	pause := streamPause.first
+	var waited time.Duration
 	for ctx.Err() == nil {
 		var refusals []error
 		for k := range peers {
@@ -162,8 +167,16 @@ func fetchChunk(ctx context.Context, peers []Source, turn int, pages Store, u *u
 			}
 			refusals = append(refusals, fmt.Errorf("%s: %w", sourceName(i, src), err))
 		}
-		// Every peer is busy: wait, and ask again.
-		_ = stderrors.Join(refusals...)
+		// Every peer refused it. Busy ones clear in a moment: wait, and ask
+		// again. A page they all still refuse once the pauses are spent is
+		// the chain's refusal from these peers -- a peer holds the anchor
+		// unsigned, or is joining -- and the attempt fails as any other
+		// refusal does, for the caller to ask the next source (#4533).
+		if waited+pause > streamPause.give {
+			return errors.NotReady.WithCauseAndFormat(stderrors.Join(refusals...),
+				"entries %d..%d of %s: every peer refused them for %v", start, end-1, name, waited)
+		}
+		waited += pause
 		t := time.NewTimer(pause)
 		select {
 		case <-ctx.Done():
