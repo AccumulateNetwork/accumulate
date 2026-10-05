@@ -7,6 +7,7 @@
 package pull
 
 import (
+	"bytes"
 	"context"
 	stderrors "errors"
 	"fmt"
@@ -66,15 +67,15 @@ func peersOf(ctx context.Context, src Source) []Source {
 // fetchEntries takes the entries [start, end) of one of the peer's chains
 // into the store -- each element, its index entry, and when bodies is set the
 // message behind it, proven by its hash (streamPage) -- parallelPages pages
-// at a time, every page of the source first. A page the source answers busy
-// (NotReady: a validator admits four queries at a time) is asked of the next
-// peer, and once every peer has answered busy it waits a pause that doubles.
-// Any other refusal of a page is the source's, and fails the stream from it:
-// a peer that lies is refused as a source and the next is tried alone
-// (FetchFrom), never mixed with it -- pages of two chains would never replay
-// to one head. The entries are written in no order, each page in a batch of
-// its own committed before the page is dropped (#4446); replayEntries then
-// builds the chain's state over them in order.
+// at a time, spread across the peers: each page is asked of the next peer in
+// turn (#4532), a page a peer answers busy (NotReady: a validator admits four
+// queries at a time) is asked of the one after, and once every peer has
+// answered busy it waits a pause that doubles. Any other refusal of a page
+// fails the stream. The entries are written in no order, each page in a
+// batch of its own committed before the page is dropped (#4446);
+// replayEntries then builds the chain's state over them in order, and a
+// stream that does not replay to the head is taken again from the source
+// alone (fetchAndReplay).
 func fetchEntries(ctx context.Context, peers []Source, pages Store, u *url.URL, name string, start, end, pageSize uint64, bodies bool) error {
 	if start >= end {
 		return nil
@@ -82,10 +83,13 @@ func fetchEntries(ctx context.Context, peers []Source, pages Store, u *url.URL, 
 	if pageSize == 0 {
 		pageSize = 256
 	}
-	type chunk struct{ start, end uint64 }
+	type chunk struct {
+		start, end uint64
+		turn       int
+	}
 	var chunks []chunk
-	for at := start; at < end; at += pageSize {
-		chunks = append(chunks, chunk{at, min(at+pageSize, end)})
+	for at, i := start, 0; at < end; at, i = at+pageSize, i+1 {
+		chunks = append(chunks, chunk{at, min(at+pageSize, end), i % len(peers)})
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -106,14 +110,14 @@ func fetchEntries(ctx context.Context, peers []Source, pages Store, u *url.URL, 
 	// is not written from two goroutines.
 	workers := 1
 	if _, ok := pages.(*database.Database); ok {
-		workers = min(parallelPages, len(chunks))
+		workers = min(parallelPages*len(peers), len(chunks))
 	}
 	for w := 0; w < workers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for c := range next {
-				if err := fetchChunk(ctx, peers, pages, u, name, c.start, c.end, bodies); err != nil {
+				if err := fetchChunk(ctx, peers, c.turn, pages, u, name, c.start, c.end, bodies); err != nil {
 					fail(err)
 					return
 				}
@@ -137,13 +141,15 @@ func fetchEntries(ctx context.Context, peers []Source, pages Store, u *url.URL, 
 	return errors.UnknownError.Wrap(ctx.Err())
 }
 
-// fetchChunk takes [start, end) of a chain from the source, peers[0], or
-// from the next peer when the source is busy, as fetchEntries says.
-func fetchChunk(ctx context.Context, peers []Source, pages Store, u *url.URL, name string, start, end uint64, bodies bool) error {
+// fetchChunk takes [start, end) of a chain from the peer at turn, or from
+// the ones after it when it is busy, as fetchEntries says.
+func fetchChunk(ctx context.Context, peers []Source, turn int, pages Store, u *url.URL, name string, start, end uint64, bodies bool) error {
 	pause := streamPause.first
 	for ctx.Err() == nil {
 		var refusals []error
-		for k, src := range peers {
+		for k := range peers {
+			i := (turn + k) % len(peers)
+			src := peers[i]
 			err := fetchChunkFrom(ctx, src, pages, u, name, start, end, bodies)
 			if err == nil {
 				return nil
@@ -152,11 +158,11 @@ func fetchChunk(ctx context.Context, peers []Source, pages Store, u *url.URL, na
 				return errors.UnknownError.Wrap(ctx.Err())
 			}
 			if !errors.Is(err, errors.NotReady) {
-				return fmt.Errorf("entries %d..%d of %s: %s: %w", start, end-1, name, sourceName(k, src), err)
+				return fmt.Errorf("entries %d..%d of %s: %s: %w", start, end-1, name, sourceName(i, src), err)
 			}
-			refusals = append(refusals, fmt.Errorf("%s: %w", sourceName(k, src), err))
+			refusals = append(refusals, fmt.Errorf("%s: %w", sourceName(i, src), err))
 		}
-		// Every peer is busy: wait, and ask the source again.
+		// Every peer is busy: wait, and ask again.
 		_ = stderrors.Join(refusals...)
 		t := time.NewTimer(pause)
 		select {
@@ -168,6 +174,36 @@ func fetchChunk(ctx context.Context, peers []Source, pages Store, u *url.URL, na
 		pause = min(2*pause, streamPause.most)
 	}
 	return errors.UnknownError.Wrap(ctx.Err())
+}
+
+// fetchAndReplay takes the entries [start, end) of a chain across the peers
+// and builds st over them in order; the result must reach want, the peer's
+// head. A stream that does not -- a peer among them served another chain --
+// is taken again from the source alone, and only when that does not reach
+// the head either is it errNotThePeers: the source is refused, never a peer
+// beside it (#4532).
+func fetchAndReplay(ctx context.Context, src Source, peers []Source, pages Store, u *url.URL, name string, st, want *merkle.State, start, end, pageSize uint64, bodies bool) error {
+	st0 := st.Copy()
+	try := func(peers []Source) error {
+		if err := fetchEntries(ctx, peers, pages, u, name, start, end, pageSize, bodies); err != nil {
+			return err
+		}
+		return replayEntries(pages, u, name, st, start, end)
+	}
+	reaches := func() bool {
+		return st.Count == want.Count && bytes.Equal(st.Anchor(), want.Anchor())
+	}
+	if err := try(peers); err != nil {
+		return err
+	}
+	if reaches() || len(peers) == 1 {
+		return nil
+	}
+	*st = *st0.Copy()
+	if err := try([]Source{src}); err != nil {
+		return err
+	}
+	return nil
 }
 
 // fetchChunkFrom takes [start, end) of a chain from one peer, in as many

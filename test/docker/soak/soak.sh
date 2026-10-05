@@ -945,8 +945,13 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   }
 
   i=0; slot=0
+  # The first slot may come sooner than a whole interval (CHAOS_FIRST_SECS):
+  # a follower can be added two minutes into a network that makes blocks
+  # (Paul, 2026-10-05); the slots after it keep the interval.
+  first_slot="${CHAOS_FIRST_SECS:-}"
   while [ "$(date +%s)" -lt "$end" ]; do
     w=$(( CHAOS_MIN + RANDOM % CHAOS_JITTER ))
+    if [ -n "$first_slot" ]; then w=$first_slot; first_slot=""; fi
     echo "$(date -u +%FT%TZ) sleeping ${w}s until the next disturbance" >> "$chaos"
     chaos_wait "$w"
     slot=$((slot+1))

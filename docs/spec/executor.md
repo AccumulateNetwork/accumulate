@@ -503,8 +503,15 @@ peer's head. What the executor reads after a handoff, and so W:
 
 So the anchor pool is taken by `AnchorPoolWindow`, twice the horizon (1,200
 blocks: the margin is for a source whose blocks come faster than this
-partition's), and the ledger and the synthetic ledger by the mark set holding
-each chain's last entry (W = 0): after the handoff they are read only from the
+partition's) -- **its signature chain by its entries alone, the messages left
+to the backfill** (#4532): every validator's signature on every anchor is
+three quarters of the window's pages, the node needs none of them to join or
+execute, and it serves no anchor without them; the window is recorded as a
+messages-only gap in the chain's `SyncedEntries`, and the backfill brings
+them once the node is ACTIVE
+(`TestASignatureChainsWindowLeavesItsMessagesToTheBackfill`) -- and the
+ledger and the synthetic ledger by the mark set holding each chain's last
+entry (W = 0): after the handoff they are read only from the
 node's own blocks up and the entry before them. **A read that reaches below
 what a window holds finds a block the node did not execute, and says so**: the
 seed takes a synthetic or root chain entry it does not hold as that evidence
@@ -1109,17 +1116,20 @@ replays through it. Each page of entries (256) is asked for with the messages
 behind them, and written in a batch of its own that is committed before the
 page is dropped: the elements, their index entries, the messages, and what
 executing a signature entry wrote beside it. **A chain's pages are asked for
-four at a time** (Paul, 2026-10-05, #4529: "fetch in parallel/batched"),
-every page of the source first; a page the source answers busy -- a validator
-admits four queries at a time, and a partition's followers join together --
-is asked of the next peer, and once every peer is busy the page waits a pause
-that doubles. Any other refusal of a page is the source's and fails the pull
-from it: a peer that lies is refused as a source and the next is tried alone,
-never mixed with it. The pages are written in no order; once the chain's
+four at a time of every peer serving the account** (Paul, 2026-10-05, #4529
+and #4532: "fetch in parallel/batched"), each page of the next peer in turn;
+a page a peer answers busy -- a validator admits four queries at a time, and
+a partition's followers join together -- is asked of the one after, and once
+every peer is busy the page waits a pause that doubles. Any other refusal of a
+page fails the pull. The pages are written in no order; once the chain's
 entries are all held, its state is built over them in order -- the
 intermediate hashes and mark points the entries imply, exactly what appending
-them wrote on the peer -- and held to the peer's head
-(`TestAChainsPagesAreFetchedInParallelAcrossThePeers`). Pages into a batch
+them wrote on the peer -- and held to the peer's head. A stream that does not
+reach the head -- a peer among them served another chain -- is taken again
+from the source alone before the source is refused, so a peer that lies
+cannot block a pull and is never mixed with an honest one in what is kept
+(`TestAChainsPagesAreFetchedInParallelAcrossThePeers`,
+`TestAMixedStreamThatDoesNotReplayIsTakenAgainFromTheSourceAlone`). Pages into a batch
 rather than the store stay one at a time: a batch is not written from two
 goroutines.
 The page is then dropped, and **no view of the store is open while a page is

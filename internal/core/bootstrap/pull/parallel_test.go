@@ -8,6 +8,9 @@ package pull
 
 import (
 	"context"
+	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -80,4 +83,97 @@ func TestAChainsPagesAreFetchedInParallelAcrossThePeers(t *testing.T) {
 	require.GreaterOrEqual(t, most.Load(), int64(2), "the pages were asked for one at a time")
 	require.Positive(t, counting[0].pages.Load(), "the source was never asked")
 	require.Positive(t, counting[1].pages.Load()+counting[2].pages.Load(), "no page the source answered busy went to the next peer")
+}
+
+// TestAMixedStreamThatDoesNotReplayIsTakenAgainFromTheSourceAlone — #4532.
+// With a chain's pages spread across the peers, one that serves another
+// chain poisons the stream: the entries never replay to the head. The stream
+// is then taken again from the source alone, and the honest source serves the
+// account; asked first, the liar is refused as a source and the next is tried.
+func TestAMixedStreamThatDoesNotReplayIsTakenAgainFromTheSourceAlone(t *testing.T) {
+	const n = 3000
+	u := protocol.DnUrl().JoinPath("anchors")
+	src := newObservedDB(t)
+	buildChain(t, src, u, n, 0x52)
+	other := newObservedDB(t)
+	buildChain(t, other, u, n, 0x53)
+	honest := &dbSource{db: src}
+	liar := &mixedSource{pagedSource: newPagedSource(src), other: &dbSource{db: other}, below: n}
+
+	dst := newObservedDB(t)
+	ctx := WithPeers(context.Background(), []Source{honest, liar}, 0)
+	require.NoError(t, Account(ctx, honest, nil, u, Options{Mode: ModeFullSpine, Store: dst}))
+	requireWhole(t, src, dst, u)
+
+	dst2 := newObservedDB(t)
+	p, i, err := FetchFrom(context.Background(), []Source{liar, honest}, nil, u, Options{Mode: ModeFullSpine, Store: dst2})
+	require.NoError(t, err)
+	require.Equal(t, 1, i, "the liar was not refused as a source")
+	require.NoError(t, p.Keep())
+	requireWhole(t, src, dst2, u)
+}
+
+// TestASignatureChainsWindowLeavesItsMessagesToTheBackfill — #4532: a pool's
+// signature chain is three quarters of a window's pages. Its window is taken
+// by its entries alone, recorded as a messages-only gap, and the backfill
+// brings the messages once the node is ACTIVE.
+func TestASignatureChainsWindowLeavesItsMessagesToTheBackfill(t *testing.T) {
+	const n = 1000
+	u := protocol.DnUrl().JoinPath("anchors")
+	src := newObservedDB(t)
+	b := src.Begin(true)
+	require.NoError(t, b.Account(u).Main().Put(&protocol.DataAccount{Url: u}))
+	var hashes [][]byte
+	for i := 0; i < n; i++ {
+		h := addSignatureEntry(t, b, u, i)
+		hashes = append(hashes, h[:])
+	}
+	require.NoError(t, b.Commit())
+
+	dst := newObservedDB(t)
+	// The production querier: a window is taken from the chain's state at
+	// its start, which the entry record carries. Window zero: the mark set
+	// holding the last entry, as the ledgers are taken; the pool's window is
+	// only wider.
+	peer := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: "Directory"})}
+	require.NoError(t, Account(context.Background(), peer, nil, u, Options{Mode: ModeWindow, Window: 0, Store: dst, Partition: protocol.DnUrl()}))
+
+	r := dst.Begin(false)
+	rec, err := r.Account(u).SyncedEntries("signature").Get()
+	require.NoError(t, err)
+	from := uint64(n-1) &^ 255
+	for i := from; i < n; i++ {
+		_, err := r.Account(u).SignatureChain().Inner().Element(i).Get()
+		require.NoError(t, err, "entry %d of the window is not held", i)
+		_, err = r.Message2(hashes[i]).Main().Get()
+		require.Error(t, err, "the message behind entry %d was taken with the window", i)
+	}
+	r.Discard()
+	require.Len(t, rec.Gaps, 2, "the record names %+v", rec.Gaps)
+	require.True(t, rec.Gaps[0].MessagesOnly && rec.Gaps[0].Low == from && rec.Gaps[0].High == n, "the window's messages are not recorded missing: %+v", rec.Gaps[0])
+
+	require.NoError(t, Backfill(context.Background(), []Source{peer}, dst, u, 0, nil))
+	r = dst.Begin(false)
+	defer r.Discard()
+	for i := 0; i < n; i++ {
+		_, err = r.Message2(hashes[i]).Main().Get()
+		require.NoError(t, err, "the backfill did not bring the message behind entry %d", i)
+	}
+	rec, err = r.Account(u).SyncedEntries("signature").Get()
+	require.NoError(t, err)
+	require.Empty(t, rec.Gaps)
+}
+
+// addSignatureEntry stores a signature message and appends its hash to u's
+// signature chain, as execution does.
+func addSignatureEntry(t testing.TB, b *database.Batch, u *url.URL, i int) [32]byte {
+	t.Helper()
+	txn := new(protocol.Transaction)
+	txn.Header.Principal = u
+	txn.Body = &protocol.WriteData{Entry: &protocol.DoubleHashDataEntry{Data: [][]byte{{byte(i), byte(i >> 8), 0x5a}}}}
+	msg := &messaging.TransactionMessage{Transaction: txn}
+	h := msg.Hash()
+	require.NoError(t, b.Message(h).Main().Put(msg))
+	require.NoError(t, b.Account(u).SignatureChain().Inner().AddEntry(h[:], false))
+	return h
 }

@@ -274,19 +274,23 @@ func streamChainFrom(ctx context.Context, src Source, pages Store, u *url.URL, c
 		}
 	}
 
-	// The window's pages, parallelPages at a time across the peers, then the
-	// state built over them in order (#4529).
-	bodies := carriesMessages(c)
-	if err := fetchEntries(ctx, peersOf(ctx, src), pages, u, c.Name, start, c.Count, pageSize, bodies); err != nil {
-		return nil, err
-	}
-	if err := replayEntries(pages, u, c.Name, st, start, c.Count); err != nil {
-		return nil, err
+	// The window's pages across the peers, then the state built over them
+	// in order (#4529, #4532). The signature chain's messages -- every
+	// validator's signature on every anchor, three quarters of a pool
+	// window's pages -- are left to the backfill: the node needs none of
+	// them to join or execute, and serves no anchor without them.
+	bodies := carriesMessages(c) && !messagesLeftToBackfill(c)
+	msgsFrom := start
+	if carriesMessages(c) && !bodies {
+		msgsFrom = c.Count
 	}
 	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
+	if err := fetchAndReplay(ctx, src, peersOf(ctx, src), pages, u, c.Name, st, want, start, c.Count, pageSize, bodies); err != nil {
+		return nil, err
+	}
 	if st.Count != want.Count || !bytes.Equal(st.Anchor(), want.Anchor()) {
 		return nil, fmt.Errorf("%w: the peer's entries [%d, %d) on the state it served at %d anchor to %x and its head to %x",
 			errNotThePeers, start, c.Count, start, st.Anchor(), want.Anchor())
 	}
-	return &streamedChain{c: c, head: want, open: st.HashList, restore: true, from: start}, nil
+	return &streamedChain{c: c, head: want, open: st.HashList, restore: true, from: start, msgsFrom: msgsFrom}, nil
 }

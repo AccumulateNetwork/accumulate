@@ -1337,6 +1337,20 @@ type streamedChain struct {
 	// from is where a chain taken by its window was taken from, over a node
 	// that held less: nothing below it is held.
 	from uint64
+
+	// msgsFrom is the first entry taken with its message: from, or the
+	// head's count for a chain whose messages are left to the backfill
+	// (messagesLeftToBackfill).
+	msgsFrom uint64
+}
+
+// messagesLeftToBackfill is whether a chain's window is taken without the
+// messages behind its entries, which the backfill brings once the node is
+// ACTIVE (#4532): the anchor pool's signature chain, every validator's
+// signature on every anchor, which the node needs neither to join nor to
+// execute and serves no anchor without.
+func messagesLeftToBackfill(c *api.ChainRecord) bool {
+	return c.Name == "signature"
 }
 
 // restore writes the heads of the streamed chains and the chain index into
@@ -1354,7 +1368,7 @@ func (s *streamedChains) restore(batch *database.Batch, u *url.URL) error {
 			}
 			// Taken whole, or by its window from t.from, with the messages
 			// behind its entries: nothing from t.from up is missing.
-			if err := recordTaken(batch.Account(u), t.c.Name, t.c.Type, uint64(prev.Count), t.head, t.from, t.from); err != nil {
+			if err := recordTaken(batch.Account(u), t.c.Name, t.c.Type, uint64(prev.Count), t.head, t.from, t.msgsFrom); err != nil {
 				return fmt.Errorf("chain %s/%s: %w", u, t.c.Name, err)
 			}
 			if err := c.Inner().RestoreHead(t.head, t.open); err != nil {
@@ -1450,25 +1464,22 @@ func streamChain(ctx context.Context, src Source, pages Store, u *url.URL, c *ap
 	if err := fetchHeldMessages(ctx, src, pages, u, c, runs, pageSize); err != nil {
 		return nil, err
 	}
-	// The pages parallelPages at a time across the peers, then the state
-	// built over them in order (#4529).
-	if err := fetchEntries(ctx, peersOf(ctx, src), pages, u, c.Name, uint64(from), c.Count, pageSize, bodies); err != nil {
-		return nil, err
-	}
-	if err := replayEntries(pages, u, c.Name, st, uint64(from), c.Count); err != nil {
+	// The pages across the peers, then the state built over them in order
+	// (#4529, #4532).
+	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
+	if err := fetchAndReplay(ctx, src, peersOf(ctx, src), pages, u, c.Name, st, want, uint64(from), c.Count, pageSize, bodies); err != nil {
 		return nil, err
 	}
 
 	// The peer's head is what the account's leaf is hashed from, so entries
 	// that do not reproduce it are a different chain.
-	want := &merkle.State{Count: int64(c.Count), Pending: c.State}
 	if st.Count != want.Count || !bytes.Equal(st.Anchor(), want.Anchor()) {
 		return nil, fmt.Errorf("%w: the peer's entries [%d, %d) on the %d the node holds anchor to %x and the peer's head to %x",
 			errNotThePeers, from, c.Count, from, st.Anchor(), want.Anchor())
 	}
 	// Nothing taken: the head is the node's own.
 	restore := whole || from != want.Count
-	return &streamedChain{c: c, head: want, open: st.HashList, restore: restore}, nil
+	return &streamedChain{c: c, head: want, open: st.HashList, restore: restore, msgsFrom: uint64(from)}, nil
 }
 
 // streamEntries takes the entries [start, end) of one of the peer's chains a
