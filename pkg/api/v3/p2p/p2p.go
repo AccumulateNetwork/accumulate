@@ -21,6 +21,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/discovery/util"
+	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
+	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
 	mafmt "github.com/multiformats/go-multiaddr-fmt"
@@ -100,6 +102,22 @@ func New(opts Options) (_ *Node, err error) {
 		libp2p.EnableNATService(),
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),
+
+		// The transports are named, and nothing is listened on but what
+		// Listen names. Given neither, libp2p falls back to its defaults:
+		// TCP, QUIC, WebSocket and WebTransport, listening at once on six
+		// ports of its own choosing, every one advertised to every peer. A
+		// peer dials all of them, and each WebTransport session that got as
+		// far as the handshake and was then dropped -- the dial another
+		// transport won -- stays in webtransport-go's session map for the
+		// life of the process, with the whole QUIC connection behind it:
+		// 1,595 of them, 114 MiB, on a validator forty hours old that had
+		// at most 99 connections open at once (#4542). It also listened
+		// before the handlers below were registered, which is what #4054
+		// moved the listen to avoid.
+		libp2p.Transport(tcp.NewTCPTransport),
+		libp2p.Transport(libp2pquic.NewTransport),
+		libp2p.NoListenAddrs,
 	}
 
 	// Resource manager with validator-sized limits and metrics. The stock
@@ -174,7 +192,15 @@ func New(opts Options) (_ *Node, err error) {
 	// registered their protocol handlers — see the comment on the host
 	// options above (#4054).
 	if len(opts.Listen) > 0 {
-		if err := n.host.Network().Listen(opts.Listen...); err != nil {
+		// An address written with the retired /quic is listened on as
+		// /quic-v1, as it is dialed (oldQuicCompat): libp2p no longer
+		// listens on the old form, so the configured UDP port was not
+		// listened on at all and QUIC ran only on the default ports above.
+		listen := make([]multiaddr.Multiaddr, len(opts.Listen))
+		for i, a := range opts.Listen {
+			listen[i] = oldQuicCompat(a)
+		}
+		if err := n.host.Network().Listen(listen...); err != nil {
 			return nil, err
 		}
 	}
