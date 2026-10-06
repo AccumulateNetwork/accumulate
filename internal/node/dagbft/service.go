@@ -150,10 +150,10 @@ type Service struct {
 	stageThrough chan stageRequest
 	// awaitingSeed: the node is joining with no consensus checkpoint, so its
 	// consensus orders nothing until the join's first state names a round
-	// the network committed. seedFloor is that round plus the rescue window:
-	// a state at or below it cannot be handed off at, because the groups up
-	// to there may hold certificates the peers committed before the seed
-	// (#4405).
+	// the network committed, and it is seeded seedBelow rounds under that
+	// (#4530). seedFloor is the seed plus the rescue window: a state at or
+	// below it cannot be handed off at, because the groups up to there may
+	// hold certificates the peers committed before the seed (#4405).
 	awaitingSeed bool
 	seedFloor    types.Round
 	// producing is the leader round of the group the block production loop

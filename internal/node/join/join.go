@@ -221,6 +221,12 @@ type Options struct {
 	// WaitSay is how long the join may stay on one step before it says
 	// what it is waiting on (#4484). Zero means DefaultWaitSay.
 	WaitSay time.Duration
+
+	// AwaitConsensus and AwaitConsensusStalled bound how long the join asks
+	// again about one proven state while consensus orders up to it (#4530).
+	// Zero means DefaultAwaitConsensus and DefaultAwaitConsensusStalled.
+	AwaitConsensus        time.Duration
+	AwaitConsensusStalled time.Duration
 }
 
 // DefaultRetry is how long a join waits before asking again.
@@ -591,11 +597,20 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 		}
 		if ok {
 			wait.on("staging the collected blocks and handing off", "block", q)
-			done, err := stageAndHandOff(opts, log, q, &failures, held)
+			did, err := stageAndHandOff(opts, log, q, &failures, held)
+			// Consensus has not ordered up to the state yet, and is getting
+			// there: the same state is asked about again, without a pull
+			// round between. A node's consensus is seeded below the first
+			// state it proves and orders up to it in seconds; pulling on
+			// meanwhile cost a round, and proved a state further ahead of
+			// consensus still (#4530).
+			if err == nil && did == notCollected {
+				did, err = awaitConsensus(ctx, opts, log, retry, q, &failures, held)
+			}
 			if err != nil {
 				return 0, errors.UnknownError.Wrap(err)
 			}
-			if done {
+			if did == handedOff {
 				return q, nil
 			}
 		}
@@ -617,12 +632,87 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 	}
 }
 
+// A Collected is a Buffer that says how far its consensus has collected: the
+// highest leader round of any block it holds.
+type Collected interface {
+	CollectedRound() uint64
+}
+
+// DefaultAwaitConsensus is how long in all a join asks again about one proven
+// state while consensus orders up to it, before it pulls on, and
+// DefaultAwaitConsensusStalled is how long it goes on asking while consensus
+// collects nothing. Seeded thirty-four rounds below the state, consensus asks
+// for the rounds above its seed once a second and is at the state in a few
+// seconds; one that has collected nothing for five, or is still short after
+// thirty, is behind for another reason, and the state is better moved forward
+// than held.
+const (
+	DefaultAwaitConsensus        = 30 * time.Second
+	DefaultAwaitConsensusStalled = 5 * time.Second
+)
+
+// awaitConsensus asks again about the proven state at q, every retry, for as
+// long as the answer is that consensus has not collected up to it and
+// consensus is collecting: it has collected a block within stalled, and the
+// asking has not lasted longer than the bound. A buffer that cannot say how
+// far it has collected is not asked again: the join pulls on, as it always
+// did.
+func awaitConsensus(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration, q uint64, failures *int, held heldGaps) (handoff, error) {
+	c, ok := opts.Buffer.(Collected)
+	if !ok {
+		return notCollected, nil
+	}
+	bound, stalled := opts.AwaitConsensus, opts.AwaitConsensusStalled
+	if bound <= 0 {
+		bound = DefaultAwaitConsensus
+	}
+	if stalled <= 0 {
+		stalled = DefaultAwaitConsensusStalled
+	}
+	began := time.Now()
+	collected, at := c.CollectedRound(), began
+	for {
+		select {
+		case <-ctx.Done():
+			return notCollected, nil
+		case <-time.After(retry):
+		}
+		did, err := stageAndHandOff(opts, log, q, failures, held)
+		if err != nil || did != notCollected {
+			return did, err
+		}
+		now := time.Now()
+		if r := c.CollectedRound(); r > collected {
+			collected, at = r, now
+		}
+		if now.Sub(at) >= stalled || now.Sub(began) >= bound {
+			log.Info("Consensus has not ordered up to the proven state; pulling on",
+				"block", q, "collected-round", collected, "asked-for", now.Sub(began).Round(time.Millisecond))
+			return notCollected, nil
+		}
+	}
+}
+
+// A handoff is what became of one attempt to hand off at a proven state.
+type handoff int
+
+const (
+	// pullOn: the node did not hand off at this state and will not by being
+	// asked again; the join pulls to a later one.
+	pullOn handoff = iota
+	// handedOff: the node is executing from the block after the state.
+	handedOff
+	// notCollected: consensus has not ordered up to the state, or to the
+	// block after it. The state stands, and may be asked about again.
+	notCollected
+)
+
 // stageAndHandOff stages the kept blocks through q + 1, asks whether q + 1 has
 // a gap, and if not settles staging at q and hands off. The state at q matched
 // its signed anchor, so the node is promoted at q once it is executing. It
-// reports whether the node handed off; false with no error means the join
-// pulls again. failures counts the handoffs that failed.
-func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, held heldGaps) (bool, error) {
+// reports what became of the attempt. failures counts the handoffs that
+// failed.
+func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, held heldGaps) (handoff, error) {
 	// Staging holds everything collected through q + 1 and nothing after it
 	// (#4398): the gap check asks what q + 1 carries, and a block delivers
 	// the run it can from what is held, so a staging that also held what
@@ -633,17 +723,17 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, he
 	case err == nil:
 	case errors.Is(err, errors.NotReady):
 		log.Info("The block after the state has not been collected yet; waiting", "synced", q, "block", q+1, "error", err)
-		return false, nil
+		return notCollected, nil
 	case errors.Is(err, errors.Conflict):
 		log.Info("The state is not one this node can hand off from; pulling again", "block", q, "error", err)
-		return false, nil
+		return pullOn, nil
 	default:
-		return false, errors.UnknownError.WithFormat("stage through %d: %w", q+1, err)
+		return pullOn, errors.UnknownError.WithFormat("stage through %d: %w", q+1, err)
 	}
 
 	gaps, err := opts.Stage.HasGap(q + 1)
 	if err != nil {
-		return false, errors.UnknownError.WithFormat("look for a gap at %d: %w", q+1, err)
+		return pullOn, errors.UnknownError.WithFormat("look for a gap at %d: %w", q+1, err)
 	}
 	reportGaps(opts.Partition, gaps)
 	if len(gaps) > 0 {
@@ -667,7 +757,7 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, he
 		}
 		if !held.peersHeldOn(gaps, q) {
 			log.Info("The next block has a gap; not executing until the peers have delivered what they held", "synced", q, "block", q+1, "gaps", streams)
-			return false, nil
+			return pullOn, nil
 		}
 		// The proven state has moved on HeldGapBlocks while every gap's
 		// first missing number stood still: the peers have not delivered
@@ -686,7 +776,7 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, he
 
 	err = opts.Stage.SettleStagingAt(q)
 	if err != nil {
-		return false, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
+		return pullOn, errors.UnknownError.WithFormat("settle staging at %d: %w", q, err)
 	}
 	err = opts.Buffer.Handoff(q)
 	switch {
@@ -697,20 +787,20 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, he
 		// flips the node's state.
 		log.Info("Joined; executing from the block after the state", "block", q, "executes", q+1)
 		opts.State.Promote(q)
-		return true, nil
+		return handedOff, nil
 	case errors.Is(err, errors.NotReady):
 		// The pull ran ahead of the blocks consensus has delivered: handing
 		// off now would give the blocks still to arrive the wrong numbers.
 		// Wait for them.
 		log.Info("The state is ahead of the blocks collected so far; waiting", "block", q, "error", err)
-		return false, nil
+		return notCollected, nil
 	case errors.Is(err, errors.Conflict):
 		// Syncing again, the state matched a block before the one this node
 		// had executed to. Those blocks are not in the buffer, so the node
 		// cannot execute from there; the pull goes on to the peers' newer
 		// state.
 		log.Info("The state is behind the block this node stood at; pulling again", "block", q, "error", err)
-		return false, nil
+		return pullOn, nil
 	default:
 		// A group could not be produced. The join does not end: the node
 		// syncs again and hands off again, counted, because a node that
@@ -724,7 +814,7 @@ func stageAndHandOff(opts Options, log *slog.Logger, q uint64, failures *int, he
 		log.Error("The handoff failed; syncing again and handing off again", "block", q, "attempt", *failures, "error", err)
 		opts.State.Demote(q)
 		opts.Buffer.StartCollecting()
-		return false, nil
+		return pullOn, nil
 	}
 }
 

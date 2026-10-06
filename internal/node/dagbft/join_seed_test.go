@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,7 +40,8 @@ import (
 // loop waited for them for ever and the join's StageThrough waited behind it.
 //
 // Four validators run the production Service over libp2p with a DAG GC depth
-// of 20 rounds and traffic in every round. Once they are well past that, a
+// of 300 rounds -- deep enough that a node is seeded below its state, as on a
+// real network's 2,000 -- and traffic in every round. Once they are past it, a
 // fifth node starts collecting and runs join.Run with its own Service as the
 // buffer, as cmd/accumulated/run/dagbft.go wires it. The pulled state is a
 // validator's own record of the block it produced and the leader round that
@@ -54,7 +56,7 @@ func TestAJoinerAddedPastTheDAGsCollectedRoundsHandsOff(t *testing.T) {
 	const (
 		nVals   = 4
 		part    = "BVN5seed"
-		gcDepth = 20
+		gcDepth = 300
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -129,8 +131,8 @@ func TestAJoinerAddedPastTheDAGsCollectedRoundsHandsOff(t *testing.T) {
 		}
 	}()
 
-	require.Eventually(t, func() bool { return vals[0].LastCommitRound() > 5*gcDepth },
-		time.Minute, 100*time.Millisecond, "the network never got past its DAG's GC depth")
+	require.Eventually(t, func() bool { return vals[0].LastCommitRound() > 2*gcDepth },
+		2*time.Minute, 100*time.Millisecond, "the network never got past its DAG's GC depth")
 
 	// The new node: collecting before it starts, with no checkpoint, as the
 	// daemon starts a node configured to join a running network.
@@ -143,9 +145,10 @@ func TestAJoinerAddedPastTheDAGsCollectedRoundsHandsOff(t *testing.T) {
 	runCtx, stop := context.WithTimeout(ctx, time.Minute)
 	defer stop()
 	state := &validatorLedgerState{from: recorded, into: joiner}
+	buffer := &refusalCounter{Service: joiner}
 	outcome, err := join.Run(runCtx, join.Options{
 		Partition: part,
-		Buffer:    joiner,
+		Buffer:    buffer,
 		Stage:     noGapStage{},
 		State:     state,
 		Peers:     onePeer{},
@@ -158,10 +161,19 @@ func TestAJoinerAddedPastTheDAGsCollectedRoundsHandsOff(t *testing.T) {
 	q := state.promoted()
 	require.NotZero(t, q)
 
+	// It handed off at the first state it proved (#4530): consensus was
+	// seeded below that state's round, the state was never refused as one
+	// the node cannot hand off from, and the join asked about it again
+	// while consensus ordered up to it rather than pull to a later one.
+	require.Zero(t, buffer.refused(), "a proven state was refused as one the node cannot hand off from")
+	require.Equal(t, state.firstProven(), q, "the node handed off at a later state than the first it proved")
+	require.Equal(t, 1, state.pulled(), "the join pulled again after it had proven a state")
+
 	// What the new node produces from q + 1 is what the validators produced.
-	require.Eventually(t, func() bool { return len(joinerAdapter.produced()) >= 3 },
+	const produce = 10
+	require.Eventually(t, func() bool { return len(joinerAdapter.produced()) >= produce },
 		30*time.Second, 100*time.Millisecond, "the new node produced nothing after the handoff")
-	for _, got := range joinerAdapter.produced()[:3] {
+	for _, got := range joinerAdapter.produced()[:produce] {
 		want, ok := recorded.block(got.Index)
 		require.True(t, ok, "validator has no block %d", got.Index)
 		require.Equal(t, want.LeaderRound, got.LeaderRound, "block %d", got.Index)
@@ -216,6 +228,8 @@ type validatorLedgerState struct {
 
 	mu      sync.Mutex
 	at      uint64
+	first   uint64 // the first block matched
+	pulls   int
 	promote uint64
 }
 
@@ -233,6 +247,7 @@ func (s *validatorLedgerState) Pull(context.Context) error {
 	}
 	s.mu.Lock()
 	s.at = b.Index
+	s.pulls++
 	s.mu.Unlock()
 	return nil
 }
@@ -240,7 +255,22 @@ func (s *validatorLedgerState) Pull(context.Context) error {
 func (s *validatorLedgerState) Matched(context.Context) (uint64, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.first == 0 {
+		s.first = s.at
+	}
 	return s.at, s.at > 0, nil
+}
+
+func (s *validatorLedgerState) firstProven() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.first
+}
+
+func (s *validatorLedgerState) pulled() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pulls
 }
 
 func (s *validatorLedgerState) Ready() (uint64, bool)   { return 0, false }
@@ -258,6 +288,23 @@ func (s *validatorLedgerState) promoted() uint64 {
 	defer s.mu.Unlock()
 	return s.promote
 }
+
+// refusalCounter counts the states the service refused as ones it cannot hand
+// off from.
+type refusalCounter struct {
+	*Service
+	n atomic.Int64
+}
+
+func (c *refusalCounter) StageThrough(block uint64) error {
+	err := c.Service.StageThrough(block)
+	if errors.Is(err, errors.Conflict) {
+		c.n.Add(1)
+	}
+	return err
+}
+
+func (c *refusalCounter) refused() int64 { return c.n.Load() }
 
 type noGapStage struct{}
 

@@ -581,6 +581,13 @@ func (p *Primary) prunePendingCerts() {
 	}
 }
 
+// ForgetHeld drops every certificate held for want of a parent, and reports
+// how many: what a node seeded by Node.Rejoin held before the seed
+// (PendingCertificates.Forget).
+func (p *Primary) ForgetHeld() int {
+	return p.pendingCerts.Forget()
+}
+
 // PendingCertsCount returns the number of certificates waiting for missing parents.
 func (p *Primary) PendingCertsCount() int {
 	return p.pendingCerts.Size()

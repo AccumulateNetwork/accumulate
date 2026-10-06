@@ -13,6 +13,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/bullshark"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -304,21 +305,64 @@ func (s *Service) pulledRound(q uint64) (types.Round, error) {
 	return types.Round(ledger.LeaderRound), nil
 }
 
-// seed starts consensus ordering at round, the leader round of the first
-// state the join brought, instead of at round zero: a joining node with no
-// checkpoint orders nothing from before it joined (#4405). The round is one
-// the network committed and near its frontier, so the certificates above it
-// are still in every peer's DAG and their batches still served. The first
-// leaders ordered after it walk RescueWindow rounds below it, where this node
-// does not know what its peers committed, so the groups up to seedFloor may
-// differ from theirs and no state there is handed off at: the join pulls
-// forward to one above it. It is called with the lock held.
-func (s *Service) seed(round types.Round) {
-	s.node.Rejoin(round)
+// seedBelow is how far below the first state a joining node proves its
+// consensus is seeded: the rescue window and one leader round. Seeded at the
+// state's own round, that state was at the seed's floor and its handoff was
+// always refused, so every join pulled another round to a state above it --
+// 16 to 55 s a partition in Docker run 20261006T044611Z (#4530).
+const seedBelow = bullshark.RescueWindow + 2
+
+// seedBelowDepth is the shallowest DAG a node is seeded below its state on.
+// A peer holds DAGGCDepth rounds behind the frontier, and the first state a
+// join proves is itself behind the frontier -- up to 95 blocks, 190 rounds,
+// in Docker run 20261006T062709Z -- so the seed must be well inside that
+// depth or no peer can serve the rounds above it and consensus orders
+// nothing (the libp2p test at a depth of 20: every catch-up request answered
+// empty). The default depth is 2,000.
+const seedBelowDepth = 8 * seedBelow
+
+// seed starts consensus ordering below stateRound, the leader round of the
+// first state the join proved, instead of at round zero: a joining node with
+// no checkpoint orders nothing from before it joined (#4405). It orders from
+// seedBelow rounds under the state. The first leaders ordered after a seed
+// walk RescueWindow rounds below it, where this node does not know what its
+// peers committed, so the groups up to seedFloor may differ from theirs and
+// no state there is handed off at; the state that names the seed is two
+// rounds above that floor, and is handed off at once consensus has ordered
+// up to it. The round ordered from need not be a committed leader's: the
+// groups above the floor are fixed by the certificates above the seed
+// (bullshark, TestSeededBelowAStateOrdersThePeersGroupsAboveIt). It is still
+// near the frontier, so the certificates above it are in every peer's DAG
+// and their batches still served.
+//
+// A state at or below seedBelow is of a network a few blocks old, with no
+// round that far under it, and a DAG shallower than seedBelowDepth may not
+// hold one: the node then orders from the state's own round, and that state
+// is refused as it always was. It is called with the lock held.
+func (s *Service) seed(stateRound types.Round) {
+	depth := s.config.NodeConfig.DAGGCDepth
+	if depth == 0 {
+		depth = consensus.DefaultDAGGCDepth
+	}
+	from := stateRound
+	if stateRound > seedBelow && depth >= seedBelowDepth {
+		from = stateRound - seedBelow
+	}
+	s.node.Rejoin(from)
 	s.awaitingSeed = false
-	s.seedFloor = round + bullshark.RescueWindow
-	s.logger.Info("Joining: consensus orders from the round of the pulled state; handing off above the rescue window",
-		"partition", s.config.Partition.ID, "round", round, "handoffAbove", s.seedFloor)
+	s.seedFloor = from + bullshark.RescueWindow
+	s.logger.Info("Joining: consensus orders from below the round of the first proven state; handing off above the rescue window",
+		"partition", s.config.Partition.ID, "stateRound", stateRound, "round", from, "handoffAbove", s.seedFloor)
+}
+
+// CollectedRound is the highest leader round of any group this node has
+// collected since it started collecting. The join asks it between two asks
+// about one state: a node whose consensus is still ordering up to that state
+// is waited for, not pulled past (join.Collected, #4530).
+func (s *Service) CollectedRound() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return uint64(s.collectedThrough)
 }
 
 // checkRound says whether the buffer can be handed off at block q, whose

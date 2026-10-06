@@ -887,17 +887,28 @@ func (n *Node) CurrentRound() types.Round {
 // LastCommitRound returns the last committed leader round.
 // Rejoin seeds the consensus position after the join (#4058; executor spec,
 // "Sync"). The node's executor state matches a block committed at the given
-// round, so consensus resumes there: the primary participates from the next
+// round or a little above it (the join seeds below its first proven state,
+// #4530), so consensus resumes there: the primary participates from the next
 // round and Bullshark orders nothing at or below the seed. The seed must be
 // within DAGGCDepth of the network's current round — the joined block is a
 // few blocks behind the tip — and the normal certificate-sync catch-up covers
 // the remainder.
+//
+// What the primary held before the seed is forgotten. It was held against a
+// floor of zero, waiting for parents: a certificate at the seed or the round
+// after it needs none now, and stayed held all the same, every later copy of
+// it refused as already held. A node seeded at its state's own round never
+// met one -- what it held was older than the seed -- but one seeded below
+// its state, on a join that took seconds, held exactly the rounds it was
+// seeded at and ordered nothing (the libp2p join test, three runs of four,
+// #4530).
 func (n *Node) Rejoin(round types.Round) {
 	n.primary.SetRound(round)
 	n.bullshark.SetLastCommitRound(round)
 	n.dag.SetLastCommitRound(round)
+	forgot := n.primary.ForgetHeld()
 	n.holdOrdering.Store(false)
-	slog.Info("Rejoined consensus", "partition", n.config.Partition, "round", round)
+	slog.Info("Rejoined consensus", "partition", n.config.Partition, "round", round, "heldAndForgotten", forgot)
 }
 
 // HoldOrdering, called before Start, makes the node order nothing until

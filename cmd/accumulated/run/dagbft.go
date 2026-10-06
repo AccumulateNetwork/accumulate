@@ -710,6 +710,10 @@ func joinOptions(partition string, joinState *join.PulledState, buffer join.Buff
 	}
 }
 
+// The join asks again about a proven state, rather than pull past it, only
+// of a buffer that says how far its consensus has collected (#4530).
+var _ join.Collected = (*dagbft.Service)(nil)
+
 // anchorSourcesOf names the partitions whose anchors this partition's anchor
 // pool records: the Directory for a BVN, every BVN for the Directory. They
 // are the anchor chains CheckStore walks.

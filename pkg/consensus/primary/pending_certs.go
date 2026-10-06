@@ -172,6 +172,24 @@ func (p *PendingCertificates) Prune(currentRound types.Round, gcDepth types.Roun
 	return pruned
 }
 
+// Forget drops every held certificate, and reports how many. What is held is
+// held against the DAG as it stood when each arrived; when a seed moves the
+// DAG's floor (Node.Rejoin), a certificate at or below the round after it
+// needs no parents any more, but one already held goes on waiting for parents
+// nobody will send, and every later copy of it is refused as already held.
+// Forgotten, each is judged again when catch-up or gossip next delivers it.
+func (p *PendingCertificates) Forget() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := len(p.pending)
+	p.pending = make(map[types.CertificateDigest]*pendingEntry)
+	p.waitingFor = make(map[types.CertificateDigest]map[types.CertificateDigest]struct{})
+	if n > 0 {
+		p.totalPruned.Add(uint64(n))
+	}
+	return n
+}
+
 // Size returns the number of pending certificates.
 func (p *PendingCertificates) Size() int {
 	p.mu.Lock()
