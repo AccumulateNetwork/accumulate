@@ -64,3 +64,37 @@ func TestFindService_NoNetworkNamedMeansThisNodesNetwork(t *testing.T) {
 	unnamed := find(api.FindServiceOptions{Service: sequencer})
 	require.NotEmpty(t, unnamed, "a search that names no network means this node's network, and finds the same server")
 }
+
+// TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt — #4537: two
+// followers of run 20261006T031201Z found no validator of their partition for
+// twenty seconds after start while connected to every one of them: their DHT
+// routing tables were still warming, and FindService asked the DHT alone. A
+// search lists the connected peers that serve the service, by the protocols
+// identify reported, before anything the DHT says. Here the DHT is given no
+// time to answer at all, and the connected server is found all the same.
+func TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt(t *testing.T) {
+	const network = "ProbeNet"
+	sequencer := private.ServiceTypeSequencer.AddressFor("BVN1")
+	server, err := New(Options{Network: network, Listen: addrs(t, "/ip4/127.0.0.1/tcp/0"), DiscoveryMode: dht.ModeServer})
+	require.NoError(t, err)
+	defer func() { _ = server.Close() }()
+	require.True(t, server.RegisterService(sequencer, func(message.Stream) {}))
+	client, err := New(Options{Network: network, Listen: addrs(t, "/ip4/127.0.0.1/tcp/0"),
+		BootstrapPeers: server.Addresses(), DiscoveryMode: dht.ModeServer})
+	require.NoError(t, err)
+	defer func() { _ = client.Close() }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var last []*api.FindServiceResult
+	for i := 0; i < 80 && len(last) == 0; i++ {
+		// A nanosecond: the DHT has no time to answer.
+		last, err = client.Services().FindService(ctx, api.FindServiceOptions{Network: network, Service: sequencer, Timeout: time.Nanosecond})
+		require.NoError(t, err)
+		if len(last) == 0 {
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
+	require.NotEmpty(t, last, "the connected server was not found without the DHT")
+	require.Equal(t, server.ID(), last[0].PeerID)
+}

@@ -8,8 +8,10 @@ package p2p
 
 import (
 	"context"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"log/slog"
 	"runtime/debug"
+	"slices"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -130,13 +132,29 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 	if opts.Known {
 		// Find known peers
 		results = n.getKnownPeers(ctx, addr)
-
 	} else {
-		// Discover peers using the DHT
-		var err error
-		results, err = n.discoverPeers(ctx, addr, opts.Timeout)
+		// The peers this node is connected to that serve it, by the
+		// protocols identify reported, then the DHT behind them (#4537): a
+		// node just started has its bootstrap peers connected within a
+		// second and its routing table warm only later, and two followers
+		// of run 20261006T031201Z found no validator in the DHT for twenty
+		// seconds while connected to all of them.
+		results = n.connectedProviders(opts.Service, addr)
+		found, err := n.discoverPeers(ctx, addr, opts.Timeout)
 		if err != nil {
-			return nil, err
+			if len(results) == 0 {
+				return nil, err
+			}
+		} else {
+			seen := map[peer.ID]bool{}
+			for _, r := range results {
+				seen[r.PeerID] = true
+			}
+			for _, r := range found {
+				if !seen[r.PeerID] {
+					results = append(results, r)
+				}
+			}
 		}
 	}
 
@@ -150,6 +168,28 @@ func (n *nodeService) FindService(ctx context.Context, opts api.FindServiceOptio
 		r.Addresses = dialableAddrs(n.host.Peerstore().Addrs(r.PeerID))
 	}
 	return results, nil
+}
+
+// connectedProviders is the peers this node is connected to that serve the
+// service, by the protocols identify reported, with the tracker's status for
+// each. Nil when the search names no service.
+func (n *nodeService) connectedProviders(sa *api.ServiceAddress, addr multiaddr.Multiaddr) []*api.FindServiceResult {
+	if sa == nil {
+		return nil
+	}
+	protocolID := idRpc(sa)
+	var results []*api.FindServiceResult
+	for _, p := range n.host.Network().Peers() {
+		protocols, err := n.host.Peerstore().GetProtocols(p)
+		if err != nil || !slices.Contains(protocols, protocolID) {
+			continue
+		}
+		results = append(results, &api.FindServiceResult{
+			PeerID: p,
+			Status: n.tracker.Status(p, addr),
+		})
+	}
+	return results
 }
 
 func (n *nodeService) getKnownPeers(ctx context.Context, addr multiaddr.Multiaddr) []*api.FindServiceResult {

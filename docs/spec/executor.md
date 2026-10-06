@@ -605,7 +605,13 @@ cryptography — the signed root, the section's hash, the entry's hash — whoev
 served them. **A joining node advertises a partition's query and sequencer services only
 once it is ACTIVE for it** (DIFFERENCES E30; Paul, 2026-10-05): until then it
 refuses every read, so it is nobody's source and nobody's validator to collect
-anchors from. **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
+anchors from. **A node finds the peers serving a service among the peers it is
+connected to first** -- by the protocols identify reported -- and in the DHT
+behind them (#4537): a node just started has its bootstrap peers connected
+within a second and its routing table warm only later, and two followers of run
+`20261006T031201Z` found no validator in the DHT for twenty seconds while
+connected to every one of them
+(`TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt`). **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
 supersedes 2026-10-02, "no as-of-H load"). A block `h+1` that reads a section
 not loaded takes it as the peers held it at `h`, their BPT history serving the
 leaves (`BptPage.ForHeight`) and the accounts (`AccountStates.ForHeight`); the
