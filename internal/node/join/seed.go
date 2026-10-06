@@ -42,6 +42,19 @@ type RoundProver interface {
 	ProvenRound(ctx context.Context) (block, round uint64, err error)
 }
 
+// A StepSeeder is a State whose pull round asks again for the round, between
+// its steps, for as long as consensus is waiting for one. A round's first
+// step can be a minute and more, and a node that could prove no round when
+// the join started -- its first anchor read met too few validators to make a
+// quorum -- was seeded a pull round later, two seconds before its state was
+// proven, and waited another round for consensus to reach that state (BVN2 of
+// acc-bvn2-fol1, Docker run 20261006T060807Z).
+type StepSeeder interface {
+	// SeedBetweenSteps gives the state what to call between the steps of a
+	// pull round.
+	SeedBetweenSteps(try func(ctx context.Context))
+}
+
 // seedBeforePulling seeds a follower's consensus at a proven round near the
 // frontier, so the groups committed while the node pulls are collected and
 // the state it proves at the end of the pull is one it can hand off at.
@@ -76,6 +89,19 @@ func seedBeforePulling(ctx context.Context, opts Options, log *slog.Logger, wait
 // unless the anchor source is held at an anchor no quorum signed, and a round
 // that old is one consensus could not order from.
 const SeedWithin = 128
+
+// SeedBetweenSteps implements [StepSeeder].
+func (s *PulledState) SeedBetweenSteps(try func(ctx context.Context)) { s.seedTry = try }
+
+// seedBetweenSteps asks again for the round consensus orders from, if the
+// join gave this state something to ask with.
+func (s *PulledState) seedBetweenSteps(ctx context.Context) {
+	if s.seedTry == nil {
+		return
+	}
+	s.seedTry(ctx)
+	s.wait.on("pulling the state")
+}
 
 // ProvenRound implements [RoundProver] from the system ledger ProvenLedger
 // proves. A ledger that records no round was written by no leader, or before

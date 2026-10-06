@@ -564,9 +564,12 @@ depends on whether the node is in the committee:
   first handoff is taken. No answer that proves — no signed anchor yet, no
   peer that serves the block, or an anchored block more than `SeedWithin`
   (128) blocks behind the block the answering peer says it is at, which is a
-  collector that has stalled — seeds nothing, and the join asks again before
-  its next round; a node still not seeded when its state is proven is seeded
-  as a validator is.
+  collector that has stalled — seeds nothing, and the join asks again
+  between the steps of its pull round (`PulledState.SeedBetweenSteps`): a
+  round's first step can last a minute, and a follower whose first anchor
+  read met two of four validators was seeded a round late and waited another
+  for consensus to reach its state (run `20261006T060807Z`). A node still not
+  seeded when its state is proven is seeded as a validator is.
 - **A node in the committee is seeded at its first proven state**
   (`Service.StageThrough` reads the ledger the pull left). That first state
   is `P` itself, so its handoff is always refused and the join pulls one more

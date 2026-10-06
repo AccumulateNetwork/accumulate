@@ -88,6 +88,10 @@ type PulledState struct {
 	// anchors, collected from its validators (anchorsrc.Collector).
 	anchors anchorSource
 
+	// seedTry, if set, asks for the round consensus orders from; a pull
+	// round calls it between its steps (SeedBetweenSteps, #4530).
+	seedTry func(ctx context.Context)
+
 	// wait is the step the join is on, said when it lasts (#4484).
 	wait waiting
 
@@ -730,6 +734,10 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		}
 	}
 
+	// The anchors are read and the peers found: a node not seeded when its
+	// join started is asked again here, and after each long step below.
+	s.seedBetweenSteps(ctx)
+
 	if s.sync == nil && s.repairFrom != 0 {
 		s.startRepair(ctx)
 	}
@@ -783,8 +791,10 @@ func (s *PulledState) Pull(ctx context.Context) error {
 	// it, whether or not it is taken this round, so the walk never writes
 	// over it.
 	round.mark("top+spine")
+	s.seedBetweenSteps(ctx)
 	s.processRecords(ctx, p, peer)
 	round.mark("records")
+	s.seedBetweenSteps(ctx)
 
 	// 2. What an earlier round could not take, once each this round,
 	// whoever named it.

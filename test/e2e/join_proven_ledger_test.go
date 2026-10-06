@@ -152,4 +152,10 @@ func proveTheLedgerBeforePulling(t *testing.T, bend bool) {
 		_, err := batch.Account(part.JoinPath(Ledger)).Main().Get()
 		require.ErrorIs(t, err, errors.NotFound, "proving the round wrote the ledger")
 	})
+	// A pull round asks again for the round between its steps, for a node
+	// that could prove none when its join started.
+	var asked int
+	state.SeedBetweenSteps(func(context.Context) { asked++ })
+	require.NoError(t, state.Pull(context.Background()))
+	require.GreaterOrEqual(t, asked, 3, "the pull round did not ask between its steps")
 }

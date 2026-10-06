@@ -108,6 +108,43 @@ func TestJoin_AnUnprovenRoundIsAskedAgainAndDoesNotHoldTheJoin(t *testing.T) {
 	require.Equal(t, []string{"pull 0", "seed 14", "pull 1", "stage 21", "handoff 20"}, log)
 }
 
+// steppingState is a provingState whose pull round asks again for the round
+// between its steps, as PulledState's does.
+type steppingState struct {
+	provingState
+	try func(context.Context)
+}
+
+func (s *steppingState) SeedBetweenSteps(try func(context.Context)) { s.try = try }
+
+func (s *steppingState) Pull(ctx context.Context) error {
+	err := s.provingState.Pull(ctx)
+	if s.try != nil {
+		s.try(ctx)
+	}
+	record(s.log, "pulled", uint64(s.pulls-1))
+	return err
+}
+
+// A node that could prove no round when its join started is seeded inside its
+// first pull round, as soon as a round is proven, and not a round later. In
+// Docker run 20261006T060807Z a follower's first anchor read met two of four
+// validators; it was seeded 110 s later, two seconds before its state was
+// proven, and waited another 70 s round for consensus to reach that state.
+func TestJoin_ANodeNotSeededAtTheStartIsSeededInsideItsFirstPullRound(t *testing.T) {
+	var log []string
+	buf := &seedingBuffer{awaiting: true}
+	buf.log = &log
+	state := &steppingState{provingState: provingState{fakeState: fakeState{matchAt: 20, matchFrom: 1}, block: 7, round: 14, log: &log,
+		errs: []error{errors.NotReady.With("no signed anchor yet")}}}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}}
+
+	_, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: new(fakeStage), State: state, Peers: peers})
+	require.NoError(t, err)
+	require.Equal(t, []string{"pull 0", "seed 14", "pulled 0", "stage 21", "handoff 20"}, log,
+		"the node was seeded only after its first pull round ended")
+}
+
 // ledgerAnswer is a peer's answer for the system ledger as of block: the
 // body, and a receipt from its hash to a root.
 func ledgerAnswer(t *testing.T, u *url.URL, block, round uint64) (*api.AccountRecord, [32]byte) {

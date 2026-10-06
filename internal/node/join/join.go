@@ -538,6 +538,12 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			pullFailed(opts, log, &pullFailures, err)
 		}
 	}
+	// A node not seeded when its join starts is asked again between the
+	// steps of each pull round, not only before the next one (#4530).
+	if s, ok := opts.State.(StepSeeder); ok {
+		s.SeedBetweenSteps(func(ctx context.Context) { seedBeforePulling(ctx, opts, log, wait) })
+	}
+
 	overran := false
 	failures := 0
 	held := heldGaps{}
