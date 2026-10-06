@@ -572,6 +572,10 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			overran = false
 		}
 
+		// A follower's consensus is told where to order from before anything
+		// is pulled (#4530).
+		seedBeforePulling(ctx, opts, log, wait)
+
 		// The state is proven at q, or the node executes nothing: a pulled
 		// state that is not proven is never handed off (#4442).
 		wait.on("proving the pulled state against its signed anchor")

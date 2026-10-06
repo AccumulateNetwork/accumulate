@@ -778,8 +778,10 @@ per block and restores the one matching the executor's last block on restart
 (consensus.md, "Restart"), so a restarted validator starts at its own round
 rather than zero and certificate catch-up can reach the frontier within
 `DAGGCDepth` (2,000 rounds, about eight minutes at four rounds a second). A
-node joining with no checkpoint is seeded at its first pulled state's leader
-round (#4405, consensus.md "Restart"); before this it ordered from round zero
+node joining with no checkpoint is seeded at a proven leader round: a
+follower's at the start of its join, from the ledger as of the newest signed
+anchor's block (#4530), a validator's at its first pulled state (#4405,
+consensus.md "Restart"); before #4405 it ordered from round zero
 and waited for ever on batches no peer held (run `20260925T011332Z`). Not
 done: a node restarted with a checkpoint more than `DAGGCDepth` below the
 frontier is not seeded — `Node.Rejoin` is called only when no checkpoint
