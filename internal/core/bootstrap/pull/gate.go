@@ -10,6 +10,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -40,20 +43,57 @@ type gatedQuerier struct {
 	gate *Gate
 }
 
+// What the gate sees, per query type (#4531: no side had numbers for where a
+// join's time went): calls and their time at the peer, time spent waiting for
+// a slot, and busy answers.
+var (
+	mGateCalls = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "pull", Name: "queries_total",
+		Help: "Queries this node sent its peers, by query type",
+	}, []string{"query"})
+	mGateSeconds = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "pull", Name: "query_seconds_total",
+		Help: "Time the peers took to answer, by query type",
+	}, []string{"query"})
+	mGateSlotWait = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "pull", Name: "gate_slot_wait_seconds_total",
+		Help: "Time queries waited for one of a peer's slots",
+	})
+	mGateBusy = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "pull", Name: "busy_answers_total",
+		Help: "Answers of 'query capacity exhausted' from the peers, by query type",
+	}, []string{"query"})
+	mGateBusyWait = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "accumulate", Subsystem: "pull", Name: "busy_wait_seconds_total",
+		Help: "Time queries paused after a busy answer before asking again",
+	})
+)
+
 func (g gatedQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	kind := "unknown"
+	if query != nil {
+		kind = query.QueryType().String()
+	}
 	pause := streamPause.first
 	var waited time.Duration
 	for {
+		t0 := time.Now()
 		select {
 		case g.gate.slots <- struct{}{}:
 		case <-ctx.Done():
 			return nil, errors.UnknownError.Wrap(ctx.Err())
 		}
+		t1 := time.Now()
+		mGateSlotWait.Add(t1.Sub(t0).Seconds())
 		r, err := g.Querier.Query(ctx, scope, query)
 		<-g.gate.slots
+		mGateCalls.WithLabelValues(kind).Inc()
+		mGateSeconds.WithLabelValues(kind).Add(time.Since(t1).Seconds())
 		if err == nil || !isBusy(err) || waited+pause > streamPause.give {
 			return r, err
 		}
+		mGateBusy.WithLabelValues(kind).Inc()
+		mGateBusyWait.Add(pause.Seconds())
 		t := time.NewTimer(pause)
 		select {
 		case <-ctx.Done():
