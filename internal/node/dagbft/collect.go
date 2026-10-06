@@ -237,7 +237,11 @@ func (s *Service) requestHandoff(req handoffRequest) error {
 // performResume runs in the block production loop (Resume).
 func (s *Service) performResume() error {
 	s.mu.RLock()
-	collecting, overrun, awaiting := s.collecting, s.bufferOverrun, s.awaitingSeed
+	collecting, overrun := s.collecting, s.bufferOverrun
+	// A node the join has seeded restored no checkpoint either: the seed is
+	// the network's position, not one this node's state was produced at
+	// (#4530).
+	awaiting := s.awaitingSeed || s.seedFloor != 0
 	q, round := s.lastBlockIndex, s.lastLeaderRound
 	s.mu.RUnlock()
 	switch {
@@ -304,21 +308,63 @@ func (s *Service) pulledRound(q uint64) (types.Round, error) {
 	return types.Round(ledger.LeaderRound), nil
 }
 
-// seed starts consensus ordering at round, the leader round of the first
-// state the join brought, instead of at round zero: a joining node with no
+// seed starts consensus ordering at round, the leader round a system ledger
+// the join proved records, instead of at round zero: a joining node with no
 // checkpoint orders nothing from before it joined (#4405). The round is one
 // the network committed and near its frontier, so the certificates above it
 // are still in every peer's DAG and their batches still served. The first
 // leaders ordered after it walk RescueWindow rounds below it, where this node
 // does not know what its peers committed, so the groups up to seedFloor may
 // differ from theirs and no state there is handed off at: the join pulls
-// forward to one above it. It is called with the lock held.
-func (s *Service) seed(round types.Round) {
+// forward to one above it. from says which ledger named the round. It is
+// called with the lock held.
+func (s *Service) seed(round types.Round, from string) {
 	s.node.Rejoin(round)
 	s.awaitingSeed = false
 	s.seedFloor = round + bullshark.RescueWindow
-	s.logger.Info("Joining: consensus orders from the round of the pulled state; handing off above the rescue window",
-		"partition", s.config.Partition.ID, "round", round, "handoffAbove", s.seedFloor)
+	s.logger.Info("Joining: consensus orders from a proven leader round; handing off above the rescue window",
+		"partition", s.config.Partition.ID, "round", round, "handoffAbove", s.seedFloor, "from", from)
+}
+
+// AwaitingSeed reports whether the join may name the round this node's
+// consensus orders from before its state is proven (SeedAt): the node joined
+// with no checkpoint, has not been seeded, and is in no committee.
+//
+// A node in the committee is seeded at its first proven state and no earlier
+// (StageThrough). A validator whose store was wiped has lost the record of
+// the rounds it authored, and the later the seed, the further above them it
+// is (consensus spec, "Restart"; #4530).
+func (s *Service) AwaitingSeed() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.seedable()
+}
+
+// seedable is AwaitingSeed with the lock held.
+func (s *Service) seedable() bool {
+	if !s.collecting || !s.awaitingSeed || s.node == nil || s.committee == nil {
+		return false
+	}
+	_, member := s.committee.FindValidator(s.node.PublicKey())
+	return !member
+}
+
+// SeedAt seeds consensus at round when the join starts, before anything is
+// pulled, and reports whether it did. The round is the leader round of a
+// block near the frontier, which the join proved from that block's system
+// ledger and its signed anchor, so the groups this node collects while it
+// pulls are its peers' above the rescue window, and the state it proves at
+// the end of the pull is one it can hand off at. Seeded at that state
+// instead, a join's first handoff is always refused and costs another pull
+// round (#4530). It seeds only a node AwaitingSeed describes.
+func (s *Service) SeedAt(round uint64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if round == 0 || !s.seedable() {
+		return false
+	}
+	s.seed(types.Round(round), "the ledger as of a signed anchor's block")
+	return true
 }
 
 // checkRound says whether the buffer can be handed off at block q, whose
@@ -558,7 +604,7 @@ func (s *Service) stageThroughNow(block uint64) error {
 
 	s.mu.Lock()
 	if s.awaitingSeed {
-		s.seed(round)
+		s.seed(round, "the first proven state")
 	}
 	if err := s.checkRound(q, round); err != nil {
 		s.mu.Unlock()
