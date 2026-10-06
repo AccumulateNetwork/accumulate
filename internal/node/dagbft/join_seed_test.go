@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/bullshark"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -47,6 +50,23 @@ import (
 // off, and the blocks the new node then produces must be the validators'
 // blocks at the same indexes, batch for batch.
 func TestAJoinerAddedPastTheDAGsCollectedRoundsHandsOff(t *testing.T) {
+	joinPastTheCollectedRounds(t, false)
+}
+
+// The same join by a follower seeded when it starts (#4530): the round is
+// proven before anything is pulled, consensus orders from it while the pull
+// runs, and the state the pull ends at -- more than the rescue window later
+// -- is handed off at the first time the service is asked about it. Seeded
+// at that state instead, the first handoff was always refused.
+//
+// The blocks the follower then produces must still be the validators' blocks,
+// batch for batch: a seed taken earlier changes which groups the node orders
+// for itself, and they are its peers' groups only above the rescue window.
+func TestAFollowerSeededWhenItsJoinStartsHandsOffAtItsFirstProvenState(t *testing.T) {
+	joinPastTheCollectedRounds(t, true)
+}
+
+func joinPastTheCollectedRounds(t *testing.T, early bool) {
 	if testing.Short() {
 		t.Skip("five consensus nodes over libp2p")
 	}
@@ -143,25 +163,45 @@ func TestAJoinerAddedPastTheDAGsCollectedRoundsHandsOff(t *testing.T) {
 	runCtx, stop := context.WithTimeout(ctx, time.Minute)
 	defer stop()
 	state := &validatorLedgerState{from: recorded, into: joiner}
-	outcome, err := join.Run(runCtx, join.Options{
+	buffer := &refusalCounter{Service: joiner}
+	opts := join.Options{
 		Partition: part,
-		Buffer:    joiner,
+		Buffer:    buffer,
 		Stage:     noGapStage{},
 		State:     state,
 		Peers:     onePeer{},
 		Logger:    slog.Default(),
 		Retry:     200 * time.Millisecond,
-	})
+	}
+	var seeded *provingLedgerState
+	if early {
+		seeded = &provingLedgerState{validatorLedgerState: state}
+		opts.State = seeded
+	}
+	outcome, err := join.Run(runCtx, opts)
 	require.NoError(t, err, "the join did not hand off; buffered %d groups, consensus at round %d",
 		joiner.BufferedCount(), joiner.LastCommitRound())
 	require.Equal(t, join.Joined, outcome)
 	q := state.promoted()
 	require.NotZero(t, q)
 
+	produce := 3
+	if early {
+		// Seeded where the join said, and never again; and no state was
+		// refused as inside the window.
+		require.NotZero(t, seeded.round, "the join never asked for a proven round")
+		require.Equal(t, seeded.round+bullshark.RescueWindow, joiner.seedFloor,
+			"consensus was not seeded at the round the join proved before it pulled")
+		require.Zero(t, buffer.refused(), "a proven state was refused as one the node cannot hand off from")
+		produce = 10
+	} else {
+		require.NotZero(t, buffer.refused(), "precondition: seeded at its first state, the join's first handoff is refused")
+	}
+
 	// What the new node produces from q + 1 is what the validators produced.
-	require.Eventually(t, func() bool { return len(joinerAdapter.produced()) >= 3 },
+	require.Eventually(t, func() bool { return len(joinerAdapter.produced()) >= produce },
 		30*time.Second, 100*time.Millisecond, "the new node produced nothing after the handoff")
-	for _, got := range joinerAdapter.produced()[:3] {
+	for _, got := range joinerAdapter.produced()[:produce] {
 		want, ok := recorded.block(got.Index)
 		require.True(t, ok, "validator has no block %d", got.Index)
 		require.Equal(t, want.LeaderRound, got.LeaderRound, "block %d", got.Index)
@@ -258,6 +298,55 @@ func (s *validatorLedgerState) promoted() uint64 {
 	defer s.mu.Unlock()
 	return s.promote
 }
+
+// provingLedgerState is the pull of a follower seeded when its join starts:
+// it proves the leader round of the validators' latest block before anything
+// is pulled, and its pull lasts -- no state is proven until the validators
+// are two rescue windows past that round, as a real pull ends a minute or
+// more after it starts.
+type provingLedgerState struct {
+	*validatorLedgerState
+	round types.Round
+}
+
+func (s *provingLedgerState) ProvenRound(context.Context) (uint64, uint64, error) {
+	b, ok := s.from.latest()
+	if !ok {
+		return 0, 0, errors.NotReady.With("the validators have produced no block")
+	}
+	s.mu.Lock()
+	s.round = b.LeaderRound
+	s.mu.Unlock()
+	return b.Index, uint64(b.LeaderRound), nil
+}
+
+func (s *provingLedgerState) Matched(ctx context.Context) (uint64, bool, error) {
+	b, ok := s.from.latest()
+	s.mu.Lock()
+	lasting := !ok || s.round == 0 || b.LeaderRound <= s.round+2*bullshark.RescueWindow
+	s.mu.Unlock()
+	if lasting {
+		return 0, false, nil
+	}
+	return s.validatorLedgerState.Matched(ctx)
+}
+
+// refusalCounter counts the states the service refused as ones it cannot hand
+// off from.
+type refusalCounter struct {
+	*Service
+	n atomic.Int64
+}
+
+func (c *refusalCounter) StageThrough(block uint64) error {
+	err := c.Service.StageThrough(block)
+	if errors.Is(err, errors.Conflict) {
+		c.n.Add(1)
+	}
+	return err
+}
+
+func (c *refusalCounter) refused() int64 { return c.n.Load() }
 
 type noGapStage struct{}
 
