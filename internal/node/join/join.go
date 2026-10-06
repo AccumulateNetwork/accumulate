@@ -228,7 +228,7 @@ const DefaultRetry = 2 * time.Second
 
 // DefaultRounds is how many times a join looks for the partition's
 // validators before it concludes that it cannot see its partition.
-const DefaultRounds = 10
+const DefaultRounds = 10 // the attempts said at Info before once a minute
 
 // An Outcome is how a join ended.
 type Outcome int
@@ -756,15 +756,18 @@ func resume(opts Options, log *slog.Logger, q uint64, failures *int) bool {
 	}
 }
 
-// findValidators looks for the partition's validators, up to Rounds times,
-// and returns how many it found. Zero means the node could not see its
-// partition at all.
+// findValidators looks for the partition's validators and returns how many it
+// found. It looks for as long as the node runs: a node that cannot see its
+// partition has nothing else it may do, and a join that returned left the node
+// collecting for good -- two followers of run 20261006T031201Z found no
+// validator for twenty seconds, gave up after ten tries and never executed
+// (#4538). It says so at Info for the first attempts and once a minute after.
+// A test bounds the search with Options.Rounds; zero returned then means the
+// node could not see its partition in that many tries.
 func findValidators(ctx context.Context, opts Options, log *slog.Logger, retry time.Duration) (int, error) {
 	rounds := opts.Rounds
-	if rounds <= 0 {
-		rounds = DefaultRounds
-	}
-	for attempt := 0; attempt < rounds; attempt++ {
+	saidAt := time.Time{}
+	for attempt := 0; rounds <= 0 || attempt < rounds; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
@@ -780,7 +783,10 @@ func findValidators(ctx context.Context, opts Options, log *slog.Logger, retry t
 		if len(peers) > 0 {
 			return len(peers), nil
 		}
-		log.Info("No validator of this partition has been found yet", "attempt", attempt+1, "of", rounds)
+		if attempt < DefaultRounds || time.Since(saidAt) >= time.Minute {
+			saidAt = time.Now()
+			log.Info("No validator of this partition has been found yet; looking on", "attempt", attempt+1)
+		}
 	}
 	return 0, nil
 }

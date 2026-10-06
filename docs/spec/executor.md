@@ -1852,7 +1852,13 @@ takes one exit from that, and only when both of these hold:
    names the block `<partition>/ledger` does — and that block is past genesis:
    genesis is no execution of this node's (#4304), so a node at genesis has
    nothing to resume from, keeps collecting, and says once a minute that fewer
-   validators serve than sign and no state can be proven to it (#4508). A store holding some of a peer's
+   validators serve than sign and no state can be proven to it (#4508). A node
+   that finds no validator of its partition at all keeps collecting and **keeps
+   looking, for as long as it runs** (#4538): discovery that is slow is not a
+   partition that is gone, and a join that returned left the node collecting for
+   good -- two followers of run `20261006T031201Z` found no validator for twenty
+   seconds, gave up after ten tries and never executed
+   (`TestJoin_KeepsLookingForItsValidators`). A store holding some of a peer's
    accounts is no block's state; such a node waits, and joins from its peers
    once they have resumed. Nor is a store a kill left **torn** — a chain's
    head naming records the store does not hold (a Tail chunk short of its

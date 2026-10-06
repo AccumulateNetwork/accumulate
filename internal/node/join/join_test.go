@@ -166,6 +166,10 @@ func (s *fakeState) Matched(context.Context) (uint64, bool, error) {
 // fakePeers lists the partition's validators.
 type fakePeers struct {
 	peers []*api.FindServiceResult
+	// foundAfter is how many calls answer nobody before peers are found:
+	// discovery warming up (#4537).
+	foundAfter int
+	calls      int
 
 	// asked is never written: Peers has no way to ask a peer for its
 	// staging (#4362 removed it), so a test that says no peer was asked
@@ -174,6 +178,10 @@ type fakePeers struct {
 }
 
 func (p *fakePeers) Validators(context.Context) ([]*api.FindServiceResult, error) {
+	p.calls++
+	if p.calls <= p.foundAfter {
+		return nil, nil
+	}
 	return p.peers, nil
 }
 
@@ -304,6 +312,22 @@ func TestJoin_FindingNoValidatorIsNotAnAnswer(t *testing.T) {
 	require.Error(t, err, "a node that cannot see its partition does not execute")
 	require.True(t, errors.Is(err, errors.NotReady), "and says it is not ready")
 	require.Zero(t, buf.handedOff)
+}
+
+// TestJoin_KeepsLookingForItsValidators — #4538: two followers of run
+// 20261006T031201Z found no validator for twenty seconds, gave up after ten
+// tries and never executed. Discovery that is slow is not a partition that is
+// gone: the join looks on, and joins when the validators appear.
+func TestJoin_KeepsLookingForItsValidators(t *testing.T) {
+	buf := new(fakeBuffer)
+	stage := new(fakeStage)
+	state := &fakeState{matchAt: 20, matchFrom: 0}
+	peers := &fakePeers{peers: []*api.FindServiceResult{peerResult(1)}, foundAfter: 3 * DefaultRounds}
+
+	_, err := run(t, Options{Partition: "BVN1", Buffer: buf, Stage: stage, State: state, Peers: peers})
+	require.NoError(t, err, "the join gave up on its validators")
+	require.Greater(t, peers.calls, 3*DefaultRounds, "the validators were not asked for again")
+	require.Positive(t, buf.handedOff, "the node did not join once its validators appeared")
 }
 
 // gapState is a state pull that syncs to b on its first pull, and after that
