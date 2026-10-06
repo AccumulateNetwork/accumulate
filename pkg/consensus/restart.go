@@ -7,6 +7,7 @@
 package consensus
 
 import (
+	"crypto/ed25519"
 	"encoding/hex"
 	"log/slog"
 	"sort"
@@ -228,21 +229,45 @@ func (n *Node) persistAuthored(h *types.Header) error {
 // persisted batch into the batch store, queues the certificates for
 // ordering, and hands the last authored header to the primary. It reports
 // how many certificates and batches it loaded.
+//
+// The batches this node authored — named by its own certificates in the
+// tail or by the header it last authored — come back as its own: the tail
+// is a whole rescue window and can be larger than the active store, and the
+// first eviction after a restart took the batch of the restored header with
+// the rest, leaving no node to serve it and the round one vote short for
+// ever (run 20261006T220257Z, #4545). The others are peer copies, as they
+// were.
 func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
 	if n.dagStore == nil {
 		return 0, 0
 	}
+	authored, err := n.dagStore.Authored()
+	if err != nil {
+		slog.Error("Reading the last authored header", "partition", n.config.Partition, "error", err)
+	}
 	var certs []*types.Certificate
-	batches := 0
+	var batchNames []string
 	for _, name := range n.dagStore.Names() {
 		if c, err := n.dagStore.Certificate(name); err == nil {
 			certs = append(certs, c)
 			continue
 		}
-		if b, err := n.dagStore.Batch(name); err == nil {
-			_ = multiWorkerBatchStore{n.workers}.StoreBatch(b)
-			batches++
+		batchNames = append(batchNames, name)
+	}
+	ours := n.ownPayloads(certs, authored)
+	batches := 0
+	for _, name := range batchNames {
+		b, err := n.dagStore.Batch(name)
+		if err != nil {
+			continue
 		}
+		if ours[b.Digest()] {
+			d := b.Digest()
+			n.workers[workerFor(d[:], len(n.workers))].RestoreOwn(b)
+		} else {
+			_ = multiWorkerBatchStore{n.workers}.StoreBatch(b)
+		}
+		batches++
 	}
 	if err := n.dag.Restore(certs); err != nil {
 		slog.Error("Restoring the DAG tail", "partition", n.config.Partition, "error", err)
@@ -261,10 +286,26 @@ func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
 	n.restored = certs
 	n.orderMu.Unlock()
 
-	authored, err := n.dagStore.Authored()
-	if err != nil {
-		slog.Error("Reading the last authored header", "partition", n.config.Partition, "error", err)
-	}
 	n.primary.RestoreAuthored(authored)
 	return len(certs), batches
+}
+
+// ownPayloads is the set of batch digests the given certificates and header
+// name under this node's key.
+func (n *Node) ownPayloads(certs []*types.Certificate, authored *types.Header) map[types.BatchDigest]bool {
+	self := n.config.KeyPair.Public().(ed25519.PublicKey)
+	ours := map[types.BatchDigest]bool{}
+	name := func(h *types.Header) {
+		if h == nil || !h.Author.Equal(self) {
+			return
+		}
+		for _, e := range h.Payload {
+			ours[e.Digest] = true
+		}
+	}
+	for _, c := range certs {
+		name(c.Header)
+	}
+	name(authored)
+	return ours
 }

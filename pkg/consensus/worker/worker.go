@@ -772,6 +772,28 @@ func (w *Worker) storeOwn(batch *types.Batch) {
 	w.batchMu.Unlock()
 }
 
+// RestoreOwn puts a batch this node authored before a restart back into the
+// store as its own: never evicted, re-proposed if no certificate names it.
+// A restart reloads the whole persisted tail, which can be larger than the
+// active store; what eviction then removes must not include the batches
+// only this node can serve (#4545). A copy already held as a peer batch
+// becomes own.
+func (w *Worker) RestoreOwn(batch *types.Batch) {
+	digest := batch.Digest()
+	w.batchMu.Lock()
+	entry, ok := w.batches[digest]
+	if ok && !entry.own {
+		entry.own = true
+		entry.lastQueued = time.Now()
+		w.ownBytes += batchBytes(entry.batch)
+		w.observeStore()
+	}
+	w.batchMu.Unlock()
+	if !ok {
+		w.storeOwn(batch)
+	}
+}
+
 // AvailableBatches returns all batch digests that are available for header creation.
 // These are batches created by this worker that have been broadcast but not yet
 // included in a committed header. This method peeks without consuming.

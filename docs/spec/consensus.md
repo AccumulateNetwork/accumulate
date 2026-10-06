@@ -516,8 +516,12 @@ named by digest, written once):
 On restart, before the primary starts, `Node.Restore` loads every persisted
 certificate into the DAG without parent checks (`DAG.Restore`: each was
 quorum-verified when first taken in, and the ones below the window are
-committed history), every persisted batch into the batch store, and runs the
-certificates through Bullshark lowest round first. The last authored header
+committed history), every persisted batch into the batch store — the ones
+named under this node's key, by its certificates in the tail or by its last
+authored header, as its **own** (invariant 4: never evicted; the tail is a
+whole rescue window and can be larger than the active store, and only the
+author can serve what its header names, #4545), the rest as peer copies —
+and runs the certificates through Bullshark lowest round first. The last authored header
 goes back to the primary (`Primary.RestoreAuthored`): the primary never
 authors that round or a lower one again, its round is raised to that
 header's if it had got further than the checkpoint, and if the header's
