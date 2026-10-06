@@ -959,12 +959,18 @@ func (c *Conductor) requestSpanTo(ctx context.Context, ranger private.SequenceRa
 // requestAnchorSpan asks the source for anchors [first, last] of its stream to
 // this partition and submits them as BlockAnchors, one per signature the
 // source holds: together they are the quorum, and each is what that
-// validator's own dispatch carried. An anchor's signatures travel in ONE
-// envelope, and as many anchors as fit the envelope budget share it — the
-// block sorts the envelope under the anchor's number and processes every
-// message in it, so each copy records its signature (review 2026-09-06,
-// finding 9: one envelope per signature per record). The source may answer a
-// prefix; the number it served through is returned.
+// validator's own dispatch carried. As many as fit the envelope budget share
+// an envelope — the block sorts the envelope under the anchor's number and
+// processes every message in it, so each copy records its signature (review
+// 2026-09-06, finding 9: one envelope per signature per record) — and an
+// anchor whose signatures do not fit one envelope has them spread over as
+// many as it takes, as its validators' own dispatches would have delivered
+// them. They travelled in one envelope whatever their size until the first
+// Directory anchor after a whole-network restart carried 126 receipts, 245
+// KB; nine signatures of it were a 2.2 MB envelope against a 512 KB limit,
+// refused, and asked for again for ever, with every anchor behind it (run
+// 20261006T214005Z, #4544). The source may answer a prefix; the number it
+// served through is returned.
 func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.SequenceRanger, source *url.URL, first, last uint64, classify entryOutcome) (int, uint64, error) {
 	records, err := c.anchorAnswers(ctx, ranger, source, first, last)
 	if err != nil {
@@ -1001,24 +1007,20 @@ func (c *Conductor) requestAnchorSpan(ctx context.Context, ranger private.Sequen
 		}
 		count++
 		mHealEntries.WithLabelValues(classify(r.Sequence.Number), c.Partition.ID, partitionLabel(source)).Inc()
-		var add []messaging.Message
-		n := 0
 		for _, sig := range sigs {
 			m := &messaging.BlockAnchor{Anchor: r.Sequence, Signature: sig}
 			k, err := marshalledSize(m)
 			if err != nil {
 				return 0, 0, err
 			}
-			add = append(add, m)
-			n += k
-		}
-		if len(msgs) > 0 && size+n > budget {
-			if err := flush(); err != nil {
-				return 0, 0, errors.UnknownError.WithFormat("submit anchors from %v: %w", source, err)
+			if len(msgs) > 0 && size+k > budget {
+				if err := flush(); err != nil {
+					return 0, 0, errors.UnknownError.WithFormat("submit anchors from %v: %w", source, err)
+				}
 			}
+			msgs = append(msgs, m)
+			size += k
 		}
-		msgs = append(msgs, add...)
-		size += n
 		served = r.Sequence.Number
 	}
 	if err := flush(); err != nil {
