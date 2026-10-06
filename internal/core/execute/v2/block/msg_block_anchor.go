@@ -60,7 +60,7 @@ func (x BlockAnchor) Process(batch *database.Batch, ctx *MessageContext) (_ *pro
 	}
 
 	// Add a transaction state to ensure the block gets recorded
-	ctx.state.Set(ctx.message.Hash(), new(chain.ProcessTransactionState))
+	ctx.state.Set(ctx.messageHash(), new(chain.ProcessTransactionState))
 
 	// Process the message
 	ctx2, err := x.check(ctx, batch)

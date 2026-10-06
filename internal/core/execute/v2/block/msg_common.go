@@ -28,6 +28,12 @@ type MessageContext struct {
 	// message is the Message being processed.
 	message messaging.Message
 
+	// hashOf, hash and id are the hash and the ID of the message they were
+	// computed for (messageHash, messageID).
+	hashOf, idOf messaging.Message
+	hash         [32]byte
+	id           *url.TxID
+
 	// additional is additional messages that should be processed after this one.
 	additional []messaging.Message
 
@@ -89,6 +95,30 @@ func (m *MessageContext) txnWith(txn *protocol.Transaction) *TransactionContext 
 	t.MessageContext = m
 	t.transaction = txn
 	return t
+}
+
+// messageHash is the hash of the context's message, computed once for the
+// context. A block anchor's hash is the hash of everything it carries, the
+// anchor it signs included -- a directory anchor with its receipts is some
+// twenty kilobytes, marshalled at every level it is nested at -- and checking,
+// recording and executing one asked for it eight to ten times: 42 GiB an hour
+// of a validator's 220, at ten transactions a second, because the anchors
+// are per block and per validator (#4542). The message is not changed while
+// its context lives; a context given another message computes again.
+func (m *MessageContext) messageHash() [32]byte {
+	if m.hashOf != m.message {
+		m.hash, m.hashOf = m.message.Hash(), m.message
+	}
+	return m.hash
+}
+
+// messageID is the ID of the context's message, computed once for the
+// context, for the reason messageHash gives: an ID is built from the hash.
+func (m *MessageContext) messageID() *url.TxID {
+	if m.idOf != m.message {
+		m.id, m.idOf = m.message.ID(), m.message
+	}
+	return m.id
 }
 
 // isWithin returns true if any of the given message types appears somewhere in
@@ -168,7 +198,7 @@ func (m *MessageContext) queueAdditional(msg messaging.Message) {
 // didProduce queues a produced synthetic message for dispatch.
 func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg messaging.Message) error {
 	p := &ProducedMessage{
-		Producer:    m.message.ID(),
+		Producer:    m.messageID(),
 		Destination: dest,
 		Message:     msg,
 	}
@@ -206,14 +236,14 @@ func (m *MessageContext) didProduce(batch *database.Batch, dest *url.URL, msg me
 	}
 	// What this message had already produced before this execution: read
 	// once, from the record the Add below reads anyway
-	produced := batch.Transaction2(m.message.Hash()).Produced()
+	produced := batch.Transaction2(m.messageHash()).Produced()
 	if !m.producedBeforeKnown {
 		m.producedBeforeKnown = true
 		if l, err := produced.Get(); err == nil {
 			m.producedBefore = len(l)
 		}
 	}
-	p.cause, p.causeHash, p.causeBefore = messageKind(m.message), m.message.Hash(), m.producedBefore
+	p.cause, p.causeHash, p.causeBefore = messageKind(m.message), m.messageHash(), m.producedBefore
 	m.produced = append(m.produced, p)
 
 	// What this message produced: one set, written as it is produced
@@ -327,7 +357,7 @@ func commitOrDiscard(batch *database.Batch, err *error) {
 
 func (m *MessageContext) checkStatus(batch *database.Batch) (*protocol.TransactionStatus, error) {
 	// If the message has already been processed, return its recorded status
-	status, err := batch.Transaction2(m.message.Hash()).Status().Get()
+	status, err := batch.Transaction2(m.messageHash()).Status().Get()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("load status: %w", err)
 	}
@@ -336,7 +366,7 @@ func (m *MessageContext) checkStatus(batch *database.Batch) (*protocol.Transacti
 	}
 
 	if status.TxID == nil {
-		status.TxID = m.message.ID()
+		status.TxID = m.messageID()
 	}
 
 	if status.Received == 0 {
@@ -360,7 +390,7 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 
 	// Record the message, referring to its transaction by hash when the
 	// transaction is stored under its own
-	err = batch.Message(m.message.Hash()).Main().Put(m.storedForm(m.message))
+	err = batch.Message(m.messageHash()).Main().Put(m.storedForm(m.message))
 	if err != nil {
 		return errors.UnknownError.WithFormat("store message: %w", err)
 	}
@@ -368,7 +398,7 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 	// If this message was caused by another message, record that
 	if msg, ok := m.message.(messaging.MessageWithCauses); ok {
 		for _, cause := range msg.GetCauses() {
-			err = batch.Message(msg.Hash()).Cause().Add(cause)
+			err = batch.Message(m.messageHash()).Cause().Add(cause)
 			if err != nil {
 				return errors.UnknownError.WithFormat("add cause: %w", err)
 			}
@@ -378,12 +408,12 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 	// If this message produced other messages, record that
 	if msg, ok := m.message.(messaging.MessageWithProduced); ok {
 		for _, produced := range msg.GetProduced() {
-			err = batch.Transaction2(msg.Hash()).Produced().Add(produced)
+			err = batch.Transaction2(m.messageHash()).Produced().Add(produced)
 			if err != nil {
 				return errors.UnknownError.WithFormat("add produced: %w", err)
 			}
 
-			err = batch.Message(produced.Hash()).Cause().Add(msg.ID())
+			err = batch.Message(produced.Hash()).Cause().Add(m.messageID())
 			if err != nil {
 				return errors.UnknownError.WithFormat("add cause: %w", err)
 			}
@@ -391,7 +421,7 @@ func (m *MessageContext) recordMessageAndStatus(batch *database.Batch, status *p
 	}
 
 	// Record the status
-	err = batch.Transaction2(m.message.Hash()).Status().Put(status)
+	err = batch.Transaction2(m.messageHash()).Status().Put(status)
 	if err != nil {
 		return errors.UnknownError.WithFormat("store status: %w", err)
 	}
