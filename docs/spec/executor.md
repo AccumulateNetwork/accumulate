@@ -1131,6 +1131,14 @@ page is dropped: the elements, their index entries, the messages, and what
 executing a signature entry wrote beside it. **A chain's pages are asked for
 four at a time of every peer serving the account** (Paul, 2026-10-05, #4529
 and #4532: "fetch in parallel/batched"), each page of the next peer in turn;
+**Every query the node sends a peer goes through that peer's gate, four in
+flight at a time whoever asks** (#4536): a validator admits four, and a node
+whose streams, states and fill each asked four at a time had twelve in flight
+to every validator and was refused by its own load; a refusal of the anchor
+pool's index-chain search then lost the account for a round (run
+`20261006T022626Z`). A busy answer is asked again behind the gate after the
+pauses below, so no single query fails on it
+(`TestQueriesToOnePeerAreGatedAndABusyAnswerIsAskedAgain`). Beyond the gate,
 a page a peer does not serve -- busy (`query capacity exhausted`: a validator
 admits four queries at a time, and a partition's followers join together),
 unreachable, or joining (its `NotReady`) -- is asked of the one after; a peer

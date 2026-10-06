@@ -88,6 +88,25 @@ type QueryPeers struct {
 
 	mu     sync.Mutex
 	cached map[string]*peerList
+	// gates is the queries in flight to each peer, PeerInFlight at a time
+	// across every source and querier of that peer this node holds
+	// (pull.Gate; #4536).
+	gates map[peer.ID]*pull.Gate
+}
+
+// gateFor is the peer's gate, made on first use.
+func (q *QueryPeers) gateFor(id peer.ID) *pull.Gate {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.gates == nil {
+		q.gates = map[peer.ID]*pull.Gate{}
+	}
+	g, ok := q.gates[id]
+	if !ok {
+		g = pull.NewGate()
+		q.gates[id] = g
+	}
+	return g
 }
 
 // DefaultPeerTTL is how long a discovered peer list is reused. A join runs for
@@ -205,7 +224,7 @@ func (q *QueryPeers) Querier(partition *url.URL) api.Querier {
 // peer: the self-discoverer is never consulted.
 func (q *QueryPeers) clientFor(id peer.ID, partition *url.URL) api.Querier {
 	addr := api.ServiceTypeQuery.AddressFor(partitionIDOf(partition)).Multiaddr()
-	return q.Client.ForPeer(id).ForAddress(addr)
+	return pull.Gated(q.Client.ForPeer(id).ForAddress(addr), q.gateFor(id))
 }
 
 func partitionIDOf(partition *url.URL) string {

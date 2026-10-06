@@ -81,6 +81,33 @@ func main() {
 	asOf := ledger.Index - 3
 	run(fmt.Sprintf("BptPage as of %d", asOf), asOf)
 
+	// The block-ledger records of the last 60 blocks with the states they
+	// name, every page of them: what a pull round pays for its records.
+	{
+		after := ledger.Index - 60
+		var cursor []byte
+		var pages, states, bytes int
+		t := time.Now()
+		for {
+			rec, err := q.QueryChangedAccountStates(ctx, part, &api.ChangedAccountStatesQuery{After: after, Cursor: cursor})
+			if err != nil {
+				fmt.Printf("  ChangedAccountStates after %d: %v after %v\n", after, err, time.Since(t))
+				break
+			}
+			pages++
+			states += len(rec.States)
+			if rec.Part != nil {
+				bytes += len(rec.Part.Data)
+			}
+			if len(rec.Cursor) == 0 {
+				fmt.Printf("  ChangedAccountStates after %d through %d: %d records, %d states (%d part bytes) in %d pages, %.1f s\n",
+					after, rec.Through, len(rec.Records), states, bytes, pages, time.Since(t).Seconds())
+				break
+			}
+			cursor = rec.Cursor
+		}
+	}
+
 	if len(urls) > 0 {
 		for _, h := range []uint64{0, asOf} {
 			t := time.Now()
