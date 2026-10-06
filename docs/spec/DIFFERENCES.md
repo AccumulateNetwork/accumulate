@@ -529,28 +529,28 @@ unproven only when the peer cannot give one.
   that subtree's pages again -- on a 2.3M-entry chain the bottom subtree is
   2^21 entries -- though nothing proven above it is asked for again.
 
-### E30. The validators asked for anchors are every peer serving the sequencer, joining followers included
+### E30. The validators asked for anchors are every peer serving the sequencer, joining followers included — RESOLVED 2026-10-05
 
-*[#4528](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4528)*
+*[#4528](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4528), [#4533](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4533)*
 
-**Spec** (executor.md, "Sync", "The anchor is collected from the partition's
-own validators"): the join asks each of P's validators for anchor n.
+**Was:** `ValidatorsOf` and `peersOf` (`internal/node/join/sources.go`) took
+every peer found serving the partition's sequencer or querier, and a joining
+follower registered both at start, so two followers joining together each
+asked the other and waited on it (attach run `20261005T152855Z`: the
+Directory joins of two followers spent 7 and 10 minutes reading anchors at
+six a minute); with the spine's pages spread across every source (#4533),
+every source's attempt failed on the follower that could not yet be dialed
+(run `20261005T183032Z`: Directory joins of 542 and 552 s against 80 s for
+the BVNs).
 
-**Code** (`internal/node/join/sources.go`, `ValidatorsOf`): the peers found
-serving the partition's sequencer service, this node dropped. A joining
-follower serves the sequencer too, so two followers joining together each
-ask the other; a node that is itself joining answers only after the p2p
-connect timeout. The collector now sets such a peer aside for the read
-(spec, same paragraph), which makes the cost one call a read instead of one
-a anchor; it does not stop a joining node being asked as a validator. The
-fix needs a decision: advertise the sequencer only from ACTIVE validators of
-the partition, or filter the found peers by the partition's validator set
-(which names keys, not peer ids).
-
-Measured: attach run `20261005T152855Z`, followers added 15:48Z -- the
-Directory join of acc-bvn2-fol1 and acc-bvn3-fol2 spent 7 and 10 minutes
-reading anchors at six a minute, each waiting 10 s per anchor on the other;
-acc-bvn1-fol1, whose list had neither, was proven in 189 s.
+**Decision** (Paul, 2026-10-05: "Agree to E30"): a node advertises a
+partition's query and sequencer services to the network only once it is
+ACTIVE for that partition (`registerRpcServiceWhenActive`,
+`cmd/accumulated/run`); a node that never joined advertises at once. The
+in-process services are provided immediately as before. The adverts of a
+follower that was removed may outlive it in its peers' peer stores; a page
+such a peer cannot be dialed for passes to the next (#4533).
+`TestAJoiningNodeAdvertisesItsServicesOnlyOnceActive`.
 
 ### E11. A node cannot sync from the running protocol
 

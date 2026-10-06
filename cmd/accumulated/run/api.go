@@ -97,7 +97,9 @@ func (q *Querier) start(inst *Instance) error {
 			return out
 		},
 	})
-	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
+	// Advertised to the network once this node is ACTIVE for the partition
+	// (DIFFERENCES E30); provided in-process at once.
+	registerRpcServiceWhenActive(inst, nodeState, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
 	return querierProvides.Register(inst.services, q, impl)
 }
 

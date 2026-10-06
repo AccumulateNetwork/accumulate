@@ -891,7 +891,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		// partition's sequencer, by name (#4487).
 		Relay: sequencerPeers(inst, s.Partition.ID),
 	})
-	registerRpcService(inst, sequencerSvc.Type().AddressFor(s.Partition.ID), message.Sequencer{Sequencer: sequencerSvc})
+	// Advertised once this node is ACTIVE for the partition (DIFFERENCES
+	// E30): a joining node is nobody's validator to collect anchors from.
+	registerRpcServiceWhenActive(inst, serving, sequencerSvc.Type().AddressFor(s.Partition.ID), message.Sequencer{Sequencer: sequencerSvc})
 	err = dagbftProvidesSequencer.Register(inst.services, s, sequencerSvc)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register sequencer service: %w", err)

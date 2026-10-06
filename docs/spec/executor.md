@@ -602,7 +602,10 @@ not loaded are redirected while it loads; a synced node tries first and
 redirects on a not-loaded failure; a peer asked for a section or a page it does
 not hold redirects to one that holds it. Answers are used when they match the
 cryptography — the signed root, the section's hash, the entry's hash — whoever
-served them. **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
+served them. **A joining node advertises a partition's query and sequencer services only
+once it is ACTIVE for it** (DIFFERENCES E30; Paul, 2026-10-05): until then it
+refuses every read, so it is nobody's source and nobody's validator to collect
+anchors from. **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
 supersedes 2026-10-02, "no as-of-H load"). A block `h+1` that reads a section
 not loaded takes it as the peers held it at `h`, their BPT history serving the
 leaves (`BptPage.ForHeight`) and the accounts (`AccountStates.ForHeight`); the
