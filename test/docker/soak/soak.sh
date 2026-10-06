@@ -812,16 +812,19 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   [ "$val_on" -eq 0 ] && echo "$(date -u +%FT%TZ) validators: not disturbed (CHAOS_VALIDATORS=${CHAOS_VALIDATORS:-on})" >> "$chaos"
 
   # The follower kinds (#4364), when CHAOS_FOLLOWERS=on: add-follower starts
-  # EVERY follower whose compose service is in the `late-follower` profile —
-  # one per BVN (#4438), each a node `compose up` did not start, with its own
-  # key in no committee, its peers from the bootstrap and its storage from
-  # docker-network.yml — all in one slot, and remove-follower stops and
-  # removes them all together a slot later. The two alternate,
-  # CHAOS_FOLLOWER_CYCLES pairs (0: for the whole run). With the validator
-  # walk on too, the slots alternate validator, follower, so each kind keeps
-  # its turn.
+  # ONE follower whose compose service is in the `late-follower` profile —
+  # they are one per BVN (#4438), each a node `compose up` did not start,
+  # with its own key in no committee, its peers from the bootstrap and its
+  # storage from docker-network.yml — and remove-follower stops and removes
+  # it a slot later; the next add takes the next follower in turn. The two
+  # alternate, CHAOS_FOLLOWER_CYCLES pairs (0: for the whole run). With the
+  # validator walk on too, the slots alternate validator, follower, so each
+  # kind keeps its turn. One at a time, because three joins at once contend
+  # for this one box's disk (run 20261006T223712Z: 60k reads/s, 330 MB/s
+  # serving three joins, and the BVN joins took ten minutes instead of two),
+  # and that contention is not part of a real network (Paul, 2026-10-06).
   #
-  # Each add clears every late follower's two databases first (bvnN-M/{dnn,
+  # Each add clears that follower's two databases first (bvnN-M/{dnn,
   # bvnn}/data/accumulate.db, in the shared config volume that outlives the
   # container), so every add is a node that has never run, not a restart, and
   # sets join-running-network in its accumulate.toml (#4340).
@@ -830,8 +833,8 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   # line per follower when accumulate_node_state reads ACTIVE on every
   # partition it runs, and one at its first block whose root equals a
   # validator's, each with the seconds since the add. The removal is
-  # bracketed by readings FOLLOWER_WINDOW_SECS before and after it — one set
-  # for the slot, since all of them leave at once — and the log states
+  # bracketed by readings FOLLOWER_WINDOW_SECS before and after it, and the
+  # log states
   # whether every partition's block cadence and every stream's delivered
   # count were unaffected. The readings are followerchaos.py's; it is tested
   # there.
@@ -844,7 +847,7 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
     if [ "${#fols[@]}" -gt 0 ]; then
       fol_on=1
       for k in "${!fols[@]}"; do
-        echo "$(date -u +%FT%TZ) followers: ${fols[$k]} (service ${fol_svcs[$k]}, data ${fol_dirs[$k]}) is added and removed with the other late followers, ${CHAOS_FOLLOWER_CYCLES:-0} pair(s) (0: unbounded)" >> "$chaos"
+        echo "$(date -u +%FT%TZ) followers: ${fols[$k]} (service ${fol_svcs[$k]}, data ${fol_dirs[$k]}) is added and removed in its turn, one late follower at a time, ${CHAOS_FOLLOWER_CYCLES:-0} pair(s) (0: unbounded)" >> "$chaos"
       done
     else
       echo "$(date -u +%FT%TZ) followers: CHAOS_FOLLOWERS=on but no follower is in the compose's late-follower profile — none will be added" >> "$chaos"
@@ -853,7 +856,7 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
   # added: the late followers up now (empty: none). Per follower: when it was
   # added, and whether ACTIVE and a root match have been seen since.
   added=(); declare -A added_at=() added_s=() seen_active=() seen_match=()
-  pairs=0; fol_done=0
+  pairs=0; fol_done=0; next_fol=0
 
   # Poll each added follower once: ACTIVE, then the follower's own word that
   # it executes in agreement on every partition it runs. That line
@@ -894,31 +897,26 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
     done
   }
   add_follower() {
-    local k c d clear="" join=""
-    for d in "${fol_dirs[@]}"; do
-      # consensus/ too: a checkpoint left beside a cleared store resumes
-      # consensus where the old follower stopped, so the add is not a fresh
-      # join (#4484).
-      clear+=" /root/.accumulate/$d/dnn/data/accumulate.db /root/.accumulate/$d/bvnn/data/accumulate.db /root/.accumulate/$d/consensus"
-      join+=" /root/.accumulate/$d/accumulate.toml"
-    done
-    # One throwaway container for all of them: the directories share one
-    # volume, and a `compose run` per follower costs seconds each.
-    $compose run --rm --no-deps --entrypoint sh "${fol_svcs[0]}" -c "rm -rf$clear" >/dev/null 2>&1
+    # The next late follower in turn; the others stay down.
+    local k=$next_fol c=${fols[$next_fol]} d=${fol_dirs[$next_fol]} clear="" join=""
+    next_fol=$(( (next_fol + 1) % ${#fols[@]} ))
+    # consensus/ too: a checkpoint left beside a cleared store resumes
+    # consensus where the old follower stopped, so the add is not a fresh
+    # join (#4484).
+    clear=" /root/.accumulate/$d/dnn/data/accumulate.db /root/.accumulate/$d/bvnn/data/accumulate.db /root/.accumulate/$d/consensus"
+    join=" /root/.accumulate/$d/accumulate.toml"
+    $compose run --rm --no-deps --entrypoint sh "${fol_svcs[$k]}" -c "rm -rf$clear" >/dev/null 2>&1
     # A node added to a running partition says so in its config: a store holding
     # only genesis cannot tell that from being the first node of a network, and
     # without it the follower executes from genesis instead of joining (#4340).
-    $compose run --rm --no-deps --entrypoint sh "${fol_svcs[0]}" -c \
+    $compose run --rm --no-deps --entrypoint sh "${fol_svcs[$k]}" -c \
       "for f in$join; do grep -q join-running-network \$f || sed -i '/type = \"coreValidator\"/a\\  join-running-network = true' \$f; done" >/dev/null 2>&1
-    $compose --profile late-follower create --no-recreate "${fol_svcs[@]}" >/dev/null 2>&1
-    for k in "${!fols[@]}"; do
-      c=${fols[$k]}
-      added_at[$c]=$(date -u +%FT%TZ); added_s[$c]=$(date +%s)
-      seen_active[$c]=0; seen_match[$c]=0
-      echo "${added_at[$c]} add-follower $c (${fol_svcs[$k]}, data ${fol_dirs[$k]}; key in no committee; databases cleared; join-running-network)" >> "$chaos"
-    done
-    docker start "${fols[@]}" >/dev/null 2>&1
-    added=("${fols[@]}")
+    $compose --profile late-follower create --no-recreate "${fol_svcs[$k]}" >/dev/null 2>&1
+    added_at[$c]=$(date -u +%FT%TZ); added_s[$c]=$(date +%s)
+    seen_active[$c]=0; seen_match[$c]=0
+    echo "${added_at[$c]} add-follower $c (${fol_svcs[$k]}, data ${fol_dirs[$k]}; key in no committee; databases cleared; join-running-network; one late follower at a time, $((k+1)) of ${#fols[@]})" >> "$chaos"
+    docker start "$c" >/dev/null 2>&1
+    added=("$c")
   }
   remove_follower() {
     local n=$((pairs + 1)) w=${FOLLOWER_WINDOW_SECS:-30} c

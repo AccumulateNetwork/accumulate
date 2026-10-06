@@ -517,10 +517,14 @@ second add of the same container never borrows the first one's numbers.
 
 There is one late follower per BVN (#4438): `acc-bvn1-fol1` (`bvn1-5`),
 `acc-bvn2-fol1` (`bvn2-5`) and `acc-bvn3-fol2` (`bvn3-6`). One add-follower
-slot adds every one of them — its databases cleared and `join-running-network
-= true` set in its `accumulate.toml` — and the next follower slot removes them
-all. So `chaos.log` has one `add-follower <container> (...)` line per follower
-at the add, `follower <container> ACTIVE (...), Ns after it was added` and
+slot adds **one** of them, in turn — its databases cleared and
+`join-running-network = true` set in its `accumulate.toml` — and the next
+follower slot removes it; the slot after that adds the next one. One at a
+time since 2026-10-06 (Paul): three joins at once contend for the one box's
+disk, and that contention is not part of a real network (run
+20261006T223712Z). Runs before that added and removed all three together.
+So `chaos.log` has one `add-follower <container> (...)` line per add,
+`follower <container> ACTIVE (...), Ns after it was added` and
 `follower <container> first in agreement (...)` lines per follower as each is
 seen (the follower's own first `This node is executing in agreement; it is
 ACTIVE` line per partition, once every partition it runs has one — logged
