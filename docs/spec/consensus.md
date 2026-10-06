@@ -382,7 +382,8 @@ for its parents.** When the buffer is full, a certificate at or below the
 round after the node's own whose parents are missing is not held, but its
 parents are still asked for; catch-up re-delivers it, and it is inserted
 once they are in. Certificates further ahead are left to round catch-up.
-This is the common case for a node seeded by `Rejoin` at `P`, not a corner:
+This is the common case for a node seeded by `Rejoin` at a round `P` (the
+seed, `S` in "Restart"), not a corner:
 the DAG accepts certificates at `P` and `P + 1` without their parents, but a
 header names as weak links every certificate of the rounds from eight below
 it to two below it, so the certificates at `P + 2` name those of
@@ -533,22 +534,55 @@ executed them, so a node ordering from zero waits for the first group for
 ever (Docker run `20260925T011332Z`, `fol2-stall`: a fresh follower waiting on
 the batches of a round-4 certificate while the network was past block 640).
 Such a node starts with ordering held (`Node.HoldOrdering`): certificates
-reach its DAG and none is ordered. The join's first state names the round
-(`Service.StageThrough` reads the leader round `P` its system ledger
-records) and consensus is seeded there (`Node.Rejoin(P)`): Bullshark orders
-nothing at or below `P`, the DAG accepts certificates at `P` and `P + 1`
-without their parents, and the primary participates from `P`. `P` is the
-round of a leader the network committed, recorded in a state the join
-itself pulled seconds earlier, so it is near the frontier: the certificates
-above it are in every peer's DAG and their batches are still served. A
-peer's current round or the first certificates to arrive would be neither —
-certificate catch-up delivers low rounds first, and a round that is no
-committed leader gives a leader chain that is not the peers'. The seed has
-no committed-digest set, so the first leaders ordered after it walk the
-rescue window below `P` and may take in certificates the peers committed
-before `P`: no state at a round at or below `P + RescueWindow` (32) is handed
-off at (`Conflict`), and the join pulls forward to one above it, about
-sixteen blocks later. A node restarted with a checkpoint more than
+reach its primary and none is ordered. The join's first proven state names
+the round (`Service.StageThrough` reads the leader round `P` its system
+ledger records), and consensus is seeded **thirty-four rounds below it**, at
+`S = P − (RescueWindow + 2)` (`Node.Rejoin(S)`, `seedBelow`; #4530):
+Bullshark orders nothing at or below `S`, the DAG accepts certificates at `S`
+and `S + 1` without their parents, and the primary participates from `S`.
+`P` is the round of a leader the network committed, recorded in a state the
+join itself pulled seconds earlier, so `S` is near the frontier: the
+certificates above it are in every peer's DAG and their batches are still
+served. A peer's current round or the first certificates to arrive would not
+be — certificate catch-up delivers low rounds first.
+
+`S` need not be a committed leader's round, and usually is not. The leader
+chain above a seed is fixed by the certificates above it, whatever kind of
+round the seed is (`bullshark`,
+`TestSeededBelowAStateOrdersThePeersGroupsAboveIt`: six DAGs built as the
+primary builds headers, with missed rounds, late certificates and skipped
+leaders, every committed leader's round as `P`, seeds 33 to 52 rounds below).
+What a seed lacks is the committed-digest set: the first leaders ordered
+after it walk the rescue window below it and may take in certificates the
+peers committed before it. So no state at a round at or below
+`S + RescueWindow` (32) is handed off at (`Conflict`).
+
+**The first proven state is two rounds above that floor, and is the state
+the node hands off at.** Until #4530 the seed was `P` itself, the first state
+was at its own floor, its handoff was always refused, and every join pulled
+another round to a state above it: 16 to 55 s for each partition of each of
+three followers in Docker run `20261006T044611Z`. Seeded below `P`, the node
+is refused at `P` only as not having collected that far yet (`NotReady`), for
+the seconds consensus takes to order thirty-four rounds; the join asks about
+the same state again and does not pull on (executor.md, "Sync", step 5).
+
+**A seed forgets what the primary held before it** (`Primary.ForgetHeld`).
+Until the seed the DAG's floor is zero, so every certificate gossip delivered
+while the node pulled was held for want of parents. The seed makes those at
+`S` and `S + 1` acceptable without parents; left held, each stayed waiting
+for parents nobody would send, and every later copy of it was refused as
+already held. Seeded at `P` a node never met one, because what it held was
+older than the seed; seeded below `P` on a join that took seconds, the node
+held exactly the rounds it was seeded at, its DAG stayed empty and it ordered
+nothing (the libp2p join test, three runs of four). Forgotten, each is judged
+again when catch-up next delivers it.
+
+Two networks are seeded at `P` itself, as before, and pay the refused first
+handoff: one younger than thirty-four rounds, and one whose `DAGGCDepth` is
+below `seedBelowDepth` (eight times the distance, 272 rounds). The first
+proven state is itself behind the frontier — up to 190 rounds in Docker run
+`20261006T062709Z` — and a seed below it must still be inside what a peer
+holds, or no peer can serve the rounds above it. A node restarted with a checkpoint more than
 `DAGGCDepth` below the frontier is not seeded this way (DIFFERENCES,
 "Seeding").
 
@@ -633,7 +667,8 @@ at (the system ledger), so a node whose state is proven at block V, committed
 at round R, holds the result of every round at or below R: a certificate for
 such a round is dropped on arrival, unverified, and is never requested. A
 joiner keeps applying block-ledger records until its proven block is the
-newest, and only then seeds consensus at that block's round, so the rounds it
-must collect are the frontier's last few. The pending buffer's size is not the
+newest, and only then seeds consensus, thirty-four rounds below that block's
+round (Restart; #4530), so the rounds it must collect are the frontier's last
+few and those thirty-four. The pending buffer's size is not the
 question ("240 is nothing, it is just we don't need even that"); it stays as
 is.

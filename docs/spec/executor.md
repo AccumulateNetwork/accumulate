@@ -2074,7 +2074,14 @@ that are not theirs, any group consensus delivers again after a restart.
 The handoff does not happen, and the buffer is left as it is, when:
 
 - `P` is above every round the node has executed or collected: the groups up
-  to it are still arriving. The join waits (`NotReady`).
+  to it are still arriving (`NotReady`). The join asks again about the same
+  state, every retry interval, and does not pull on, for as long as the node
+  is collecting: it has collected a block within the last 5 s
+  (`DefaultAwaitConsensusStalled`), and the asking has lasted less than 30 s
+  (`DefaultAwaitConsensus`). Past either, it pulls on to a later state, as it
+  did after every such answer before #4530. This is the answer every first
+  proven state gets, for the seconds consensus takes to order up to it from
+  its seed below (next but one).
 - `P` is below the round the node's consensus stood at — the round of the
   last block it produced, or the checkpoint's committed round it resumed
   from (consensus.md, "Restart"): the groups between were committed before
@@ -2084,8 +2091,12 @@ The handoff does not happen, and the buffer is left as it is, when:
   window, on a node that joined with no checkpoint (consensus.md,
   "Restart"): the groups there may hold certificates the peers committed
   before the seed. The join pulls forward (`Conflict`). The first
-  `StageThrough` of such a node is what seeds it, from the round of the
-  state it is asked about, so that first call is always refused this way.
+  `StageThrough` of such a node is what seeds it, thirty-four rounds below
+  the round of the state it is asked about (consensus.md, "Restart"; #4530),
+  so that state is above the floor and this refusal is not the first
+  state's. It was, for every join, while the seed was the state's own round;
+  it still is on a network too young or a DAG too shallow to be seeded
+  below.
 - The block production loop, which serves the join's requests between
   groups, has not taken the request within five seconds: it is inside a group,
   waiting for its batches. The join is told so (`NotReady`, naming the
