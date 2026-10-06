@@ -38,11 +38,14 @@
 package bcdb
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -162,7 +165,7 @@ type Database struct {
 	// many hit, how many missed, how many distinct keys the hits were,
 	// and a sample of who asked. It names who reaches past the window.
 	history     map[string]*HistoryShape
-	historyKeys map[string]map[[32]byte]struct{}
+	historyKeys map[string]*distinctKeys
 	historySeq  uint64
 	fallbackMu  sync.Mutex
 
@@ -808,15 +811,14 @@ func (d *Database) ShallowMisses() map[string]uint64 {
 
 // HistoryShape is what one record shape cost in DEEP reads: Hits found
 // the key, in the window or below it, Misses found nothing anywhere,
-// Distinct is how many different keys the hits were for (Capped when
-// the set stopped growing), and the callers are a 1-in-historySample
-// sample of the code that asked, by its first frame above the database
-// layers, hits and misses apart.
+// Distinct is about how many different keys the hits were for (an
+// estimate, within a few percent: distinctKeys), and the callers are a
+// 1-in-historySample sample of the code that asked, by its first frame
+// above the database layers, hits and misses apart.
 type HistoryShape struct {
 	Hits     uint64 `json:"hits"`
 	Misses   uint64 `json:"misses"`
 	Distinct int    `json:"distinct"`
-	Capped   bool   `json:"capped,omitempty"`
 	// HitCallers asked for a record history had; MissCallers walked
 	// history for a record that was nowhere.  Kept apart because the
 	// misses outnumber the hits by orders of magnitude and would bury
@@ -825,12 +827,47 @@ type HistoryShape struct {
 	MissCallers map[string]uint64 `json:"missCallers,omitempty"`
 }
 
-// historySample is the caller sampling rate; historyKeysCap bounds the
-// distinct-key set per shape.
-const (
-	historySample  = 32
-	historyKeysCap = 200_000
-)
+// historySample is the caller sampling rate.
+const historySample = 32
+
+// distinctKeys estimates how many different keys it has been shown, in 4 KiB
+// however many that is: a HyperLogLog of 4,096 registers over the keys, which
+// are hashes already.  It replaces the set of the keys themselves, which was
+// exact to 200,000 a shape and held them all: 195 MiB of an 780 MiB live heap
+// on a validator a day and a half old, a quarter of what the collector had to
+// walk, for one number in a statistics file (#4542).  The estimate is exact
+// for a handful of keys and within a few percent after that (300 keys read
+// as 305 in the test).
+type distinctKeys [1 << 12]uint8
+
+func (s *distinctKeys) add(h [32]byte) {
+	x := binary.BigEndian.Uint64(h[:8])
+	// The top twelve bits pick the register; the rank is the position of
+	// the first set bit in the rest.
+	rank := uint8(bits.LeadingZeros64(x<<12|1<<11)) + 1
+	if i := x >> 52; rank > s[i] {
+		s[i] = rank
+	}
+}
+
+func (s *distinctKeys) count() int {
+	m := float64(len(s))
+	var sum float64
+	var empty int
+	for _, rank := range s {
+		sum += 1 / float64(uint64(1)<<rank)
+		if rank == 0 {
+			empty++
+		}
+	}
+	est := 0.7213 / (1 + 1.079/m) * m * m / sum
+	if est <= 2.5*m && empty > 0 {
+		// Few keys for the registers: counting the empty ones is exact
+		// to the key at the low end.
+		est = m * math.Log(m/float64(empty))
+	}
+	return int(est + 0.5)
+}
 
 // recordHistoryRead books a deep read.  The
 // stack is captured outside the leaf lock; everything else under it.
@@ -848,7 +885,7 @@ func (d *Database) recordHistoryRead(shape string, h [32]byte, hit bool) {
 	defer d.fallbackMu.Unlock()
 	if d.history == nil {
 		d.history = map[string]*HistoryShape{}
-		d.historyKeys = map[string]map[[32]byte]struct{}{}
+		d.historyKeys = map[string]*distinctKeys{}
 	}
 	hs := d.history[shape]
 	if hs == nil {
@@ -859,17 +896,10 @@ func (d *Database) recordHistoryRead(shape string, h [32]byte, hit bool) {
 		hs.Hits++
 		keys := d.historyKeys[shape]
 		if keys == nil {
-			keys = map[[32]byte]struct{}{}
+			keys = new(distinctKeys)
 			d.historyKeys[shape] = keys
 		}
-		if _, seen := keys[h]; !seen {
-			if len(keys) < historyKeysCap {
-				keys[h] = struct{}{}
-				hs.Distinct = len(keys)
-			} else {
-				hs.Capped = true
-			}
-		}
+		keys.add(h)
 	} else {
 		hs.Misses++
 	}
@@ -935,6 +965,9 @@ func (d *Database) HistoryReads() map[string]HistoryShape {
 	out := make(map[string]HistoryShape, len(d.history))
 	for shape, hs := range d.history {
 		c := *hs
+		if keys := d.historyKeys[shape]; keys != nil {
+			c.Distinct = keys.count()
+		}
 		c.HitCallers = copyCounts(hs.HitCallers)
 		c.MissCallers = copyCounts(hs.MissCallers)
 		out[shape] = c
