@@ -538,12 +538,6 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			pullFailed(opts, log, &pullFailures, err)
 		}
 	}
-	// A node not seeded when its join starts is asked again between the
-	// steps of each pull round, not only before the next one (#4530).
-	if s, ok := opts.State.(StepSeeder); ok {
-		s.SeedBetweenSteps(func(ctx context.Context) { seedBeforePulling(ctx, opts, log, wait) })
-	}
-
 	overran := false
 	failures := 0
 	held := heldGaps{}
@@ -577,10 +571,6 @@ func converge(ctx context.Context, opts Options, log *slog.Logger, retry time.Du
 			log.Info("Collecting again after the join buffer overran")
 			overran = false
 		}
-
-		// A follower's consensus is told where to order from before anything
-		// is pulled (#4530).
-		seedBeforePulling(ctx, opts, log, wait)
 
 		// The state is proven at q, or the node executes nothing: a pulled
 		// state that is not proven is never handed off (#4442).

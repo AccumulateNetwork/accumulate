@@ -149,10 +149,8 @@ type Service struct {
 	handoff      chan handoffRequest
 	stageThrough chan stageRequest
 	// awaitingSeed: the node is joining with no consensus checkpoint, so its
-	// consensus orders nothing until the join names a round the network
-	// committed: a follower's when its join starts (SeedAt, #4530), a
-	// validator's at its first proven state (StageThrough). seedFloor is
-	// that round plus the rescue window:
+	// consensus orders nothing until the join's first state names a round
+	// the network committed. seedFloor is that round plus the rescue window:
 	// a state at or below it cannot be handed off at, because the groups up
 	// to there may hold certificates the peers committed before the seed
 	// (#4405).
@@ -255,7 +253,7 @@ func (s *Service) Start(ctx context.Context) error {
 		s.mu.Lock()
 		s.awaitingSeed = true
 		s.mu.Unlock()
-		s.logger.Info("Joining with no consensus checkpoint: ordering nothing until the join names the round to order from",
+		s.logger.Info("Joining with no consensus checkpoint: ordering nothing until the join's state names the round to order from",
 			"partition", s.config.Partition.ID)
 	}
 

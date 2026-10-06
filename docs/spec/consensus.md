@@ -533,54 +533,22 @@ executed them, so a node ordering from zero waits for the first group for
 ever (Docker run `20260925T011332Z`, `fol2-stall`: a fresh follower waiting on
 the batches of a round-4 certificate while the network was past block 640).
 Such a node starts with ordering held (`Node.HoldOrdering`): certificates
-reach its DAG and none is ordered. The join names the round: the leader
-round `P` that a system ledger it has proven records, and consensus is
-seeded there (`Node.Rejoin(P)`): Bullshark orders nothing at or below `P`,
-the DAG accepts certificates at `P` and `P + 1` without their parents, and
-the primary participates from `P`. `P` is the round of a leader the network
-committed, in a block seconds old, so it is near the frontier: the
-certificates above it are in every peer's DAG and their batches are still
-served. A peer's current round or the first certificates to arrive would be
-neither — certificate catch-up delivers low rounds first, and a round that
-is no committed leader gives a leader chain that is not the peers'.
-
-The seed has no committed-digest set, so the first leaders ordered after it
-walk the rescue window below `P` and may take in certificates the peers
-committed before `P`: no state at a round at or below `P + RescueWindow` (32)
-is handed off at (`Conflict`), and the join pulls forward to one above it,
-about sixteen blocks later. Which ledger names `P`, and so what that costs,
-depends on whether the node is in the committee:
-
-- **A node in no committee — a follower — is seeded when its join starts,
-  before it pulls anything** (#4530; Paul agreed 2026-10-06). The join reads
-  the newest anchor a quorum of the partition's validators signed, for block
-  `B`, and asks a peer for the system ledger as of `B` with its receipt
-  (`ReceiptOptions.ForHeight`, executor.md "Serve last"). The answer is taken
-  only if the ledger is block `B`'s, the receipt starts at the hash of the
-  body served, checks, and ends at the `StateTreeAnchor` the signed anchor
-  carries; `P` is then proven with nothing pulled (`PulledState.ProvenRound`,
-  `Service.SeedAt`). The node collects the groups committed while it pulls,
-  so the state it proves a minute or more later is far above `P + 32` and its
-  first handoff is taken. No answer that proves — no signed anchor yet, no
-  peer that serves the block, or an anchored block more than `SeedWithin`
-  (128) blocks behind the block the answering peer says it is at, which is a
-  collector that has stalled — seeds nothing, and the join asks again
-  between the steps of its pull round (`PulledState.SeedBetweenSteps`): a
-  round's first step can last a minute, and a follower whose first anchor
-  read met two of four validators was seeded a round late and waited another
-  for consensus to reach its state (run `20261006T060807Z`). A node still not
-  seeded when its state is proven is seeded as a validator is.
-- **A node in the committee is seeded at its first proven state**
-  (`Service.StageThrough` reads the ledger the pull left). That first state
-  is `P` itself, so its handoff is always refused and the join pulls one more
-  round. It is not seeded earlier: a validator whose store was wiped has lost
-  the record of the rounds it authored (`RestoreAuthored`), and the later the
-  seed, the further above them it is.
-
-The extra round was every join's until #4530, and it is a whole pull round,
-not sixteen blocks: 16 to 55 s for each partition of each of three followers
-in Docker run `20261006T044611Z`, 16 to 41 s of it on the Directory, which
-finished last. A node restarted with a checkpoint more than
+reach its DAG and none is ordered. The join's first state names the round
+(`Service.StageThrough` reads the leader round `P` its system ledger
+records) and consensus is seeded there (`Node.Rejoin(P)`): Bullshark orders
+nothing at or below `P`, the DAG accepts certificates at `P` and `P + 1`
+without their parents, and the primary participates from `P`. `P` is the
+round of a leader the network committed, recorded in a state the join
+itself pulled seconds earlier, so it is near the frontier: the certificates
+above it are in every peer's DAG and their batches are still served. A
+peer's current round or the first certificates to arrive would be neither —
+certificate catch-up delivers low rounds first, and a round that is no
+committed leader gives a leader chain that is not the peers'. The seed has
+no committed-digest set, so the first leaders ordered after it walk the
+rescue window below `P` and may take in certificates the peers committed
+before `P`: no state at a round at or below `P + RescueWindow` (32) is handed
+off at (`Conflict`), and the join pulls forward to one above it, about
+sixteen blocks later. A node restarted with a checkpoint more than
 `DAGGCDepth` below the frontier is not seeded this way (DIFFERENCES,
 "Seeding").
 
@@ -666,11 +634,6 @@ at round R, holds the result of every round at or below R: a certificate for
 such a round is dropped on arrival, unverified, and is never requested. A
 joiner keeps applying block-ledger records until its proven block is the
 newest, and only then seeds consensus at that block's round, so the rounds it
-must collect are the frontier's last few. **A follower is seeded before
-that** (#4530; Paul agreed 2026-10-06): at the start of its join, at a proven
-round at the frontier (Restart). It still catches up no decided round: it
-collects the rounds decided while it pulls, as they are decided, and at the
-handoff drops the groups its proven state already holds. What that costs is
-those groups' batches, fetched and not executed. The pending buffer's size is not the
+must collect are the frontier's last few. The pending buffer's size is not the
 question ("240 is nothing, it is just we don't need even that"); it stays as
 is.

@@ -699,12 +699,6 @@ func (s *DAGBFTService) start(inst *Instance) error {
 // daemon's start path calls both, and so does the test that proves a
 // demotion reaches the querier, the submitter and the gauge
 // (TestADemotedJoinIsRefusedByTheDaemonsServicesAndGauge).
-// The join seeds a follower's consensus before it pulls only if the service
-// and the state it is given are these (#4530); a join handed anything else
-// seeds at its first proven state and says nothing.
-var _ join.Seeder = (*dagbft.Service)(nil)
-var _ join.RoundProver = (*join.PulledState)(nil)
-
 func joinOptions(partition string, joinState *join.PulledState, buffer join.Buffer, stage join.Stage, peers join.Peers) join.Options {
 	return join.Options{
 		Partition: partition,

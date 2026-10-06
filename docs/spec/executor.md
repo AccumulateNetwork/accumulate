@@ -1880,8 +1880,7 @@ checkpoint put it — the position that produced its last block (consensus.md,
 never stopped would. Nothing is staged or settled first: staging is what
 consensus delivers from here. **It never seeds** (#4405): a node that restored
 no checkpoint does not know the round its state was produced at, and is
-refused and keeps collecting — whether it is still waiting for a join's seed
-or a join has seeded it since (#4530). The node is `ACTIVE` on its own root, since too
+refused and keeps collecting. The node is `ACTIVE` on its own root, since too
 few peers had a root to verify it against; from there every executed block is checked against its signed anchor as
 after any handoff, and a mismatch is repaired ("Two mismatches"). The first block after
 the exit whose root its signed anchor proves is recorded (`AgreedAt`) and
@@ -2084,12 +2083,9 @@ The handoff does not happen, and the buffer is left as it is, when:
 - `P` is at or below the round consensus was seeded at plus the rescue
   window, on a node that joined with no checkpoint (consensus.md,
   "Restart"): the groups there may hold certificates the peers committed
-  before the seed. The join pulls forward (`Conflict`). A node in the
-  committee is seeded by its first `StageThrough`, from the round of the
-  state it is asked about, so that first call is always refused this way. A
-  follower is seeded when its join starts, at a round proven from the system
-  ledger as of the newest signed anchor's block (consensus.md, "Restart";
-  #4530), so the first state it proves is above the window.
+  before the seed. The join pulls forward (`Conflict`). The first
+  `StageThrough` of such a node is what seeds it, from the round of the
+  state it is asked about, so that first call is always refused this way.
 - The block production loop, which serves the join's requests between
   groups, has not taken the request within five seconds: it is inside a group,
   waiting for its batches. The join is told so (`NotReady`, naming the
