@@ -1261,9 +1261,29 @@ func (s *PulledState) ours(ctx context.Context, u *url.URL) bool {
 	return !errors.Is(err, errNotThisPartition)
 }
 
-// takeAccounts takes the named accounts: those taken another way by pullOne
-// (takeState), the rest by AccountStates, asked of the peers in order until
-// each is taken. What no peer served is owed.
+// statesChunk is how many accounts one AccountStates call asks for when the
+// calls run across the peers, and statesInFlight how many run at once against
+// each peer: a validator admits four queries at a time (api/v3 queryGate). A
+// validator serves a state in ~17 ms, I/O in its store; asked of one peer one
+// call after another, the stale accounts of a round against a tree of 29k
+// accounts took longer than the blocks the round covered, and the pull chased
+// the head for sixteen minutes (#4535, run 20261005T185718Z).
+const statesChunk = 64
+const statesInFlight = 4
+
+// statesAnswer is what one chunk's calls brought: the peer that served it
+// and its answers in order, or no answers when no peer served it.
+type statesAnswer struct {
+	chunk []*url.URL
+	src   pull.Source
+	recs  []*api.AccountStatesRecord
+}
+
+// takeAccounts asks the sources for the accounts' states -- statesChunk
+// accounts a call, statesInFlight calls at a time against each source, a
+// chunk a source does not serve asked of the next -- and keeps every state
+// served (takeStates), in the order the answers arrive. An account no source
+// served is owed to the next round.
 func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.Source, accounts []*url.URL) {
 	var batchable []*url.URL
 	for _, u := range accounts {
@@ -1275,88 +1295,138 @@ func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.
 			batchable = append(batchable, u)
 		}
 	}
-	remaining := batchable
-	for _, src := range srcs {
-		if len(remaining) == 0 || ctx.Err() != nil {
-			break
-		}
-		remaining = s.askStates(ctx, p, src, remaining)
+	if len(batchable) == 0 {
+		return
 	}
-	for _, u := range remaining {
-		p.retry[accountKey(u)] = u
+	if len(srcs) == 0 {
+		for _, u := range batchable {
+			p.retry[accountKey(u)] = u
+		}
+		return
+	}
+	var chunks [][]*url.URL
+	for len(batchable) > 0 {
+		n := min(len(batchable), statesChunk)
+		chunks = append(chunks, batchable[:n])
+		batchable = batchable[n:]
+	}
+
+	// The calls run on workers; the answers are kept here, on the round's
+	// goroutine, which alone touches p.
+	start, asOf := p.start, p.last
+	next := make(chan int)
+	out := make(chan statesAnswer)
+	workers := min(statesInFlight*len(srcs), len(chunks))
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				src, recs := s.askStatesOf(ctx, srcs, i%len(srcs), chunks[i], start, asOf)
+				out <- statesAnswer{chunks[i], src, recs}
+			}
+		}()
+	}
+	go func() {
+		for i := range chunks {
+			select {
+			case next <- i:
+			case <-ctx.Done():
+			}
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		close(next)
+		wg.Wait()
+		close(out)
+	}()
+	for a := range out {
+		served := s.keepAnswers(ctx, p, a.src, a.chunk, a.recs)
+		for _, u := range a.chunk {
+			if !served[accountKey(u)] {
+				p.retry[accountKey(u)] = u
+			}
+		}
 	}
 }
 
-// maxAccountsAsked is how many accounts one AccountStates call names.
-const maxAccountsAsked = 1024
-
-// askStates asks one peer for the named accounts' states, every page of the
-// answer, and returns the accounts it did not serve or whose answer was
-// refused. An answer read at a block before S is refused whole: an account
-// changed at or before S may show its old state there, and no record after S
-// names it.
-func (s *PulledState) askStates(ctx context.Context, p *syncing, src pull.Source, accounts []*url.URL) []*url.URL {
-	var left []*url.URL
-	for len(accounts) > 0 {
-		n := min(len(accounts), maxAccountsAsked)
-		chunk := accounts[:n]
-		accounts = accounts[n:]
-
-		served := map[[32]byte]bool{}
-		inChunk := make(map[[32]byte]bool, len(chunk))
-		for _, u := range chunk {
-			inChunk[accountKey(u)] = true
+// askStatesOf asks the sources, from the one at turn, for a chunk's states
+// until one serves it: every page of the answer, as of asOf (zero: current).
+// It reads nothing of p: it runs beside the round.
+func (s *PulledState) askStatesOf(ctx context.Context, srcs []pull.Source, turn int, chunk []*url.URL, start, asOf uint64) (pull.Source, []*api.AccountStatesRecord) {
+	for k := range srcs {
+		if ctx.Err() != nil {
+			return nil, nil
 		}
-		var cursor []byte
-		asOf := p.last
-		p.part = nil
-		for ctx.Err() == nil {
-			// As of L: an account a record through L named, or a loaded
-			// section's page as of L showed, is taken as it stood at L
-			// (executor spec, "Sync", §3a; #4518). A peer that cannot
-			// answer as of L answers its current state, of a block past L,
-			// and the records catch up to that block (DIFFERENCES E29).
-			rec, err := src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk, Cursor: cursor, ForHeight: asOf})
-			if err != nil && asOf != 0 && cursor == nil {
-				asOf = 0
-				rec, err = src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk})
-			}
-			if err != nil {
-				s.log.Info("A peer did not answer for accounts; they are asked of another",
-					"partition", s.partition, "peer", sourceKey(src), "accounts", len(chunk), "error", err)
-				break
-			}
-			if rec.Block < p.start {
-				s.log.Info("A peer answered for accounts at a block before the pull's start; they are asked of another",
-					"partition", s.partition, "peer", sourceKey(src), "block", rec.Block, "start", p.start)
-				break
-			}
-			p.highest = max(p.highest, rec.Block)
-			var states []*api.AccountState
-			for _, st := range s.statesOf(p, rec) {
-				if st.Url != nil && inChunk[accountKey(st.Url)] {
-					states = append(states, st)
-				}
-			}
-			blocks := make([]uint64, len(states))
-			for i := range blocks {
-				blocks[i] = rec.Block
-			}
-			for k := range s.takeStates(ctx, p, src, states, blocks) {
-				served[k] = true
-			}
-			if len(rec.Cursor) == 0 {
-				break
-			}
-			cursor = rec.Cursor
-		}
-		for _, u := range chunk {
-			if !served[accountKey(u)] {
-				left = append(left, u)
-			}
+		src := srcs[(turn+k)%len(srcs)]
+		if recs, ok := s.statesFrom(ctx, src, chunk, start, asOf); ok {
+			return src, recs
 		}
 	}
-	return left
+	return nil, nil
+}
+
+// statesFrom asks one source for a chunk's states, every page of the answer,
+// and says whether it served them.
+func (s *PulledState) statesFrom(ctx context.Context, src pull.Source, chunk []*url.URL, start, asOf uint64) ([]*api.AccountStatesRecord, bool) {
+	var recs []*api.AccountStatesRecord
+	var cursor []byte
+	for ctx.Err() == nil {
+		rec, err := src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk, Cursor: cursor, ForHeight: asOf})
+		if err != nil && asOf != 0 && cursor == nil {
+			// A peer that cannot answer as of L answers its current
+			// state, of a block past L, and the records catch up to it.
+			asOf = 0
+			rec, err = src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk})
+		}
+		if err != nil {
+			s.log.Info("A peer did not answer for accounts; they are asked of another",
+				"partition", s.partition, "peer", sourceKey(src), "accounts", len(chunk), "error", err)
+			return nil, false
+		}
+		if rec.Block < start {
+			s.log.Info("A peer answered for accounts at a block before the pull's start; they are asked of another",
+				"partition", s.partition, "peer", sourceKey(src), "block", rec.Block, "start", start)
+			return nil, false
+		}
+		recs = append(recs, rec)
+		if len(rec.Cursor) == 0 {
+			return recs, true
+		}
+		cursor = rec.Cursor
+	}
+	return nil, false
+}
+
+// keepAnswers keeps the states one chunk's answers carry and reports the
+// accounts kept. The answers are one source's pages in order, so an account
+// served in parts reassembles (statesOf).
+func (s *PulledState) keepAnswers(ctx context.Context, p *syncing, src pull.Source, chunk []*url.URL, recs []*api.AccountStatesRecord) map[[32]byte]bool {
+	served := map[[32]byte]bool{}
+	inChunk := make(map[[32]byte]bool, len(chunk))
+	for _, u := range chunk {
+		inChunk[accountKey(u)] = true
+	}
+	p.part = nil
+	for _, rec := range recs {
+		p.highest = max(p.highest, rec.Block)
+		var states []*api.AccountState
+		for _, st := range s.statesOf(p, rec) {
+			if st.Url != nil && inChunk[accountKey(st.Url)] {
+				states = append(states, st)
+			}
+		}
+		blocks := make([]uint64, len(states))
+		for i := range blocks {
+			blocks[i] = rec.Block
+		}
+		for k := range s.takeStates(ctx, p, src, states, blocks) {
+			served[k] = true
+		}
+	}
+	return served
 }
 
 // partitionSources is the partition's peers, each reached by name, in the

@@ -762,7 +762,12 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			}
 			continue
 		}
-		failed := 0
+		// statesInFlight loads at a time against each peer (#4535): a load
+		// is a page and a states call, ~200 ms of a validator's I/O, and
+		// one after another a tree of 4,000 sections took seven minutes.
+		var failed atomic.Int32
+		slots := make(chan struct{}, max(1, statesInFlight*len(x.peers(ctx))))
+		var wg sync.WaitGroup
 		for _, s := range todo {
 			if ctx.Err() != nil || !active() {
 				break
@@ -777,21 +782,28 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			if !ok {
 				continue
 			}
+			slots <- struct{}{}
+			wg.Add(1)
 			// Only a section that hashes to its marker: one that a block
 			// after h changed is loaded by the block that touches it.
-			ld, _, err := x.fetch(ctx, s, h, want, false)
-			if err != nil {
-				failed++
-				x.log.Debug("A section could not be loaded by the fill; it is asked again", "partition", x.partition, "section", s, "block", h, "error", err)
-				continue
-			}
-			x.mu.Lock()
-			if x.notLoaded[s].Load() {
-				x.ready[s] = ld
-			}
-			x.mu.Unlock()
+			go func(s bpt.Section, want [32]byte) {
+				defer wg.Done()
+				defer func() { <-slots }()
+				ld, _, err := x.fetch(ctx, s, h, want, false)
+				if err != nil {
+					failed.Add(1)
+					x.log.Debug("A section could not be loaded by the fill; it is asked again", "partition", x.partition, "section", s, "block", h, "error", err)
+					return
+				}
+				x.mu.Lock()
+				if x.notLoaded[s].Load() {
+					x.ready[s] = ld
+				}
+				x.mu.Unlock()
+			}(s, want)
 		}
-		if failed > 0 && !pause(ctx, backfillPause) {
+		wg.Wait()
+		if failed.Load() > 0 && !pause(ctx, backfillPause) {
 			return
 		}
 	}

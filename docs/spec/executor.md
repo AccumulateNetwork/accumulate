@@ -413,7 +413,17 @@ failure, and the join treats them apart:
 Past the match, every section not loaded is loaded while the node executes
 (§3a, "The fill"), and every account the pull took by its chain heads alone
 is filled in whole the same way, so the node ends holding every account's
-chains and entries, not only a root that matches.
+chains and entries, not only a root that matches. **The states are asked in
+parallel across the partition's peers** (#4535): a validator serves an
+account's state in ~17 ms, I/O in its store, and asked of one peer one call
+after another the stale accounts of a round against a tree of 29k accounts
+took longer than the blocks the round covered, so the pull chased the head
+and no late follower joined (run `20261005T185718Z`, from the fifth cycle
+on). A round's stale accounts go in chunks of 64, four calls at a time
+against each peer (the validators' query gate), a chunk a peer does not
+serve asked of the next; the fill loads four sections at a time against each
+peer the same way
+(`TestTheStatesOfManyAccountsAreAskedAcrossThePeersAtOnce`).
 
 Invariants 13–15 are what make steps 2 and 3 sound: no leaf exists for an
 account that holds nothing, the record names every account a block changes,
