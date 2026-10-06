@@ -676,6 +676,13 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// joined: a node that never joined answers for itself, and a service that
 	// wants the state must get an answer rather than an absence.
 	nodeState, serving := nodeStateOf(joinState)
+	// A validator's services are advertised whatever its state: its peers
+	// find the partition by them, and after a whole-network restart no
+	// node is ACTIVE until it has (#4543). A follower's wait for ACTIVE
+	// (DIFFERENCES E30).
+	if nodeState != nil && inCommittee(s.service.Committee(), validatorKey) {
+		nodeState.AdvertiseAtOnce()
+	}
 	err = dagbftProvidesNodeState.Register(inst.services, s, serving)
 	if err != nil {
 		return errors.UnknownError.WithFormat("register node state: %w", err)
@@ -713,6 +720,16 @@ func joinOptions(partition string, joinState *join.PulledState, buffer join.Buff
 // The join asks again about a proven state, rather than pull past it, only
 // of a buffer that says how far its consensus has collected (#4530).
 var _ join.Collected = (*dagbft.Service)(nil)
+
+// inCommittee reports whether the node holding key is in the committee: a
+// validator of the partition, whatever its state.
+func inCommittee(c *types.Committee, key []byte) bool {
+	if c == nil || len(key) != ed25519.PrivateKeySize {
+		return false
+	}
+	_, member := c.FindValidator(ed25519.PrivateKey(key).Public().(ed25519.PublicKey))
+	return member
+}
 
 // anchorSourcesOf names the partitions whose anchors this partition's anchor
 // pool records: the Directory for a BVN, every BVN for the Directory. They
@@ -895,8 +912,9 @@ func (s *DAGBFTService) registerAPIServices(inst *Instance, store keyvalue.Begin
 		// partition's sequencer, by name (#4487).
 		Relay: sequencerPeers(inst, s.Partition.ID),
 	})
-	// Advertised once this node is ACTIVE for the partition (DIFFERENCES
-	// E30): a joining node is nobody's validator to collect anchors from.
+	// Advertised once this node is ACTIVE for the partition, or at once for
+	// a validator (DIFFERENCES E30, #4543): a joining follower is nobody's
+	// validator to collect anchors from.
 	registerRpcServiceWhenActive(inst, serving, sequencerSvc.Type().AddressFor(s.Partition.ID), message.Sequencer{Sequencer: sequencerSvc})
 	err = dagbftProvidesSequencer.Register(inst.services, s, sequencerSvc)
 	if err != nil {

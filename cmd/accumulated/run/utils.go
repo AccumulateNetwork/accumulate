@@ -85,24 +85,27 @@ func registerRpcService(inst *Instance, addr *api.ServiceAddress, services ...me
 
 // registerRpcServiceWhenActive registers the service with the network once
 // the node is ACTIVE for the partition, and at once for a node that never
-// joined. A joining node's query and sequencer services refuse every read
-// (servingFor), so advertising them only makes the node a source its peers
-// ask and are refused by: two followers joining together each pulled from
-// the other and waited on it (DIFFERENCES E30; Paul, 2026-10-05).
+// joined or that is a validator of it (nodestate.Machine.AdvertiseAtOnce,
+// #4543). A joining node's query and sequencer services refuse every read
+// (servingFor), so advertising a follower's only makes the node a source its
+// peers ask and are refused by: two followers joining together each pulled
+// from the other and waited on it (DIFFERENCES E30; Paul, 2026-10-05).
 func registerRpcServiceWhenActive(inst *Instance, serving nodestate.Serving, addr *api.ServiceAddress, services ...message.Service) {
 	whenServing(serving, func() { registerRpcService(inst, addr, services...) })
 }
 
-// whenServing runs register now when the node answers for its state, else
-// once, when it first does. The check after OnChange closes the gap in which
-// the state flipped between the two.
+// whenServing runs register now when the node answers for its state or is
+// to be advertised whatever its state, else once, when it first does. The
+// check after OnChange closes the gap in which the state flipped between the
+// two.
 func whenServing(serving nodestate.Serving, register func()) {
 	var once sync.Once
 	m, ok := serving.(interface {
 		nodestate.Serving
 		OnChange(func(nodestate.Advertisement))
+		AdvertisesAtOnce() bool
 	})
-	if !ok || serving.CanServeCurrent() {
+	if !ok || serving.CanServeCurrent() || m.AdvertisesAtOnce() {
 		once.Do(register)
 		return
 	}

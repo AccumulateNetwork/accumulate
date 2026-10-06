@@ -150,6 +150,10 @@ type Machine struct {
 	anchor   [32]byte
 	last     time.Time
 	onChange []func(Advertisement)
+
+	// advertiseAtOnce: the node's services are advertised to the network
+	// whatever its state (AdvertiseAtOnce).
+	advertiseAtOnce bool
 }
 
 // New constructs a Machine in StateBooting for a partition.
@@ -231,6 +235,30 @@ func (m *Machine) CanServeCurrent() bool {
 		return true // no state of its own: it never joined
 	}
 	return m.State().CanServeCurrent()
+}
+
+// AdvertiseAtOnce says the node's services are to be advertised to the
+// network at once, whatever its state: it is a validator of the partition,
+// whose peers find the partition by its advertisement and whose anchors they
+// collect. After a whole-network restart no node is ACTIVE until it has found
+// its peers, so a validator that advertised only once ACTIVE was never found
+// (#4543). A node in no committee is advertised once ACTIVE (DIFFERENCES
+// E30). What the services answer is unchanged: a BOOTING node refuses what
+// it cannot serve (CanServeCurrent).
+func (m *Machine) AdvertiseAtOnce() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.advertiseAtOnce = true
+}
+
+// AdvertisesAtOnce reports AdvertiseAtOnce.
+func (m *Machine) AdvertisesAtOnce() bool {
+	if m == nil {
+		return true
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.advertiseAtOnce
 }
 
 // State returns the current state.
