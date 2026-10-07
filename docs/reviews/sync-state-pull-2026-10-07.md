@@ -132,7 +132,8 @@ in 12 minutes); not measured in validator time.
    the BVN is still syncing (#4550). Both are the rule broken, and #4550 is
    the largest query load on the validators during a join.
 4. **Per-account validator cost (~10 ms marginal, 2–3 s per 64 under load)
-   is store reads on a cold cache**, #4546. Fewer reads per account (finding
+   is store reads**, cold-cache bound (#4546) — but see §5: the validators'
+   read latency is nearly flat through a run; what grows is the join's work. Fewer reads per account (finding
    2) and the resident index BlockchainDB#103 asks for are the levers; the
    "as of a block" rule is not (measured equal).
 5. **Sections do not bound the work on a loaded partition.** Every round
@@ -157,7 +158,49 @@ in 12 minutes); not measured in validator time.
    sections phase, round length vs. blocks moved, and time to ACTIVE, one
    follower at a time (the walk).
 
-## 5. Not verified
+## 5. Why a join slows down through a run and is fast again at the next (Paul, 2026-10-07)
+
+Paul: "Times should be the same every time, only maybe degrading a bit as the
+databases get bigger." They are not, and the cold cache (#4546) cannot be why:
+a cache does not warm on a restart, and the validators were **not** restarted
+between run 20261007T050444Z (joins failing from 03:10Z) and run
+20261007T141334Z (first follower ACTIVE in 112 s at 14:25Z) — they had been
+up since 22:36Z the day before. What restarts with a run is the load
+generator, and it **bootstraps a fresh account universe every run**:
+
+| minutes into the run | accounts it has created (three runs) |
+|---|---|
+| 8–10 | 122–165 |
+| 26–28 | 625–665 |
+| 45–49 | 1,234–1,268 |
+| 70–76 | 1,911–2,180 |
+| 91–110 | 2,518–3,215 |
+| 141 | 4,188 |
+
+At 10 tps the block-ledger records name ~18 accounts a block whatever the
+universe (BVN2 validator, blocks 215757+, 216485+, 220261+: mean 17–18), but
+the *distinct* accounts a span of blocks names grow with it: 163 over 40
+blocks at +10 min (the whole universe), 239 at +27, 348 at +91. A join's
+work per round is the distinct accounts its records name, each opening a
+section the node loads whole (~23 leaves): run 211137Z's first rounds went
+53 sections / 1,196 accounts at +10 min → 261 / 6,104 at +27 → 394 / 9,500
+at +91. Early in a run the universe is a few hundred accounts and every
+round names the same ones; two hours in it is thousands, and a round opens
+most of the tree. The serial page loop (#4549) fell over at ~40 accounts/s
+once a round's work passed what it could load before the network moved on;
+at ~160 accounts/s the fifth follower (+91 min, 9,500-account first round)
+still matched in 638 s.
+
+The validators themselves barely move: the read probe's p50 was 3.1–5.9 ms
+through run 050444Z and 4.5–5.9 ms through 141334Z, p95 31–61 ms; across
+the day p50 rose ~50% (4.2 → 6.6 ms) as the store grew — the "degrading a
+bit" Paul expects. The join time is a property of the test's traffic shape,
+not of the network's age: the follower walk should record the load
+generator's universe (`accounts=`) beside each join so joins are compared
+like for like, and a "same every time" expectation needs a load generator
+whose working set is the same every run.
+
+## 6. Not verified
 
 - That the Directory backfill is what makes a 64-account answer take ~2 s:
   it takes 2–2.8 s from an idle HTTP client too, with the backfill running.
