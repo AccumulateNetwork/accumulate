@@ -50,7 +50,7 @@ func TestCommittedBatchesSurviveEvictionUntilExecuted(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _ = w.Start(ctx) }() // blocks until ctx ends
-	n.ctx = ctx                       // order hands groups over under it; Start is not run
+	n.ctx = ctx                      // order hands groups over under it; Start is not run
 
 	// A chain of rounds, each certificate naming one peer's batch, run
 	// through ordering. Nothing executes: the executor is behind.
