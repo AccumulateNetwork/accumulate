@@ -41,7 +41,8 @@ def walk(active_after, end_after, behind=None):
 
     w = fw.Walk(rd, clk.t + end_after, run=run, now=clk.now, sleep=clk.sleep, state=state,
                 agreement=lambda c, s: (False, ""), behind=behind or (lambda c: {"BVN": 3}),
-                snapshot=lambda p: open(p, "w").write("{}"), unaffected=lambda a, b, c: "unaffected")
+                snapshot=lambda p: open(p, "w").write("{}"), unaffected=lambda a, b, c: "unaffected",
+                universe=lambda: 150 + int(clk.t - 1_000_000) // 10)
     w.run(FOLS)
     with open(os.path.join(rd, "chaos.log")) as f:
         lines = [l.split(" ", 1)[1].strip() for l in f]
@@ -104,6 +105,16 @@ class TestWalk(unittest.TestCase):
         lines, _ = walk({c["container"]: 60 for c in FOLS}, end_after=3000, behind=lambda c: {})
         held = next(l for l in lines if " held ACTIVE " in l)
         self.assertIn("FAIL (blocks behind never measured)", held)
+
+
+    def test_each_add_and_active_names_the_load_generators_universe(self):
+        # A join at +10 min against 150 accounts is not the same test as one
+        # at +90 against 2,500 (review 2026-10-07, §5): both lines say which.
+        lines, _ = walk({c["container"]: 60 for c in FOLS}, end_after=3000)
+        add = next(l for l in lines if l.startswith("add-follower"))
+        self.assertRegex(add, r"loadgen universe \d+ accounts\)$")
+        active = next(l for l in lines if " ACTIVE (" in l)
+        self.assertRegex(active, r"after it was added; loadgen universe \d+ accounts$")
 
 
 if __name__ == "__main__":

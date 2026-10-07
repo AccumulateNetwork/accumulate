@@ -539,6 +539,12 @@ stopped, and its line read like a pass). A hold that loses ACTIVE also
 writes `follower <container> LEFT ACTIVE during its hold`. The walk ends
 with `followerwalk: done, K follower(s) walked: P PASSED, F FAILED their
 hold, N NEVER ACTIVE`.
+Each `add-follower` line and each `follower <container> ACTIVE (...)` line
+ends with `loadgen universe N accounts` (from `loadgen-stats.json`), because
+a join's work per round is the distinct accounts the records name, which
+the load generator's universe bounds: a join at +10 minutes against 150
+accounts and one at +90 against 2,500 are not the same test, and a run's
+joins are compared by it (docs/reviews/sync-state-pull-2026-10-07.md, §5).
 So `chaos.log` has one `add-follower <container> (...)` line per add,
 `follower <container> ACTIVE (...), Ns after it was added` and
 `follower <container> first in agreement (...)` lines per follower as each is

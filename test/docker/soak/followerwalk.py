@@ -65,7 +65,7 @@ def utc(t=None):
 
 class Walk:
     def __init__(self, run_dir, end, run=subprocess.run, now=time.time, sleep=time.sleep,
-                 state=None, agreement=None, behind=None, snapshot=None, unaffected=None):
+                 state=None, agreement=None, behind=None, snapshot=None, unaffected=None, universe=None):
         self.rd, self.end = run_dir, end
         self.chaos = os.path.join(run_dir, "chaos.log")
         self._run, self.now, self.sleep = run, now, sleep
@@ -74,6 +74,7 @@ class Walk:
         self.behind = behind or self._behind
         self.snapshot = snapshot or self._snapshot
         self.unaffected = unaffected or self._unaffected
+        self.universe = universe or self._universe
         self.removals = 0
 
     # --- the record -------------------------------------------------------
@@ -101,6 +102,17 @@ class Walk:
         except Exception:
             return {}
 
+    def _universe(self):
+        """How many accounts the load generator has created so far: a join's
+        work per round is the distinct accounts the records name, which the
+        universe bounds, so a join at +10 min (150 accounts) and one at +90
+        (2,500) are not the same test (review 2026-10-07, §5)."""
+        try:
+            with open(os.path.join(self.rd, "loadgen-stats.json")) as f:
+                return int(json.load(f)["accounts"]["accounts"])
+        except Exception:
+            return None
+
     def _snapshot(self, path):
         with open(path, "w") as f:
             json.dump(followerchaos.snapshot(), f)
@@ -127,9 +139,10 @@ class Walk:
         self.sh(COMPOSE + ["run", "--rm", "--no-deps", "--entrypoint", "sh", svc, "-c",
                            "grep -q join-running-network %s || sed -i '/type = \"coreValidator\"/a\\  join-running-network = true' %s" % (toml, toml)])
         self.sh(COMPOSE + ["--profile", "late-follower", "create", "--no-recreate", svc])
+        u = self.universe()
         self.log("add-follower %s (%s, data %s; key in no committee; databases cleared; join-running-network; "
-                 "one late follower at a time, %d of %d; up to %ds to ACTIVE, then held %ds)"
-                 % (c, svc, d, n, of, JOIN_SECS, HOLD_SECS))
+                 "one late follower at a time, %d of %d; up to %ds to ACTIVE, then held %ds; loadgen universe %s accounts)"
+                 % (c, svc, d, n, of, JOIN_SECS, HOLD_SECS, u if u is not None else "not read"))
         self.sh(["docker", "start", c])
 
     def wait_active(self, c, added_at, added_utc):
@@ -145,7 +158,9 @@ class Walk:
             ok, out = self.state(c)
             if ok:
                 took = int(self.now() - added_at)
-                self.log("follower %s ACTIVE (%s), %ds after it was added" % (c, out, took))
+                u = self.universe()
+                self.log("follower %s ACTIVE (%s), %ds after it was added; loadgen universe %s accounts"
+                         % (c, out, took, u if u is not None else "not read"))
                 return took
         return None
 
