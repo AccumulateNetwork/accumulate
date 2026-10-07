@@ -10,6 +10,8 @@ import (
 	"context"
 	stderrors "errors"
 	"sort"
+	"sync"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
@@ -131,13 +133,30 @@ func openedLoaded(p *syncing) bool {
 	return true
 }
 
-// loadOpened loads every section the pull opened and has not loaded: the
-// section's leaves from a peer as of L, and every account they name
-// that this node does not hold or holds differently, unless a record brought
-// it current -- the page may be older than the record. The node's own leaves
-// in the section that the page does not name are asked of every peer, and
-// forgotten only if none holds one (pullOne). A page of a block before the
-// pull's start is asked of the next peer.
+// spanLoad is what fetching one span brought: the sections its pages
+// covered, the answers for their stale leaves, the local leaves the pages
+// did not name, the highest block any page was read at, and whether every
+// section of the span was covered. Nothing in it has been written: keepSpan
+// writes it on the round's goroutine.
+type spanLoad struct {
+	covered []sectionID
+	answers []statesAnswer
+	unnamed []*url.URL
+	highest uint64
+	pages   int
+	ok      bool
+}
+
+// loadOpened loads the sections the round opened (round step 3): highest
+// first, one probe page, then the rest cut into spans of as many sections as
+// that page covered -- a span is a page of the tree as it is, 256 leaves,
+// whether a section holds one leaf or forty -- the spans fetched at once,
+// statesInFlight against each peer, and each span's answers kept on the
+// round's goroutine as they arrive. One page at a time used 1.4 of the 16
+// queries four validators admit, 2.6 s and ~100 accounts a page, so a BVN
+// of 96k leaves was 40 minutes of pulling against a 30-minute deadline
+// (#4549, run 20261007T141334Z). A span no peer serves leaves its sections
+// opened for the next round; the other spans go on.
 func (s *PulledState) loadOpened(ctx context.Context, p *syncing) {
 	var todo []sectionID
 	for sec, done := range p.opened {
@@ -148,32 +167,121 @@ func (s *PulledState) loadOpened(ctx context.Context, p *syncing) {
 	if len(todo) == 0 {
 		return
 	}
-	// A page runs in descending key order, so the highest section first:
-	// one page covers every section from its start down to the last whose
-	// leaves it ends inside of, and a round's calls grow with the pages its
-	// sections fill, not with how many sections it opened.
 	sort.Slice(todo, func(i, j int) bool { return todo[i] > todo[j] })
 	srcs := s.partitionSources(ctx)
 	if len(srcs) == 0 {
 		return
 	}
-	for len(todo) > 0 && ctx.Err() == nil {
-		covered, ok := s.loadOpenedPage(ctx, p, srcs, todo)
-		if !ok {
-			return
-		}
-		todo = todo[covered:]
+	started := s.clock()
+	probe := new(spanLoad)
+	covered, ok := s.fetchPage(ctx, p, srcs, s.pageTurn, todo, probe)
+	s.pageTurn++
+	if !ok {
+		return
 	}
+	probe.ok = true
+	accounts := s.keepSpan(ctx, p, probe)
+	todo = todo[covered:]
+	var spans [][]sectionID
+	for len(todo) > 0 {
+		n := min(len(todo), max(1, covered))
+		spans = append(spans, todo[:n])
+		todo = todo[n:]
+	}
+	turn := s.pageTurn
+	s.pageTurn += len(spans)
+
+	next := make(chan int)
+	out := make(chan *spanLoad)
+	workers := min(statesInFlight*len(srcs), len(spans))
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range next {
+				out <- s.fetchSpan(ctx, p, srcs, turn+i, spans[i])
+			}
+		}()
+	}
+	go func() {
+		for i := range spans {
+			select {
+			case next <- i:
+			case <-ctx.Done():
+			}
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		close(next)
+		wg.Wait()
+		close(out)
+	}()
+	sections, pages, notServed := covered, probe.pages, 0
+	for ld := range out {
+		accounts += s.keepSpan(ctx, p, ld)
+		sections += len(ld.covered)
+		pages += ld.pages
+		if !ld.ok {
+			notServed++
+		}
+	}
+	took := s.clock().Sub(started)
+	perSecond := 0.0
+	if took > 0 {
+		perSecond = float64(accounts) / took.Seconds()
+	}
+	s.log.Info("Loaded the sections the round opened",
+		"partition", s.partition, "sections", sections, "spans", len(spans)+1, "spans-not-served", notServed,
+		"pages", pages, "accounts", accounts, "took", took.Round(time.Millisecond), "accounts-per-second", int(perSecond))
 }
 
-// loadOpenedPage loads the sections a page from the highest of todo covers,
-// asking the peers in turn until one answers at or after the pull's start. It
-// returns how many of todo it loaded, and false when no peer answered.
-func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pull.Source, todo []sectionID) (int, bool) {
+// fetchSpan pages one span of opened sections, highest first, until every
+// section is covered or a page fails, and asks for the states of what the
+// pages show stale. It writes nothing.
+func (s *PulledState) fetchSpan(ctx context.Context, p *syncing, srcs []pull.Source, turn int, span []sectionID) *spanLoad {
+	ld := new(spanLoad)
+	todo := span
+	for len(todo) > 0 && ctx.Err() == nil {
+		n, ok := s.fetchPage(ctx, p, srcs, turn, todo, ld)
+		if !ok {
+			return ld
+		}
+		todo = todo[n:]
+		turn++
+	}
+	ld.ok = len(todo) == 0
+	return ld
+}
+
+// keepSpan writes what a span's fetch brought, on the round's goroutine, and
+// marks its sections loaded. It returns how many accounts were kept.
+func (s *PulledState) keepSpan(ctx context.Context, p *syncing, ld *spanLoad) int {
+	p.highest = max(p.highest, ld.highest)
+	p.sectionPages += ld.pages
+	kept := s.keepStates(ctx, p, ld.answers)
+	for _, u := range ld.unnamed {
+		s.pullOne(ctx, p, u)
+	}
+	for _, sec := range ld.covered {
+		p.opened[sec] = true
+		s.secs.pulled(sec)
+	}
+	return kept
+}
+
+// fetchPage fetches the page from the highest of todo, asking the peers in
+// turn until one answers at or after the pull's start, and adds what it
+// covers to ld: the sections covered, the answers for the leaves this node
+// does not hold or holds and does not agree with (unless a record has named
+// them), and the local leaves the page did not name. It returns how many of
+// todo the page covered, and false when no peer answered.
+func (s *PulledState) fetchPage(ctx context.Context, p *syncing, srcs []pull.Source, turn int, todo []sectionID, ld *spanLoad) (int, bool) {
 	// Each peer is asked twice: a page below the start may be a peer a
 	// block behind, and the next ask finds it a block on.
 	for i := 0; i < 2*len(srcs); i++ {
-		turn := (s.pageTurn + i) % len(srcs)
+		turn := (turn + i) % len(srcs)
 		src := srcs[turn]
 		// As of L, the records' end: what the page shows is then what the
 		// records left, and the load raises no block the records must
@@ -194,9 +302,8 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 				"partition", s.partition, "peer", sourceKey(src), "page-block", page.Block, "start", p.start)
 			continue
 		}
-		p.highest = max(p.highest, page.Block)
-		p.sectionPages++
-		s.pageTurn++
+		ld.highest = max(ld.highest, page.Block)
+		ld.pages++
 
 		// The sections the page covers whole: every one above the section
 		// its last leaf is in, or every one, when the page is the tree's
@@ -233,7 +340,7 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 				s.log.Info("A peer could not page a large section; the next is asked", "partition", s.partition, "peer", sourceKey(src), "section", todo[0], "block", block, "error", err)
 				continue
 			}
-			p.highest = max(p.highest, block)
+			ld.highest = max(ld.highest, block)
 			bySection = map[sectionID][]*api.BptLeafSummary{}
 			for i, l := range leaves {
 				bySection[todo[0]] = append(bySection[todo[0]], &api.BptLeafSummary{KeyHash: l.KeyHash, ValueHash: l.Hash, Account: urls[i]})
@@ -267,14 +374,9 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 		// The page's own peer first. A leaf the node holds that the page
 		// does not name is asked of every peer, and forgotten only if none
 		// holds one.
-		s.takeAccounts(ctx, p, append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...), stale)
-		for _, u := range unnamed {
-			s.pullOne(ctx, p, u)
-		}
-		for _, sec := range todo[:n] {
-			p.opened[sec] = true
-			s.secs.pulled(sec)
-		}
+		ld.answers = append(ld.answers, s.askStates(ctx, p, append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...), stale)...)
+		ld.unnamed = append(ld.unnamed, unnamed...)
+		ld.covered = append(ld.covered, todo[:n]...)
 		return n, true
 	}
 	return 0, false

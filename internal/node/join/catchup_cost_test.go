@@ -263,7 +263,10 @@ func TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord(t *testing.T
 	// The records: one answer, whatever the blocks and accounts, and a page
 	// per 256 leaves of the sections their accounts are in (executor spec,
 	// "Sync", §3a): calls that grow with pages, not accounts.
-	require.LessOrEqual(t, rc2, rc1+2000/256+1,
+	// The opened sections are loaded in spans sized by the round's first
+	// page (#4549); a span whose sections hold more leaves than that page's
+	// takes a second page, so at most twice the pages -- never per account.
+	require.LessOrEqual(t, rc2, rc1+2*(2000/256)+1,
 		"the records round asked %d calls for 100 blocks naming 200 accounts and %d for 1,000 blocks naming 2,000", rc1, rc2)
 	require.Equal(t, rm1, rm2,
 		"the records round made %d commits for 200 accounts and %d for 2,000", rm1, rm2)

@@ -1061,7 +1061,18 @@ Each round, in this order:
    overwrites a value the records wrote**. The sections are loaded as of `L`
    (§3a), so no page is newer than the records: every account ends at the
    state of the last record processed, and the load raises no block the
-   records must catch up to.
+   records must catch up to. **The opened sections are loaded at once**
+   (#4549): one probe page, highest section first, then the rest cut into
+   spans of as many sections as that page covered — a span is one page of
+   the tree as it is, whether a section holds one leaf or forty — and the
+   spans fetched in parallel, `statesInFlight` against each peer, each
+   span's answers written on the round's goroutine as they arrive; a span
+   no peer serves leaves its sections opened for the next round. One page
+   at a time used 1.4 of the 16 queries four validators admit, 2.6 s and
+   ~100 accounts a page, so a BVN of 96k leaves was 40 minutes of pulling
+   against a 30-minute deadline (run 20261007T141334Z;
+   `TestTheSectionsARoundOpenedAreLoadedInParallel`). The round logs what it
+   loaded: sections, pages, accounts, and accounts per second.
 
 **The state is complete** when the top is taken, every section opened is
 loaded, nothing is owed, and `L` is at or above the highest `B` any reply was

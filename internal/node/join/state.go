@@ -1285,24 +1285,44 @@ type statesAnswer struct {
 // served (takeStates), in the order the answers arrive. An account no source
 // served is owed to the next round.
 func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.Source, accounts []*url.URL) {
+	s.keepStates(ctx, p, s.askStates(ctx, p, srcs, accounts))
+}
+
+// keepStates keeps what askStates brought, on the round's goroutine: every
+// account a chunk's answer did not serve is owed. It returns how many
+// accounts were kept.
+func (s *PulledState) keepStates(ctx context.Context, p *syncing, answers []statesAnswer) int {
+	kept := 0
+	for _, a := range answers {
+		var served map[[32]byte]bool
+		if a.src != nil {
+			served = s.keepAnswers(ctx, p, a.src, a.chunk, a.recs)
+		}
+		for _, u := range a.chunk {
+			if served[accountKey(u)] {
+				kept++
+			} else {
+				p.retry[accountKey(u)] = u
+			}
+		}
+	}
+	return kept
+}
+
+// askStates asks the peers for the accounts' states, chunks of statesChunk
+// at a time and statesInFlight at a time against each peer, a chunk a peer
+// does not serve going to the next, and returns every chunk's answer -- with
+// no source when no peer served it. It writes nothing, so spans of the
+// section load call it at once (loadOpened).
+func (s *PulledState) askStates(ctx context.Context, p *syncing, srcs []pull.Source, accounts []*url.URL) []statesAnswer {
 	var batchable []*url.URL
 	for _, u := range accounts {
-		switch {
-		case ctx.Err() != nil:
-			p.retry[accountKey(u)] = u
-		case !Routable(u):
-		default:
+		if Routable(u) {
 			batchable = append(batchable, u)
 		}
 	}
 	if len(batchable) == 0 {
-		return
-	}
-	if len(srcs) == 0 {
-		for _, u := range batchable {
-			p.retry[accountKey(u)] = u
-		}
-		return
+		return nil
 	}
 	var chunks [][]*url.URL
 	for len(batchable) > 0 {
@@ -1313,6 +1333,13 @@ func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.
 
 	// The calls run on workers; the answers are kept here, on the round's
 	// goroutine, which alone touches p.
+	if len(srcs) == 0 || ctx.Err() != nil {
+		answers := make([]statesAnswer, 0, len(chunks))
+		for _, c := range chunks {
+			answers = append(answers, statesAnswer{chunk: c})
+		}
+		return answers
+	}
 	start, asOf := p.start, p.last
 	next := make(chan int)
 	out := make(chan statesAnswer)
@@ -1342,14 +1369,11 @@ func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.
 		wg.Wait()
 		close(out)
 	}()
+	answers := make([]statesAnswer, 0, len(chunks))
 	for a := range out {
-		served := s.keepAnswers(ctx, p, a.src, a.chunk, a.recs)
-		for _, u := range a.chunk {
-			if !served[accountKey(u)] {
-				p.retry[accountKey(u)] = u
-			}
-		}
+		answers = append(answers, a)
 	}
+	return answers
 }
 
 // askStatesOf asks the sources, from the one at turn, for a chunk's states

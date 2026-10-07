@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,15 +29,20 @@ import (
 // method that made it.
 type countingQuerier struct {
 	api.Querier
+	mu    sync.Mutex // the section load asks pages at once (#4549)
 	calls map[string]int
 }
 
 func (c *countingQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	c.mu.Lock()
 	c.calls[fmt.Sprintf("%T", query)]++
+	c.mu.Unlock()
 	return c.Querier.Query(ctx, scope, query)
 }
 
 func (c *countingQuerier) total() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	n := 0
 	for _, v := range c.calls {
 		n += v
@@ -45,6 +51,8 @@ func (c *countingQuerier) total() int {
 }
 
 func (c *countingQuerier) String() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	var keys []string
 	for k := range c.calls {
 		keys = append(keys, k)
