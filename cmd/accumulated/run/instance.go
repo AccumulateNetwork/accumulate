@@ -8,9 +8,11 @@ package run
 
 import (
 	"context"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,6 +49,12 @@ type Instance struct {
 
 	haltControllersMu sync.RWMutex
 	haltControllers   map[string]*HaltController
+
+	// partitionStates is each DAG-BFT partition's serving state, by
+	// partition ID, registered as the service starts; everyPartitionActive
+	// is the gate the joins' history backfills run behind (#4550).
+	partitionStatesMu sync.Mutex
+	partitionStates   map[string]nodestate.Serving
 
 	// databases is the one database each store is opened as, so every
 	// service over a store shares its section gate (#4497).
@@ -274,6 +282,40 @@ func (i *Instance) Verify() (*Config, error) {
 	}
 
 	return cfg, errors.Join(errs...)
+}
+
+// registerPartitionState records a partition's serving state (#4550).
+func (i *Instance) registerPartitionState(partition string, s nodestate.Serving) {
+	i.partitionStatesMu.Lock()
+	defer i.partitionStatesMu.Unlock()
+	if i.partitionStates == nil {
+		i.partitionStates = map[string]nodestate.Serving{}
+	}
+	i.partitionStates[strings.ToLower(partition)] = s
+}
+
+// everyPartitionActive is whether every DAG-BFT partition this instance is
+// configured to run has registered its state and may serve: the gate a
+// partition's history backfill runs behind. A node that runs the Directory
+// beside a BVN is past its match only when the BVN is (#4550).
+func (i *Instance) everyPartitionActive() bool {
+	expected := 0
+	for _, svc := range i.config.Services {
+		if _, ok := svc.(*DAGBFTService); ok {
+			expected++
+		}
+	}
+	i.partitionStatesMu.Lock()
+	defer i.partitionStatesMu.Unlock()
+	if len(i.partitionStates) < expected {
+		return false
+	}
+	for _, s := range i.partitionStates {
+		if !s.CanServeCurrent() {
+			return false
+		}
+	}
+	return true
 }
 
 func (i *Instance) Stop() {

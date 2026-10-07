@@ -99,8 +99,12 @@ type PulledState struct {
 	authority *anchorsrc.Authority
 
 	machine *nodestate.Machine
-	tracker *tracker.Tracker
-	log     *slog.Logger
+
+	// backfillWhen is StateOptions.BackfillWhen; nil means the partition's
+	// own state is the only gate.
+	backfillWhen func() bool
+	tracker      *tracker.Tracker
+	log          *slog.Logger
 
 	// repairLog records the failures this node names and repairs (executor
 	// spec, "Sync", §3b).
@@ -350,6 +354,16 @@ type StateOptions struct {
 	RepairLog string
 
 	Logger *slog.Logger
+
+	// BackfillWhen, when set, must return true for the history backfill to
+	// run, besides this partition being ACTIVE: the daemon hands in "every
+	// partition this node runs is ACTIVE". History is collected after the
+	// match, and a node that runs the Directory beside a BVN is not past its
+	// match until the BVN is; its Directory's backfill otherwise pulls
+	// hundreds of thousands of entries from the same validators the BVN's
+	// state pull reads, through the same per-peer gate (#4550: 850 chain
+	// queries a minute, three times the BVN pull's validator time).
+	BackfillWhen func() bool
 }
 
 // DefaultAnchorWait is how long a complete pull holds for its block's signed
@@ -375,17 +389,18 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		log = slog.Default()
 	}
 	s := &PulledState{
-		partition:  opts.Partition,
-		db:         opts.Database.Ungated(),
-		gated:      opts.Database,
-		sources:    opts.Sources,
-		machine:    machine,
-		torn:       opts.Torn,
-		tracker:    track,
-		log:        log.With("module", "join"),
-		repairLog:  newRepairs(log, opts.RepairLog),
-		executed:   opts.ExecutedBlock,
-		anchorWait: opts.AnchorWait,
+		partition:    opts.Partition,
+		db:           opts.Database.Ungated(),
+		gated:        opts.Database,
+		sources:      opts.Sources,
+		machine:      machine,
+		backfillWhen: opts.BackfillWhen,
+		torn:         opts.Torn,
+		tracker:      track,
+		log:          log.With("module", "join"),
+		repairLog:    newRepairs(log, opts.RepairLog),
+		executed:     opts.ExecutedBlock,
+		anchorWait:   opts.AnchorWait,
 	}
 	if s.anchorWait <= 0 {
 		s.anchorWait = DefaultAnchorWait

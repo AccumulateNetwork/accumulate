@@ -205,7 +205,7 @@ const backfillPause = 2 * time.Second
 func (s *PulledState) Backfill(ctx context.Context) {
 	ctx = context.WithValue(ctx, backfillKey{}, true)
 	for ctx.Err() == nil {
-		if s.machine.State() != nodestate.StateActive {
+		if !s.backfillAllowed() {
 			if !pause(ctx, backfillPause) {
 				return
 			}
@@ -226,6 +226,13 @@ func (s *PulledState) Backfill(ctx context.Context) {
 	}
 }
 
+// backfillAllowed is whether the history backfill may run now: this
+// partition is ACTIVE and, when the daemon set one, its gate holds -- every
+// partition of the node is ACTIVE (StateOptions.BackfillWhen, #4550).
+func (s *PulledState) backfillAllowed() bool {
+	return s.machine.State() == nodestate.StateActive && (s.backfillWhen == nil || s.backfillWhen())
+}
+
 // backfillAll brings in the accounts left, backfillWorkers at a time, each
 // account by one worker. A worker stops taking accounts once the node is not
 // ACTIVE.
@@ -244,7 +251,7 @@ func (s *PulledState) backfillAll(ctx context.Context, left []*url.URL) {
 		}()
 	}
 	for _, u := range left {
-		if ctx.Err() != nil || s.machine.State() != nodestate.StateActive {
+		if ctx.Err() != nil || !s.backfillAllowed() {
 			break
 		}
 		next <- u

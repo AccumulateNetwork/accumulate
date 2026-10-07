@@ -707,8 +707,14 @@ moves on to the next block.
 **Past the match, every account taken by its heads is brought in whole.** The
 walk and the records take an account by its chain heads and open mark set
 (§3), which reproduce its leaf and let the node append. Once the node is
-`ACTIVE`, the backfill brings those accounts in while the node executes
-(`pull.Backfill`): the entries below each chain's open mark set, the mark
+`ACTIVE` — **every partition it runs** (#4550): a node that runs the
+Directory beside a BVN is past its match only when the BVN is, and its
+Directory's backfill otherwise pulls hundreds of thousands of entries from
+the validators the BVN's state pull is reading, through the same per-peer
+gate (run 20261007T141334Z: 850 chain queries a minute, three times the BVN
+pull's validator time; `StateOptions.BackfillWhen`,
+`TestTheBackfillWaitsForEveryPartitionOfTheNode`) — the backfill brings
+those accounts in while the node executes (`pull.Backfill`): the entries below each chain's open mark set, the mark
 points that close their sets, and the message behind every entry. It
 writes nothing at or above a chain's head, so it does not race the blocks the
 node executes. It streams as the pull does, a page at a time, each page

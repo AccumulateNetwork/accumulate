@@ -601,7 +601,8 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			// Each failure the join names is appended here, for an operator
 			// to repair offline what the node could not (executor spec,
 			// "Sync", §3b).
-			RepairLog: filepath.Join(inst.path("consensus", strings.ToLower(s.Partition.ID)), "repairs.jsonl"),
+			RepairLog:    filepath.Join(inst.path("consensus", strings.ToLower(s.Partition.ID)), "repairs.jsonl"),
+			BackfillWhen: inst.everyPartitionActive,
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)
@@ -676,6 +677,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 	// joined: a node that never joined answers for itself, and a service that
 	// wants the state must get an answer rather than an absence.
 	nodeState, serving := nodeStateOf(joinState)
+	inst.registerPartitionState(s.Partition.ID, serving)
 	// A validator's services are advertised whatever its state: its peers
 	// find the partition by them, and after a whole-network restart no
 	// node is ACTIVE until it has (#4543). A follower's wait for ACTIVE
