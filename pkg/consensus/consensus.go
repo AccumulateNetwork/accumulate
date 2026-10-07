@@ -451,6 +451,33 @@ func (n *Node) batchAbsence(digest types.BatchDigest) string {
 	return worker.GoneUnknown
 }
 
+// AwaitExecution marks the batches a committed certificate names as needed
+// by the executor, on the worker each is stored in, until PruneCommitted
+// retires them (consensus spec, invariant 3).
+func (n *Node) AwaitExecution(cert *types.Certificate) {
+	n.eachPayloadWorker(cert, (*worker.Worker).AwaitExecution)
+}
+
+// ReleaseExecution drops AwaitExecution's marks for a certificate the
+// executor skips: delivered again after it was executed.
+func (n *Node) ReleaseExecution(cert *types.Certificate) {
+	n.eachPayloadWorker(cert, (*worker.Worker).ReleaseExecution)
+}
+
+func (n *Node) eachPayloadWorker(cert *types.Certificate, fn func(*worker.Worker, []types.BatchDigest)) {
+	if len(n.workers) == 0 || len(cert.Header.Payload) == 0 {
+		return
+	}
+	by := map[int][]types.BatchDigest{}
+	for _, e := range cert.Header.Payload {
+		i := workerFor(e.Digest[:], len(n.workers))
+		by[i] = append(by[i], e.Digest)
+	}
+	for i, ds := range by {
+		fn(n.workers[i], ds)
+	}
+}
+
 // CollectBatches returns the batches named by the certificate's payload, in
 // canonical payload order. Local workers are consulted first; a batch this
 // node does not hold is fetched from connected peers, retrying until the

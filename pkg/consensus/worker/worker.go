@@ -311,6 +311,16 @@ type Worker struct {
 	// header is waiting on is not cache, it is a prerequisite for progress.
 	pins map[types.BatchDigest]int
 
+	// awaiting holds the batches named by certificates consensus has
+	// committed and the executor has not yet executed: from the hand-off to
+	// the executor until PruneCommitted retires them. Not evictable either
+	// (consensus spec, invariant 3). A follower does not vote, so `pins`
+	// never covered it: run 20261007T050444Z's bvn2-fol1 fell 300 blocks
+	// behind, its store evicted the batch of a committed certificate the
+	// validators had already retired, and it waited on it for good (2,613
+	// asks, no peer held it).
+	awaiting map[types.BatchDigest]struct{}
+
 	// Tombstones: why a batch left the store. A committed certificate whose
 	// batch is absent everywhere halts the partition permanently (#4125), and
 	// without this the log cannot say whether it was pruned, evicted, or never
@@ -392,6 +402,7 @@ func New(config Config, g *gossip.GossipLayer) *Worker {
 		pending:             make([][]byte, 0, config.BatchSize),
 		batches:             make(map[types.BatchDigest]*lruEntry),
 		pins:                make(map[types.BatchDigest]int),
+		awaiting:            make(map[types.BatchDigest]struct{}),
 		lruList:             list.New(),
 		gone:                make(map[types.BatchDigest]BatchGone),
 		maxTombstones:       config.MaxTombstones,
@@ -943,6 +954,7 @@ func (w *Worker) PruneCommitted(committed []types.BatchDigest, info CommitInfo) 
 
 	pruned := 0
 	for _, digest := range committed {
+		delete(w.awaiting, digest)
 		if entry, ok := w.batches[digest]; ok {
 			w.lruList.Remove(entry.element)
 			delete(w.batches, digest)
@@ -1371,7 +1383,7 @@ func (w *Worker) performEviction() {
 			e = prev
 			continue
 		}
-		if w.pins[lruDigest] > 0 {
+		if _, held := w.awaiting[lruDigest]; held || w.pins[lruDigest] > 0 {
 			// A header is waiting on this to vote.  Evicting it is not
 			// reclaiming cache, it is undoing work that has to be redone
 			// before the partition can advance.
@@ -1456,6 +1468,43 @@ func (w *Worker) PinBatches(digests []types.BatchDigest) {
 	for _, d := range digests {
 		w.pins[d]++
 	}
+}
+
+// AwaitExecution marks batches named by a certificate consensus has committed,
+// so LRU eviction leaves them alone until PruneCommitted (or ReleaseExecution)
+// says the executor is done with them. Like a pin it does not fetch, and a
+// mark on a batch this node does not hold yet keeps it once it arrives.
+func (w *Worker) AwaitExecution(digests []types.BatchDigest) {
+	if len(digests) == 0 {
+		return
+	}
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	if w.awaiting == nil {
+		w.awaiting = map[types.BatchDigest]struct{}{}
+	}
+	for _, d := range digests {
+		w.awaiting[d] = struct{}{}
+	}
+}
+
+// ReleaseExecution drops the marks AwaitExecution took without retiring the
+// batches: a certificate delivered again after it was executed, whose
+// batches were retired the first time.
+func (w *Worker) ReleaseExecution(digests []types.BatchDigest) {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	for _, d := range digests {
+		delete(w.awaiting, d)
+	}
+}
+
+// AwaitingExecution reports how many batches are marked awaiting execution.
+// For tests and diagnostics.
+func (w *Worker) AwaitingExecution() int {
+	w.batchMu.RLock()
+	defer w.batchMu.RUnlock()
+	return len(w.awaiting)
 }
 
 // UnpinBatches releases pins taken by PinBatches: the vote went out, or the

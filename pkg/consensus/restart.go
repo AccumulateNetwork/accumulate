@@ -63,6 +63,11 @@ func (n *Node) order(cert *types.Certificate) bool {
 	// pruning before the executor reads causes "Missing batch for
 	// certificate" errors.
 	for _, group := range groups {
+		// Its batches stay in the store until the executor retires them
+		// (consensus spec, invariant 3).
+		for _, cert := range group {
+			n.AwaitExecution(cert)
+		}
 		// BLOCK, never drop: a dropped committed certificate means this node
 		// silently skips transactions its peers execute — permanent state
 		// divergence (#4122's shape). If the executor lags, backpressure here

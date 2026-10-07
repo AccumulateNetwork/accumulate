@@ -168,8 +168,16 @@ of transactions a few times a second.
 
 `StoreBatch` adds a batch and, when the peer cache exceeds its byte budget,
 runs an LRU eviction over peers' batches that skips pinned ones (those a
-pending vote needs); own batches are counted against their own share
-(invariant 8). There is no count limit by default: `MaxStoredBatches`
+pending vote needs) and those named by a certificate consensus has committed
+and the executor has not yet executed — marked when the group is handed to
+the executor, released when `PruneCommitted` retires them (or the executor
+skips a re-delivered certificate); own batches are counted against their own
+share (invariant 8). A follower casts no vote, so the second mark is the
+only thing that keeps its backlog: without it, a follower 300 blocks behind
+evicted a committed batch the validators had already retired and waited on
+it for good (Docker run `20261007T050444Z`, bvn2-fol1). A node so far behind
+that its backlog outgrows memory is past the retention window and resyncs
+(invariant 6). There is no count limit by default: `MaxStoredBatches`
 and `MaxRetainedBatches` are zero, and only a test sets them. A negative
 `MaxRetainedBatches` turns retention off.
 
