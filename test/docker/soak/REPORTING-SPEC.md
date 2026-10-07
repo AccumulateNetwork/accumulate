@@ -523,6 +523,17 @@ follower slot removes it; the slot after that adds the next one. One at a
 time since 2026-10-06 (Paul): three joins at once contend for the one box's
 disk, and that contention is not part of a real network (run
 20261006T223712Z). Runs before that added and removed all three together.
+
+With `FOLLOWER_WALK=on` (from 2026-10-06, Paul) the slot cadence no longer
+governs followers: `followerwalk.py` adds one, gives it up to
+`FOLLOWER_JOIN_SECS` (1800) to be ACTIVE, holds an ACTIVE one
+`FOLLOWER_HOLD_SECS` (900) while reading its blocks behind every 10 s, then
+removes it and adds the next BVN's. A follower not ACTIVE by the deadline is
+`NEVER ACTIVE` and the next starts; a slot that cannot finish before the run
+ends is not started. Each hold writes `follower <container> held ACTIVE Ns:
+<partition> worst W last L blocks behind; D of P polls not ACTIVE`, and a
+hold that loses ACTIVE writes `follower <container> LEFT ACTIVE during its
+hold`.
 So `chaos.log` has one `add-follower <container> (...)` line per add,
 `follower <container> ACTIVE (...), Ns after it was added` and
 `follower <container> first in agreement (...)` lines per follower as each is

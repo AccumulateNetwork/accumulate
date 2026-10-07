@@ -942,6 +942,23 @@ print("\n".join(topology.validator_containers()))' "$here/.." 2>/dev/null)
     echo "$(date -u +%FT%TZ) follower removal $n, ${w}s either side: $(python3 "$here/followerchaos.py" unaffected "$pre-before.json" "$pre-at.json" "$pre-after.json" 2>&1)" >> "$chaos"
   }
 
+  # FOLLOWER_WALK=on hands the followers to followerwalk.py: one at a time,
+  # each up to FOLLOWER_JOIN_SECS to reach ACTIVE, then held
+  # FOLLOWER_HOLD_SECS, then removed and the next BVN's follower started
+  # (Paul, 2026-10-06: a removal slot on a fixed cadence cut joins off before
+  # they finished, and the run measured nothing). It replaces the slot loop
+  # below for the followers; it is not combined with the validator walk.
+  if [ "$fol_on" -eq 1 ] && [ "${FOLLOWER_WALK:-off}" = on ]; then
+    if [ "$val_on" -eq 1 ]; then
+      echo "$(date -u +%FT%TZ) FOLLOWER_WALK=on with CHAOS_VALIDATORS=on: the walk runs alone; validators are not disturbed" >> "$chaos"
+    fi
+    w="${CHAOS_FIRST_SECS:-$CHAOS_MIN}"
+    echo "$(date -u +%FT%TZ) sleeping ${w}s until the follower walk starts" >> "$chaos"
+    sleep "$w"
+    python3 "$here/followerwalk.py" "$rd" "$end" "${FOLLOWER_JOIN_SECS:-1800}" "${FOLLOWER_HOLD_SECS:-900}" "${FOLLOWER_WINDOW_SECS:-30}" 2>>"$log"
+    exit 0
+  fi
+
   i=0; slot=0
   # The first slot may come sooner than a whole interval (CHAOS_FIRST_SECS):
   # a follower can be added two minutes into a network that makes blocks

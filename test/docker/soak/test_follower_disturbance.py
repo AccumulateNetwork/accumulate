@@ -128,9 +128,9 @@ class FollowerDisturbance(unittest.TestCase):
         followers = set(topology.follower_containers())
         late = [f["container"] for f in topology.late_followers()]
         self.assertGreater(len(late), 1, "one late follower per BVN (#4438)")
-        # Every late follower is added in one slot and removed together in a
-        # later one: the follower events come in runs of one kind, each run
-        # naming every late follower once, add and remove alternating.
+        # One late follower at a time (Paul, 2026-10-06): each add names one
+        # follower, the next follower slot removes that same one, and the
+        # adds take the late followers in turn.
         groups = []
         for kind, name in events:
             if kind in FOLLOWER_KINDS:
@@ -145,16 +145,21 @@ class FollowerDisturbance(unittest.TestCase):
                 self.assertNotIn(name, followers)
         for i, (kind, names) in enumerate(groups):
             self.assertEqual("add-follower" if i % 2 == 0 else "remove-follower", kind, groups)
-            if i < len(groups) - 1 or kind == "remove-follower":
-                self.assertEqual(late, names, "a slot did not add or remove every late follower")
+            self.assertEqual(1, len(names), "a slot added or removed more than one follower: %s" % groups)
+            if kind == "remove-follower":
+                self.assertEqual(groups[i - 1][1], names, "a removal took a follower other than the one added")
+        adds = [names[0] for kind, names in groups if kind == "add-follower"]
+        self.assertEqual([late[j % len(late)] for j in range(len(adds))], adds, "the adds did not take the late followers in turn")
 
         # In turn: all three kinds land within the first two rounds of the walk.
         self.assertTrue({"add-follower", "remove-follower"} <= set(kinds[:6]),
                         "follower kinds are not interleaved with the validator walk: %s" % kinds)
 
-        # The docker calls: each late follower is started, later stopped and
-        # removed, and is never paused or restarted.
-        for name in late:
+        # The docker calls: each follower added and then removed was started,
+        # later stopped and removed, and is never paused or restarted.
+        removed = [names[0] for kind, names in groups if kind == "remove-follower"]
+        self.assertTrue(removed, groups)
+        for name in removed:
             self.started_then_removed(name, calls)
         for c in calls:
             if re.match(r"(pause|unpause|restart)\b", c):
@@ -382,15 +387,14 @@ class TheAddFollowerConf(FollowerDisturbance):
         late = [ln.split()[1] for ln in subprocess.run(
             [sys.executable, os.path.join(HERE, "followerchaos.py"), "late"],
             capture_output=True, text=True, check=True).stdout.splitlines()]
-        self.assertEqual([["add-follower", c] for c in late] +
-                         [["remove-follower", c] for c in late], events,
-                         "CHAOS_FOLLOWER_CYCLES=1 is one pair — every late follower "
+        self.assertEqual([["add-follower", late[0]], ["remove-follower", late[0]]], events,
+                         "CHAOS_FOLLOWER_CYCLES=1 is one pair — the first late follower "
                          "added in one slot, removed in the next — and "
                          "CHAOS_VALIDATORS=off is no validator event, over %d slots" % 8)
-        # Each removal line names the one removal it belongs to.
-        self.assertEqual(len(late), len(re.findall(r"remove-follower \S+ \(removal 1\)", log)))
-        # One join setting and one clearing for all of them, every directory named.
-        for f in topology.late_followers():
+        # The removal line names the one removal it belongs to.
+        self.assertEqual(1, len(re.findall(r"remove-follower \S+ \(removal 1\)", log)))
+        # The follower added had its databases cleared and its join set.
+        for f in topology.late_followers()[:1]:
             d = f["dir"]
             self.assertTrue(any("/root/.accumulate/%s/bvnn/data/accumulate.db" % d in c
                                 for c in calls), "%s's databases were not cleared" % d)
