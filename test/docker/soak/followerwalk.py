@@ -13,7 +13,10 @@ until END_EPOCH:
      join-running-network, create and start the container;
   2. give it up to JOIN_SECS (30 minutes) to be ACTIVE on every partition;
   3. once ACTIVE, hold it HOLD_SECS (15 minutes), reading how far behind the
-     network it is every POLL_SECS and whether it stays ACTIVE;
+     network it is every POLL_SECS and whether it stays ACTIVE. The hold
+     PASSES only if the follower never left ACTIVE and ends it within
+     CAUGHT_UP_BLOCKS of the network on every partition; otherwise it FAILS
+     and the line says why;
   4. remove it, bracketed by readings WINDOW_SECS before and after, and start
      the next.
 
@@ -46,6 +49,11 @@ import followerchaos  # noqa: E402
 
 JOIN_SECS, HOLD_SECS, WINDOW_SECS = 1800, 900, 30
 POLL_SECS = 10
+# A follower is running when it ends its hold this close to the network on
+# every partition: ten blocks, ten seconds at the block interval. Run
+# 20261007T050444Z's bvn2-fol1 held ACTIVE for 900 s at 229, then 976 blocks
+# behind, stopped dead, and the hold line read like a pass.
+CAUGHT_UP_BLOCKS = 10
 MONITOR = "http://127.0.0.1:8099/data"
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMPOSE = ["docker", "compose", "-f", os.path.join(HERE, "..", "docker-compose.yml")]
@@ -160,9 +168,16 @@ class Walk:
                 worst[p] = max(worst.get(p, 0), b)
                 last[p] = b
         parts = ", ".join("%s worst %d last %d" % (p, worst[p], last.get(p, -1)) for p in sorted(worst)) or "behind not measured"
-        self.log("follower %s held ACTIVE %ds: %s blocks behind; %d of %d polls not ACTIVE"
-                 % (c, int(self.now() - start), parts, dropped, polls))
-        return worst, dropped
+        why = []
+        if dropped:
+            why.append("left ACTIVE")
+        if not last:
+            why.append("blocks behind never measured")
+        why += ["%s ended %d blocks behind" % (p, b) for p, b in sorted(last.items()) if b > CAUGHT_UP_BLOCKS]
+        verdict = "FAIL (%s)" % "; ".join(why) if why else "PASS (caught up within %d blocks)" % CAUGHT_UP_BLOCKS
+        self.log("follower %s held ACTIVE %ds: %s blocks behind; %d of %d polls not ACTIVE; %s"
+                 % (c, int(self.now() - start), parts, dropped, polls, verdict))
+        return not why
 
     def remove(self, c, never_active, added_at):
         self.removals += 1
@@ -195,18 +210,23 @@ class Walk:
             return
         self.log("followerwalk: %s in turn, one at a time; each up to %ds to ACTIVE, then held %ds, then removed"
                  % (", ".join(f["container"] for f in fols), JOIN_SECS, HOLD_SECS))
-        k = 0
+        k, passed, failed, never = 0, 0, 0, 0
         while self.slot_fits():
             f = fols[k % len(fols)]
             c = f["container"]
             added_at = self.now()
             self.add(f, k % len(fols) + 1, len(fols))
             took = self.wait_active(c, added_at, utc(added_at))
-            if took is not None:
-                self.hold(c)
+            if took is None:
+                never += 1
+            elif self.hold(c):
+                passed += 1
+            else:
+                failed += 1
             self.remove(c, took is None, added_at)
             k += 1
-        self.log("followerwalk: done, %d follower(s) walked; the next slot would not end before the run does" % k)
+        self.log("followerwalk: done, %d follower(s) walked: %d PASSED, %d FAILED their hold, %d NEVER ACTIVE; "
+                 "the next slot would not end before the run does" % (k, passed, failed, never))
 
 
 def main(argv):

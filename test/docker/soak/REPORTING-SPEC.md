@@ -531,9 +531,14 @@ governs followers: `followerwalk.py` adds one, gives it up to
 removes it and adds the next BVN's. A follower not ACTIVE by the deadline is
 `NEVER ACTIVE` and the next starts; a slot that cannot finish before the run
 ends is not started. Each hold writes `follower <container> held ACTIVE Ns:
-<partition> worst W last L blocks behind; D of P polls not ACTIVE`, and a
-hold that loses ACTIVE writes `follower <container> LEFT ACTIVE during its
-hold`.
+<partition> worst W last L blocks behind; D of P polls not ACTIVE; PASS|FAIL
+(...)`: a hold PASSES only if the follower never left ACTIVE and ended it
+within 10 blocks of the network on every partition, and FAIL names each
+reason (run 20261007T050444Z's bvn2-fol1 ended its hold 976 blocks behind,
+stopped, and its line read like a pass). A hold that loses ACTIVE also
+writes `follower <container> LEFT ACTIVE during its hold`. The walk ends
+with `followerwalk: done, K follower(s) walked: P PASSED, F FAILED their
+hold, N NEVER ACTIVE`.
 So `chaos.log` has one `add-follower <container> (...)` line per add,
 `follower <container> ACTIVE (...), Ns after it was added` and
 `follower <container> first in agreement (...)` lines per follower as each is

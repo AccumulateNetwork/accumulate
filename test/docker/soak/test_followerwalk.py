@@ -83,6 +83,28 @@ class TestWalk(unittest.TestCase):
         held = next(l for l in lines if " held ACTIVE " in l)
         self.assertIn("BVN1 worst 7", held)
 
+    def test_a_follower_caught_up_at_the_end_of_its_hold_passes(self):
+        lines, _ = walk({c["container"]: 60 for c in FOLS}, end_after=3000,
+                        behind=lambda c: {"BVN1": 2, "Directory": 0})
+        held = next(l for l in lines if " held ACTIVE " in l)
+        self.assertIn("PASS", held)
+        self.assertIn("1 PASSED, 0 FAILED their hold, 0 NEVER ACTIVE", lines[-1])
+
+    def test_a_follower_that_falls_behind_fails_its_hold(self):
+        # bvn2-fol1 in run 20261007T050444Z: ACTIVE, then 229 -> 976 behind
+        seq = iter(range(229, 2000, 8))
+        lines, _ = walk({c["container"]: 60 for c in FOLS}, end_after=3000,
+                        behind=lambda c: {"BVN2": next(seq), "Directory": 0})
+        held = next(l for l in lines if " held ACTIVE " in l)
+        self.assertIn("FAIL (BVN2 ended ", held)
+        self.assertNotIn("Directory ended", held)
+        self.assertIn("0 PASSED, 1 FAILED their hold", lines[-1])
+
+    def test_a_hold_that_never_measured_blocks_behind_fails(self):
+        lines, _ = walk({c["container"]: 60 for c in FOLS}, end_after=3000, behind=lambda c: {})
+        held = next(l for l in lines if " held ACTIVE " in l)
+        self.assertIn("FAIL (blocks behind never measured)", held)
+
 
 if __name__ == "__main__":
     unittest.main()
