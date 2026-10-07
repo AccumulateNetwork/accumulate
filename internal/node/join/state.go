@@ -289,9 +289,6 @@ type syncing struct {
 	// servedBy names the peers whose answers this pull took.
 	servedBy map[string]bool
 
-	// chainsTaken are the accounts whose chains this pull took to an
-	// answer's heads (pull.TakeChainsAt).
-	chainsTaken map[[32]byte]bool
 
 	// ready is whether the last round left the state complete at last, V:
 	// the top is taken, every section opened is loaded, nothing is owed, and every record
@@ -308,7 +305,7 @@ type syncing struct {
 }
 
 func newSyncing() *syncing {
-	return &syncing{current: map[[32]byte]bool{}, retry: map[[32]byte]*url.URL{}, opened: map[sectionID]bool{}, servedBy: map[string]bool{}, chainsTaken: map[[32]byte]bool{}}
+	return &syncing{current: map[[32]byte]bool{}, retry: map[[32]byte]*url.URL{}, opened: map[sectionID]bool{}, servedBy: map[string]bool{}}
 }
 
 func accountKey(u *url.URL) [32]byte { return u.AccountID32() }
@@ -767,7 +764,7 @@ func (s *PulledState) Pull(ctx context.Context) error {
 			if p.current[accountKey(u)] {
 				continue
 			}
-			if s.pullOne(ctx, p, u) != taken {
+			if s.pullOne(ctx, p, u, true) != taken {
 				ok = false
 			}
 		}
@@ -882,7 +879,7 @@ func (s *PulledState) startRepair(ctx context.Context) {
 		}
 		seen[k] = true
 		p.current[k] = true
-		s.pullOne(ctx, p, u)
+		s.pullOne(ctx, p, u, false)
 	}
 }
 
@@ -1126,12 +1123,15 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 // commit per account made a walk page of 256 accounts cost 22 s on
 // BlockchainDB (#4461).
 //
-// The trust chain (pull.WholeAccounts) and the windowed accounts
-// (pull.WindowAccounts) are taken with their chains' entries and the
-// messages behind them, by pullOne, and so is every account of a repair
-// (taken whole). pullOne reads the account as the peer holds it now, a block
-// after the answer's; the answer's state is written over it, so the account
-// stands at the answer's block like every other (#4442; #4453 review F1).
+// Pulling the state takes account states and nothing else: no chain entry
+// and no message behind one, whatever the account (Paul, 2026-10-07). The
+// state is what enables the chains to be pulled, and they are pulled with
+// the histories, after the match: every account taken here is left to the
+// backfill. Only the spine step, once and first, takes the trust chain whole
+// and the windowed accounts by their window (pullOne). A state round took
+// the ledger's, the anchor pool's and the synthetic ledger's new entries on
+// every record answer, since every block changes them: 1,145 chain calls in
+// two minutes against 110 account-state calls (run 20261007T141334Z).
 // An account the answer holds no leaf for is deleted: at the answer's block
 // it does not exist, and a record after it names it if a block creates it.
 // That is the answer of a peer whose section is loaded, and one such answer
@@ -1145,9 +1145,8 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Source, states []*api.AccountState, blocks []uint64) map[[32]byte]bool {
 	taken := map[[32]byte]bool{}
 	type keeping struct {
-		st              *api.AccountState
-		block           uint64
-		whole, windowed bool
+		st    *api.AccountState
+		block uint64
 	}
 	var keep []keeping
 	opening := make([]*url.URL, 0, len(states))
@@ -1184,27 +1183,7 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 			taken[accountKey(u)] = true
 			continue
 		}
-		// The chains' entries and the messages behind them, to the answer's
-		// heads and no further (pull.TakeChainsAt).
-		window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
-		whole := s.takenWhole(u)
-		if whole || windowed {
-			srcs, _, err := s.sourcesFor(ctx, u)
-			if err == nil {
-				srcs = append([]pull.Source{src}, s.order(srcs)...)
-				k := accountKey(u)
-				_, err = pull.TakeChainsAt(ctx, srcs, s.db, st, block, whole, p.chainsTaken[k], window)
-				if err == nil {
-					p.chainsTaken[k] = true
-				}
-			}
-			if err != nil {
-				s.log.Info("An account's chains could not be taken to the answer's heads; it is asked for again",
-					"account", u, "block", block, "error", err)
-				continue
-			}
-		}
-		keep = append(keep, keeping{st, block, whole, windowed})
+		keep = append(keep, keeping{st, block})
 	}
 
 	list := make([]*api.AccountState, len(keep))
@@ -1233,11 +1212,9 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 		delete(p.retry, accountKey(u))
 		p.servedBy[sourceKey(src)] = true
 		taken[accountKey(u)] = true
-		if !k.whole {
-			// Taken by its heads, or its window: the rest is backfilled once
-			// the state has matched, in a repair too (#4519).
-			headOnly = append(headOnly, u)
-		}
+		// Taken by its state: its chains are backfilled once the state has
+		// matched, in a repair too (#4519).
+		headOnly = append(headOnly, u)
 	}
 	s.markHeadOnly(headOnly...)
 	return taken
@@ -1462,7 +1439,7 @@ const (
 // refuses -- a body served under another name (#4408), an answer with no body
 // (#4437), an entry with no message behind it (#4400) -- and the next peer is
 // asked.
-func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outcome {
+func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL, spine bool) outcome {
 	if !Routable(u) {
 		return dropped
 	}
@@ -1484,8 +1461,13 @@ func (s *PulledState) pullOne(ctx context.Context, p *syncing, u *url.URL) outco
 	// backfills (executor spec, "Sync", "Two mismatches", 2; #4519).
 	srcs = s.order(srcs)
 
+	// Chains only in the spine step: anywhere else the account is taken by
+	// its state and its chains are left to the backfill (takeStates).
 	window, windowed := pull.WindowAccounts(s.partition)[strings.ToLower(u.String())]
 	whole := s.takenWhole(u)
+	if !spine {
+		window, windowed, whole = 0, false, false
+	}
 	mode := pull.ModeStateOnly
 	switch {
 	case whole:

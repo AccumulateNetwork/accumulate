@@ -202,7 +202,7 @@ func TestJoin_AWholeChainPullHoldsAPageNotTheChain(t *testing.T) {
 
 	stop := make(chan struct{})
 	peak := peakHeap(stop, store)
-	got := s.pullOne(context.Background(), p, pool)
+	got := s.pullOne(context.Background(), p, pool, true)
 	close(stop)
 	seen := <-peak
 	grew := int64(seen[0]) - int64(base)
@@ -254,7 +254,7 @@ func TestJoin_APullKilledMidAccountResumes(t *testing.T) {
 	cut := &cutAfter{Source: src, n: 5, cancel: cancel}
 	s := diskState(node, here, servedAt{Source: cut, db: peer})
 	s.checkedHeld = true
-	require.Equal(t, owed, s.pullOne(ctx, newSyncing(), pool), "precondition: the pull was killed")
+	require.Equal(t, owed, s.pullOne(ctx, newSyncing(), pool, true), "precondition: the pull was killed")
 
 	// Killed there, the pages it took are on disk and the head is not.
 	func() {
@@ -274,7 +274,7 @@ func TestJoin_APullKilledMidAccountResumes(t *testing.T) {
 	t.Cleanup(func() { _ = node.Close() })
 	s = diskState(node, here, servedAt{Source: src, db: peer})
 	p := newSyncing()
-	require.Equal(t, taken, s.pullOne(context.Background(), p, pool), "the pool was not taken on resuming: %v", p.retry)
+	require.Equal(t, taken, s.pullOne(context.Background(), p, pool, true), "the pool was not taken on resuming: %v", p.retry)
 	requireSameChain(t, peer, node, pool, "anchor-sequence")
 
 	pb := peer.Begin(false)

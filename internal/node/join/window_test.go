@@ -102,7 +102,7 @@ func TestJoin_ThePoolIsTakenByItsWindowNotItsHistory(t *testing.T) {
 		s := diskState(node, here, servedAt{Source: src, db: peer, block: uint64(n)})
 		p := newSyncing()
 		began := time.Now()
-		require.Equal(t, taken, s.pullOne(context.Background(), p, pool), "the pool was not taken: %v", p.retry)
+		require.Equal(t, taken, s.pullOne(context.Background(), p, pool, true), "the pool was not taken: %v", p.retry)
 		took := time.Since(began)
 		c := cost{src.entries.Load(), src.messages.Load()}
 		t.Logf("a pool of %d blocks: %d chain entries and %d messages fetched before the handoff, in %v", n, c.entries, c.messages, took)

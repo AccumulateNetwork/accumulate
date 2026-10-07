@@ -89,8 +89,8 @@ func TestTheSourcesAreAskedInRotation(t *testing.T) {
 	p := newSyncing()
 
 	ctx := context.Background()
-	s.pullOne(ctx, p, alice)
-	s.pullOne(ctx, p, alice)
+	s.pullOne(ctx, p, alice, false)
+	s.pullOne(ctx, p, alice, false)
 	require.Equal(t, int64(5), balanceIn(t, db, alice), "the same peer was asked first both times")
 }
 
@@ -216,14 +216,14 @@ func TestAPeerWhoseAnswersBroughtNoMatchIsAskedLast(t *testing.T) {
 	// The pull handed off from took bob from a, and the root after it did
 	// not match.
 	s.sync = newSyncing()
-	s.pullOne(ctx, s.sync, bob)
+	s.pullOne(ctx, s.sync, bob, false)
 	require.Equal(t, int64(12), balanceIn(t, db, bob), "precondition: a answered first")
 	s.HandedOff(10)
 	s.RepairFrom(10)
 
 	s.sync = newSyncing()
 	for i := 0; i < 4; i++ {
-		s.pullOne(ctx, s.sync, bob)
+		s.pullOne(ctx, s.sync, bob, false)
 		require.Equal(t, int64(5), balanceIn(t, db, bob), "pull %d asked the peer whose answers brought no match first", i)
 	}
 }

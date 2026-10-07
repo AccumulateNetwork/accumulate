@@ -71,7 +71,7 @@ func TestARepairBackfillsNothing(t *testing.T) {
 
 			switch path {
 			case "pullOne":
-				require.Equal(t, taken, s.pullOne(ctx, p, bob), "bob was not taken: %v", p.retry)
+				require.Equal(t, taken, s.pullOne(ctx, p, bob, false), "bob was not taken: %v", p.retry)
 			case "records":
 				st, err := served.QueryAccountStates(ctx, here, &api.AccountStatesQuery{Accounts: []*url.URL{bob}})
 				require.NoError(t, err)
@@ -139,7 +139,7 @@ func repairWrongGrowth(t *testing.T, held int) {
 	p := newSyncing()
 	p.repair = true
 	ctx := context.Background()
-	require.Equal(t, taken, s.pullOne(ctx, p, bob), "bob was not taken: %v", p.retry)
+	require.Equal(t, taken, s.pullOne(ctx, p, bob, false), "bob was not taken: %v", p.retry)
 	requireSameHash(t, peer, node, bob)
 	require.Contains(t, s.headOnly, accountKey(bob), "bob is not left to the background backfill")
 

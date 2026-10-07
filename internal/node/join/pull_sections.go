@@ -269,7 +269,7 @@ func (s *PulledState) loadOpenedPage(ctx context.Context, p *syncing, srcs []pul
 		// holds one.
 		s.takeAccounts(ctx, p, append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...), stale)
 		for _, u := range unnamed {
-			s.pullOne(ctx, p, u)
+			s.pullOne(ctx, p, u, false)
 		}
 		for _, sec := range todo[:n] {
 			p.opened[sec] = true

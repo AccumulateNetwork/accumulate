@@ -95,10 +95,18 @@ func TestAnAccountWhosePartsDoNotHashToItsLeafIsRefused(t *testing.T) {
 	require.False(t, has(db), "alice was written from a reply whose parts do not hash to its leaf")
 	require.Contains(t, s.sync.retry, accountKey(alice), "alice was not owed after the only peer's reply was refused")
 
-	// a, then b: taken from b, as b serves her.
-	asked = 0
-	s, db = joining(bent, honest)
-	loadSectionOf(t, s, alice)
+	// a, then b: taken from b, as b serves her. The join rotates which peer
+	// it asks first, and where the rotation stands depends on every call
+	// before; it is started at each turn until a is asked first.
+	for turn := 0; turn < 4; turn++ {
+		asked = 0
+		s, db = joining(bent, honest)
+		s.pageTurn, s.sourceTurn = turn, turn
+		loadSectionOf(t, s, alice)
+		if asked > 0 {
+			break
+		}
+	}
 	require.NotZero(t, asked, "precondition: peer a was asked for alice")
 	require.True(t, has(db), "alice was not asked of the next peer")
 	require.Equal(t, int64(5), balanceIn(t, db, alice), "alice was taken from the peer whose reply does not hash to its leaf")
