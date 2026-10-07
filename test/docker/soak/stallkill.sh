@@ -95,11 +95,26 @@ except Exception: print("its distance from the decision not computed")
 
   # 4. Wait for soak.sh to finish recording before removing the containers —
   #    it reads them for the final logs and stream summary.
+  #    Our own soak.sh, by SOAK_PID: the name match sees the NEXT run's
+  #    soak.sh, and run 20261006T233857Z's watchdog waited out its ten
+  #    minutes on it and then removed the next run's first follower, 11 s
+  #    after it went ACTIVE (20261007T050444Z, 05:14:53Z). A soak.sh that
+  #    exits has removed its own late followers (rm_late_followers at its
+  #    teardown), so then there is nothing left for us to touch.
   local i
   for i in $(seq 1 120); do
-    pgrep -f 'bash \./soak\.sh' >/dev/null 2>&1 || break
+    if [ -n "${SOAK_PID:-}" ]; then
+      kill -0 "$SOAK_PID" 2>/dev/null || break
+    else
+      pgrep -f 'bash \./soak\.sh' >/dev/null 2>&1 || break
+    fi
     sleep 5
   done
+  if [ -n "${SOAK_PID:-}" ] && ! kill -0 "$SOAK_PID" 2>/dev/null; then
+    log "stallkill: soak.sh $SOAK_PID finished its own teardown; touching nothing"
+    log "stallkill: run stopped"
+    return 0
+  fi
 
   # 5. Down. Pinned project, so this can only ever reach the soak network.
   #    Not when the run attached (ATTACH=1, passed by soak.sh from its config):
