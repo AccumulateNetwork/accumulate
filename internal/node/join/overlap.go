@@ -55,6 +55,12 @@ type overlap struct {
 	// ask bounds how long one block asks the peers for its record.
 	ask time.Duration
 
+	// loading reports whether any section of the state tree is not loaded
+	// yet. The overlap does not end while one is: a block executed alone that
+	// loads a cold section takes it as its peers hold it now, after the block,
+	// and diverges -- the clean run is a run of blocks with everything loaded.
+	loading func() bool
+
 	// repairs records each block that left accounts other than their record
 	// (executor spec, "Sync", §3b).
 	repairs *repairs
@@ -750,14 +756,14 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 	if o.clean < o.blocks {
 		return
 	}
-	// The fill is not waited for: a block that loads a section in-line
-	// takes it as of this node's own block, checked against the marker's
-	// hash (sections.Load), so a cold section cannot bring a later state
-	// into a block (the divergence of run 20261002T090546Z, before the
-	// sectioned sync). Waiting settled every block for as long as the fill
-	// ran -- 95 blocks at ~8 s each, the follower 700 blocks behind at the
-	// end (#4554, run 20261008T180957Z). Synced is the match and executing
-	// in agreement; the fill is background work (Paul, 2026-10-08).
+	if o.loading != nil && o.loading() {
+		// "Eventually everything settles out": a clean run before every
+		// section is loaded is not settled. Run 20261002T090546Z: BVN1
+		// matched at 10818, ran 5 clean buffered blocks with 808 sections
+		// not loaded, and block 10824, executed alone, loaded a section as
+		// its peers held it after 10824 and diverged.
+		return
+	}
 	o.active = false
 	o.endedAt = n
 	o.log.Info("The overlap is over: the node executes alone",

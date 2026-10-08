@@ -1605,17 +1605,20 @@ hold begins at the first block whose root its signed anchor proves (the
 line "its own root matched its signed anchor"), and past `SyncedHold` blocks
 with no regression it says it is synced the same way (run 20261003T182050Z:
 acc-bvn3-fol1 resumed, was proved, ran caught up, and never said it was
-synced). **The overlap does not wait for the fill** (#4554, Paul, 2026-10-08:
-synced is the match and executing in agreement; the fill is background
-work). A block that loads a section in-line takes it as of the node's own
-block and checks it against the marker's hash (§3a), so a cold section
-cannot bring a later state into a block — the divergence of run
-20261002T090546Z (BVN1 matched at 10818, ran 5 clean buffered blocks with
-808 sections not loaded, and block 10824, executed alone, loaded a section
-as the peers held it after the block) predates the sectioned sync. Waiting
-settled every block for as long as the fill ran: 95 blocks at ~8 s each,
-the follower 700 blocks behind at the overlap's end and its hold failed
-(run 20261008T180957Z, `TestTheOverlapEndsOnItsCleanBlocksWhateverTheFillIsDoing`). A staging error is
+synced). A clean run
+before every section is loaded is not settled: a block executed alone that
+loads a cold section takes it as its peers hold it after the block and
+diverges (run 20261002T090546Z: BVN1 matched at 10818, ran 5 clean buffered
+blocks with 808 sections not loaded, and block 10824 diverged). *This is
+not a condition of being synced — synced is the match and executing in
+agreement (Paul, 2026-10-08) — it is what the no-retention decision costs:
+a peer cannot answer a cold section as of an old block, so a cold load
+after the overlap takes the later state, and the test that removed the wait
+diverged at the root watch exactly so (`TestTheOverlapHoldsWhileASectionIsNotLoaded`,
+#4554). The overlap therefore lasts as long as the fill, and the fill's
+speed is what bounds how far a follower falls behind after its match: 95
+settled blocks at ~8 s each and 700 blocks behind on run 20261008T180957Z.*
+A staging error is
 repaired by the same loop; nothing at the handoff pulls staging. A
 section loaded from the peers' current state during the overlap cannot make
 the root differ: the records set the states the anchor commits to (#4495).

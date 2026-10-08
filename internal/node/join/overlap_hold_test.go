@@ -45,21 +45,3 @@ func TestTheOverlapsEndHoldsOnlyWithoutARegression(t *testing.T) {
 		require.Equal(t, uint64(12), o.endedAt, "a demotion after the hold withdrew a synced node's overlap end")
 	})
 }
-
-// TestTheOverlapEndsOnItsCleanBlocksWhateverTheFillIsDoing — #4554, run
-// 20261008T180957Z: the overlap stayed open while any section was not
-// loaded, so it settled every block for as long as the fill ran -- 95 blocks
-// at ~8 s each, the follower 700 blocks behind at its end. Being synced is
-// the match and executing in agreement; the fill is background work. A
-// block that loads a section in-line takes it as of the node's own block
-// and checks it against the marker's hash (sections.Load), so a cold
-// section cannot bring a later state into a block: the overlap ends at its
-// clean blocks whether or not the fill is done.
-func TestTheOverlapEndsOnItsCleanBlocksWhateverTheFillIsDoing(t *testing.T) {
-	o := &overlap{partition: protocol.PartitionUrl("BVN1"), label: "BVN1", log: slog.Default(), blocks: 2}
-	o.start(10)
-	o.done(11, true, 0)
-	o.done(12, true, 0)
-	require.Equal(t, uint64(12), o.endedAt, "the overlap stayed open after its clean blocks because the fill was still running")
-	require.False(t, o.active)
-}
