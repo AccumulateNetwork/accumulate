@@ -727,6 +727,156 @@ func statesAt(ctx context.Context, src pull.Source, partition *url.URL, urls []*
 	return out, nil
 }
 
+// fillSpan pages one peer's tree from the highest of span, as of h, and
+// makes ready every section of span the page covers whole whose leaves hash
+// to its marker, with one states call for all of their leaves. A section the
+// page does not cover whole -- larger than a page -- is loaded alone
+// (fetch). A section whose leaves do not hash to its marker changed after h
+// and is left to the block that touches it. It returns how many of span,
+// from the front, the page covered, and false when no peer served the page.
+func (x *sections) fillSpan(ctx context.Context, srcs []pull.Source, span []bpt.Section, h uint64) (int, bool) {
+	if len(span) == 0 {
+		return 0, true
+	}
+	top := span[0]
+	if n := len(srcs); n > 1 {
+		turn := int(x.turn.Add(1) % uint64(n))
+		srcs = append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...)
+	}
+	for _, src := range srcs {
+		if ctx.Err() != nil {
+			return 0, false
+		}
+		at := h
+		page, err := src.QueryBptPage(ctx, x.partition, &api.BptPageQuery{StartHash: top.ScanStart(), Count: sectionPage, ForHeight: at})
+		if err != nil && at != 0 {
+			if _, notLoaded := database.NotLoadedOf(err); !notLoaded {
+				// A peer that cannot answer as of h answers its current
+				// tree: a section whose leaves still hash to its marker
+				// has not changed since, and is taken (DIFFERENCES E29).
+				at = 0
+				page, err = src.QueryBptPage(ctx, x.partition, &api.BptPageQuery{StartHash: top.ScanStart(), Count: sectionPage})
+			}
+		}
+		if err != nil || (at != 0 && page.Block > at) {
+			continue
+		}
+
+		// The leaves by section, and the sections the page covers whole:
+		// every one above the section its last leaf is in, or every one
+		// when the page is the tree's last.
+		bySection := map[bpt.Section][]bpt.SectionLeaf{}
+		urlsBy := map[bpt.Section][]*url.URL{}
+		var lastSec bpt.Section
+		seen, bad := false, false
+		for _, e := range page.Entries {
+			if e == nil {
+				continue
+			}
+			es := bpt.SectionOf(e.KeyHash)
+			if es > top {
+				continue
+			}
+			if e.Account == nil || [32]byte(keys.NewKey("Account", e.Account).Hash()) != e.KeyHash {
+				bad = true
+				break
+			}
+			bySection[es] = append(bySection[es], bpt.SectionLeaf{KeyHash: e.KeyHash, Hash: e.ValueHash})
+			urlsBy[es] = append(urlsBy[es], e.Account)
+			lastSec, seen = es, true
+		}
+		if bad {
+			continue
+		}
+		n := 0
+		switch {
+		case page.Done:
+			n = len(span)
+		case seen:
+			for n < len(span) && span[n] > lastSec {
+				n++
+			}
+		}
+		if n == 0 {
+			// Larger than a page: loaded alone, as every section was.
+			want, ok := x.expected(top)
+			if !ok {
+				return 1, true
+			}
+			ld, _, err := x.fetch(ctx, top, h, want, false)
+			if err != nil {
+				x.log.Debug("A section could not be loaded by the fill; it is asked again", "partition", x.partition, "section", top, "block", h, "error", err)
+				return 1, false
+			}
+			x.makeReady(ld)
+			return 1, true
+		}
+
+		// The sections that hash to their markers, and their leaves.
+		type candidate struct {
+			section bpt.Section
+			hash    [32]byte
+			leaves  []bpt.SectionLeaf
+			urls    []*url.URL
+		}
+		var cands []*candidate
+		var all []*url.URL
+		for _, sec := range span[:n] {
+			want, ok := x.expected(sec)
+			if !ok {
+				continue
+			}
+			leaves := bySection[sec]
+			got, ok := bpt.SectionHash(leaves)
+			if !ok || got != want {
+				continue
+			}
+			cands = append(cands, &candidate{sec, got, leaves, urlsBy[sec]})
+			all = append(all, urlsBy[sec]...)
+		}
+		if len(cands) == 0 {
+			return n, true
+		}
+		states, err := statesAt(ctx, src, x.partition, all, at)
+		if err != nil && at != 0 {
+			// An account the peer did not retain as of h: its current
+			// state, which is as of h for a section unchanged since.
+			states, err = statesAt(ctx, src, x.partition, all, 0)
+		}
+		if err != nil {
+			x.log.Debug("A span's states could not be taken by the fill; it is asked again", "partition", x.partition, "section", top, "sections", len(cands), "error", err)
+			continue
+		}
+		i := 0
+		for _, c := range cands {
+			ld := &loadedSection{section: c.section, block: page.Block, hash: c.hash, leaves: c.leaves, states: states[i : i+len(c.urls)]}
+			i += len(c.urls)
+			ok := true
+			for j, st := range ld.states {
+				if err := pull.CheckState(st); err != nil || st.LeafHash != ld.leaves[j].Hash {
+					ok = false
+					break
+				}
+			}
+			if ok {
+				x.makeReady(ld)
+			}
+		}
+		return n, true
+	}
+	return 0, false
+}
+
+// makeReady hands a loaded section to the next block, unless a block loaded
+// it meanwhile.
+func (x *sections) makeReady(ld *loadedSection) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	if x.notLoaded[ld.section].Load() {
+		x.ready[ld.section] = ld
+	}
+}
+
 // fill loads every section not loaded, in key order, as of the block the
 // node last committed, and hands each to the next block's batch to write
 // (Opened). It never commits: a commit beside a block's would write tree
@@ -765,7 +915,10 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			}
 			continue
 		}
-		sort.Slice(todo, func(i, j int) bool { return todo[i] < todo[j] })
+		// Highest first: a page of the tree runs downward from the section
+		// it starts in, so a span's page covers the sections below its
+		// first (loadOpened).
+		sort.Slice(todo, func(i, j int) bool { return todo[i] > todo[j] })
 		h, err := x.committedBlock()
 		if err != nil {
 			if !pause(ctx, backfillPause) {
@@ -773,13 +926,35 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			}
 			continue
 		}
-		// statesInFlight loads at a time against each peer (#4535): a load
-		// is a page and a states call, ~200 ms of a validator's I/O, and
-		// one after another a tree of 4,000 sections took seven minutes.
+		// A span at a time, statesInFlight against each peer: one page of
+		// the tree from the span's highest section covers every section the
+		// page runs past, and one states call brings their leaves (#4554; a
+		// section a page at a time, ~23 leaves, was 3.5 sections a second
+		// under the follower's own gate, thirteen minutes for 3,500, and the
+		// overlap settled every block for as long). The first page sizes
+		// the spans, as the pull's rounds are sized (#4549).
+		srcs := x.peers(ctx)
+		if len(srcs) == 0 {
+			if !pause(ctx, backfillPause) {
+				return
+			}
+			continue
+		}
 		var failed atomic.Int32
-		slots := make(chan struct{}, max(1, statesInFlight*len(x.peers(ctx))))
+		covered, ok := x.fillSpan(ctx, srcs, todo, h)
+		if !ok {
+			failed.Add(1)
+		}
+		todo = todo[covered:]
+		var spans [][]bpt.Section
+		for len(todo) > 0 {
+			k := min(len(todo), max(1, covered))
+			spans = append(spans, todo[:k])
+			todo = todo[k:]
+		}
+		slots := make(chan struct{}, max(1, statesInFlight*len(srcs)))
 		var wg sync.WaitGroup
-		for _, s := range todo {
+		for _, span := range spans {
 			if ctx.Err() != nil || !active() {
 				break
 			}
@@ -789,29 +964,20 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			if full {
 				break
 			}
-			want, ok := x.expected(s)
-			if !ok {
-				continue
-			}
 			slots <- struct{}{}
 			wg.Add(1)
-			// Only a section that hashes to its marker: one that a block
-			// after h changed is loaded by the block that touches it.
-			go func(s bpt.Section, want [32]byte) {
+			go func(span []bpt.Section) {
 				defer wg.Done()
 				defer func() { <-slots }()
-				ld, _, err := x.fetch(ctx, s, h, want, false)
-				if err != nil {
-					failed.Add(1)
-					x.log.Debug("A section could not be loaded by the fill; it is asked again", "partition", x.partition, "section", s, "block", h, "error", err)
-					return
+				for len(span) > 0 && ctx.Err() == nil {
+					n, ok := x.fillSpan(ctx, srcs, span, h)
+					if !ok {
+						failed.Add(1)
+						return
+					}
+					span = span[n:]
 				}
-				x.mu.Lock()
-				if x.notLoaded[s].Load() {
-					x.ready[s] = ld
-				}
-				x.mu.Unlock()
-			}(s, want)
+			}(span)
 		}
 		wg.Wait()
 		if failed.Load() > 0 && !pause(ctx, backfillPause) {

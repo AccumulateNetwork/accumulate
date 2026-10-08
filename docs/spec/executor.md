@@ -1482,8 +1482,19 @@ produced, and `The block was held past its bound` when the node gives it up.
 **The fill.** A goroutine of its own, beside the backfill and with its
 lifecycle (#4472): started after each handoff, stopped — and waited for —
 before the node is demoted and pulls again, and when the join ends. It loads
-the sections still not loaded, in key order, as the peers hold them now,
-taking only an answer that hashes to the section's marker, and **hands each to the next block's batch to write**; it never
+the sections still not loaded, highest first, as of the block the node last
+committed, taking only an answer that hashes to the section's marker, and
+**hands each to the next block's batch to write**. **It loads them in
+spans** (#4554): one page of 256 leaves from the highest section not loaded
+covers every section the page runs past, and one `AccountStates` call
+brings the leaves of all of them that hash to their markers — a page and a
+states call per span of sections, not per section (`fillSpan`,
+`TestTheFillLoadsSectionsInSpans`: 1,565 sections of 2,000 accounts in 8
+pages and 8 states calls, against 1,601 and 1,565 a section at a time); a
+section larger than a page is loaded alone. A section at a time was 3.5
+sections a second under the follower's own gate, thirteen minutes for
+3,500 sections, and the overlap settled every block for as long (run
+20261008T180957Z). It never
 commits itself, because a commit beside the block's would write tree nodes
 the block's batch also holds, and the later commit would put back the earlier
 one's marker. A loaded section waiting for a block is written only if its
