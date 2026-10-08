@@ -227,13 +227,14 @@ func (s *PulledState) Backfill(ctx context.Context) {
 }
 
 // backfillAllowed is whether the history backfill may run now: this
-// partition is ACTIVE, every section of its tree is loaded, and, when the
-// daemon set one, its gate holds -- every partition of the node is ACTIVE
-// (StateOptions.BackfillWhen, #4550). History comes after the state: while
-// the fill loads sections the overlap settles every block, and the
-// backfill's chain queries queued the fill's loads and the settle's reads
-// behind them on the node's gate -- a follower crawled at 6–12 s a block for
-// thirteen minutes after its match (#4554, run 20261008T180957Z).
+// partition is ACTIVE, the fill has loaded every section of its tree, and,
+// when the daemon set one, its gate holds -- every partition of the node is
+// ACTIVE (StateOptions.BackfillWhen, #4550). Neither the fill nor the
+// backfill is part of being synced; both are background work, and the fill
+// comes first: a block that touches a section not loaded loads it in-line,
+// so the fill is what keeps blocks cheap, while the backfill's chain
+// queries only queued the fill's loads behind them on the node's gate
+// (#4554, run 20261008T180957Z: every call waited ~4.5 s).
 func (s *PulledState) backfillAllowed() bool {
 	return s.machine.State() == nodestate.StateActive && !s.secs.AnyNotLoaded() && (s.backfillWhen == nil || s.backfillWhen())
 }

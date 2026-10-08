@@ -713,14 +713,15 @@ Directory's backfill otherwise pulls hundreds of thousands of entries from
 the validators the BVN's state pull is reading, through the same per-peer
 gate (run 20261007T141334Z: 850 chain queries a minute, three times the BVN
 pull's validator time; `StateOptions.BackfillWhen`,
-`TestTheBackfillWaitsForEveryPartitionOfTheNode`) — **and every section of
-the partition's tree is loaded** (#4554: while the fill loads sections the
-overlap settles every block, and the backfill's twenty chain queries a
-second queued the fill's loads and the settle's reads behind them on the
-node's per-peer gate, every call waiting ~4.5 s; a follower crawled at 6–12
-s a block for thirteen minutes after its match and its hold ended 216 blocks
-behind, run 20261008T180957Z; `TestTheBackfillWaitsForTheSectionFill`) — the
-backfill brings
+`TestTheBackfillWaitsForEveryPartitionOfTheNode`) — **and after the fill
+has loaded every section** (#4554). Neither is a condition of being synced
+— synced is the match and executing in agreement (Paul, 2026-10-08) — it
+is an order between two background tasks: the fill keeps blocks cheap (a
+block that touches a section not loaded loads it in-line), and the
+backfill's twenty chain queries a second only queued the fill's loads
+behind them on the node's per-peer gate, every call waiting ~4.5 s (run
+20261008T180957Z; `TestTheBackfillWaitsForTheSectionFill`) — the backfill
+brings
 those accounts in while the node executes (`pull.Backfill`): the entries below each chain's open mark set, the mark
 points that close their sets, and the message behind every entry. It
 writes nothing at or above a chain's head, so it does not race the blocks the
@@ -1604,11 +1605,17 @@ hold begins at the first block whose root its signed anchor proves (the
 line "its own root matched its signed anchor"), and past `SyncedHold` blocks
 with no regression it says it is synced the same way (run 20261003T182050Z:
 acc-bvn3-fol1 resumed, was proved, ran caught up, and never said it was
-synced). A clean run
-before every section is loaded is not settled: a block executed alone that
-loads a cold section takes it as its peers hold it after the block and
-diverges (run 20261002T090546Z: BVN1 matched at 10818, ran 5 clean buffered
-blocks with 808 sections not loaded, and block 10824 diverged). A staging error is
+synced). **The overlap does not wait for the fill** (#4554, Paul, 2026-10-08:
+synced is the match and executing in agreement; the fill is background
+work). A block that loads a section in-line takes it as of the node's own
+block and checks it against the marker's hash (§3a), so a cold section
+cannot bring a later state into a block — the divergence of run
+20261002T090546Z (BVN1 matched at 10818, ran 5 clean buffered blocks with
+808 sections not loaded, and block 10824, executed alone, loaded a section
+as the peers held it after the block) predates the sectioned sync. Waiting
+settled every block for as long as the fill ran: 95 blocks at ~8 s each,
+the follower 700 blocks behind at the overlap's end and its hold failed
+(run 20261008T180957Z, `TestTheOverlapEndsOnItsCleanBlocksWhateverTheFillIsDoing`). A staging error is
 repaired by the same loop; nothing at the handoff pulls staging. A
 section loaded from the peers' current state during the overlap cannot make
 the root differ: the records set the states the anchor commits to (#4495).
