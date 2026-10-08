@@ -24,7 +24,7 @@ import (
 // and "an AccountStates answer serves it with no body, so the asker asks the
 // next peer", naming the peers to ask. A store holding alice's section by its
 // hash alone answers alice as not loaded -- the section and the peers to ask
-// -- by both batch calls, never NoLeaf; an account that does not exist, in a
+// -- by AccountStates, never NoLeaf; an account that does not exist, in a
 // section the store holds whole, is still NoLeaf.
 func TestAnAccountInASectionNotLoadedIsNotServedAsNoLeaf(t *testing.T) {
 	here := protocol.PartitionUrl("BVN0")
@@ -89,19 +89,6 @@ func TestAnAccountInASectionNotLoadedIsNotServedAsNoLeaf(t *testing.T) {
 		rec, err := q.QueryAccountStates(context.Background(), here, &api.AccountStatesQuery{Accounts: []*url.URL{alice, bob, nobody}})
 		require.NoError(t, err)
 		require.Len(t, rec.States, 3)
-		check(t, rec.States)
-	})
-
-	t.Run("ChangedAccountStates", func(t *testing.T) {
-		b := db.Begin(true)
-		require.NoError(t, b.Account(here.JoinPath(protocol.Ledger)).BlockLedger(10).Put(&database.BlockLedger{Index: 10, Entries: []*protocol.BlockEntry{
-			{Account: alice, Chain: "main", Index: 1},
-			{Account: bob, Chain: "main", Index: 1},
-		}}))
-		require.NoError(t, b.Commit())
-		rec, err := q.QueryChangedAccountStates(context.Background(), here, &api.ChangedAccountStatesQuery{After: 9})
-		require.NoError(t, err)
-		require.Len(t, rec.States, 2)
 		check(t, rec.States)
 	})
 

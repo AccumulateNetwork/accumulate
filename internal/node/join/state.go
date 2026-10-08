@@ -64,9 +64,6 @@ import (
 // answers from the node's own store for any service it provides, which for a
 // joining node is the un-executed store the pull exists to fill (#4303).
 type PulledState struct {
-	// refusedAnswers counts the records answers refused (recordsOnce).
-	refusedAnswers int
-
 	partition *url.URL
 	sources   Sources
 
@@ -792,11 +789,11 @@ func (s *PulledState) Pull(ctx context.Context) error {
 		}
 	}
 
-	// 1. The records: ChangedAccountStates after L, every page of it. Every
-	// account it answers is written and marked current, and L moves to the
-	// records' end T. Every account is marked current as the records name
-	// it, whether or not it is taken this round, so the walk never writes
-	// over it.
+	// 1. The records: ChangedAccountStates after L, one answer. L moves to
+	// the records' end T, and the states of the accounts they name are
+	// asked at once, as of T (#4552). Every account is marked current as
+	// the records name it, whether or not it is taken this round, so the
+	// walk never writes over it.
 	round.mark("top+spine")
 	s.processRecords(ctx, p, peer)
 	round.mark("records")
@@ -901,52 +898,38 @@ func (s *PulledState) startRepair(ctx context.Context) {
 	}
 }
 
-// maxRecordCallsPerRound bounds how many ChangedAccountStates pages one round
-// asks for, so a partition far ahead cannot make one round endless. The next
-// round goes on from L.
-const maxRecordCallsPerRound = 64
+// maxRecordAnswersPerRound bounds how many ChangedAccountStates answers one
+// round asks for, so a partition far ahead cannot make one round endless. The
+// next round goes on from L.
+const maxRecordAnswersPerRound = 64
 
 // processRecords processes the block-ledger records after L (executor spec,
-// "Sync", §3, step 1): ChangedAccountStates with After = L, every page of it,
-// asked of the peer whose ledger named the lowest block -- the round's target
-// -- and then of the others in the order of the blocks they named, so one
-// peer naming a block far ahead does not carry L there (#4438 threat F3). An
-// answer covers the records through its T, which the peer caps at its own
-// block and at a span of records; L moves to T, and a peer with records past
-// T is asked again from there, within the round's calls, until L reaches the
-// round's target. It does not go past the target in one round: under load an
-// answer of many pages ends at a view newer than its T, and chasing that view
-// kept a join in its first round's records for as long as an answer took
-// about as long as the blocks it covered (#4442, Docker 20260928T051402Z:
-// the BVN pull never reached its walk). The next round goes on from L. A page
-// that cannot be read stops the round's records there, and the next round
-// asks again from L.
+// "Sync", §3, step 1): ChangedAccountStates with After = L, asked of the peer
+// whose ledger named the lowest block -- the round's target -- and then of
+// the others in the order of the blocks they named, so one peer naming a
+// block far ahead does not carry L there (#4438 threat F3). An answer is the
+// records through its T, which the peer caps at its own block and at a span
+// of records; L moves to T, and the states of every account the records name
+// are asked as of T, statesChunk a call and statesInFlight against each peer
+// at once, the answer's peer first (#4552) -- an account no peer serves is
+// owed. A peer with records past T is asked again from there, within the
+// round's answers, until L reaches the round's target. It does not go past
+// the target in one round: under load the states end at a view newer than
+// their T, and chasing that view kept a join in its first round's records
+// for as long as an answer took about as long as the blocks it covered
+// (#4442, Docker 20260928T051402Z: the BVN pull never reached its walk). The
+// next round goes on from L.
 func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peersAt) {
-	calls := 0
-	for i := 0; i < len(peer.sources) && ctx.Err() == nil && calls < maxRecordCallsPerRound; {
+	for i, answers := 0, 0; i < len(peer.sources) && ctx.Err() == nil && answers < maxRecordAnswersPerRound; answers++ {
 		src := peer.sources[i]
-		through, block, n, err := s.recordsOnce(ctx, p, src)
-		calls += n
-		switch {
-		case err == nil:
-		case errors.Is(err, errRefusedAnswer):
-			// Nothing of it was written: another peer is asked.
-			s.refusedAnswers++
-			s.log.Info("A peer's answer of the block-ledger records was refused; the next is asked",
-				"partition", s.partition, "peer", sourceKey(src), "after", p.last, "error", err)
-			i++
-			continue
-		case n <= 1:
-			// The first page was not served: another peer is asked.
+		through, block, named, err := s.recordsOnce(ctx, p, src)
+		if err != nil {
 			s.log.Info("A peer did not answer the block-ledger records; the next is asked",
 				"partition", s.partition, "peer", sourceKey(src), "after", p.last, "error", err)
 			i++
 			continue
-		default:
-			s.log.Info("A page of the block-ledger records could not be read; the records go on from here next round",
-				"partition", s.partition, "peer", sourceKey(src), "after", p.last, "error", err)
-			return
 		}
+		after := p.last
 		p.last = through
 		if through < block {
 			// The answer was cut short by the peer's cap on blocks per
@@ -955,102 +938,57 @@ func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peers
 			s.log.Info("The block-ledger records after L were more blocks than one answer covers; the join has fallen behind",
 				"partition", s.partition, "peer", sourceKey(src), "through", through, "peer-block", block)
 		}
+
+		// The states, as of T (askStates asks as of L), the answer's peer
+		// first.
+		started := s.clock()
+		srcs := append(append(make([]pull.Source, 0, len(peer.sources)), peer.sources[i:]...), peer.sources[:i]...)
+		kept := s.keepStates(ctx, p, s.askStates(ctx, p, srcs, named))
+		took := s.clock().Sub(started)
+		perSecond := 0.0
+		if took > 0 {
+			perSecond = float64(kept) / took.Seconds()
+		}
+		s.log.Info("Took the accounts the records name",
+			"partition", s.partition, "blocks", through-after, "accounts", len(named), "owed", len(named)-kept,
+			"took", took.Round(time.Millisecond), "accounts-per-second", int(perSecond))
 		if through >= block || through >= peer.block {
 			return
 		}
 	}
 }
 
-// RefusedRecordAnswers is how many answers of the block-ledger records this
-// join has refused. An honest peer's answer is never refused.
-func (s *PulledState) RefusedRecordAnswers() int { return s.refusedAnswers }
-
-// errRefusedAnswer is an answer of the records refused whole: nothing of it
-// is written, and the next peer is asked.
-var errRefusedAnswer = errors.Conflict.With("the answer was refused")
-
-// recordsOnce asks one peer for one answer of ChangedAccountStates after L,
-// every page of it, and takes it: the block-ledger records it carries, and
-// every account they name (#4461). The answer is taken whole or not at all.
-// Its pages are held until the last, and the records must name exactly the
-// accounts the pages serve: an answer that leaves out an account a record
-// names, or serves one no record names, is refused, nothing of it is written,
-// and the next peer is asked. The accounts of a taken answer are marked
-// current by the records' names and written in one commit. It returns the
-// records' end T, the block the last page was read at, and how many pages it
-// asked for.
-func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Source) (through, block uint64, calls int, err error) {
+// recordsOnce asks one peer for the block-ledger records after L, one
+// answer, and takes what they name: every account a record names is marked
+// current and its section opened, so the walk never writes over it. It
+// returns the records' end T, the block the answer was read at, and the
+// accounts the records name, in a fixed order. The records are the peer's
+// word; the match proves what they led the node to take.
+func (s *PulledState) recordsOnce(ctx context.Context, p *syncing, src pull.Source) (through, block uint64, named []*url.URL, err error) {
 	after := p.last
-	var cursor []byte
-	var records []*api.BlockLedgerRecord
-	var states []*api.AccountState
-	var blocks []uint64
-	answered := map[[32]byte]bool{}
-	highest := uint64(0)
-	p.part = nil
-	for {
-		calls++
-		rec, err := src.QueryChangedAccountStates(ctx, s.partition, &api.ChangedAccountStatesQuery{After: after, Cursor: cursor})
-		if err != nil {
-			return 0, 0, calls, errors.UnknownError.Wrap(err)
-		}
-		if rec == nil {
-			return 0, 0, calls, errors.Conflict.With("the peer answered nothing")
-		}
-		if rec.Through < after || rec.Block < rec.Through || cursor != nil && rec.Through != through {
-			return 0, 0, calls, errors.Conflict.WithFormat("the peer answered the records after %d through %d at block %d", after, rec.Through, rec.Block)
-		}
-		if cursor == nil {
-			records = rec.Records
-		}
-		through, block = rec.Through, rec.Block
-		highest = max(highest, block)
-		if rec.Part != nil && rec.Part.Url != nil {
-			answered[accountKey(rec.Part.Url)] = true
-		}
-		for _, st := range s.statesOf(p, rec) {
-			if st.Url == nil {
-				continue
-			}
-			answered[accountKey(st.Url)] = true
-			states = append(states, st)
-			blocks = append(blocks, rec.Block)
-		}
-		if len(rec.Cursor) == 0 {
-			break
-		}
-		cursor = rec.Cursor
-	}
-
-	named, err := namedByRecords(records, after, through)
-	switch {
-	case err != nil:
-	default:
-		err = coversExactly(named, answered)
-	}
+	rec, err := src.QueryChangedAccountStates(ctx, s.partition, &api.ChangedAccountStatesQuery{After: after})
 	if err != nil {
-		return 0, 0, calls, fmt.Errorf("%w: records after %d through %d: %w", errRefusedAnswer, after, through, err)
+		return 0, 0, nil, errors.UnknownError.Wrap(err)
 	}
-
-	p.highest = max(p.highest, highest)
-	opening := make([]*url.URL, 0, len(named))
-	for _, u := range named {
-		opening = append(opening, u)
+	if rec == nil {
+		return 0, 0, nil, errors.Conflict.With("the peer answered nothing")
 	}
-	s.openFor(p, opening...)
-	for k, u := range named {
+	if rec.Through < after || rec.Block < rec.Through {
+		return 0, 0, nil, errors.Conflict.WithFormat("the peer answered the records after %d through %d at block %d", after, rec.Through, rec.Block)
+	}
+	names, err := namedByRecords(rec.Records, after, rec.Through)
+	if err != nil {
+		return 0, 0, nil, errors.Conflict.WithFormat("records after %d through %d: %w", after, rec.Through, err)
+	}
+	p.highest = max(p.highest, rec.Block)
+	named = make([]*url.URL, 0, len(names))
+	for k, u := range names {
+		named = append(named, u)
 		p.current[k] = true
-		if !answered[k] {
-			p.retry[k] = u
-		}
 	}
-	taken := s.takeStates(ctx, p, src, states, blocks)
-	for _, st := range states {
-		if !taken[accountKey(st.Url)] {
-			p.retry[accountKey(st.Url)] = st.Url
-		}
-	}
-	return through, block, calls, nil
+	sort.Slice(named, func(i, j int) bool { return named[i].String() < named[j].String() })
+	s.openFor(p, named...)
+	return rec.Through, rec.Block, named, nil
 }
 
 // namedByRecords is every account the records name, by the rule the peer
@@ -1072,23 +1010,6 @@ func namedByRecords(records []*api.BlockLedgerRecord, after, through uint64) (ma
 		}
 	}
 	return named, nil
-}
-
-// coversExactly says whether the accounts an answer served are exactly those
-// its records name.
-func coversExactly(named map[[32]byte]*url.URL, answered map[[32]byte]bool) error {
-	for k, u := range named {
-		if !answered[k] {
-			return errors.Conflict.WithFormat("a record names %v and the answer does not serve it", u)
-		}
-	}
-	for k := range answered {
-		k := k
-		if _, ok := named[k]; !ok {
-			return errors.Conflict.WithFormat("the answer serves an account no record names (%x)", k[:8])
-		}
-	}
-	return nil
 }
 
 // statePart is an account answered in parts: the bytes of its marshalled
@@ -1133,13 +1054,21 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 	return append(append([]*api.AccountState(nil), out...), st)
 }
 
-// takeStates writes the accounts one answer serves, or hands each to the
-// pull that takes it another way, and returns those whose answer was taken. An
-// answer refused is that peer's: the account is asked of the next peer, or
-// owed. Every account written by its served state is written in one commit
-// (pull.KeepStates), and what is left to backfill is recorded in one more: a
-// commit per account made a walk page of 256 accounts cost 22 s on
-// BlockchainDB (#4461).
+// A keeping is one served state the pull is about to write: the state, the
+// block of the view it was read from, the peer that served it, and whether
+// it was taken whole or by its window.
+type keeping struct {
+	st              *api.AccountState
+	block           uint64
+	src             pull.Source
+	whole, windowed bool
+}
+
+// prepareStates takes what one answer serves that is not written by its
+// served state, hands each account to the pull that takes it another way,
+// and returns the states left to write (commitStates) and the accounts
+// settled here. An answer refused is that peer's: the account is asked of
+// the next peer, or owed.
 //
 // The trust chain (pull.WholeAccounts) and the windowed accounts
 // (pull.WindowAccounts) are taken with their chains' entries and the
@@ -1157,13 +1086,8 @@ func (s *PulledState) statesOf(p *syncing, rec *api.AccountStatesRecord) []*api.
 // as served (pull.KeepStates).
 //
 // blocks[i] is the block of the view states[i] was read from.
-func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Source, states []*api.AccountState, blocks []uint64) map[[32]byte]bool {
+func (s *PulledState) prepareStates(ctx context.Context, p *syncing, src pull.Source, states []*api.AccountState, blocks []uint64) ([]keeping, map[[32]byte]bool) {
 	taken := map[[32]byte]bool{}
-	type keeping struct {
-		st              *api.AccountState
-		block           uint64
-		whole, windowed bool
-	}
 	var keep []keeping
 	opening := make([]*url.URL, 0, len(states))
 	for _, st := range states {
@@ -1219,9 +1143,21 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 				continue
 			}
 		}
-		keep = append(keep, keeping{st, block, whole, windowed})
+		keep = append(keep, keeping{st, block, src, whole, windowed})
 	}
+	return keep, taken
+}
 
+// commitStates writes the served states in one commit (pull.KeepStates),
+// records what is left to backfill in one more, and returns the accounts
+// written. A commit per account made a walk page of 256 accounts cost 22 s
+// on BlockchainDB (#4461); the states of every answer a round's chunks
+// brought are written together (#4552).
+func (s *PulledState) commitStates(ctx context.Context, p *syncing, keep []keeping) map[[32]byte]bool {
+	taken := map[[32]byte]bool{}
+	if len(keep) == 0 {
+		return taken
+	}
 	list := make([]*api.AccountState, len(keep))
 	asOf := make([]uint64, len(keep))
 	for i, k := range keep {
@@ -1237,16 +1173,16 @@ func (s *PulledState) takeStates(ctx context.Context, p *syncing, src pull.Sourc
 		u := k.st.Url
 		if errs[i] != nil {
 			s.log.Info("A peer's answer for an account was refused; it is asked of another",
-				"account", u, "peer", sourceKey(src), "error", errs[i])
+				"account", u, "peer", sourceKey(k.src), "error", errs[i])
 			continue
 		}
-		if err := pull.KeepQueuedMessages(ctx, src, s.db, k.st); err != nil {
+		if err := pull.KeepQueuedMessages(ctx, k.src, s.db, k.st); err != nil {
 			s.log.Info("A queued delivery's message could not be taken; the account is asked of another",
-				"account", u, "peer", sourceKey(src), "error", err)
+				"account", u, "peer", sourceKey(k.src), "error", err)
 			continue
 		}
 		delete(p.retry, accountKey(u))
-		p.servedBy[sourceKey(src)] = true
+		p.servedBy[sourceKey(k.src)] = true
 		taken[accountKey(u)] = true
 		if !k.whole {
 			// Taken by its heads, or its window: the rest is backfilled once
@@ -1303,16 +1239,27 @@ func (s *PulledState) takeAccounts(ctx context.Context, p *syncing, srcs []pull.
 	s.keepStates(ctx, p, s.askStates(ctx, p, srcs, accounts))
 }
 
-// keepStates keeps what askStates brought, on the round's goroutine: every
-// account a chunk's answer did not serve is owed. It returns how many
-// accounts were kept.
+// keepStates keeps what askStates brought, on the round's goroutine, every
+// answer's states written in one commit: every account a chunk's answer did
+// not serve is owed. It returns how many accounts were kept.
 func (s *PulledState) keepStates(ctx context.Context, p *syncing, answers []statesAnswer) int {
+	var keep []keeping
+	served := map[[32]byte]bool{}
+	for _, a := range answers {
+		if a.src == nil {
+			continue
+		}
+		k, settled := s.prepareAnswers(ctx, p, a.src, a.chunk, a.recs)
+		keep = append(keep, k...)
+		for u := range settled {
+			served[u] = true
+		}
+	}
+	for u := range s.commitStates(ctx, p, keep) {
+		served[u] = true
+	}
 	kept := 0
 	for _, a := range answers {
-		var served map[[32]byte]bool
-		if a.src != nil {
-			served = s.keepAnswers(ctx, p, a.src, a.chunk, a.recs)
-		}
 		for _, u := range a.chunk {
 			if served[accountKey(u)] {
 				kept++
@@ -1439,11 +1386,13 @@ func (s *PulledState) statesFrom(ctx context.Context, src pull.Source, chunk []*
 	return nil, false
 }
 
-// keepAnswers keeps the states one chunk's answers carry and reports the
-// accounts kept. The answers are one source's pages in order, so an account
-// served in parts reassembles (statesOf).
-func (s *PulledState) keepAnswers(ctx context.Context, p *syncing, src pull.Source, chunk []*url.URL, recs []*api.AccountStatesRecord) map[[32]byte]bool {
-	served := map[[32]byte]bool{}
+// prepareAnswers takes what one chunk's answers carry that is not written by
+// its served state (prepareStates), and returns the states left to write
+// and the accounts settled. The answers are one source's pages in order, so
+// an account served in parts reassembles (statesOf).
+func (s *PulledState) prepareAnswers(ctx context.Context, p *syncing, src pull.Source, chunk []*url.URL, recs []*api.AccountStatesRecord) ([]keeping, map[[32]byte]bool) {
+	var keep []keeping
+	settled := map[[32]byte]bool{}
 	inChunk := make(map[[32]byte]bool, len(chunk))
 	for _, u := range chunk {
 		inChunk[accountKey(u)] = true
@@ -1461,11 +1410,13 @@ func (s *PulledState) keepAnswers(ctx context.Context, p *syncing, src pull.Sour
 		for i := range blocks {
 			blocks[i] = rec.Block
 		}
-		for k := range s.takeStates(ctx, p, src, states, blocks) {
-			served[k] = true
+		k, taken := s.prepareStates(ctx, p, src, states, blocks)
+		keep = append(keep, k...)
+		for u := range taken {
+			settled[u] = true
 		}
 	}
-	return served
+	return keep, settled
 }
 
 // partitionSources is the partition's peers, each reached by name, in the

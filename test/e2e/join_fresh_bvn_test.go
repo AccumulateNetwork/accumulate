@@ -238,9 +238,6 @@ func nodeJoinsByPull(t *testing.T, partition string, reinstall bool, damage func
 	missing := entriesWithNoMessage(t, part.NodeDatabase(fresh).Deep(), partition)
 	require.NoError(t, err, "a fresh %s node did not join within %d pull rounds", partition, maxRounds)
 	t.Logf("join start to ACTIVE: %v, %d rounds", activeAfter.Round(time.Millisecond), activeRound)
-	// Every peer is honest: no answer of the records is refused (#4461).
-	require.Zero(t, part.NodeJoinState(fresh).RefusedRecordAnswers(),
-		"a fresh %s node refused an honest peer's answer of the block-ledger records", partition)
 	require.Equal(t, join.Joined, outcome)
 	require.False(t, part.Joining(fresh))
 	// The handoff's first block opens the seed, which reads the pool's newest

@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/bptproof"
@@ -81,30 +82,40 @@ func main() {
 	asOf := ledger.Index - 3
 	run(fmt.Sprintf("BptPage as of %d", asOf), asOf)
 
-	// The block-ledger records of the last 60 blocks with the states they
-	// name, every page of them: what a pull round pays for its records.
+	// The block-ledger records of the last 60 blocks, and the states of the
+	// accounts they name as of their end: what a pull round pays for its
+	// records (#4552).
 	{
 		after := ledger.Index - 60
-		var cursor []byte
-		var pages, states, bytes int
 		t := time.Now()
-		for {
-			rec, err := q.QueryChangedAccountStates(ctx, part, &api.ChangedAccountStatesQuery{After: after, Cursor: cursor})
-			if err != nil {
-				fmt.Printf("  ChangedAccountStates after %d: %v after %v\n", after, err, time.Since(t))
-				break
+		rec, err := q.QueryChangedAccountStates(ctx, part, &api.ChangedAccountStatesQuery{After: after})
+		if err != nil {
+			fmt.Printf("  ChangedAccountStates after %d: %v after %v\n", after, err, time.Since(t))
+		} else {
+			named := map[string]*url.URL{}
+			for _, r := range rec.Records {
+				for _, u := range api.RecordNames(r.Entries) {
+					named[strings.ToLower(u.String())] = u
+				}
 			}
-			pages++
-			states += len(rec.States)
-			if rec.Part != nil {
-				bytes += len(rec.Part.Data)
+			fmt.Printf("  ChangedAccountStates after %d through %d: %d records naming %d accounts, %.1f s\n",
+				after, rec.Through, len(rec.Records), len(named), time.Since(t).Seconds())
+			var list []*url.URL
+			for _, u := range named {
+				list = append(list, u)
 			}
-			if len(rec.Cursor) == 0 {
-				fmt.Printf("  ChangedAccountStates after %d through %d: %d records, %d states (%d part bytes) in %d pages, %.1f s\n",
-					after, rec.Through, len(rec.Records), states, bytes, pages, time.Since(t).Seconds())
-				break
+			for len(list) > 0 {
+				n := min(len(list), 64)
+				chunk := list[:n]
+				list = list[n:]
+				t := time.Now()
+				st, err := q.QueryAccountStates(ctx, part, &api.AccountStatesQuery{Accounts: chunk, ForHeight: rec.Through})
+				if err != nil {
+					fmt.Printf("  AccountStates(%d) as of %d: %v after %v\n", len(chunk), rec.Through, err, time.Since(t))
+					continue
+				}
+				fmt.Printf("  AccountStates(%d) as of %-6d  %7.1f ms (%d states)\n", len(chunk), rec.Through, float64(time.Since(t).Microseconds())/1000, len(st.States))
 			}
-			cursor = rec.Cursor
 		}
 	}
 

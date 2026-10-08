@@ -321,7 +321,7 @@ AccountStatesRecord:
       marshal-as: reference
       pointer: true
     - name: Through
-      description: is T, the block the records the answer covers run through, fixed for the cursor. Zero on an AccountStates answer
+      description: is T, the block the records a ChangedAccountStates answer covers run through. Zero on an AccountStates answer
       type: uint
       keep-empty: true
     - name: Block
@@ -332,7 +332,7 @@ AccountStatesRecord:
       description: continues the answer; empty when this page completes it
       type: bytes
     - name: Records
-      description: is, on the first page of a ChangedAccountStates answer, the block-ledger record of every block after After through T that has one. The answer's pages serve every account they name (#4461)
+      description: is, on a ChangedAccountStates answer, the block-ledger record of every block after After through T that has one; the asking node takes the states of the accounts they name by AccountStates (#4461, #4552)
       type: BlockLedgerRecord
       marshal-as: reference
       pointer: true

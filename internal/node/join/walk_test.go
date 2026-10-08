@@ -110,9 +110,9 @@ func (s scriptedSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api
 	return api.Querier2{Querier: s.peer}.QueryBptPage(ctx, scope, q)
 }
 
-// QueryChangedAccountStates answers the scripted records: the accounts they
-// name after After, through the peer's block, each served by the production
-// querier from the peer's store as it is now.
+// QueryChangedAccountStates answers the scripted records after After,
+// through the peer's block; the accounts they name are served by the
+// production querier from the peer's store as it is now (AccountStates).
 func (s scriptedSource) QueryChangedAccountStates(ctx context.Context, scope *url.URL, q *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
 	p := s.peer
 	p.blockReads++
@@ -123,8 +123,6 @@ func (s scriptedSource) QueryChangedAccountStates(ctx context.Context, scope *ur
 		return nil, errors.NotReady.WithFormat("the peer stands at %d, before %d", p.block, q.After)
 	}
 	through := min(p.block, q.After+1024)
-	seen := map[string]bool{}
-	var named []*url.URL
 	var records []*api.BlockLedgerRecord
 	for n := q.After + 1; n <= through; n++ {
 		if len(p.records[n]) > 0 {
@@ -134,24 +132,11 @@ func (s scriptedSource) QueryChangedAccountStates(ctx context.Context, scope *ur
 			}
 			records = append(records, r)
 		}
-		for _, u := range p.records[n] {
-			if !seen[u.String()] {
-				seen[u.String()] = true
-				named = append(named, u)
-			}
-		}
 	}
 	r := &api.AccountStatesRecord{Through: through, Block: p.block, Records: records}
 	if p.moves {
 		p.block++
 		r.Block = p.block
-	}
-	if len(named) > 0 {
-		served, err := p.served().QueryAccountStates(ctx, scope, &api.AccountStatesQuery{Accounts: named})
-		if err != nil {
-			return nil, err
-		}
-		r.States = served.States
 	}
 	return r, nil
 }

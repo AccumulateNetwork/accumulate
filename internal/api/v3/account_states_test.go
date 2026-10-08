@@ -24,9 +24,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
-// collectStates asks for every page of one ChangedAccountStates answer and
-// reassembles the accounts answered in parts.
-func collectStates(t *testing.T, q api.Querier2, partition *url.URL, after uint64) (map[string]*api.AccountState, *api.AccountStatesRecord, int, int) {
+// collectAccountStates asks for the accounts' states, every page of the
+// answer, reassembling an account answered in parts, and returns them by
+// name with the pages and parts it took.
+func collectAccountStates(t *testing.T, q api.Querier2, partition *url.URL, accounts []*url.URL) (map[string]*api.AccountState, *api.AccountStatesRecord, int, int) {
 	t.Helper()
 	ctx := context.Background()
 	out := map[string]*api.AccountState{}
@@ -35,13 +36,12 @@ func collectStates(t *testing.T, q api.Querier2, partition *url.URL, after uint6
 	var part []byte
 	pages, parts := 0, 0
 	for {
-		rec, err := q.QueryChangedAccountStates(ctx, partition, &api.ChangedAccountStatesQuery{After: after, Cursor: cursor})
+		rec, err := q.QueryAccountStates(ctx, partition, &api.AccountStatesQuery{Accounts: accounts, Cursor: cursor})
 		require.NoError(t, err)
 		pages++
 		if first == nil {
 			first = rec
 		}
-		require.Equal(t, first.Through, rec.Through, "T moved between pages of one answer")
 		for _, st := range rec.States {
 			out[strings.ToLower(st.Url.String())] = st
 		}
@@ -66,12 +66,11 @@ func collectStates(t *testing.T, q api.Querier2, partition *url.URL, after uint6
 	return out, first, pages, parts
 }
 
-// TestChangedAccountStatesOverTheWire — #4453, executor spec, "Sync", §3.
-// Over the v3 message transport, a partition answers every account its
-// block-ledger records name, each once, each checking against its own leaf,
-// stamped with the block of the view it was read from; paged by a byte
-// budget, with an account larger than a page answered in parts that
-// reassemble into the same state.
+// TestChangedAccountStatesOverTheWire: a ChangedAccountStates answer is the
+// block-ledger records after After through T, one answer, naming every
+// account those blocks changed and carrying no states (#4552); AccountStates
+// serves the named accounts' states from one view, paged by a byte budget,
+// each hashing to its own leaf.
 func TestChangedAccountStatesOverTheWire(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
@@ -111,10 +110,35 @@ func TestChangedAccountStatesOverTheWire(t *testing.T) {
 		})
 		require.NotEmpty(t, named, "precondition: the records name accounts")
 
-		whole, rec, pages, _ := collectStates(t, q, partition, 0)
+		// The records: one answer, no states, no pages.
+		rec, err := q.QueryChangedAccountStates(context.Background(), partition, &api.ChangedAccountStatesQuery{After: 0})
+		require.NoError(t, err)
 		require.Equal(t, block, rec.Block, "%s: the answer is not stamped with the block of its view", part)
 		require.Equal(t, block, rec.Through, "%s: the records' end is not the peer's block", part)
-		require.Len(t, whole, len(named), "%s: the answer does not name each account the records name, once", part)
+		require.Empty(t, rec.States, "%s: the records answer carries states", part)
+		require.Nil(t, rec.Part, "%s: the records answer carries a part", part)
+		require.Empty(t, rec.Cursor, "%s: the records answer is paged", part)
+		answered := map[string]*url.URL{}
+		for _, r := range rec.Records {
+			require.True(t, r.Index > 0 && r.Index <= block, "%s: a record of block %d, outside 1 through %d", part, r.Index, block)
+			for _, u := range api.RecordNames(r.Entries) {
+				answered[strings.ToLower(u.String())] = u
+			}
+		}
+		require.Len(t, answered, len(named), "%s: the records do not name each account the store's records name, once", part)
+		for k := range answered {
+			require.True(t, named[k], "%s: %s is named and no record of the store names it", part, k)
+		}
+		var accounts []*url.URL
+		for _, u := range answered {
+			accounts = append(accounts, u)
+		}
+
+		// The states the records lead to, from one view, each hashing to
+		// its own leaf.
+		whole, first, pages, _ := collectAccountStates(t, q, partition, accounts)
+		require.Equal(t, block, first.Block, "%s: a states answer is not stamped with the block of its view", part)
+		require.Len(t, whole, len(named), "%s: the states answer does not serve each account the records name, once", part)
 		for k, st := range whole {
 			require.True(t, named[k], "%s: %s was answered and no record names it", part, k)
 			if st.NoLeaf {
@@ -123,11 +147,11 @@ func TestChangedAccountStatesOverTheWire(t *testing.T) {
 			require.NoError(t, pull.CheckState(st), "%s: %s does not hash to its own leaf", part, k)
 			require.Equal(t, leaves[k], st.LeafHash, "%s: %s's leaf is not the store's", part, k)
 		}
-		t.Logf("%s: %d accounts in %d page(s) at block %d", part, len(whole), pages, block)
+		t.Logf("%s: %d records naming %d accounts, served in %d page(s) at block %d", part, len(rec.Records), len(whole), pages, block)
 
 		// A small budget: pages, and accounts in parts, that come to the same.
 		restore := apiimpl.SetAccountStatesBudget(512)
-		small, _, smallPages, parts := collectStates(t, q, partition, 0)
+		small, _, smallPages, parts := collectAccountStates(t, q, partition, accounts)
 		restore()
 		require.NotZero(t, parts, "%s: no account was answered in parts", part)
 		require.Greater(t, smallPages, pages, "%s: a small budget did not page the answer", part)
@@ -140,26 +164,13 @@ func TestChangedAccountStatesOverTheWire(t *testing.T) {
 			require.Equal(t, a, b, "%s: %s differs when paged", part, k)
 		}
 
-		// AccountStates: the same state for named accounts, and no leaf for
-		// an account the partition does not hold.
-		var some []*url.URL
-		for _, st := range whole {
-			some = append(some, st.Url)
-			if len(some) == 3 {
-				break
-			}
-		}
+		// No leaf for an account the partition does not hold.
 		ghost := protocol.AccountUrl("ghost", "tokens")
-		rec2, err := q.QueryAccountStates(context.Background(), partition, &api.AccountStatesQuery{Accounts: append(some, ghost)})
+		rec2, err := q.QueryAccountStates(context.Background(), partition, &api.AccountStatesQuery{Accounts: append(accounts[:3:3], ghost)})
 		require.NoError(t, err)
 		require.Equal(t, block, rec2.Block)
-		require.Len(t, rec2.States, len(some)+1)
-		for _, st := range rec2.States[:len(some)] {
-			a, _ := st.MarshalBinary()
-			b, _ := whole[strings.ToLower(st.Url.String())].MarshalBinary()
-			require.Equal(t, b, a)
-		}
-		require.True(t, rec2.States[len(some)].NoLeaf, "%s: an account the partition does not hold was answered with a leaf", part)
+		require.Len(t, rec2.States, 4)
+		require.True(t, rec2.States[3].NoLeaf, "%s: an account the partition does not hold was answered with a leaf", part)
 
 		// A BPT page carries the block of its view.
 		page, err := q.QueryBptPage(context.Background(), partition, &api.BptPageQuery{Count: 4})

@@ -129,16 +129,12 @@ BptBlockQuery:
 
 ChangedAccountStatesQuery:
   union: { type: query }
-  description: asks the addressed partition for the sync state of every account its block-ledger records after a block name, for a node pulling the state (executor.md, "Sync", §3; #4453). Each page of the answer is read from one view of the peer's store
+  description: asks the addressed partition for its block-ledger records after a block, which name every account those blocks changed, for a node pulling the state (executor.md, "Sync", §3; #4453, #4552). The answer is read from one view of the peer's store and carries no states; the asking node takes them by AccountStates as of T
   fields:
     - name: After
       description: is L, the last block whose records the asking node has processed; the answer covers the records of the blocks after it
       type: uint
       keep-empty: true
-    - name: Cursor
-      description: continues the answer where the previous page stopped; omitted starts it
-      type: bytes
-      optional: true
 
 AccountStatesQuery:
   union: { type: query }

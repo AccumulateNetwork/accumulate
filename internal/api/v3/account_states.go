@@ -9,9 +9,6 @@ package api
 import (
 	"context"
 	"encoding/binary"
-	"sort"
-	"strings"
-	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
@@ -25,8 +22,8 @@ import (
 )
 
 // accountStatesBudget is how many bytes of marshalled account states one page
-// of ChangedAccountStates or AccountStates carries. An account larger than it
-// is answered in parts. A variable so a test can page a small store.
+// of AccountStates carries. An account larger than it is answered in parts. A
+// variable so a test can page a small store.
 var accountStatesBudget = 1 << 20
 
 // maxRecordSpan is how many blocks of records one ChangedAccountStates answer
@@ -35,23 +32,20 @@ var accountStatesBudget = 1 << 20
 // cap cuts short means the join fell behind (Paul, 2026-09-28; #4461).
 const maxRecordSpan = 1024
 
-// namedAnswers is how many answers' unions of named accounts a querier keeps
-// (namedCache).
-const namedAnswers = 4
-
 // maxAccountStatesAsked is how many accounts one AccountStates query may name:
 // a walk page's worth and more (executor.md, "Sync", §3).
 const maxAccountStatesAsked = 4096
 
-// queryChangedAccountStates answers the sync state of every account the block
-// ledger's records of the blocks after After name, through T, from this one
-// view of the store (executor.md, "Sync", §3; #4453). T is this node's block B
-// on a first page, capped at maxRecordSpan blocks after After, and the cursor
-// carries it so every page of the answer covers the same records: an account
-// the records name many times is in the union once, and in the answer once.
-// One answer is the whole catch-up from After up to the cap (#4461): the union
-// is read from the records once per answer (namedCache), not once per page, so
-// a page costs the accounts it carries.
+// queryChangedAccountStates answers the block-ledger records of the blocks
+// after After through T, from one view of the store (executor.md, "Sync",
+// §3; #4453). T is this node's block B, capped at maxRecordSpan blocks after
+// After. One answer is the whole catch-up from After up to the cap (#4461):
+// the records name every account those blocks changed (invariant 14), and
+// the asking node takes their states by AccountStates, as of T, at once
+// (#4552). The answer carries no states: served inside the answer they came
+// a page at a time, each page a view of its own, so a round of the pull was
+// complete only when they fit one page, and a node joining a loaded
+// partition never caught up (run 20261007T211137Z).
 func (s *Querier) queryChangedAccountStates(ctx context.Context, batch *database.Batch, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
 	if scope == nil || !s.partition.URL.Equal(scope) {
 		return nil, errors.BadRequest.WithFormat(
@@ -67,40 +61,12 @@ func (s *Querier) queryChangedAccountStates(ctx context.Context, batch *database
 		// written yet. Another peer is asked.
 		return nil, errors.NotReady.WithFormat("this node stands at block %d, before block %d", block, query.After)
 	}
-
-	cur, err := decodeStatesCursor(query.Cursor)
-	if err != nil {
-		return nil, errors.BadRequest.Wrap(err)
-	}
-	through := cur.through
-	if len(query.Cursor) == 0 {
-		through = min(block, query.After+maxRecordSpan)
-	}
-	if through < query.After || through > block {
-		return nil, errors.BadRequest.WithFormat("the cursor names block %d, not between %d and this node's block %d", through, query.After, block)
-	}
-
-	span, err := s.named.get(query.After, through, func() (*recordSpan, error) {
-		return s.namedBetween(batch, query.After, through)
-	})
+	through := min(block, query.After+maxRecordSpan)
+	records, err := s.recordsBetween(batch, query.After, through)
 	if err != nil {
 		return nil, errors.UnknownError.Wrap(err)
 	}
-	r, err := s.statesPage(ctx, batch, span.named, cur)
-	if err != nil {
-		return nil, errors.UnknownError.Wrap(err)
-	}
-	if len(query.Cursor) == 0 {
-		// The records themselves, once, on the first page (#4461).
-		r.Records = span.records
-	}
-	r.Through, r.Block = through, block
-	if len(r.Cursor) > 0 {
-		c, _ := decodeStatesCursor(r.Cursor)
-		c.through = through
-		r.Cursor = c.encode()
-	}
-	return r, nil
+	return &api.AccountStatesRecord{Records: records, Through: through, Block: block}, nil
 }
 
 // queryAccountStates answers the sync state of the named accounts, from this
@@ -170,21 +136,11 @@ func (s *Querier) viewBlock(batch *database.Batch) (uint64, error) {
 	}
 }
 
-// A recordSpan is the block-ledger records of the blocks after one block
-// through another, and the union of the accounts they name, once each, in a
-// fixed order, so every page of one answer walks the same list.
-type recordSpan struct {
-	records []*api.BlockLedgerRecord
-	named   []*url.URL
-}
-
-// namedBetween reads the block-ledger records of the blocks after after
-// through through, and the union of the accounts they name (RecordNames). A
-// block with no record changed nothing.
-func (s *Querier) namedBetween(batch *database.Batch, after, through uint64) (*recordSpan, error) {
+// recordsBetween reads the block-ledger records of the blocks after after
+// through through. A block with no record changed nothing.
+func (s *Querier) recordsBetween(batch *database.Batch, after, through uint64) ([]*api.BlockLedgerRecord, error) {
 	ledger := batch.Account(s.partition.Ledger())
-	span := new(recordSpan)
-	seen := map[string]*url.URL{}
+	var records []*api.BlockLedgerRecord
 	for n := after + 1; n <= through; n++ {
 		_, entries, err := indexing.LoadBlockLedger(ledger, n)
 		switch {
@@ -194,64 +150,9 @@ func (s *Querier) namedBetween(batch *database.Batch, after, through uint64) (*r
 		default:
 			return nil, errors.UnknownError.WithFormat("load the record of block %d: %w", n, err)
 		}
-		span.records = append(span.records, &api.BlockLedgerRecord{Index: n, Entries: entries})
-		for _, u := range api.RecordNames(entries) {
-			k := strings.ToLower(u.String())
-			if _, ok := seen[k]; !ok {
-				seen[k] = u
-			}
-		}
+		records = append(records, &api.BlockLedgerRecord{Index: n, Entries: entries})
 	}
-	keys := make([]string, 0, len(seen))
-	for k := range seen {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	span.named = make([]*url.URL, len(keys))
-	for i, k := range keys {
-		span.named[i] = seen[k]
-	}
-	return span, nil
-}
-
-// namedCache holds the unions of named accounts of the last few answers, by
-// their After and T. The records of a block this node has executed do not
-// change, so the union of the records after After through T is the same
-// whichever view reads it.
-type namedCache struct {
-	mu      sync.Mutex
-	entries []namedEntry
-}
-
-type namedEntry struct {
-	after, through uint64
-	span           *recordSpan
-}
-
-func (c *namedCache) get(after, through uint64, read func() (*recordSpan, error)) (*recordSpan, error) {
-	if c == nil {
-		return read()
-	}
-	c.mu.Lock()
-	for _, e := range c.entries {
-		if e.after == after && e.through == through {
-			c.mu.Unlock()
-			return e.span, nil
-		}
-	}
-	c.mu.Unlock()
-
-	span, err := read()
-	if err != nil {
-		return nil, err
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries = append(c.entries, namedEntry{after, through, span})
-	if len(c.entries) > namedAnswers {
-		c.entries = c.entries[len(c.entries)-namedAnswers:]
-	}
-	return span, nil
+	return records, nil
 }
 
 // statesPage answers the accounts from cur on, as many whole as fit the
@@ -553,12 +454,11 @@ func (s *Querier) readAccountStateAt(batch *database.Batch, u *url.URL, at uint6
 // the answer is fixed to, the account, and the byte of its state a part
 // continues from.
 type statesCursor struct {
-	through, index, offset uint64
+	index, offset uint64
 }
 
 func (c statesCursor) encode() []byte {
-	b := make([]byte, 0, 3*binary.MaxVarintLen64)
-	b = binary.AppendUvarint(b, c.through)
+	b := make([]byte, 0, 2*binary.MaxVarintLen64)
 	b = binary.AppendUvarint(b, c.index)
 	b = binary.AppendUvarint(b, c.offset)
 	return b
@@ -569,7 +469,7 @@ func decodeStatesCursor(b []byte) (statesCursor, error) {
 	if len(b) == 0 {
 		return c, nil
 	}
-	for _, v := range []*uint64{&c.through, &c.index, &c.offset} {
+	for _, v := range []*uint64{&c.index, &c.offset} {
 		x, n := binary.Uvarint(b)
 		if n <= 0 {
 			return c, errors.BadRequest.With("malformed cursor")

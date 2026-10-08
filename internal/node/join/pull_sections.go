@@ -71,12 +71,15 @@ func (s *PulledState) openSection(p *syncing, sec sectionID) { s.openSections(p,
 
 // openSections takes the sections' markers out of the tree, in one commit,
 // and owes the sections' loads to the pull: a section is either not loaded --
-// its marker's hash, untouched since the top was taken -- or loaded whole.
+// its marker's hash, untouched since the top was taken -- or loaded whole. A
+// section opened and not yet loaded is not opened again: its marker is out
+// already, and a commit for nothing per answer naming it was a commit per
+// chunk of a round's states (#4552).
 func (s *PulledState) openSections(p *syncing, secs ...sectionID) {
 	var open []sectionID
 	seen := map[sectionID]bool{}
 	for _, sec := range secs {
-		if !seen[sec] && s.secs.NotLoaded(sec) {
+		if !seen[sec] && s.secs.NotLoaded(sec) && !s.secs.isOpening(sec) {
 			seen[sec] = true
 			open = append(open, sec)
 		}

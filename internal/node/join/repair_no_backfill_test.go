@@ -76,8 +76,7 @@ func TestARepairBackfillsNothing(t *testing.T) {
 				st, err := served.QueryAccountStates(ctx, here, &api.AccountStatesQuery{Accounts: []*url.URL{bob}})
 				require.NoError(t, err)
 				require.Len(t, st.States, 1)
-				got := s.takeStates(ctx, p, served, st.States, []uint64{7})
-				require.True(t, got[accountKey(bob)], "bob was not taken")
+				require.Equal(t, 1, s.keepStates(ctx, p, []statesAnswer{{chunk: []*url.URL{bob}, src: served, recs: []*api.AccountStatesRecord{st}}}), "bob was not taken")
 			}
 
 			// What every join takes of a chain: its head and its open mark

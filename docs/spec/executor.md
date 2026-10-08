@@ -979,38 +979,36 @@ about fourteen accounts a second, and each of those calls read the peer's store
 separately, so one account's parts could come from different blocks. Two calls
 replace them, beside `BptPage`:
 
-- **`ChangedAccountStates{Partition, After, Cursor}`** — the peer reads its own
+- **`ChangedAccountStates{Partition, After}`** — the peer reads its own
   block-ledger records for the blocks after `After` through its current block
-  `T`, takes the union of the accounts they name (invariant 14: a record names
-  every account its block changed), and answers each account's sync state. The
-  reply says `T`, the block the records run through (at most 1,024 blocks
-  after `After`), and `B`, the block the
-  view it was read from is at (`B ≥ T`). It is paged by a byte budget; the
-  cursor continues the same union, and each page is a view of its own with its
-  own `B` — a view held open across pages pins BlockchainDB's overlays (#4446).
-  An account a record names many times is in the union once, so how often an
-  account changes costs nothing in calls. **One answer is the node's whole
-  catch-up** (Paul, 2026-09-28; #4461): the node sends its index `I` (`After
-  = L`), and the peer answers every account the records after `I` name, in
-  pages of one answer; it reads the union once per answer, not once per page,
-  so a page costs the accounts it carries. An answer covers at most 1,024
-  blocks after `I` — a bound, not the expected case (Paul: "We can limit the
-  number of blocks per request, but it should never be that much"): with the
-  walk a page a second, the records after `I` are a few blocks, and an answer
-  the cap cuts short is logged by the joining node as having fallen behind.
-  **The answer carries the records themselves** (Paul, 2026-09-28): its
-  first page holds the block-ledger record of every block after `I` through
-  `T` that has one, and its pages serve exactly the accounts those records
-  name. The joining node holds the pages until the last and checks the
-  records against them: a record of a block outside `I + 1` through `T` or
-  given twice, an account a record names that no page serves, or an account
-  served that no record names refuses the answer whole — nothing of it is
-  written, `L` does not move, and the next peer is asked
-  (`TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused`). A taken
-  answer marks current every account its records name, and is written in one
-  commit.
-- **`AccountStates{Partition, Accounts}`** — the same sync state for the
-  accounts a walk page shows stale, from one view, stamped with its `B`.
+  `T` and answers them: the record of every block after `After` through `T`
+  that has one (invariant 14: a record names every account its block
+  changed). The reply says `T`, the block the records run through (at most
+  1,024 blocks after `After`), and `B`, the block the view it was read from
+  is at (`B ≥ T`). It is one answer, read from one view, and **it carries no
+  states** (#4552): the joining node takes the states of the accounts the
+  records name by `AccountStates`, as of `T`, in chunks asked at once
+  (below). **One answer is the node's whole catch-up** (Paul, 2026-09-28;
+  #4461): the node sends its index `I` (`After = L`), and the peer answers
+  every record after `I`. An answer covers at most 1,024 blocks after `I` —
+  a bound, not the expected case (Paul: "We can limit the number of blocks
+  per request, but it should never be that much"): with the walk a page a
+  second, the records after `I` are a few blocks, and an answer the cap cuts
+  short is logged by the joining node as having fallen behind. A record of a
+  block outside `I + 1` through `T`, or given twice, refuses the answer:
+  nothing is taken from it, `L` does not move, and the next peer is asked.
+  The records are the peer's word; the match proves what they led the node
+  to take. *Until #4552 the answer served the states inside it, a page of 1
+  MiB at a time, each page a view of its own with its own `B`: a round was
+  complete only when the answer fit one page, and on a loaded partition —
+  ~190 distinct accounts named per 17-block gap, ~30 ms a state on the
+  validator — every round was two pages wide and the join orbited the head
+  (run 20261007T211137Z, review §9).*
+- **`AccountStates{Partition, Accounts, ForHeight}`** — the sync state of
+  the named accounts, from one view, stamped with its `B`: the accounts a
+  walk page shows stale, and the accounts a records answer names, the latter
+  as of `T`. It is paged by a byte budget (1 MiB); an account larger than
+  the budget is answered in parts, each from one view.
 
 **An account's sync state** is its main state, its directory, its pending
 list, its `AccountLeaf` — the chain heads in the account's chain order, the
@@ -1022,12 +1020,12 @@ each from one view. Messages are not included; an account taken by its state
 carries none (below), and the windowed accounts' recent chains are taken by
 the window pull.
 
-**An answer is written in one commit, not a commit per account** (#4461).
-The accounts a records answer serves, and those an `AccountStates` page
-serves — for the walk or for what is owed — are written in one batch with the BPT and committed once;
-each is written in a batch nested in it, so an account the write refuses is
-not written at all and the others are. What is left to backfill is recorded
-once per page too. A commit per account cost about 85 ms on BlockchainDB: a
+**A round's states are written in one commit, not a commit per account**
+(#4461). The accounts the `AccountStates` answers of one step serve — the
+records' names, a span of the walk, or what is owed — are written in one
+batch with the BPT and committed once; each is written in a batch nested in
+it, so an account the write refuses is not written at all and the others
+are. What is left to backfill is recorded once per step too. A commit per account cost about 85 ms on BlockchainDB: a
 walk page of 256 accounts took 24 s, and the records 2.5 minutes, of a BVN
 join at ~6,000 blocks (Docker `20260928T194436Z`), while the peer's answers
 were 1–2 % of that time. At 3,000 accounts both stores BlockchainDB, the walk
@@ -1052,11 +1050,16 @@ taken; another peer is asked. The records are never read back before `S`.
 
 Each round, in this order:
 
-1. **The records.** `ChangedAccountStates` with `After = L`, every page of
-   it, checked against the records it carries. Every account its records
-   name is marked current and every account it serves is written; `L` moves
-   to `T`. An answer refused is asked of the next peer. A page that cannot be read stops the round's records there, and the
-   next round asks again from `L`.
+1. **The records.** `ChangedAccountStates` with `After = L`, one answer.
+   Every account its records name is marked current and its section
+   opened; `L` moves to `T`; and the named accounts' states are asked by
+   `AccountStates` **as of `T`**, `statesChunk` (64) a call and
+   `statesInFlight` (4) at once against each peer, the answer's peer first
+   — exactly as the sections' stale leaves are asked (#4549, #4552) — and
+   written in one commit. As of `T`, the states raise no block the records
+   must catch up to; a peer that cannot answer as of `T` answers current,
+   and the records catch up to it. An account no peer serves is owed. An
+   answer refused, or not answered, is asked of the next peer.
 2. **What is owed.** An account a batch did not answer whole, or whose reply
    was refused, is asked for again, once a round, whoever named it.
 3. **The sections opened.** Every section an account written in steps 1–2
@@ -1497,8 +1500,8 @@ store's contract in internal/database
 **What is not loaded is not served; the node redirects** (Paul, 2026-10-02:
 "We can ask and use answers that match the cryptography, and nodes that
 can't answer should be redirecting"). An account read in a section not
-loaded is refused with `NotReady` — a query; an `AccountStates` or
-`ChangedAccountStates` answer serves it with no body and `NotLoaded`, carrying
+loaded is refused with `NotReady` — a query; an `AccountStates` answer
+serves it with no body and `NotLoaded`, carrying
 the section and the peers to ask instead (`Section`, `Redirect`: the
 refusal's `{notLoaded, redirect}` per account), so the asker asks the next
 peer. It is never `NoLeaf`: a peer that meets a section's marker where an
@@ -1611,8 +1614,8 @@ two steps (`database.BlockSettler`, called by the executor's close):
 
 1. *After its transactions, before its chains are anchored.* The node asks its
    peers in turn, once each, for the block-ledger records from block n
-   (`ChangedAccountStatesQuery{After: n − 1}`, first page; its states are not
-   used), and for the accounts n's record names and the accounts this
+   (`ChangedAccountStatesQuery{After: n − 1}`), and for the accounts n's
+   record names and the accounts this
    execution changed, the peer's state as of n (`AccountStatesQuery{ForHeight:
    n}`). An account whose state differs from the record's — compared with its
    index chains taken from the record, since the block's close writes those
@@ -1686,11 +1689,10 @@ production join, executor and API peers), and
 `TestAJoinAgreesAcrossRepeatedBurns`, which requires zero divergence of every
 class again.
 
-*Not built.* A query for one block's record alone: the first page of a
-`ChangedAccountStates` answer carries up to 1 MiB of current states the
-overlap does not use, once per block for at most a few blocks. The node's
-transaction status for a transaction it refused that the record settled is
-its own (not hashed, not in the root).
+*Not built.* The node's transaction status for a transaction it refused
+that the record settled is its own (not hashed, not in the root). (A
+`ChangedAccountStates` answer carried up to 1 MiB of states the overlap did
+not use, once per block; since #4552 it carries the records alone.)
 
 **Decided (Paul, 2026-10-02): no retention.** A peer cannot answer a section
 as of H for a cold account a later block changed (it retained no state at H;

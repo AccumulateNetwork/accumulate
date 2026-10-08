@@ -215,6 +215,17 @@ func (x *sections) pulled(s bpt.Section) {
 	x.setNotLoaded(s, marked)
 }
 
+// opening is whether the join has opened a section and not yet loaded it:
+// its marker is out of the tree and its load is owed.
+func (x *sections) isOpening(s bpt.Section) bool {
+	if x == nil {
+		return false
+	}
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	return x.opening[s]
+}
+
 // forgetOpening forgets what an abandoned pull opened.
 func (x *sections) forgetOpening() {
 	if x == nil {

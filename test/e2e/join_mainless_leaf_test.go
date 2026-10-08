@@ -75,8 +75,8 @@ func (s *countingSources) Querier(partition *url.URL) api.Querier {
 // than the blocks hold -- one no peer has a leaf for -- while s.injecting is
 // set. It is the peer's word the join takes the records on (#4310), and it is
 // how a name every source answers NotFound for reaches the join through the
-// production pull: the first page of each ChangedAccountStates answer carries
-// the peer's own answer for that account, which is that it holds no leaf.
+// production pull: the join asks every peer for the account the record
+// names, and each answers that it holds no leaf.
 type namingSource struct {
 	pull.Source
 	s *countingSources
@@ -84,7 +84,7 @@ type namingSource struct {
 
 func (q namingSource) QueryChangedAccountStates(ctx context.Context, scope *url.URL, query *api.ChangedAccountStatesQuery) (*api.AccountStatesRecord, error) {
 	r, err := q.Source.QueryChangedAccountStates(ctx, scope, query)
-	if err != nil || len(query.Cursor) != 0 {
+	if err != nil {
 		return r, err
 	}
 	q.s.mu.Lock()
@@ -93,14 +93,8 @@ func (q namingSource) QueryChangedAccountStates(ctx context.Context, scope *url.
 	if !injecting {
 		return r, err
 	}
-	extra, err := q.Source.QueryAccountStates(ctx, scope, &api.AccountStatesQuery{Accounts: []*url.URL{inject}})
-	if err != nil {
-		return nil, err
-	}
-	r.States = append(r.States, extra.States...)
 
-	// The records name it too: the answer serves what its records name
-	// (#4461). A copy, for the peer's records are its own.
+	// The records name it. A copy, for the peer's records are its own.
 	if r.Through > query.After {
 		named := &api.BlockLedgerRecord{Index: r.Through, Entries: []*BlockEntry{{Account: inject, Chain: "main", Index: 1}}}
 		records := make([]*api.BlockLedgerRecord, 0, len(r.Records)+1)

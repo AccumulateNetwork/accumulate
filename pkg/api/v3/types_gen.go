@@ -112,13 +112,13 @@ type AccountStatesRecord struct {
 	States    []*AccountState `json:"states,omitempty" form:"states" query:"states" validate:"required"`
 	// Part is part of an account whose state is larger than a page -- the next bytes of its marshalled AccountState, read from this page's view. The parts of one account are read from different views, and the whole is checked against its leaf like any other.
 	Part *AccountStatePart `json:"part,omitempty" form:"part" query:"part" validate:"required"`
-	// Through is T, the block the records the answer covers run through, fixed for the cursor. Zero on an AccountStates answer.
+	// Through is T, the block the records a ChangedAccountStates answer covers run through. Zero on an AccountStates answer.
 	Through uint64 `json:"through" form:"through" query:"through" validate:"required"`
 	// Block is B, the block of the view this page was read from; B is at or after T.
 	Block uint64 `json:"block" form:"block" query:"block" validate:"required"`
 	// Cursor continues the answer; empty when this page completes it.
 	Cursor []byte `json:"cursor,omitempty" form:"cursor" query:"cursor" validate:"required"`
-	// Records is, on the first page of a ChangedAccountStates answer, the block-ledger record of every block after After through T that has one. The answer's pages serve every account they name (#4461).
+	// Records is, on a ChangedAccountStates answer, the block-ledger record of every block after After through T that has one; the asking node takes the states of the accounts they name by AccountStates (#4461,.
 	Records   []*BlockLedgerRecord `json:"records,omitempty" form:"records" query:"records" validate:"required"`
 	extraData []byte
 }
@@ -311,13 +311,11 @@ type ChainRecord struct {
 	extraData     []byte
 }
 
-// ChangedAccountStatesQuery asks the addressed partition for the sync state of every account its block-ledger records after a block name, for a node pulling the state (executor.md, "Sync", §3;.
+// ChangedAccountStatesQuery asks the addressed partition for its block-ledger records after a block, which name every account those blocks changed, for a node pulling the state (executor.md, "Sync", §3;.
 type ChangedAccountStatesQuery struct {
 	fieldsSet []bool
 	// After is L, the last block whose records the asking node has processed; the answer covers the records of the blocks after it.
-	After uint64 `json:"after" form:"after" query:"after" validate:"required"`
-	// Cursor continues the answer where the previous page stopped; omitted starts it.
-	Cursor    []byte `json:"cursor,omitempty" form:"cursor" query:"cursor"`
+	After     uint64 `json:"after" form:"after" query:"after" validate:"required"`
 	extraData []byte
 }
 
@@ -1503,7 +1501,6 @@ func (v *ChangedAccountStatesQuery) Copy() *ChangedAccountStatesQuery {
 	u := new(ChangedAccountStatesQuery)
 
 	u.After = v.After
-	u.Cursor = encoding.BytesCopy(v.Cursor)
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -3336,9 +3333,6 @@ func (v *ChainRecord) Equal(u *ChainRecord) bool {
 
 func (v *ChangedAccountStatesQuery) Equal(u *ChangedAccountStatesQuery) bool {
 	if !(v.After == u.After) {
-		return false
-	}
-	if !(bytes.Equal(v.Cursor, u.Cursor)) {
 		return false
 	}
 
@@ -6402,7 +6396,6 @@ func (v *ChainRecord) IsValid() error {
 var fieldNames_ChangedAccountStatesQuery = []string{
 	1: "QueryType",
 	2: "After",
-	3: "Cursor",
 }
 
 func (v *ChangedAccountStatesQuery) MarshalBinary() ([]byte, error) {
@@ -6417,9 +6410,6 @@ func (v *ChangedAccountStatesQuery) MarshalBinary() ([]byte, error) {
 
 	writer.WriteEnum(1, v.QueryType())
 	writer.WriteUint(2, v.After)
-	if !(len(v.Cursor) == 0) {
-		writer.WriteBytes(3, v.Cursor)
-	}
 
 	_, _, err := writer.Reset(fieldNames_ChangedAccountStatesQuery)
 	if err != nil {
@@ -11070,9 +11060,6 @@ func (v *ChangedAccountStatesQuery) UnmarshalFieldsFrom(reader *encoding.Reader)
 	if x, ok := reader.ReadUint(2); ok {
 		v.After = x
 	}
-	if x, ok := reader.ReadBytes(3); ok {
-		v.Cursor = x
-	}
 
 	seen, err := reader.Reset(fieldNames_ChangedAccountStatesQuery)
 	if err != nil {
@@ -13206,7 +13193,6 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("queryType", "string"),
 		encoding.NewTypeField("after", "uint64"),
-		encoding.NewTypeField("cursor", "bytes"),
 	}, "ChangedAccountStatesQuery", "changedAccountStatesQuery")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -14187,14 +14173,10 @@ func (v *ChangedAccountStatesQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
 		After     uint64    `json:"after"`
-		Cursor    *string   `json:"cursor,omitempty"`
 		ExtraData *string   `json:"$epilogue,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	u.After = v.After
-	if !(len(v.Cursor) == 0) {
-		u.Cursor = encoding.BytesToJSON(v.Cursor)
-	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
 }
@@ -15925,12 +15907,10 @@ func (v *ChangedAccountStatesQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
 		QueryType QueryType `json:"queryType"`
 		After     uint64    `json:"after"`
-		Cursor    *string   `json:"cursor,omitempty"`
 		ExtraData *string   `json:"$epilogue,omitempty"`
 	}{}
 	u.QueryType = v.QueryType()
 	u.After = v.After
-	u.Cursor = encoding.BytesToJSON(v.Cursor)
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -15939,11 +15919,6 @@ func (v *ChangedAccountStatesQuery) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("field QueryType: not equal: want %v, got %v", v.QueryType(), u.QueryType)
 	}
 	v.After = u.After
-	if x, err := encoding.BytesFromJSON(u.Cursor); err != nil {
-		return fmt.Errorf("error decoding Cursor: %w", err)
-	} else {
-		v.Cursor = x
-	}
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

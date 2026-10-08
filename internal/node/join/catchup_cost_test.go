@@ -260,136 +260,15 @@ func TestACatchUpCostsCallsAndCommitsPerAnswerNotPerAccountOrRecord(t *testing.T
 	require.Less(t, wm2, 2000/10,
 		"the walk made %d commits for 2,000 accounts: its commits grow with the accounts, not the pages", wm2)
 
-	// The records: one answer, whatever the blocks and accounts, and a page
-	// per 256 leaves of the sections their accounts are in (executor spec,
-	// "Sync", §3a): calls that grow with pages, not accounts.
-	// The opened sections are loaded in spans sized by the round's first
-	// page (#4549); a span whose sections hold more leaves than that page's
-	// takes a second page, so at most twice the pages -- never per account.
-	require.LessOrEqual(t, rc2, rc1+2*(2000/256)+1,
+	// The records: one answer, whatever the blocks and accounts; a call per
+	// statesChunk accounts they name, asked at once (#4552); and a page per
+	// 256 leaves of the sections their accounts are in (executor spec,
+	// "Sync", §3a): calls that grow with chunks and pages, not blocks, and
+	// never per account. The opened sections are loaded in spans sized by
+	// the round's first page (#4549); a span whose sections hold more leaves
+	// than that page's takes a second page, so at most twice the pages.
+	require.LessOrEqual(t, rc2, rc1+2000/statesChunk+2*(2000/256)+1,
 		"the records round asked %d calls for 100 blocks naming 200 accounts and %d for 1,000 blocks naming 2,000", rc1, rc2)
 	require.Equal(t, rm1, rm2,
 		"the records round made %d commits for 200 accounts and %d for 2,000", rm1, rm2)
-}
-
-// omittingQuerier leaves one account out of every ChangedAccountStates answer
-// while omit is set.
-type omittingQuerier struct {
-	api.Querier
-	victim *url.URL
-	omit   bool
-}
-
-func (q *omittingQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
-	r, err := q.Querier.Query(ctx, scope, query)
-	if _, ok := query.(*api.ChangedAccountStatesQuery); !ok || err != nil || !q.omit {
-		return r, err
-	}
-	rec := r.(*api.AccountStatesRecord)
-	var kept []*api.AccountState
-	for _, st := range rec.States {
-		if !st.Url.Equal(q.victim) {
-			kept = append(kept, st)
-		}
-	}
-	rec.States = kept
-	return rec, nil
-}
-
-// TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused — #4461. The
-// catch-up answer carries the block-ledger records after I and the accounts
-// they name. An answer that leaves out an account one of its records names is
-// refused whole: nothing of it is written, and L does not move. The same
-// records answered whole are taken.
-func TestAnAnswerThatLeavesOutAnAccountItsRecordsNameIsRefused(t *testing.T) {
-	here := protocol.PartitionUrl("BVN0")
-	alice := protocol.AccountUrl("alice", "tokens")
-	bob := protocol.AccountUrl("bob", "tokens")
-	peerDB := peerStore(t)
-	putLedger(t, peerDB, here, 10)
-	putTokens(t, peerDB, alice, 5)
-	putTokens(t, peerDB, bob, 5)
-	q := &omittingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}), victim: bob}
-
-	db := database.OpenInMemory(nil)
-	t.Cleanup(func() { _ = db.Close() })
-	values, _ := genesisValues(t, 4)
-	putNetwork(t, db, here, values)
-	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: q, block: 10}, ExecutedBlock: 1})
-	require.NoError(t, err)
-	ctx := context.Background()
-	loadSectionOf(t, s, alice, bob)
-
-	// Block 11 changes alice and bob.
-	putTokens(t, peerDB, alice, 11)
-	putTokens(t, peerDB, bob, 12)
-	b := peerDB.Begin(true)
-	require.NoError(t, b.Account(here.JoinPath(protocol.Ledger)).BlockLedger(11).Put(&database.BlockLedger{Index: 11, Entries: []*protocol.BlockEntry{
-		{Account: alice, Chain: "main", Index: 1},
-		{Account: bob, Chain: "main", Index: 1},
-	}}))
-	require.NoError(t, b.Commit())
-	putLedger(t, peerDB, here, 11)
-	s.sources.(*onePeer).block = 11
-
-	q.omit = true
-	require.NoError(t, s.Pull(ctx))
-	require.Equal(t, uint64(10), s.sync.last, "an answer that left out bob, whom block 11's record names, was taken")
-	require.Equal(t, int64(5), balanceIn(t, db, alice), "alice was written from an answer that was refused")
-
-	q.omit = false
-	require.NoError(t, s.Pull(ctx))
-	require.Equal(t, uint64(11), s.sync.last)
-	require.Equal(t, int64(11), balanceIn(t, db, alice))
-	require.Equal(t, int64(12), balanceIn(t, db, bob))
-}
-
-// recordlessQuerier is a peer that withholds its records: its
-// ChangedAccountStates answers carry the accounts and no records.
-type recordlessQuerier struct{ api.Querier }
-
-func (q recordlessQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
-	r, err := q.Querier.Query(ctx, scope, query)
-	if rec, ok := r.(*api.AccountStatesRecord); ok && err == nil {
-		rec.Records = nil
-	}
-	return r, err
-}
-
-// TestAnAnswerStrippedOfItsRecordsIsRefused — #4461. An answer that serves
-// accounts and carries no records names nothing its accounts can be checked
-// against, and a withheld record must not pass the check: it is refused like
-// any answer that fails coverage, nothing of it is written, and L does not
-// move. This line runs no peer from before the records were in the answer
-// (Paul, 2026-09-28: fresh installs, no mixed versions).
-func TestAnAnswerStrippedOfItsRecordsIsRefused(t *testing.T) {
-	here := protocol.PartitionUrl("BVN0")
-	alice := protocol.AccountUrl("alice", "tokens")
-	peerDB := peerStore(t)
-	putLedger(t, peerDB, here, 10)
-	putTokens(t, peerDB, alice, 5)
-	q := recordlessQuerier{apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
-
-	db := database.OpenInMemory(nil)
-	t.Cleanup(func() { _ = db.Close() })
-	values, _ := genesisValues(t, 4)
-	putNetwork(t, db, here, values)
-	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: q, block: 10}, ExecutedBlock: 1})
-	require.NoError(t, err)
-	ctx := context.Background()
-	loadSectionOf(t, s, alice)
-
-	putTokens(t, peerDB, alice, 11)
-	b := peerDB.Begin(true)
-	require.NoError(t, b.Account(here.JoinPath(protocol.Ledger)).BlockLedger(11).Put(&database.BlockLedger{Index: 11, Entries: []*protocol.BlockEntry{
-		{Account: alice, Chain: "main", Index: 1},
-	}}))
-	require.NoError(t, b.Commit())
-	putLedger(t, peerDB, here, 11)
-	s.sources.(*onePeer).block = 11
-
-	require.NoError(t, s.Pull(ctx))
-	require.NotZero(t, s.RefusedRecordAnswers(), "an answer stripped of its records was not refused")
-	require.Equal(t, uint64(10), s.sync.last, "an answer stripped of its records moved L")
-	require.Equal(t, int64(5), balanceIn(t, db, alice), "alice was written from an answer stripped of its records")
 }
