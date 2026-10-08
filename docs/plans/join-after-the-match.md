@@ -40,3 +40,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 22:43Z step 2 hold 1 PASS, worst 108 (was 240–708). Sampler: fill bounded by 256-account states calls at ~2 s each (validators under load) and by the Directory backfill leaking through the per-partition gate → step 1b.
 - 23:00Z step 2 join 2 ACTIVE 103 s; overlap 7:19, checked=156; hold 2 PASS worst 304 (was 437–566). Step 1b built (daemon gate `everyPartitionPastItsFill`).
 - 23:22Z step 2 join 3 ACTIVE 174 s; overlap 15:17; hold 3 FAIL worst 856/last 795 — the Directory backfill (ACME main) ran through BVN3's fill (5,868 chain calls; states calls 5.6 s each). Run stopped; relaunch with 1b (ef269c4d6).
+- 23:31Z step 2 relaunched with followers @ef269c4d6 (1b). Teardown of 221608Z lingered ~10 min on stallkill (soak.sh waits for it); gone on its own — harness note.
