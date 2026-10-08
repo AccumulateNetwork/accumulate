@@ -231,3 +231,80 @@ concurrently; either amends "One answer is the node's whole catch-up".
   extrapolation from nine full pages.
 - Whether the 0.33 s for one account is a fixed per-call cost or that
   account's 38 KB of open entries.
+- §9: that join 2's last-round union fit one page is inferred from the
+  absence of the `fallen behind` line for that round (one page is one view,
+  so T = Block); the page count of a past answer cannot be reproduced, the
+  validators retain BPT history for 1,024 blocks only.
+
+## 9. The one-page threshold: why a join converges or never does (Paul, 2026-10-08)
+
+Paul: "Resetting the network makes bootstrapping faster — same history,
+faster bootstrapping, until the network has been running for a while, then
+it is slow again." Worked against the code and the validators' records.
+
+**What a reset resets.** The validators were started 2026-10-06 22:36Z and
+never restarted through runs 050444Z, 141334Z and 211137Z (`docker inspect
+StartedAt`). The history is never read by a join: it takes the records after
+L — the last tens of blocks — and the sections they open. What a run resets
+is the load generator (a fresh universe, from zero accounts) and the
+followers' stores. So what makes a join fast or slow is in the last few
+blocks' records at the moment of the join, and in the states they name.
+
+**The convergence rule** (`state.go` `Pull`, `recordsOnce`;
+`account_states.go`). A round is complete when L ≥ the highest block any
+reply was read at. A `ChangedAccountStates` answer is the union of the
+distinct accounts the gap's records name, served in pages of 1 MiB of
+marshalled states; T is the peer's block at the first page and each page is
+its own view. A one-page answer is one view, so Block = T and the round is
+ready. A two-page answer's second page is served ~10 s later at a later
+block, Block > T (`the join has fallen behind`), and the round repeats from
+L with the blocks that passed meanwhile. **A join converges when, and only
+when, a round's gap names a union that fits one page.** Every round of the
+eleventh follower (+4 h 08) logged `fallen behind`; join 2 (+20 min) logged
+it for rounds 1–7 and not for round 8, which converged. The two joins'
+steady-state rounds were otherwise alike — records 0.55 vs 0.65 s/block,
+17–23 blocks a round, 13–19 s — the difference was the threshold, not the
+speed.
+
+**Both sides of the threshold grow with the load generator's run, and reset
+with it.** The picker is uniform over the universe (`randIdentity`,
+`randLite`), so the distinct accounts a window names rise toward names ×
+blocks as the universe grows; and a state grows with the account's age
+(entries since its last mark point, key pages, credits). BVN2 validator,
+blocks of run 211137Z and of the run before it:
+
+| point | names/block | distinct in 17 blocks | in 40 | in 100 |
+|---|---|---|---|---|
+| +10 min (universe ~150) | 15.7 | 69 | 112 | 173 |
+| +20 min (join 2, ACTIVE in 324 s) | 17.7 | 156 | 239 | 354 |
+| +1.3 h | 16.7 | 160 | 301 | 557 |
+| +2.3 h | 16.0 | 156 | 324 | 638 |
+| +3.3 h | 16.5 | 161 | 319 | 748 |
+| +4.3 h (join 11, NEVER ACTIVE) | 17.0 | 189 | 370 | 801 |
+| previous run +3.4 h / +5.0 h / +5.9 h | 15–16 | 153 / 190 / 154 | 350 / 382 / 323 | 678 / 737 / 707 |
+
+Names per block are constant; distinct names over a round's gap grow
+through the run (and the previous run's last hours sit where this run's
+fourth hour does, which is where both failed). The states grow too: the 167
+accounts of join 2's converging round need two pages *today* (93 on the
+first) and the 189 of join 11's rounds need two (131 on the first) — the
+same accounts, four hours older. Early in a run a gap of 17 blocks names
+~70 young accounts, a page; four hours in it names ~190 older ones, over a
+page, and the round that reads them takes ≥10 s (the serial ~30 ms per
+account on the validator, #4552), in which ~17 more blocks pass naming
+another ~190: a stable orbit two pages wide. Restart the load generator and
+the next join's gap names a few dozen small accounts again.
+
+**Not the cause:** validator age (never restarted; read-probe p50 3–6 ms all
+day), the size of the history (never read), the partition (BVN1, BVN2 and
+BVN3 join alike), the Directory (joins first every time).
+
+**What would falsify it.** (a) Restart the validators mid-run with the load
+generator kept: the theory says joins stay slow. (b) Cap the universe (no
+`add-account` past a few hundred): joins stay fast all run. (c) Raise
+`accountStatesBudget` from 1 MiB: later joins converge, with no change to
+the validators. **What removes it:** #4552 option 1 — names in the records
+answer, states fetched `askStates` 16-wide — makes the answer a few KB and
+always one page, so the threshold is gone and a round's length is the
+states' parallel fetch; #4551 (chain tails out of the state) shrinks the
+states that set the page.
