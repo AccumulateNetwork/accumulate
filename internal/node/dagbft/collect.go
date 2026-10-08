@@ -474,6 +474,15 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 		"partition", s.config.Partition.ID, "block", q, "round", round,
 		"alreadyInTheState", inState, "toProduce", len(groups))
 
+	// The groups the state already holds were executed -- by the peers whose
+	// state this is -- and count as such. Dropped uncounted, the primary read
+	// the executor as behind by them for ever and every restarted validator
+	// refused user submissions for good (run 20261008T170913Z: 125 on BVN1,
+	// 50 on the Directory; consensus spec, invariant 9).
+	for i := 0; i < inState; i++ {
+		s.node.ReportExecuted()
+	}
+
 	for i, g := range groups {
 		err := s.produce(g.Certs, g.Batches, g.Leader, g.IsLeader, g.payloadEntries(), false)
 		if err != nil {

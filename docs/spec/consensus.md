@@ -109,6 +109,16 @@ So a validator holds batches in four places, for four reasons:
    Directory of eight. Each header therefore gets its share of a per-block
    budget, `MaxBlockBytes / (2 × validators)`, capped by `MaxHeaderBytes`; a
    block is bounded whatever the number of validators.
+   **The lag counts commits the executor has not executed, and a joining
+   node's commits are executed by its handoff or by its state.** While a
+   node joins it executes nothing, so it reads as lagging and proposes no
+   user work (#4292). At the handoff the groups it collected are either
+   produced — each reported executed as it is — or already held by the
+   pulled state, executed by the peers whose state it is: those count as
+   executed at the handoff too. Dropped uncounted, every validator restarted
+   on a loaded partition read as behind by them for ever and refused user
+   work for good — 125 blocks on BVN1, 50 on the Directory, run
+   `20261008T170913Z` (#4553).
 10. **A refusal says why.** Refusing for a full own store (consensus is not
    committing this validator's batches) and refusing for execution lag (commits
    are fine, the executor is behind) are the same `NotReady` to the submitter

@@ -184,6 +184,38 @@ func TestHandoff_ProducesOnlyWhatTheStateDoesNotHave(t *testing.T) {
 	require.Equal(t, uint64(44), ca.blocks[2].Index)
 }
 
+// TestHandoff_TheGroupsTheStateAlreadyHoldsCountAsExecuted — run
+// 20261008T170913Z: twelve validators recreated in place rejoined with
+// alreadyInTheState=125 (BVN1) and 50 (Directory), and every one refused
+// user submissions for good: the groups the join collected that the pulled
+// state already held were dropped from the buffer and never reported
+// executed, so the primary read the executor as 125 blocks behind for ever
+// (consensus spec, invariant 9). A group the state holds is executed -- by
+// the peers whose state this is -- and counts as such.
+func TestHandoff_TheGroupsTheStateAlreadyHoldsCountAsExecuted(t *testing.T) {
+	svc, ca, author := newJoiningService(t)
+	w := svc.node.Workers()[0]
+
+	svc.lastBlockIndex = 40
+	svc.StartCollecting()
+	for i := 0; i < 3; i++ {
+		b := types.NewBatch([][]byte{{byte(i)}})
+		require.NoError(t, w.StoreBatch(b))
+		_, err := svc.processCommittedGroup(group(commitCert(author, types.Round(2*i+2), time.Unix(int64(100+i), 0),
+			[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
+		require.NoError(t, err)
+	}
+	require.Len(t, svc.Buffered(), 3)
+	executedBefore := svc.node.ExecutedGroups()
+
+	// The pull reached block 42: 41 and 42 are in the state, 43 is produced.
+	pullState(t, svc, 42, 4)
+	require.NoError(t, svc.performHandoff(42))
+	require.Len(t, ca.blocks, 1, "only the block the state does not hold is produced")
+	require.Equal(t, uint64(3), svc.node.ExecutedGroups()-executedBefore,
+		"the groups the state already holds were not reported executed: the primary reads the executor as behind by them for ever")
+}
+
 // A handoff at a block the node has not collected through yet is not a
 // handoff: the blocks between are still on their way, and producing what comes
 // after them would give those blocks the wrong numbers. The join waits.

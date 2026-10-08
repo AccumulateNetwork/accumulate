@@ -833,6 +833,10 @@ func (n *Node) Committed() <-chan []*types.Certificate {
 // from this (consensus spec, invariant 9).
 func (n *Node) ReportExecuted() { n.executedGroups.Add(1) }
 
+// ExecutedGroups is how many committed groups the executor has reported
+// executed, or held already in a pulled state.
+func (n *Node) ExecutedGroups() uint64 { return n.executedGroups.Load() }
+
 // ExecutionLag is how many committed leader groups the executor has not yet
 // executed.
 func (n *Node) ExecutionLag() int {
