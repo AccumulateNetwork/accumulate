@@ -39,3 +39,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 22:32Z step 2 join 1: ACTIVE 61 s; overlap 4 min 57 s, checked=195 (was ~13 min / 95 at 8 s each); fill 4,032 sections in 4:50 (~14/s vs 3.5/s). Short of the step-1 bar (≤2 min, ≤40 blocks).
 - 22:43Z step 2 hold 1 PASS, worst 108 (was 240–708). Sampler: fill bounded by 256-account states calls at ~2 s each (validators under load) and by the Directory backfill leaking through the per-partition gate → step 1b.
 - 23:00Z step 2 join 2 ACTIVE 103 s; overlap 7:19, checked=156; hold 2 PASS worst 304 (was 437–566). Step 1b built (daemon gate `everyPartitionPastItsFill`).
+- 23:22Z step 2 join 3 ACTIVE 174 s; overlap 15:17; hold 3 FAIL worst 856/last 795 — the Directory backfill (ACME main) ran through BVN3's fill (5,868 chain calls; states calls 5.6 s each). Run stopped; relaunch with 1b (ef269c4d6).
