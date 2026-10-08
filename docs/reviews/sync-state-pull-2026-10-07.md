@@ -308,3 +308,48 @@ answer, states fetched `askStates` 16-wide — makes the answer a few KB and
 always one page, so the threshold is gone and a round's length is the
 states' parallel fetch; #4551 (chain tails out of the state) shrinks the
 states that set the page.
+
+## 10. #4552 built; the restart that exposed #4553; what is left is the chains (run 20261008T180957Z)
+
+**#4552 option 1 built** (`28c0adc56`): the records answer is records only,
+the states asked 16-wide as of T, one commit a step. To measure it the 12
+validators had to serve the new answer, so they were recreated **in place**,
+one at a time, from the rebuilt image — all node state lives in the one
+shared volume `disoak_network-config`, so the 41-hour history survived; each
+rejoined in 62–163 s and the network made blocks at 1/s throughout.
+
+**That exposed #4553.** Every restarted validator refused user submissions
+for good: `execution_lag_blocks` stuck at exactly its rejoin's
+`alreadyInTheState` (125 on BVN1, 50 on the Directory) because
+`performHandoffAt` dropped the collected groups the pulled state already
+held without reporting them executed. The load generator sent 0
+transactions in 30 minutes (run 20261008T170913Z, stopped at +30 min: joins
+on an idle network prove nothing). Fixed `c31f1dacf` (the in-state groups
+count as executed at the handoff; spec invariant 9); the validators were
+rolled a second time, every lag gauge 0 after.
+
+**Run 20261008T180957Z** (validators and followers @`c31f1dacf`, 10 tps,
+follower walk, load real: 10.0/s, 0 refusals): joins 1–3 ACTIVE in 72 s
+(universe 149), 102 s (647), 142 s (1,146) — the same slots were 92, 324,
+334 s the run before — all holds PASS so far. The validators' per-call cost
+measured directly (BVN3, idle): a 64-account `AccountStates` as of T 220–320
+ms, a BPT page 120 ms, the records answer 0.0 s.
+
+**Where the first round's time goes now** (third follower, pull-query
+counters sampled every 2 s across both partitions):
+
+| phase | wall | chain calls (query s) | accountStates calls (query s) |
+|---|---|---|---|
+| top+spine | 35 s | 1,548 (131) | 4 (2) |
+| records, 246 accounts / 34 blocks | 25 s | 477 (60) | 1 |
+| sections, 6,461 accounts | 26 s | 168 (29) | 208 (288, 16-wide) |
+
+The records phase is no longer the states: it is `TakeChainsAt` on the
+windowed system accounts every record names (anchor pool, ledger, synthetic
+ledger) — 477 chain calls. The spine is the same, 1,548 chain calls. What is
+left of spine+records is #4548 and the window ("The window", executor.md):
+the change Paul described on 2026-10-08 — the spine is the trust chain,
+validated once; the pool and the ledgers taken by head and mark set like
+every other account; their history from the backfill. The sections phase is
+bounded by the follower's own writes now (6,461 accounts in 26 s with the
+validators answering 64 in 0.3 s), a store-side item.
