@@ -9,6 +9,7 @@ package run
 import (
 	"context"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -51,10 +52,11 @@ type Instance struct {
 	haltControllers   map[string]*HaltController
 
 	// partitionStates is each DAG-BFT partition's serving state, by
-	// partition ID, registered as the service starts; everyPartitionActive
+	// partition ID, registered as the service starts; everyPartitionPastItsFill
 	// is the gate the joins' history backfills run behind (#4550).
 	partitionStatesMu sync.Mutex
 	partitionStates   map[string]nodestate.Serving
+	partitionFills    map[string]dagbft.Sections
 
 	// databases is the one database each store is opened as, so every
 	// service over a store shares its section gate (#4497).
@@ -284,21 +286,28 @@ func (i *Instance) Verify() (*Config, error) {
 	return cfg, errors.Join(errs...)
 }
 
-// registerPartitionState records a partition's serving state (#4550).
-func (i *Instance) registerPartitionState(partition string, s nodestate.Serving) {
+// registerPartitionState records a partition's serving state and its fill
+// (#4550, #4554); secs is nil for a partition that never joined.
+func (i *Instance) registerPartitionState(partition string, s nodestate.Serving, secs dagbft.Sections) {
 	i.partitionStatesMu.Lock()
 	defer i.partitionStatesMu.Unlock()
 	if i.partitionStates == nil {
 		i.partitionStates = map[string]nodestate.Serving{}
+		i.partitionFills = map[string]dagbft.Sections{}
 	}
 	i.partitionStates[strings.ToLower(partition)] = s
+	i.partitionFills[strings.ToLower(partition)] = secs
 }
 
-// everyPartitionActive is whether every DAG-BFT partition this instance is
-// configured to run has registered its state and may serve: the gate a
-// partition's history backfill runs behind. A node that runs the Directory
-// beside a BVN is past its match only when the BVN is (#4550).
-func (i *Instance) everyPartitionActive() bool {
+// everyPartitionPastItsFill is whether every DAG-BFT partition this instance
+// is configured to run has registered its state, may serve, and holds every
+// section of its tree: the gate a partition's history backfill runs behind.
+// A node that runs the Directory beside a BVN is past its match only when
+// the BVN is (#4550), and its Directory's backfill otherwise runs while the
+// BVN's fill does -- 14 chain queries a second through the fill's gate, run
+// 20261008T221608Z (#4554). The fill of every partition comes before the
+// history of any.
+func (i *Instance) everyPartitionPastItsFill() bool {
 	expected := 0
 	for _, svc := range i.config.Services {
 		if _, ok := svc.(*DAGBFTService); ok {
@@ -310,8 +319,11 @@ func (i *Instance) everyPartitionActive() bool {
 	if len(i.partitionStates) < expected {
 		return false
 	}
-	for _, s := range i.partitionStates {
+	for p, s := range i.partitionStates {
 		if !s.CanServeCurrent() {
+			return false
+		}
+		if secs := i.partitionFills[p]; secs != nil && secs.SectionsNotLoaded() > 0 {
 			return false
 		}
 	}

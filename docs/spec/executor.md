@@ -714,7 +714,11 @@ the validators the BVN's state pull is reading, through the same per-peer
 gate (run 20261007T141334Z: 850 chain queries a minute, three times the BVN
 pull's validator time; `StateOptions.BackfillWhen`,
 `TestTheBackfillWaitsForEveryPartitionOfTheNode`) — **and after the fill
-has loaded every section** (#4554). Neither is a condition of being synced
+has loaded every section, of every partition the node runs** (#4554: the
+Directory's fill is seconds and its backfill otherwise runs through the
+BVN's fill, 14 chain queries a second on the same gate, run
+20261008T221608Z; `everyPartitionPastItsFill`,
+`TestEveryPartitionPastItsFillWaitsForEveryConfiguredPartition`). Neither is a condition of being synced
 — synced is the match and executing in agreement (Paul, 2026-10-08) — it
 is an order between two background tasks: the fill keeps blocks cheap (a
 block that touches a section not loaded loads it in-line), and the

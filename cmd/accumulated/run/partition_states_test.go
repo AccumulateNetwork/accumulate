@@ -14,22 +14,33 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// TestEveryPartitionActiveWaitsForEveryConfiguredPartition — #4550: the
-// gate a partition's history backfill runs behind is true only once every
-// DAG-BFT partition the instance is configured to run has registered its
-// state and may serve. A partition not yet registered is not vacuously
-// ACTIVE.
-func TestEveryPartitionActiveWaitsForEveryConfiguredPartition(t *testing.T) {
-	inst := &Instance{config: &Config{Services: []Service{&DAGBFTService{}, &DAGBFTService{}}}}
-	require.False(t, inst.everyPartitionActive(), "no partition registered")
+// filling is a partition's fill with n sections still not loaded.
+type filling int
 
-	inst.registerPartitionState("Directory", nodestate.Always{})
-	require.False(t, inst.everyPartitionActive(), "one of two partitions registered")
+func (f *filling) SectionsNotLoaded() int { return int(*f) }
+
+// TestEveryPartitionPastItsFillWaitsForEveryConfiguredPartition — #4550,
+// #4554: the gate a partition's history backfill runs behind is true only
+// once every DAG-BFT partition the instance is configured to run has
+// registered its state, may serve, and has loaded every section of its tree.
+// A partition not yet registered is not vacuously past its fill; a partition
+// ACTIVE and still filling holds the gate for the whole node (run
+// 20261008T221608Z: the Directory's backfill ran through the BVN's fill).
+func TestEveryPartitionPastItsFillWaitsForEveryConfiguredPartition(t *testing.T) {
+	inst := &Instance{config: &Config{Services: []Service{&DAGBFTService{}, &DAGBFTService{}}}}
+	require.False(t, inst.everyPartitionPastItsFill(), "no partition registered")
+
+	inst.registerPartitionState("Directory", nodestate.Always{}, nil)
+	require.False(t, inst.everyPartitionPastItsFill(), "one of two partitions registered")
 
 	bvn := nodestate.New(protocol.PartitionUrl("BVN1"))
-	inst.registerPartitionState("BVN1", bvn)
-	require.False(t, inst.everyPartitionActive(), "the BVN is still joining")
+	left := filling(3)
+	inst.registerPartitionState("BVN1", bvn, &left)
+	require.False(t, inst.everyPartitionPastItsFill(), "the BVN is still joining")
 
 	require.True(t, bvn.PromoteToActive([32]byte{1}, 10))
-	require.True(t, inst.everyPartitionActive(), "every partition ACTIVE")
+	require.False(t, inst.everyPartitionPastItsFill(), "the BVN is ACTIVE and still filling: the Directory's backfill would run through its fill")
+
+	left = 0
+	require.True(t, inst.everyPartitionPastItsFill(), "every partition ACTIVE and past its fill")
 }
