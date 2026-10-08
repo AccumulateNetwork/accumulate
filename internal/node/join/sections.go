@@ -61,6 +61,11 @@ type sections struct {
 	notLoaded  [bpt.Sections]atomic.Bool
 	nNotLoaded atomic.Int64 // how many of notLoaded are set
 
+	// What the fill did, for its log line: pages asked, states calls, spans
+	// loaded a section at a time (no peer served the page), and the passes
+	// that paused on fillReady.
+	fillPages, fillStates, fillAlone, fillCapped atomic.Int64
+
 	// unverified counts the sections a block took as a peer holds them
 	// with no peer's hashing to the marker: each is a load whose block the
 	// root check decides.
@@ -73,11 +78,11 @@ type sections struct {
 	// opening is the sections the join has opened and not loaded yet: no
 	// marker holds them and the store does not hold them whole, so they are
 	// not loaded either (opened, pulled).
-	opening map[bpt.Section]bool
-	pending map[bpt.Section][]*url.URL
-	ready   map[bpt.Section]*loadedSection
-	said    time.Time
-	done    bool
+	opening        map[bpt.Section]bool
+	pending        map[bpt.Section][]*url.URL
+	ready          map[bpt.Section]*loadedSection
+	said, saidPass time.Time
+	done           bool
 }
 
 // loadTimeout is how long a section's load inside a block asks every peer
@@ -748,6 +753,7 @@ func (x *sections) fillSpan(ctx context.Context, srcs []pull.Source, span []bpt.
 			return 0, false
 		}
 		at := h
+		x.fillPages.Add(1)
 		page, err := src.QueryBptPage(ctx, x.partition, &api.BptPageQuery{StartHash: top.ScanStart(), Count: sectionPage, ForHeight: at})
 		if err != nil && at != 0 {
 			if _, notLoaded := database.NotLoadedOf(err); !notLoaded {
@@ -755,6 +761,7 @@ func (x *sections) fillSpan(ctx context.Context, srcs []pull.Source, span []bpt.
 				// tree: a section whose leaves still hash to its marker
 				// has not changed since, and is taken (DIFFERENCES E29).
 				at = 0
+				x.fillPages.Add(1)
 				page, err = src.QueryBptPage(ctx, x.partition, &api.BptPageQuery{StartHash: top.ScanStart(), Count: sectionPage})
 			}
 		}
@@ -837,10 +844,12 @@ func (x *sections) fillSpan(ctx context.Context, srcs []pull.Source, span []bpt.
 		if len(cands) == 0 {
 			return n, true
 		}
+		x.fillStates.Add(1)
 		states, err := statesAt(ctx, src, x.partition, all, at)
 		if err != nil && at != 0 {
 			// An account the peer did not retain as of h: its current
 			// state, which is as of h for a section unchanged since.
+			x.fillStates.Add(1)
 			states, err = statesAt(ctx, src, x.partition, all, 0)
 		}
 		if err != nil {
@@ -869,6 +878,7 @@ func (x *sections) fillSpan(ctx context.Context, srcs []pull.Source, span []bpt.
 	// still filling, DIFFERENCES E26), or every peer failed. The span's top
 	// is loaded alone, which follows the names; the sections below it get
 	// their own page next.
+	x.fillAlone.Add(1)
 	want, ok := x.expected(top)
 	if !ok {
 		return 1, true
@@ -925,6 +935,9 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 		}
 		if len(todo) == 0 || waiting >= fillReady {
 			// Everything not loaded is loaded and waiting for a block.
+			if waiting >= fillReady {
+				x.fillCapped.Add(1)
+			}
 			if !pause(ctx, 50*time.Millisecond) {
 				return
 			}
@@ -941,6 +954,7 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			}
 			continue
 		}
+		started := time.Now()
 		// A span at a time, statesInFlight against each peer: one page of
 		// the tree from the span's highest section covers every section the
 		// page runs past, and one states call brings their leaves (#4554; a
@@ -995,8 +1009,29 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			}(span)
 		}
 		wg.Wait()
+		x.logPass(started, len(spans)+1, left)
 		if failed.Load() > 0 && !pause(ctx, backfillPause) {
 			return
 		}
 	}
+}
+
+// logPass says what a pass of the fill did, once a minute at most: how the
+// fill's time goes is what decides how far a follower falls behind after its
+// match (#4554).
+func (x *sections) logPass(started time.Time, spans, before int) {
+	x.mu.Lock()
+	say := time.Since(x.saidPass) >= time.Minute
+	if say {
+		x.saidPass = time.Now()
+	}
+	left := len(x.hash)
+	x.mu.Unlock()
+	if !say {
+		return
+	}
+	x.log.Info("The fill made a pass",
+		"partition", x.partition, "spans", spans, "sections-before", before, "sections-left", left,
+		"pages", x.fillPages.Swap(0), "states-calls", x.fillStates.Swap(0), "alone", x.fillAlone.Swap(0),
+		"paused-on-ready", x.fillCapped.Swap(0), "took", time.Since(started).Round(time.Millisecond))
 }
