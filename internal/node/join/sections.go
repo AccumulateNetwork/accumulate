@@ -864,7 +864,22 @@ func (x *sections) fillSpan(ctx context.Context, srcs []pull.Source, span []bpt.
 		}
 		return n, true
 	}
-	return 0, false
+	// No peer served the page: one of them holds a section the page would
+	// run into by its marker and refused, naming the peers to ask (a joiner
+	// still filling, DIFFERENCES E26), or every peer failed. The span's top
+	// is loaded alone, which follows the names; the sections below it get
+	// their own page next.
+	want, ok := x.expected(top)
+	if !ok {
+		return 1, true
+	}
+	ld, _, err := x.fetch(ctx, top, h, want, false)
+	if err != nil {
+		x.log.Debug("A section could not be loaded by the fill; it is asked again", "partition", x.partition, "section", top, "block", h, "error", err)
+		return 1, false
+	}
+	x.makeReady(ld)
+	return 1, true
 }
 
 // makeReady hands a loaded section to the next block, unless a block loaded

@@ -33,3 +33,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
   +3 h 18). Steps 0a–0d were done before the file existed; 0d is the
   excursion this file exists to prevent.
 - 2026-10-08 17:40 CT: step 1 built; the fill sorted ascending first and fell back to the per-section path every time (the test caught it: 1,601 pages); highest-first fixed it.
+- 2026-10-08 17:55 CT: step 1: a span whose page no peer serves (a peer holding a section by its marker refuses it, naming the holder) is loaded a section at a time through the redirect — `TestASectionOnlyOnePeerHoldsIsLoadedThroughARedirect` caught it (83 sections left). Step 2 needs no validator roll: the fill and the gate are follower-side; validators stay at c31f1dacf.
