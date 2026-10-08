@@ -200,7 +200,24 @@ generator's universe (`accounts=`) beside each join so joins are compared
 like for like, and a "same every time" expectation needs a load generator
 whose working set is the same every run.
 
-## 6. Not verified
+## 7. After #4549: the records phase is the next wall (run 20261007T211137Z)
+
+With the sections loaded at once, ten followers in a row were ACTIVE in
+92–972 s (the same network that had failed from the fifth follower on) and
+every hold passed. The eleventh, at +4 h 8 min with the load generator's
+universe at ~6,000 accounts, was NEVER ACTIVE: its rounds were 14–16 s, of
+which the records phase was 10–12 s for ~17 blocks of records and the
+sections 3–4 s, and the network moved 14–16 blocks in each — the join sat
+2–3 blocks behind the head for twenty minutes. `recordsOnce` fetches the
+`ChangedAccountStates` answer a page at a time and the validator reads every
+named account's state inside the answer at ~30 ms; at 10 tps a block names
+~18 accounts, and once they are distinct that is ~0.5 s of serial validator
+time per block of records — parity with a 1 block/s head. **#4552**: the
+states of a records answer fetched in parallel as the sections' are (names
+in the answer, `askStates` 16-wide), or the answer's pages fetched by index
+concurrently; either amends "One answer is the node's whole catch-up".
+
+## 8. Not verified
 
 - That the Directory backfill is what makes a 64-account answer take ~2 s:
   it takes 2–2.8 s from an idle HTTP client too, with the backfill running.
