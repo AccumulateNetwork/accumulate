@@ -353,3 +353,47 @@ validated once; the pool and the ledgers taken by head and mark set like
 every other account; their history from the backfill. The sections phase is
 bounded by the follower's own writes now (6,461 accounts in 26 s with the
 validators answering 64 in 0.3 s), a store-side item.
+
+## 11. Stopped by Paul at +3 h 18: the barriers after the match, and what slows with uptime (run 20261008T180957Z)
+
+**Result:** 10 of 10 joins ACTIVE in 72, 102, 142, 142, 144, 152, 132, 152,
+142, 226 s (universe 149 → 4,971; the same slots the run before: 92, 324,
+334, 273, 638, 578, 224, 972, 851, 598 s), every join one round. Holds: 8
+PASS, 1 FAIL (hold 8: 708 behind at worst, 216 at the end), 1 cut short by
+the stop.
+
+**The hold's crawl (#4554).** After ACTIVE a follower executed at 0.07–0.17
+blocks/s for 10–13 minutes, then at 4–5 (monitor.csv, both of bvn2-fol1's
+holds). The overlap settled every block for as long as the fill ran (its
+rule from run 20261002T090546Z, "a clean run before every section is loaded
+is not settled"): 95 blocks checked, ~8 s each; and in that window three
+things shared the follower's per-peer query gate — the history backfill
+(1,633 chain calls in 80 s), the fill (605 states calls, 593 pages) and the
+settle — every call queued ~4.5 s (`gate_slot_wait` +358 s in 80 s). Paul:
+synced is the match and executing in agreement; neither the fill nor the
+backfill is part of it, they are background work, and the only question is
+whether they make keeping up harder. Built: the backfill yields to the fill
+(`7db7d2c5d`, an order between background tasks, not a sync condition) and
+the overlap ends on its clean blocks whatever the fill is doing (a block's
+in-line section load is as of the node's own block, checked against the
+marker; the old divergence predates the sectioned sync).
+
+**What slows with uptime (Paul's hypothesis: caches or "optimizations"
+whose overhead exceeds their benefit).** The per-call cost of a 64-account
+`AccountStates` on the same validators: 0.22–0.32 s forty minutes after
+their in-place restart (under 10 tps and join 2), 0.44–2.2 s four hours
+later (under 10 tps and join 10), 2.0–2.8 s on the 37-hour-old validators
+the day before — and **22–44 ms idle**, 25 minutes after the load stopped.
+So the answer itself is cheap; what grows is contention on the validator
+under load. Not pinned to a cache yet: the hourly CPU profiles at +1/+2/+3
+h have the same shape (syscalls 23–27 %, ed25519 10 %, GC 15–20 %), the
+sampled live heap grew only ~24 MB between +1 h and +3 h (consensus
+headers/certificates ~100 MB, BlockchainDB segment blooms 70 MB, the bcdb
+immutable cache 57 MB, pubsub buffers 58 MB), `heap_inuse` 700 MB → 1.03 GB
+with a GC every ~5 s, plain reads flat (read probe p50 3–4 ms all run), and
+the store's shallow misses 84k → 2.06M and deep misses 107k → 467k in
+three hours (#4505: reads that leave the shallow window and walk). The
+controlled test is a validator restarted mid-run with the load generator
+kept: if its calls drop back to 0.25 s while its peers' stay at 1–2 s, it
+is the node's own state (caches, segments, retention); if not, it is the
+traffic. Not run.
