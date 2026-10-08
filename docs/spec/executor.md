@@ -713,7 +713,14 @@ Directory's backfill otherwise pulls hundreds of thousands of entries from
 the validators the BVN's state pull is reading, through the same per-peer
 gate (run 20261007T141334Z: 850 chain queries a minute, three times the BVN
 pull's validator time; `StateOptions.BackfillWhen`,
-`TestTheBackfillWaitsForEveryPartitionOfTheNode`) — the backfill brings
+`TestTheBackfillWaitsForEveryPartitionOfTheNode`) — **and every section of
+the partition's tree is loaded** (#4554: while the fill loads sections the
+overlap settles every block, and the backfill's twenty chain queries a
+second queued the fill's loads and the settle's reads behind them on the
+node's per-peer gate, every call waiting ~4.5 s; a follower crawled at 6–12
+s a block for thirteen minutes after its match and its hold ended 216 blocks
+behind, run 20261008T180957Z; `TestTheBackfillWaitsForTheSectionFill`) — the
+backfill brings
 those accounts in while the node executes (`pull.Backfill`): the entries below each chain's open mark set, the mark
 points that close their sets, and the message behind every entry. It
 writes nothing at or above a chain's head, so it does not race the blocks the

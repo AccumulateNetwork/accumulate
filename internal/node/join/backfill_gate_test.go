@@ -20,6 +20,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -85,6 +86,56 @@ func TestTheBackfillWaitsForEveryPartitionOfTheNode(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	require.Contains(t, buf.String(), "entries could not be brought in", "the backfill did not run once every partition was ACTIVE")
+	cancel()
+	<-done
+}
+
+// TestTheBackfillWaitsForTheSectionFill — #4554, run 20261008T180957Z: a
+// follower ACTIVE on both its partitions crawled at 6–12 s a block for
+// thirteen minutes after its match — the overlap settles every block until
+// every section is loaded, and the history backfill's 20 chain queries a
+// second shared the node's query gate with the fill's loads and the settle's
+// reads (every call queued ~4.5 s), so the fill drained 3.5 sections a second
+// and the hold ended 216 blocks behind. History comes after the state: the
+// backfill waits until every section is loaded.
+func TestTheBackfillWaitsForTheSectionFill(t *testing.T) {
+	here := protocol.DnUrl()
+	db := database.OpenInMemory(nil)
+	t.Cleanup(func() { _ = db.Close() })
+	var buf lockedBuffer
+	secs := newSections(here, "dn", db, slog.New(slog.NewTextHandler(&buf, nil)))
+	sec := database.SectionOfAccount(protocol.AccountUrl("someone", "tokens"))
+	secs.hash[sec] = [32]byte{7}
+	secs.setNotLoaded(sec, true)
+	s := &PulledState{
+		partition: here,
+		db:        db,
+		sources:   &fixedSources{partition: here, srcs: []pull.Source{}},
+		machine:   nodestate.New(here),
+		log:       slog.New(slog.NewTextHandler(&buf, nil)),
+		secs:      secs,
+	}
+	require.True(t, s.machine.PromoteToActive([32]byte{1}, 10), "precondition: ACTIVE")
+	s.markHeadOnly(here.JoinPath(protocol.AnchorPool))
+	require.Equal(t, 1, s.BackfillLeft())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); s.Backfill(ctx) }()
+
+	// A section is not loaded: the backfill asks for nothing.
+	time.Sleep(300 * time.Millisecond)
+	require.NotContains(t, buf.String(), "entries could not be brought in",
+		"the backfill ran while the fill still had a section to load")
+	require.Equal(t, 1, s.BackfillLeft())
+
+	// Every section loaded: the backfill runs.
+	secs.Committed([]bpt.Section{sec})
+	deadline := time.Now().Add(2*backfillPause + time.Second)
+	for !strings.Contains(buf.String(), "entries could not be brought in") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	require.Contains(t, buf.String(), "entries could not be brought in", "the backfill did not run once every section was loaded")
 	cancel()
 	<-done
 }
