@@ -325,8 +325,13 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 				// -- that is the state block h+1 executes over -- and said,
 				// for the root check to decide.
 				x.unverified.Add(1)
-				x.log.Warn("A section a block reads was not verified as of this node's block; the root check decides",
+				x.log.Warn("A section a block reads was not verified as of this node's block; the records settle it",
 					"partition", x.partition, "section", s, "block", h+1, "as-of", ld.block)
+			}
+			if ld.hash != want {
+				// Not the marker's: a peer held it as blocks after h left
+				// it. The records through its block settle it (§3a).
+				x.overlap.loadedAhead(max(ld.block, h+1))
 			}
 			return x.apply(batch, ld)
 		}

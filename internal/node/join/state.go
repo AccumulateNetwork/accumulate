@@ -534,7 +534,6 @@ func NewState(opts StateOptions) (*PulledState, error) {
 	s.overlap = &overlap{partition: opts.Partition, label: label, log: s.log, repairs: s.repairLog, peers: s.secs.peers, ask: overlapAsk, blocks: OverlapBlocks}
 	s.overlap.taken = func(urls ...*url.URL) { s.markHeadOnly(urls...) }
 	s.secs.overlap = s.overlap
-	s.overlap.loading = s.secs.AnyNotLoaded
 	opts.Database.SetSectionGate(s.secs)
 
 	mSpineStalled.WithLabelValues(label).Set(-1)

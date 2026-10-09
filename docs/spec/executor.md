@@ -1411,24 +1411,35 @@ that an account does not exist.
   peer is not refused either. A peer past H whose leaves differ holds the
   section as blocks after H left it. A block's load takes the first answer
   when no peer's verifies, whatever block it is of, and says so (`A section a block reads was taken as a peer holds
-  it after this node's block; the root check decides`). In the overlap after a
-  match (below) the block's record then settles what the load was ahead of;
-  outside it the root check does its job — a root that then differs from its
-  anchor is the anchor mismatch of "Two mismatches", 2, repaired from the
-  block ledger, and the node moves on.
+  it after this node's block; the records settle it`). **The records that
+  follow settle it, the overlap over or not (Paul, 2026-10-09): "We pull the
+  accounts for the touched sections from N or maybe N+1. We also apply the
+  block ledger for N+1 to N+10 to ensure we don't miss any updates. We should
+  be able to continue executing txs during this process."** A load whose
+  section is not the marker's records the block P it was taken as of, and
+  every block through P + `SettleMargin` (10) is settled against its record as
+  the overlap settles (below): a record is the states after its block, not a
+  change, so taking it is the same whatever the section held. A difference in
+  such a block is the record reconciling the section — counted
+  (`reconciled` in `The overlap is over`, and said: `A block's record
+  reconciled a section loaded ahead of it; the record stands`), never a return
+  to the ledger, and it neither breaks nor counts toward the clean run. A
+  difference in a block no load was ahead of is a mismatch, as below.
   **Decided (Paul, 2026-10-02): this is the design, not a defect.** Peers hold
   no history (no retention), so a section can only be served as the peer
   holds it, and the block that first touches one is settled against its
   record. On run 20261002T145702Z every BVN join repaired its first block
   this way (`differences=8`, `Repairing the state … own=2..5`) and was in
-  agreement within seconds (#4509). The dashboard counts it as a return to
-  the ledger; a join is judged by its synced time, not by that count.
+  agreement within seconds (#4509) -- then by a return to the ledger and a
+  new match; since 2026-10-09 the record reconciles it in place, with no
+  return (above).
   This is the case of a cold account — written last before any peer's
   retention window — that a block writes after the peers have executed that
   block: no peer could answer it as of H, and holding the block for it is what
   this replaces (`TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`
-  in the overlap, `TestTheOverlapHoldsWhileASectionIsNotLoaded`
-  after it).
+  in the overlap, `TestAColdLoadAfterTheOverlapIsSettledByTheRecords`
+  after it: the overlap ended at 16, the cold deposit at 23 was reconciled by
+  its record, no demotion).
   The fill takes only an answer that hashes to the marker: a section a block
   after H changed is loaded by the block that touches it.
 
@@ -1607,8 +1618,10 @@ overlap and sends the node back to the block ledger from that block: the root
 watch reports it as a divergence there (`takeMismatch`), the node is demoted,
 repairs from the block ledger, matches its anchor again, hands off, and a new
 overlap begins. After 20 blocks in a row of perfect matches (`OverlapBlocks`;
-Paul raised it from 5 on 2026-10-02), **with every section of the state tree
-loaded**, the node stops taking the records and executes alone. **It is synced only when
+Paul raised it from 5 on 2026-10-02) the node stops taking the records and
+executes alone, whatever sections are not loaded yet — except for the blocks a
+section loaded ahead of its block may be ahead of, which the records still
+settle (above, `SettleMargin`). **It is synced only when
 that holds: "If we regress back a state (within say 100 blocks) then regress
 and consider it we are still syncing"** (Paul, 2026-10-02). For `SyncedHold`
 (100) proven blocks after the overlap's end, a demotion withdraws the end --
@@ -1620,19 +1633,17 @@ hold begins at the first block whose root its signed anchor proves (the
 line "its own root matched its signed anchor"), and past `SyncedHold` blocks
 with no regression it says it is synced the same way (run 20261003T182050Z:
 acc-bvn3-fol1 resumed, was proved, ran caught up, and never said it was
-synced). A clean run
-before every section is loaded is not settled: a block executed alone that
-loads a cold section takes it as its peers hold it after the block and
-diverges (run 20261002T090546Z: BVN1 matched at 10818, ran 5 clean buffered
-blocks with 808 sections not loaded, and block 10824 diverged). *This is
-not a condition of being synced — synced is the match and executing in
-agreement (Paul, 2026-10-08) — it is what the no-retention decision costs:
-a peer cannot answer a cold section as of an old block, so a cold load
-after the overlap takes the later state, and the test that removed the wait
-diverged at the root watch exactly so (`TestTheOverlapHoldsWhileASectionIsNotLoaded`,
-#4554). The overlap therefore lasts as long as the fill, and the fill's
-speed is what bounds how far a follower falls behind after its match: 95
-settled blocks at ~8 s each and 700 blocks behind on run 20261008T180957Z.*
+synced). *The overlap no longer waits for the fill (Paul, 2026-10-09).* It
+did, from run 20261002T090546Z (BVN1 ran 5 clean blocks with 808 sections not
+loaded, and block 10824, executed alone, loaded a cold section as its peers
+held it after the block and diverged) to #4554: the overlap lasted as long as
+the fill, 5–15 minutes, 58–206 blocks checked for a run of 20, and in run
+20261008T232237Z all 34 overlaps ended with no difference. What diverged was
+the load ahead of its block left unsettled, not the clean run: the records
+after such a load now settle it wherever the overlap is, and the test that
+removing the wait failed (0d, demoted at 23) passes with it
+(`TestAColdLoadAfterTheOverlapIsSettledByTheRecords`). The fill is background
+work, as synced says.
 A staging error is
 repaired by the same loop; nothing at the handoff pulls staging. A
 section loaded from the peers' current state during the overlap cannot make
@@ -1711,11 +1722,10 @@ no peer holds a state it did not execute.
 a block executed alone at the frontier, a chain this execution changed that
 the record does not name (it cannot be unmarked), an account this execution
 made that the record does not hold, the ledger's own chains, and every block
-after the overlap — a cold load then is repaired as before
-(`TestTheOverlapHoldsWhileASectionIsNotLoaded`). The tests:
+after the overlap and its settle windows. The tests:
 `TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`,
 `TestAnExecutionThatDiffersFromItsRecordSendsTheNodeBackToTheLedger`,
-`TestTheOverlapHoldsWhileASectionIsNotLoaded`,
+`TestAColdLoadAfterTheOverlapIsSettledByTheRecords`,
 `TestARestartMidOverlapBeginsTheOverlapAgain` (test/e2e, through the
 production join, executor and API peers), and
 `TestAJoinAgreesAcrossRepeatedBurns`, which requires zero divergence of every

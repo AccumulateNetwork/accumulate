@@ -55,12 +55,6 @@ type overlap struct {
 	// ask bounds how long one block asks the peers for its record.
 	ask time.Duration
 
-	// loading reports whether any section of the state tree is not loaded
-	// yet. The overlap does not end while one is: a block executed alone that
-	// loads a cold section takes it as its peers hold it now, after the block,
-	// and diverges -- the clean run is a run of blocks with everything loaded.
-	loading func() bool
-
 	// repairs records each block that left accounts other than their record
 	// (executor spec, "Sync", §3b).
 	repairs *repairs
@@ -84,8 +78,16 @@ type overlap struct {
 	// mismatch or a demotion, and holds the count at 0 until a new start.
 	base, verified uint64
 	broken         bool
-	endedAt        uint64
-	syncedAt       uint64 // the block the node was synced at: endedAt + SyncedHold, held
+	// aheadThrough is the latest block a section a block loaded was taken as
+	// of, when that section was not the marker's -- a peer held it as blocks
+	// after this node's left it. Every block through aheadThrough +
+	// SettleMargin is settled against its record, the overlap's clean run
+	// over or not, and a difference in one is the record reconciling the
+	// section, not a mismatch (Paul, 2026-10-09). Zero when there is none.
+	aheadThrough uint64
+	reconciled   int64
+	endedAt      uint64
+	syncedAt     uint64 // the block the node was synced at: endedAt + SyncedHold, held
 	// ownRoot is set when the hold began at the block a resumed node's own
 	// root was first proved by its signed anchor (hold), not at an overlap's
 	// end; it changes only what the synced line says.
@@ -116,9 +118,20 @@ type settling struct {
 }
 
 // OverlapBlocks is how many blocks in a row with no difference end the
-// overlap, with every section loaded: "we are synced after [20] blocks of
-// perfect matches" (Paul, 2026-10-02).
+// overlap: "we are synced after [20] blocks of perfect matches" (Paul,
+// 2026-10-02). The sections not loaded yet are no part of it: the fill is
+// background work (Paul, 2026-10-08), and a section a block loads ahead of
+// itself is settled by the records that follow it (SettleMargin).
 const OverlapBlocks = 20
+
+// SettleMargin is how many blocks past the block a section was taken as of
+// the records are still applied: "We pull the accounts for the touched
+// sections from N or maybe N+1. We also apply the block ledger for N+1 to
+// N+10 to ensure we don't miss any updates. We should be able to continue
+// executing txs during this process" (Paul, 2026-10-09). Records are states
+// after their blocks, not changes, so taking one is the same whatever the
+// section held.
+const SettleMargin = 10
 
 // SyncedHold is how many blocks after the overlap's end the node must run
 // without regressing before it is synced: "If we regress back a state
@@ -222,6 +235,7 @@ func (o *overlap) start(block uint64) {
 	o.from, o.last = block, block
 	o.clean, o.checked, o.frontier = 0, 0, 0
 	o.endedAt, o.syncedAt, o.ownRoot = 0, 0, false
+	o.aheadThrough = 0
 	o.rebase(block)
 	o.log.Info("The overlap begins: each block is executed and settled against its record",
 		"partition", o.partition, "proven", block, "until-clean", o.blocks)
@@ -237,6 +251,7 @@ func (o *overlap) stop(block uint64) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.active = false
+	o.aheadThrough = 0
 	o.breakRun()
 	if o.endedAt != 0 && o.syncedAt == 0 {
 		o.log.Info("The node regressed within the hold after its overlap ended; it is still syncing",
@@ -295,7 +310,26 @@ func (o *overlap) hold(block uint64) {
 func (o *overlap) due(block uint64) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.active && block > o.from
+	return (o.active || o.settling(block)) && block > o.from
+}
+
+// settling is whether block is one a section loaded ahead of its block may
+// be ahead of. Called with the lock held.
+func (o *overlap) settling(block uint64) bool {
+	return o.aheadThrough != 0 && block <= o.aheadThrough+SettleMargin
+}
+
+// loadedAhead records that a block loaded a section a peer held as of block
+// p, past the node's own: the records through p + SettleMargin settle it.
+func (o *overlap) loadedAhead(p uint64) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if p > o.aheadThrough {
+		o.aheadThrough = p
+	}
 }
 
 // settle is a block's first step, after its transactions and before its
@@ -785,7 +819,7 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	if !o.active || n <= o.last {
+	if (!o.active && !o.settling(n)) || n <= o.last {
 		return
 	}
 	o.last = n
@@ -793,6 +827,16 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 		o.checked++
 	} else {
 		o.frontier++
+	}
+	if diffs > 0 && o.settling(n) {
+		// A section this block or one before it loaded was ahead of it: the
+		// record put the section's accounts where the partition's execution
+		// left them. That is the settle doing its job, not a mismatch; the
+		// clean run neither breaks nor counts it.
+		o.reconciled++
+		o.log.Info("A block's record reconciled a section loaded ahead of it; the record stands",
+			"partition", o.partition, "block", n, "differences", diffs, "settling-through", o.aheadThrough+SettleMargin)
+		return
 	}
 	if diffs > 0 {
 		// "If we get a mismatch, we go back to processing the blockledgers
@@ -812,22 +856,17 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 	if checked && n == o.verified+1 {
 		o.extend(n)
 	}
+	if !o.active {
+		return // past the clean run: settled for a section loaded ahead
+	}
 	o.clean++
 	if o.clean < o.blocks {
-		return
-	}
-	if o.loading != nil && o.loading() {
-		// "Eventually everything settles out": a clean run before every
-		// section is loaded is not settled. Run 20261002T090546Z: BVN1
-		// matched at 10818, ran 5 clean buffered blocks with 808 sections
-		// not loaded, and block 10824, executed alone, loaded a section as
-		// its peers held it after 10824 and diverged.
 		return
 	}
 	o.active = false
 	o.endedAt = n
 	o.log.Info("The overlap is over: the node executes alone",
-		"partition", o.partition, "block", n, "proven", o.from, "checked", o.checked, "frontier", o.frontier, "differences", o.differences)
+		"partition", o.partition, "block", n, "proven", o.from, "checked", o.checked, "frontier", o.frontier, "differences", o.differences, "reconciled", o.reconciled)
 }
 
 // takeMismatch reports the block at which this overlap's execution first
@@ -860,6 +899,9 @@ type OverlapStatus struct {
 	// block ledger, since the process started: a demotion at one of these is
 	// the overlap's repair, not an anchor mismatch.
 	Returns []uint64
+	// Reconciled is how many blocks' records settled a section loaded ahead
+	// of the block, without a return to the ledger.
+	Reconciled int64
 }
 
 // SetOverlapBlocks sets how many clean blocks in a row end the overlap, for a
@@ -876,7 +918,7 @@ func (s *PulledState) Overlap() OverlapStatus {
 	o := s.overlap
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return OverlapStatus{Active: o.active, From: o.from, EndedAt: o.endedAt, SyncedAt: o.syncedAt, Checked: o.checked, Frontier: o.frontier, Differences: o.differences, Returns: append([]uint64(nil), o.returns...)}
+	return OverlapStatus{Active: o.active, From: o.from, EndedAt: o.endedAt, SyncedAt: o.syncedAt, Checked: o.checked, Frontier: o.frontier, Differences: o.differences, Reconciled: o.reconciled, Returns: append([]uint64(nil), o.returns...)}
 }
 
 // SettleBlock implements [database.BlockSettler].
