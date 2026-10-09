@@ -27,6 +27,10 @@ Review: `docs/reviews/sync-state-pull-2026-10-07.md` §§7–11.
 | 4 | #4548 + the window: spine = trust chain only, pool/ledgers by head + mark set, `TakeChainsAt` only for whole accounts, history from the backfill | TODO, needs Paul's go | spine ≤ 5 s, records phase ≤ 2 s per round; a joined node's synthetic proofs on anchors below its handoff wait for the backfill (DIFFERENCES E20) |
 | 5a | #4551 chain tails out of the state answer (mark-point rule) | TODO, needs Paul's rule | state answer ≤ 25 % of today's bytes; `TestAStateAnswerCarriesNoChainTail` |
 | 5b | #4546 cold-cache read cost (options a/b; BlockchainDB#103) | TODO, needs Paul's choice | 64-account call under load ≤ 0.3 s at +4 h |
+| 4a | memory A/B: val1+val2 of each BVN at `GOGC=200`, `GOMEMLIMIT=2000MiB`, `mem_limit 2348m` (arm A); val3+val4 unchanged at 1700MiB/2048m/default GOGC (arm B); all 12 recreated in place together | TODO | per arm at +1/+4/+8 h: 64-state call ms, GC/min, CPU %, RSS; A flat while B climbs ⇒ GC pressure is (part of) #4555 |
+| 4b | the walk's ACTIVE/hold lines carry the overlap's length and `checked` | TODO | lines show both in follower-report.md |
+| 4c | readprobe: a 64-account AccountStates as-of-block call per validator per round | TODO | per-validator ms in every round line, so the arms compare without hand sampling |
+| 4d | relaunch: followers from HEAD (1c, 1d), attach-10tps-followers.conf, walk on | TODO | step 2's exit measurement; monitor up and load real before stopping to watch |
 | 5c | the follower's own writes in the sections phase (`keepSpan` commits; 6,461 accounts in 26 s with the validators answering 64 in 0.3 s) | TODO | sections phase ≥ 1,000 accounts/s; store-side issue filed if BlockchainDB |
 
 Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
@@ -66,3 +70,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 04:13Z join 14 ACTIVE 264 s (universe 8,043); hold 14 PASS but worst 732 — backlog climbing with the universe; 1c is the built fix, not in these followers.
 - 04:34Z join 15 ACTIVE 234 s (universe 8,597); hold 15 PASS 493 — 15/15 at +5h10.
 - 04:53Z join 16 ACTIVE 194 s (universe 9,125); hold 16 PASS 431 — 16/16 at +5h30.
+- 2026-10-09 CT: Paul: GOGC 200 + 300 MiB more container and GOMEMLIMIT, as an A/B; walk overlap fields; readprobe states call; relaunch. Steps 4a–4d added.

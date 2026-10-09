@@ -78,6 +78,15 @@ x-node-env: &node-env
   # stopped keeping a digest per key (~190MB/node).
   GOMEMLIMIT: "${GOMEMLIMIT-1700MiB}"
 
+# Arm A of the memory A/B (plan step 4a, #4555): val1 and val2 of each BVN
+# run 300MiB more ceiling and container, and collect at GOGC=200 instead of
+# 100; val3 and val4 stay as above, so one run compares the two under the
+# same traffic.
+x-node-env-a: &node-env-a
+  <<: *node-env
+  GOGC: "${GOGC_A-200}"
+  GOMEMLIMIT: "${GOMEMLIMIT_A-2000MiB}"
+
 services:
   # CRITICAL: Bootstrap server is REQUIRED for peer discovery
   # All validators need this to find each other on the network
@@ -146,8 +155,8 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn1-val1
     logging: *bounded-logging
-    environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    environment: *node-env-a
+    mem_limit: ${ACC_MEM_LIMIT_A-2348m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -167,8 +176,8 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn1-val2
     logging: *bounded-logging
-    environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    environment: *node-env-a
+    mem_limit: ${ACC_MEM_LIMIT_A-2348m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -231,8 +240,8 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn2-val1
     logging: *bounded-logging
-    environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    environment: *node-env-a
+    mem_limit: ${ACC_MEM_LIMIT_A-2348m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -252,8 +261,8 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn2-val2
     logging: *bounded-logging
-    environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    environment: *node-env-a
+    mem_limit: ${ACC_MEM_LIMIT_A-2348m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -315,8 +324,8 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn3-val1
     logging: *bounded-logging
-    environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    environment: *node-env-a
+    mem_limit: ${ACC_MEM_LIMIT_A-2348m}
     volumes:
       - network-config:/root/.accumulate
     command:
@@ -336,8 +345,8 @@ services:
       dockerfile: Dockerfile
     container_name: acc-bvn3-val2
     logging: *bounded-logging
-    environment: *node-env
-    mem_limit: ${ACC_MEM_LIMIT-2048m}
+    environment: *node-env-a
+    mem_limit: ${ACC_MEM_LIMIT_A-2348m}
     volumes:
       - network-config:/root/.accumulate
     command:
