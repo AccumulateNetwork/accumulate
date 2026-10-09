@@ -5,3 +5,6 @@
 .git
 */Dockerfile
 .test
+# Soak evidence: 128 GB in a working tree by 2026-10-09; COPY . . took it
+# into every image build and filled the disk mid-launch.
+test/docker/soak/runs
