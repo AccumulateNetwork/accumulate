@@ -66,6 +66,10 @@ type sections struct {
 	// that paused on fillReady.
 	fillPages, fillStates, fillAlone, fillCapped atomic.Int64
 
+	// spanSize is how many sections one page covered, measured by the
+	// fill's first page and kept for its later passes.
+	spanSize int
+
 	// unverified counts the sections a block took as a peer holds them
 	// with no peer's hashing to the marker: each is a load whose block the
 	// root check decides.
@@ -91,7 +95,14 @@ const loadTimeout = 30 * time.Second
 
 // fillReady is how many loaded sections the fill holds for the next block
 // before it waits for one to be written.
-const fillReady = 64
+// fillReady is how many loaded sections may wait for a block before the fill
+// pauses: a section is written only by the next block's batch, so this times
+// the block rate bounds the fill. At 64, with a block every ~1.5 s during the
+// overlap, the fill could not exceed ~40 sections a second whatever its calls
+// cost, and each pass re-paid a probe page to stop at the cap after a span or
+// two (run 20261008T232237Z, #4554). 256 sections is ~6,000 accounts, ~30 MB
+// held until the next block writes them.
+const fillReady = 256
 
 // mSectionsNotLoaded is how many sections of the state tree this node has not
 // loaded: zero once the fill is done (#4485).
@@ -970,14 +981,17 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			continue
 		}
 		var failed atomic.Int32
-		covered, ok := x.fillSpan(ctx, srcs, todo, h)
-		if !ok {
-			failed.Add(1)
+		if x.spanSize == 0 {
+			covered, ok := x.fillSpan(ctx, srcs, todo, h)
+			if !ok {
+				failed.Add(1)
+			}
+			todo = todo[covered:]
+			x.spanSize = max(1, covered)
 		}
-		todo = todo[covered:]
 		var spans [][]bpt.Section
 		for len(todo) > 0 {
-			k := min(len(todo), max(1, covered))
+			k := min(len(todo), x.spanSize)
 			spans = append(spans, todo[:k])
 			todo = todo[k:]
 		}
@@ -1009,7 +1023,7 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 			}(span)
 		}
 		wg.Wait()
-		x.logPass(started, len(spans)+1, left)
+		x.logPass(started, len(spans), left)
 		if failed.Load() > 0 && !pause(ctx, backfillPause) {
 			return
 		}
