@@ -55,3 +55,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 01:57Z join 8 ACTIVE 355 s (universe 4,343; joins 5–8: 295/183/244/355). Step 3 +30: val2 349 vs val1 644 — val2 climbing with its own uptime (178→191→349).
 - 02:05Z hold 8 PASS 294. Join 8 was 3 rounds (172/84/50 s) with nothing owed: the as-of-T fallback to current on the first failing peer → step 1d built. Step 3 +40: val2 338 vs val1 586.
 - 02:12Z join 9 ACTIVE 305 s (universe 4,969). 1d committed bacf1751b.
+- 02:26Z hold 9 PASS 281. Step 3 series, first-call ms (restarted val2 / untouched val1): +10 178/578, +20 191/711, +30 349/644, +40 338/586, +50 423/err — val2 climbs from a restart toward its peers within the hour under the same traffic: the node's own state, not the traffic.
