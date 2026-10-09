@@ -78,8 +78,14 @@ type overlap struct {
 	checked     int    // blocks settled against their record
 	frontier    int    // blocks no peer had produced yet
 	differences int64
-	endedAt     uint64
-	syncedAt    uint64 // the block the node was synced at: endedAt + SyncedHold, held
+	// base and verified bound the blocks matched (mMatchedBlocks): every
+	// block in (base, verified] was settled against its record or lies under
+	// an anchored root this node's own root matched. broken is set by a
+	// mismatch or a demotion, and holds the count at 0 until a new start.
+	base, verified uint64
+	broken         bool
+	endedAt        uint64
+	syncedAt       uint64 // the block the node was synced at: endedAt + SyncedHold, held
 	// ownRoot is set when the hold began at the block a resumed node's own
 	// root was first proved by its signed anchor (hold), not at an overlap's
 	// end; it changes only what the synced line says.
@@ -153,6 +159,53 @@ var mOverlapReturns = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help:      "Blocks at which the overlap after a join found execution differing from the block-ledger record and sent the node back to the block ledger",
 }, []string{"partition"})
 
+// mMatchedBlocks is the blocks this node has verified since its state was
+// proven, in an unbroken run: each settled against its block-ledger record
+// in the overlap, or under an anchored root its own root matched after it. A
+// frontier block -- settled with no record to compare -- stops the run until
+// an anchor covers it; a mismatch or a demotion sets it to 0 (Paul,
+// 2026-10-09: "the number of contiguous matching blocks").
+var mMatchedBlocks = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "join",
+	Name:      "matched_blocks",
+	Help:      "Blocks verified in an unbroken run since the state was proven: settled against their record, or under a matching anchored root; 0 after a mismatch or a demotion",
+}, []string{"partition"})
+
+// rebase starts the matched run at block. Called with the lock held.
+func (o *overlap) rebase(block uint64) {
+	o.base, o.verified, o.broken = block, block, false
+	mMatchedBlocks.WithLabelValues(o.label).Set(0)
+}
+
+// breakRun sets the matched run to 0 until the next rebase. Called with the
+// lock held.
+func (o *overlap) breakRun() {
+	o.broken = true
+	mMatchedBlocks.WithLabelValues(o.label).Set(0)
+}
+
+// extend extends the matched run to block, if every block up to it is
+// covered. Called with the lock held.
+func (o *overlap) extend(block uint64) {
+	if o.broken || block <= o.verified {
+		return
+	}
+	o.verified = block
+	mMatchedBlocks.WithLabelValues(o.label).Set(float64(o.verified - o.base))
+}
+
+// vouched records that a signed anchor proved this node's root after block:
+// every block up to it is verified.
+func (o *overlap) vouched(block uint64) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.extend(block)
+}
+
 // start begins the overlap for the blocks after block, the block the state
 // was proven at. A match that hands off is followed by them; one that does
 // not is followed by another match, which begins it again.
@@ -169,6 +222,7 @@ func (o *overlap) start(block uint64) {
 	o.from, o.last = block, block
 	o.clean, o.checked, o.frontier = 0, 0, 0
 	o.endedAt, o.syncedAt, o.ownRoot = 0, 0, false
+	o.rebase(block)
 	o.log.Info("The overlap begins: each block is executed and settled against its record",
 		"partition", o.partition, "proven", block, "until-clean", o.blocks)
 }
@@ -183,6 +237,7 @@ func (o *overlap) stop(block uint64) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.active = false
+	o.breakRun()
 	if o.endedAt != 0 && o.syncedAt == 0 {
 		o.log.Info("The node regressed within the hold after its overlap ended; it is still syncing",
 			"partition", o.partition, "block", block, "overlap-ended", o.endedAt, "hold", SyncedHold)
@@ -233,6 +288,7 @@ func (o *overlap) hold(block uint64) {
 	}
 	o.active = false
 	o.endedAt, o.ownRoot = block, true
+	o.rebase(block)
 }
 
 // due reports whether block is one the overlap settles.
@@ -745,12 +801,16 @@ func (o *overlap) done(n uint64, checked bool, diffs int) {
 		// (takeMismatch), repairs from the block ledger there, and the
 		// next match begins the overlap again.
 		o.clean = 0
+		o.breakRun()
 		if o.mismatch == 0 {
 			o.mismatch = n
 			o.log.Info("Execution differs from the block ledger; going back to the block ledger from this block",
 				"partition", o.partition, "block", n, "differences", diffs)
 		}
 		return
+	}
+	if checked && n == o.verified+1 {
+		o.extend(n)
 	}
 	o.clean++
 	if o.clean < o.blocks {

@@ -31,6 +31,8 @@ Review: `docs/reviews/sync-state-pull-2026-10-07.md` §§7–11.
 | 4b | the walk's ACTIVE/hold lines carry the overlap's length and `checked` | DONE | lines show both in follower-report.md |
 | 4c | readprobe: a 64-account AccountStates as-of-block call per validator per round | DONE | per-validator ms in every round line, so the arms compare without hand sampling |
 | 4d | relaunch: followers from HEAD (1c, 1d), attach-10tps-followers.conf, walk on | RUNNING 20261009T124645Z | step 2's exit measurement; monitor up and load real before stopping to watch |
+| 4e | blocks matched: gauge `accumulate_join_matched_blocks` (contiguous blocks settled against their record or under a matching anchored root; 0 on mismatch/demotion); dashboard follower column = blocks matched / current height | gauge BUILT (unit test only; join suite not run); dashboard height column live, matched not yet shown | column rises 1:1 with the partition once caught up, drops only to 0 |
+| 4f | Paul 2026-10-09: more than 100 blocks behind ⇒ stop executing txs and process block-ledger entries until caught up; then execute again, checked against the block ledger | TODO — spec first | a follower never holds > 100 behind while executing |
 | 5c | the follower's own writes in the sections phase (`keepSpan` commits; 6,461 accounts in 26 s with the validators answering 64 in 0.3 s) | TODO | sections phase ≥ 1,000 accounts/s; store-side issue filed if BlockchainDB |
 
 Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
@@ -75,3 +77,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 2026-10-09 07:14 CT: 4c done: readprobe's round adds one 64-state call as of a block per validator (readprobe-states.csv + a 'states' log line); live check on the idle network reads 'not read' (400 blocks changed only system accounts), as expected without load.
 - 2026-10-09 07:45 CT: 4d: validators built from 9f78a3a7d, all 12 recreated together 12:24:52Z (arms verified by docker inspect; every validator ACTIVE, heights agree). Launch failed at the follower build: disk 100% full — Dockerfile `COPY . .` took test/docker/soak/runs (128 GB) into the build context; build cache 206→343 GB. Build killed before any load; validators unharmed (no ENOSPC, no restarts, heights agree). Fix: .dockerignore excludes soak runs.
 - 12:47Z (07:47 CT) 4d launched: run 20261009T124645Z, validators 9f78a3a7d (A/B arms), followers d401137bb; monitor 200 on the tailnet, load running; first states round (fresh restart, both arms): 33–203 ms on all 12.
+- 2026-10-09 09:10 CT: Paul: 'ok blocks' told nothing — replaced on the dashboard by current height (behind); blocks matched gauge built (4e, WIP); catch-up rule given (4f). Paul: stop. Run 20261009T124645Z still running.

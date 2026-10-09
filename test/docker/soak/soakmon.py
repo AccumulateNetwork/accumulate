@@ -3304,7 +3304,7 @@ td.name{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px
 <div class=panel id=fjpanel data-p=followers>
   <h2>Followers — joins, read from each container&rsquo;s log</h2>
   <div class=note>One row per follower &times; partition. A follower added to the network goes pulling &rarr; proving &rarr; checking &rarr; holding &rarr; synced; one started with the network executes from genesis. Hover a heading or a state for what it means. Counts are whole-run.</div>
-  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th title="the follower's container, and the partition this row is about">follower</th><th title="what the node is doing now; hover the state for its meaning">state</th><th title="blocks executed with no failure since the node last handed off, now">ok blocks</th><th title="time since the follower was added, or since it started">up</th><th title="time from the add to the state proven against its signed anchor">proven</th><th title="time from the add to synced: 20 perfect blocks, then 100 with no regression">synced</th><th title="sections of the state tree not yet loaded, now">sections</th><th title="accounts whose history is not yet backfilled, now">backfill</th><th title="returns to the ledger over the run: a block whose execution differed from its record">returns</th><th title="regressions while holding, over the run">regress</th><th title="root mismatches over the run: an executed block's root was not its anchored root">root&ne;</th><th title="accounts a repair changed, over the run">repaired</th><th title="memory in MiB, now">MiB</th><th title="the container's status">container</th></tr></thead><tbody></tbody></table></div>
+  <div class=scrollx><table class=ftab id=fjtab><thead><tr><th title="the follower's container, and the partition this row is about">follower</th><th title="what the node is doing now; hover the state for its meaning">state</th><th title="the block this follower has executed on this partition, now (its own metrics), and in brackets how many blocks behind the partition's validators it is">height</th><th title="time since the follower was added, or since it started">up</th><th title="time from the add to the state proven against its signed anchor">proven</th><th title="time from the add to synced: 20 perfect blocks, then 100 with no regression">synced</th><th title="sections of the state tree not yet loaded, now">sections</th><th title="accounts whose history is not yet backfilled, now">backfill</th><th title="returns to the ledger over the run: a block whose execution differed from its record">returns</th><th title="regressions while holding, over the run">regress</th><th title="root mismatches over the run: an executed block's root was not its anchored root">root&ne;</th><th title="accounts a repair changed, over the run">repaired</th><th title="memory in MiB, now">MiB</th><th title="the container's status">container</th></tr></thead><tbody></tbody></table></div>
 </div>
 <div class=two>
   <div class=panel data-p=synflow>
@@ -3479,7 +3479,7 @@ function nodestateView(nsd){
 function followersView(fj,jp,net,ns){
   // The follower's executed height as the monitor reads it now (nodeState), not
   // the join log's last mention of it, which freezes between log lines.
-  const live={};for(const x of ((ns||{}).rows||[]))live[x.node+"|"+(x.partition||"").toLowerCase()]=x.executed;
+  const live={},nsRow={};for(const x of ((ns||{}).rows||[])){live[x.node+"|"+(x.partition||"").toLowerCase()]=x.executed;nsRow[x.node+"|"+(x.partition||"").toLowerCase()]=x;}
   const COLS=14;
   if(!fj||!fj.rows)return `<tr><td class=mut colspan=${COLS}>— not measured: the monitor has not read the followers yet</td></tr>`;
   if(!fj.rows.length)return `<tr><td class=mut colspan=${COLS}>${fj.why||'no follower in this topology'}</td></tr>`;
@@ -3511,18 +3511,19 @@ function followersView(fj,jp,net,ns){
     const [word,why,cls]=STATE[key]||[key,key,'mut'];
     const gone=r.life==='waiting'||r.life==='removed';
     const exec=gone?null:(live[r.container+'|'+(r.partition||'').toLowerCase()]??g.executed??r.height);
-    // Blocks executed since the node last handed off, none of which failed:
-    // its executed height above the block it went ACTIVE at. Blank while it
-    // is not executing -- nothing is counted that is not a block executed.
-    const executing=!gone&&(r.phase==='ACTIVE'||r.phase==='synced')&&exec!=null&&r.activeBlock!=null;
-    const okBlocks=executing?Math.max(0,exec-r.activeBlock):null;
+    // The block it has executed now, and how far behind the partition's
+    // validators that is (Paul, 2026-10-09: the old "ok blocks" -- executed
+    // minus the block it went ACTIVE at -- told the reader nothing).
+    const x=gone?null:nsRow[r.container+'|'+(r.partition||'').toLowerCase()];
+    const ph=x?x.partitionHeight:null;
+    const behind=exec!=null&&ph!=null?ph-exec:null;
     const st=r.status==null?(r.life==='waiting'?'<span class=mut>not created</span>':'<span class=mut>—</span>')
       :r.oomKilled?`<span class=red title="killed by the kernel for memory (OOMKilled), exit ${r.exitCode}">OOM ${r.exitCode}</span>`
       :r.status!=='running'?`<span class=red title="container ${r.status}, exit ${r.exitCode}">${r.status} ${r.exitCode}</span>`:'running';
     const na=launched?'<span class=mut title="started with the network; never joined">—</span>':'—';
     return `<tr><td class=name title="${r.container}${launched?', started with the network':''}">${r.container.replace(/^acc-/,'')} ${shortP(r.partition)}</td>`
       +`<td class=${cls} title="${why}">${word}</td>`
-      +`<td>${okBlocks==null?'—':`<span class=grn>${fmt(okBlocks)}</span>`}</td>`
+      +`<td>${exec==null?'—':fmt(exec)}${behind==null?'':` <span class=${behind>5?'yel':'mut'}>(${behind>0?'−'+fmt(behind):'0'})</span>`}</td>`
       +`<td>${gone?'—':d(r.sinceAddSec)}</td>`
       +`<td>${launched?na:(r.toProvenSec!=null?d(r.toProvenSec):'—')}</td><td><b>${launched?na:(r.toSyncedSec!=null?d(r.toSyncedSec):'—')}</b></td>`
       +`<td>${gone?'—':n(g.sectionsNotLoaded??0,'yel')}</td><td>${gone?'—':n(g.backfillLeft??0,'yel')}</td>`
