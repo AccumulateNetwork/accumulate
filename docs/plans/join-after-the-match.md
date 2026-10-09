@@ -51,3 +51,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 01:25Z run 232237Z: join 6 ACTIVE 183 s (universe 3,033); hold 6 PASS 381. Six for six at +2 h. Step 3 launched 01:26Z: bvn3-val2 recreated in place (image from ef269c4d6), load kept; 64-state call on it vs bvn3-val1 every 10 min for an hour (scratchpad uptime-step3.log).
 - 01:36Z run 232237Z join 7 ACTIVE 244 s (universe 3,633). Step 3: bvn3-val2 recreated 01:26Z, ACTIVE 01:30:48, accepting submissions 01:31:11; +10 min first-call: val2 178 ms vs val1 578 ms (before: 1,088 / 990).
 - 01:47Z hold 7 PASS 513. Step 3 +20 min: val2 191 ms vs val1 711 ms (first call); +10: 178 vs 578 — restarted validator 3–4x cheaper per call under the same load, two samples.
+- 01:57Z join 8 ACTIVE 355 s (universe 4,343; joins 5–8: 295/183/244/355). Step 3 +30: val2 349 vs val1 644 — val2 climbing with its own uptime (178→191→349).
