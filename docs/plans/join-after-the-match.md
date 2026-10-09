@@ -62,3 +62,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 03:10Z hold 11 PASS 414 — 11/11 joins and holds at +3h45, universe 6,228. #4555 filed.
 - 03:16Z join 12 ACTIVE 265 s (universe 6,811).
 - 03:30Z hold 12 PASS 477 — 12/12 at +4 h, universe 6,811. Continuing; reporting on change of state only.
+- 03:53Z join 13 ACTIVE 376 s (universe 7,499); hold 13 PASS 308.
