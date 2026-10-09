@@ -77,6 +77,10 @@ type PulledState struct {
 	// the gate that loads one when a block reads it (#4485).
 	secs *sections
 
+	// asOfFallbacks counts the chunks of a step no peer could answer as of
+	// L, taken current instead (askStatesOf); said in the step's log line.
+	asOfFallbacks atomic.Int64
+
 	// overlap settles the first blocks after a match against the
 	// partition's records of them (#4495). The section gate calls it.
 	overlap *overlap
@@ -951,6 +955,7 @@ func (s *PulledState) processRecords(ctx context.Context, p *syncing, peer peers
 		}
 		s.log.Info("Took the accounts the records name",
 			"partition", s.partition, "blocks", through-after, "accounts", len(named), "owed", len(named)-kept,
+			"chunks-taken-current", s.asOfFallbacks.Swap(0),
 			"took", took.Round(time.Millisecond), "accounts-per-second", int(perSecond))
 		if through >= block || through >= peer.block {
 			return
@@ -1351,6 +1356,25 @@ func (s *PulledState) askStatesOf(ctx context.Context, srcs []pull.Source, turn 
 			return src, recs
 		}
 	}
+	if asOf == 0 || ctx.Err() != nil {
+		return nil, nil
+	}
+	// No peer could answer as of L -- none retains the block, or every one
+	// was busy. Their current states, of a block past L, and the records
+	// catch up to it (DIFFERENCES E29). Asked of the first peer that failed,
+	// before the others were tried as of L, this made a round repeat for one
+	// busy answer (#4554, run 20261008T232237Z: joins of two and three
+	// rounds with nothing owed).
+	s.asOfFallbacks.Add(1)
+	for k := range srcs {
+		if ctx.Err() != nil {
+			return nil, nil
+		}
+		src := srcs[(turn+k)%len(srcs)]
+		if recs, ok := s.statesFrom(ctx, src, chunk, start, 0); ok {
+			return src, recs
+		}
+	}
 	return nil, nil
 }
 
@@ -1361,12 +1385,6 @@ func (s *PulledState) statesFrom(ctx context.Context, src pull.Source, chunk []*
 	var cursor []byte
 	for ctx.Err() == nil {
 		rec, err := src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk, Cursor: cursor, ForHeight: asOf})
-		if err != nil && asOf != 0 && cursor == nil {
-			// A peer that cannot answer as of L answers its current
-			// state, of a block past L, and the records catch up to it.
-			asOf = 0
-			rec, err = src.QueryAccountStates(ctx, s.partition, &api.AccountStatesQuery{Accounts: chunk})
-		}
 		if err != nil {
 			s.log.Info("A peer did not answer for accounts; they are asked of another",
 				"partition", s.partition, "peer", sourceKey(src), "accounts", len(chunk), "error", err)

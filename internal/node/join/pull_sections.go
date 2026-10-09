@@ -237,7 +237,8 @@ func (s *PulledState) loadOpened(ctx context.Context, p *syncing) {
 	}
 	s.log.Info("Loaded the sections the round opened",
 		"partition", s.partition, "sections", sections, "spans", len(spans)+1, "spans-not-served", notServed,
-		"pages", pages, "accounts", accounts, "took", took.Round(time.Millisecond), "accounts-per-second", int(perSecond))
+		"pages", pages, "accounts", accounts, "chunks-taken-current", s.asOfFallbacks.Swap(0),
+		"took", took.Round(time.Millisecond), "accounts-per-second", int(perSecond))
 }
 
 // fetchSpan pages one span of opened sections, highest first, until every

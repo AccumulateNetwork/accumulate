@@ -18,6 +18,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -186,4 +187,71 @@ func TestAnAccountARecordNamesThatNoPeerServesIsOwed(t *testing.T) {
 	require.NoError(t, s.Pull(ctx))
 	require.Equal(t, int64(12), balanceIn(t, db, bob), "bob was not taken once served")
 	require.Empty(t, s.sync.retry)
+}
+
+// refusingAsOf is a peer that cannot answer account states as of a block
+// (it retains no history, or is busy) and answers current states a block
+// past T.
+type refusingAsOf struct {
+	api.Querier
+	block uint64
+}
+
+func (q *refusingAsOf) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	if sq, ok := query.(*api.AccountStatesQuery); ok && sq.ForHeight != 0 {
+		return nil, errors.NotReady.With("no history as of that block")
+	}
+	r, err := q.Querier.Query(ctx, scope, query)
+	if rec, ok := r.(*api.AccountStatesRecord); ok && err == nil {
+		if _, states := query.(*api.AccountStatesQuery); states {
+			rec.Block = q.block
+		}
+	}
+	return r, err
+}
+
+// TestAPeerThatCannotAnswerAsOfTIsPassedOverForOneThatCan — #4554 step 1d,
+// run 20261008T232237Z: joins 5–8 took two and three rounds with nothing
+// owed and no answer cut short. The records' states are asked as of T so the
+// round is ready at T; a peer that could not answer as of T (busy, or
+// without the history) was asked for its current states instead, from a
+// block past T, and the round repeated for them. The next peer is asked as
+// of T first; current states only when no peer can answer as of T.
+func TestAPeerThatCannotAnswerAsOfTIsPassedOverForOneThatCan(t *testing.T) {
+	here := protocol.PartitionUrl("BVN0")
+	peerDB := peerStore(t)
+	putLedger(t, peerDB, here, 10)
+	alice := protocol.AccountUrl("alice", "tokens")
+	bob := protocol.AccountUrl("bob", "tokens")
+	putTokens(t, peerDB, alice, 5)
+	putTokens(t, peerDB, bob, 5)
+	served := apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	cannot := api.Querier2{Querier: &refusingAsOf{Querier: served, block: 12}}
+	can := api.Querier2{Querier: served}
+
+	db := database.OpenInMemory(nil)
+	t.Cleanup(func() { _ = db.Close() })
+	values, _ := genesisValues(t, 4)
+	putNetwork(t, db, here, values)
+	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &fixedSources{partition: here, srcs: []pull.Source{cannot, can}}, ExecutedBlock: 1})
+	require.NoError(t, err)
+	ctx := context.Background()
+	loadSectionOf(t, s, alice, bob)
+
+	putTokens(t, peerDB, alice, 11)
+	putTokens(t, peerDB, bob, 12)
+	b := peerDB.Begin(true)
+	require.NoError(t, b.Account(here.JoinPath(protocol.Ledger)).BlockLedger(11).Put(&database.BlockLedger{Index: 11, Entries: []*protocol.BlockEntry{
+		{Account: alice, Chain: "main", Index: 1},
+		{Account: bob, Chain: "main", Index: 1},
+	}}))
+	require.NoError(t, b.Commit())
+	putLedger(t, peerDB, here, 11)
+
+	require.NoError(t, s.Pull(ctx))
+	require.Equal(t, uint64(11), s.sync.last)
+	require.Equal(t, int64(11), balanceIn(t, db, alice))
+	require.Equal(t, int64(12), balanceIn(t, db, bob))
+	require.Equal(t, uint64(11), s.sync.highest, "a state was taken from a block past T: the peer that could not answer as of T was asked for current states instead of the next peer being asked as of T")
+	require.True(t, s.sync.ready, "the round was not ready at T")
 }
