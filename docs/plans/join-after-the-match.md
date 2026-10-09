@@ -60,3 +60,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 02:37Z step 3 DONE: +60 val2 392 vs val1 745 ms. Restarted node 3x cheaper at first, climbs toward its peers within the hour under identical traffic ⇒ the node's own state. Mechanism not yet named (3b).
 - 02:55Z hold 10 PASS 413; join 11 ACTIVE 355 s at universe 6,228 (NEVER ACTIVE two runs ago). Step 3 done; per-hour deep misses 306k (old) vs 100k (restarted), commits 4,750 vs 15,100, segments 24 vs 27 — step 3b to name it.
 - 03:10Z hold 11 PASS 414 — 11/11 joins and holds at +3h45, universe 6,228. #4555 filed.
+- 03:16Z join 12 ACTIVE 265 s (universe 6,811).
