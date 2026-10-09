@@ -64,3 +64,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 03:30Z hold 12 PASS 477 — 12/12 at +4 h, universe 6,811. Continuing; reporting on change of state only.
 - 03:53Z join 13 ACTIVE 376 s (universe 7,499); hold 13 PASS 308.
 - 04:13Z join 14 ACTIVE 264 s (universe 8,043); hold 14 PASS but worst 732 — backlog climbing with the universe; 1c is the built fix, not in these followers.
+- 04:34Z join 15 ACTIVE 234 s (universe 8,597); hold 15 PASS 493 — 15/15 at +5h10.
