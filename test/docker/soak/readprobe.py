@@ -70,6 +70,16 @@ FOL_CSV = os.path.join(RUN_DIR, "readprobe-follower.csv")
 FOL_CSV_HEADER = "time,follower,partition,service,outcome,reads"
 FOL_SERVICE = "query"
 REPORT = os.path.join(RUN_DIR, "readprobe-report.md")
+# One 64-account AccountStates call as of a block, per validator per round
+# (plan step 4c, #4555): the call a joining node makes, pinned to each
+# validator so its cost per node is read through the run. Step 3 measured it
+# by hand: a restarted validator answered in 178 ms and climbed to 392 within
+# the hour while its untouched peer answered 578-745.
+STATES_CSV = os.path.join(RUN_DIR, "readprobe-states.csv")
+STATES_CSV_HEADER = "time,container,partition,accounts,asOf,ms,outcome"
+STATES_ACCOUNTS = 64
+STATES_BACK = 400
+VALIDATORS = topology.validator_records()
 
 
 # Silenced when this module is imported by a test rather than run: a round
@@ -170,6 +180,27 @@ def sample(partition):
                 "sampledAt": time.time()}
     except Exception:
         return None
+
+
+def states_names(partition, h):
+    """Up to STATES_ACCOUNTS accounts the partition's last STATES_BACK blocks
+    changed, and the block they are as of; (None, None) when not read."""
+    r, _, _ = query("acc://%s.acme" % SCOPES[partition],
+                    {"queryType": "changedAccountStates", "after": max(1, h - STATES_BACK)})
+    try:
+        names = sorted({e["account"] for rec in r["records"] for e in rec.get("entries") or []
+                        if "/ledger" not in e["account"] and "/anchors" not in e["account"]})
+        return names[:STATES_ACCOUNTS], int(r["through"])
+    except Exception:
+        return None, None
+
+
+def states_call(port, partition, names, at):
+    """The states of names as of block at, asked of the validator on port."""
+    r, ms, why = query("acc://%s.acme" % SCOPES[partition],
+                       {"queryType": "accountStates", "accounts": names, "forHeight": at},
+                       url="http://127.0.0.1:%d/v3" % port)
+    return ms, (why or ("ok" if r is not None else WHY_ERROR))
 
 
 def read_chain(s):
@@ -320,6 +351,32 @@ class Probe:
         log("round %d: %d reads p50 %.1fms p95 %.1fms max %.1fms (%s, %s, age %d blocks) failed %d notReady %d gated %d timeouts %d reservoir %d oldest %d blocks"
             % (len(self.rounds), row["reads"], row["p50"], row["p95"], row["max"], worst[2], worst[4], worst[0], failed, not_ready, gated, timeouts, len(self.reservoir), row["oldestAge"]))
         self.run_follower_round(picks)
+        self.run_states_round()
+
+    def run_states_round(self):
+        rows, out = [], []
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        for p in sorted(SCOPES):
+            vals = [v for v in VALIDATORS if v["bvn"] == p]
+            if not vals or p not in self.heights:
+                continue
+            names, at = states_names(p, self.heights[p])
+            if not names:
+                out.append("%s not read" % p)
+                continue
+            for v in vals:
+                ms, why = states_call(v["port"], p, names, at)
+                rows.append((now, v["container"], p, len(names), at, round(ms), why))
+                out.append("%s %d%s" % (v["container"].replace("acc-", ""), ms, "" if why == "ok" else " " + why))
+        if not rows and not out:
+            return
+        new = not os.path.exists(STATES_CSV)
+        with open(STATES_CSV, "a") as f:
+            if new:
+                f.write(STATES_CSV_HEADER + "\n")
+            for r in rows:
+                f.write(",".join(str(x) for x in r) + "\n")
+        log("round %d states (%d accounts as of a block, ms): %s" % (len(self.rounds), STATES_ACCOUNTS, ", ".join(out)))
 
     def run_follower_round(self, picks):
         """The same entries, read from each follower's OWN port.
