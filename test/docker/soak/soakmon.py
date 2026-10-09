@@ -3476,7 +3476,10 @@ function nodestateView(nsd){
 }
 // The Followers panel (followerJoins on /data): one row per follower x
 // partition, from each container's log. Absent is `— not measured`, never 0.
-function followersView(fj,jp,net){
+function followersView(fj,jp,net,ns){
+  // The follower's executed height as the monitor reads it now (nodeState), not
+  // the join log's last mention of it, which freezes between log lines.
+  const live={};for(const x of ((ns||{}).rows||[]))live[x.node+"|"+(x.partition||"").toLowerCase()]=x.executed;
   const COLS=14;
   if(!fj||!fj.rows)return `<tr><td class=mut colspan=${COLS}>— not measured: the monitor has not read the followers yet</td></tr>`;
   if(!fj.rows.length)return `<tr><td class=mut colspan=${COLS}>${fj.why||'no follower in this topology'}</td></tr>`;
@@ -3507,7 +3510,7 @@ function followersView(fj,jp,net){
     if(launched&&(r.phase==='not started'))key='genesis';
     const [word,why,cls]=STATE[key]||[key,key,'mut'];
     const gone=r.life==='waiting'||r.life==='removed';
-    const exec=gone?null:(g.executed??r.height);
+    const exec=gone?null:(live[r.container+'|'+(r.partition||'').toLowerCase()]??g.executed??r.height);
     // Blocks executed since the node last handed off, none of which failed:
     // its executed height above the block it went ACTIVE at. Blank while it
     // is not executing -- nothing is counted that is not a block executed.
@@ -3704,7 +3707,7 @@ const bytes=v=>(v==null?'—':v<1024?fmt(v)+' B':v<1048576?(v/1024).toFixed(1)+'
   // A panel that measures nothing is hidden, not shown as a wall of dashes.
   $('wpanel').style.display=w.measured?'':'none';
   $('whrow').style.gridTemplateColumns=w.measured?'':'1fr';
-  $('fjtab').querySelector('tbody').innerHTML=followersView(s.followerJoins,s.joinProgress,s.executedHeights);
+  $('fjtab').querySelector('tbody').innerHTML=followersView(s.followerJoins,s.joinProgress,s.executedHeights,s.nodeState);
   for(const el of document.querySelectorAll('.cap.clamp'))el.title=el.textContent;
   // wedges / heals pills
   $('wsyn').innerHTML=w.measured?fmt((w.byReason||{})['queue-full']||0):nm(null);$('wanc').innerHTML=w.measured?fmt((w.byReason||{}).deadline||0):nm(null);$('wtot').innerHTML=nm(w.total);
