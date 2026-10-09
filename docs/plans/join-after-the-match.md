@@ -47,3 +47,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 00:05Z run 232237Z join 2 ACTIVE 124 s; overlap 7:02 checked≈? — unchanged by 1b: the fill is bounded by its drain (fillReady × block rate). Step 1c built.
 - 00:18Z run 232237Z join 3 ACTIVE 154 s; overlap 5:57 (was 15:17 without 1b).
 - 00:37Z run 232237Z join 4 ACTIVE 122 s; overlap 7:11 (universe 1,840).
+- 01:06Z run 232237Z: hold 4 PASS 391; join 5 ACTIVE 295 s (spine 63 s, records 30 s, sections 27 s; universe 2,490); hold 5 PASS 383. Dashboard: followers' ok-blocks column was frozen (join-log source) — fixed, soakmon restarted via its supervisor at 01:04Z.
