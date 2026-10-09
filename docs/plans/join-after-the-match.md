@@ -46,3 +46,4 @@ Order: 1 → 2 and 3 in one run → 4 → 5a–5c. Step 1 is an afternoon.
 - 23:50Z hold 1 PASS worst 146. Live: a 256-leaf page covers 9–12 sections, a span's states fit one 1 MiB page — the follower made 1,908 pages + 2,265 states calls for 4,032 sections (should be ~370): spans throttled or bypassed; suspects fillReady=64 per block and the shared gate. Instrumenting the fill (per-pass line) for the next run.
 - 00:05Z run 232237Z join 2 ACTIVE 124 s; overlap 7:02 checked≈? — unchanged by 1b: the fill is bounded by its drain (fillReady × block rate). Step 1c built.
 - 00:18Z run 232237Z join 3 ACTIVE 154 s; overlap 5:57 (was 15:17 without 1b).
+- 00:37Z run 232237Z join 4 ACTIVE 122 s; overlap 7:11 (universe 1,840).
