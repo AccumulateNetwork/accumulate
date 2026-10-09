@@ -37,8 +37,10 @@ hold with what it measured. Each follower's log is kept as
 node-logs-<container>-<N>.txt.
 """
 
+import calendar
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -129,6 +131,36 @@ class Walk:
             self.log("followerwalk: %s failed: %s" % (" ".join(args[:3]), e))
             return None
 
+    def overlaps(self, c, since):
+        """Each partition's overlap since the follower was added, from its own
+        log: how long it ran (or has run) and how many blocks it checked."""
+        r = self.sh(["docker", "logs", "--since", since, c], timeout=300)
+        if r is None:
+            return "overlap not read"
+        began, over = {}, {}
+        for line in re.sub(r"\x1b\[[0-9;]*m", "", r.stdout or "").splitlines():
+            m = re.search(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ) INFO The overlap (begins|is over).*partition=acc://(\S+?)(?:\.acme)?(?:\s|$)", line)
+            if not m:
+                continue
+            t, p = calendar.timegm(time.strptime(m.group(1), "%Y-%m-%dT%H:%M:%SZ")), m.group(3).replace("bvn-", "")
+            if m.group(2) == "begins":
+                began[p] = t
+                over.pop(p, None)
+            else:
+                k = re.search(r"checked=(\d+)", line)
+                over[p] = (t, k.group(1) if k else "?")
+        if not began:
+            return "no overlap"
+        out = []
+        for p in sorted(began):
+            if p in over:
+                d = over[p][0] - began[p]
+                out.append("%s %dm%02ds checked %s" % (p, d // 60, d % 60, over[p][1]))
+            else:
+                d = int(self.now() - began[p])
+                out.append("%s open %dm%02ds" % (p, d // 60, d % 60))
+        return "overlap " + ", ".join(out)
+
     # --- the phases ---------------------------------------------------------
     def add(self, f, n, of):
         d, svc, c = f["dir"], f["service"], f["container"]
@@ -159,12 +191,12 @@ class Walk:
             if ok:
                 took = int(self.now() - added_at)
                 u = self.universe()
-                self.log("follower %s ACTIVE (%s), %ds after it was added; loadgen universe %s accounts"
-                         % (c, out, took, u if u is not None else "not read"))
+                self.log("follower %s ACTIVE (%s), %ds after it was added; loadgen universe %s accounts; %s"
+                         % (c, out, took, u if u is not None else "not read", self.overlaps(c, added_utc)))
                 return took
         return None
 
-    def hold(self, c):
+    def hold(self, c, since):
         """Hold an ACTIVE follower HOLD_SECS: worst and last blocks behind per
         partition, and every poll it was not ACTIVE."""
         start = self.now()
@@ -190,8 +222,8 @@ class Walk:
             why.append("blocks behind never measured")
         why += ["%s ended %d blocks behind" % (p, b) for p, b in sorted(last.items()) if b > CAUGHT_UP_BLOCKS]
         verdict = "FAIL (%s)" % "; ".join(why) if why else "PASS (caught up within %d blocks)" % CAUGHT_UP_BLOCKS
-        self.log("follower %s held ACTIVE %ds: %s blocks behind; %d of %d polls not ACTIVE; %s"
-                 % (c, int(self.now() - start), parts, dropped, polls, verdict))
+        self.log("follower %s held ACTIVE %ds: %s blocks behind; %d of %d polls not ACTIVE; %s; %s"
+                 % (c, int(self.now() - start), parts, dropped, polls, verdict, self.overlaps(c, since)))
         return not why
 
     def remove(self, c, never_active, added_at):
@@ -234,7 +266,7 @@ class Walk:
             took = self.wait_active(c, added_at, utc(added_at))
             if took is None:
                 never += 1
-            elif self.hold(c):
+            elif self.hold(c, utc(added_at)):
                 passed += 1
             else:
                 failed += 1

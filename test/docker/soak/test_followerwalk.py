@@ -20,7 +20,7 @@ class Clock:
         self.t += s
 
 
-def walk(active_after, end_after, behind=None):
+def walk(active_after, end_after, behind=None, logs=None):
     """active_after: container -> seconds after its add it reads ACTIVE (None: never)."""
     clk = Clock()
     rd = tempfile.mkdtemp()
@@ -31,7 +31,7 @@ def walk(active_after, end_after, behind=None):
         calls.append(args)
         if args[:2] == ["docker", "start"]:
             added[args[2]] = clk.t
-        class R: stdout = ""
+        class R: stdout = logs(clk) if logs and args[:2] == ["docker", "logs"] else ""
         return R()
 
     def state(c):
@@ -114,7 +114,25 @@ class TestWalk(unittest.TestCase):
         add = next(l for l in lines if l.startswith("add-follower"))
         self.assertRegex(add, r"loadgen universe \d+ accounts\)$")
         active = next(l for l in lines if " ACTIVE (" in l)
-        self.assertRegex(active, r"after it was added; loadgen universe \d+ accounts$")
+        self.assertRegex(active, r"after it was added; loadgen universe \d+ accounts; ")
+
+    def test_the_active_and_hold_lines_carry_each_overlap(self):
+        # Plan step 4b: the overlap's length and blocks checked, per
+        # partition, read from the follower's own log since its add.
+        def logs(clk):
+            t = lambda d: fw.utc(clk.t - d)
+            esc = "\x1b[36m"
+            return "\n".join([
+                "%s INFO The overlap begins: each block is executed %spartition=\x1b[0macc://bvn-BVN1.acme proven=10" % (t(500), esc),
+                "%s INFO The overlap begins: each block is executed partition=acc://dn.acme proven=20" % t(480),
+                "%s INFO The overlap is over: the node executes alone block=40 checked=20 partition=acc://dn.acme proven=20" % t(470),
+            ]) if clk.t else ""
+        lines, calls = walk({c["container"]: 60 for c in FOLS}, end_after=3000, logs=logs)
+        active = next(l for l in lines if " ACTIVE (" in l)
+        self.assertRegex(active, r"overlap BVN1 open 8m20s, dn 0m10s checked 20$")
+        held = next(l for l in lines if " held ACTIVE " in l)
+        self.assertRegex(held, r"overlap BVN1 open 8m20s, dn 0m10s checked 20$")
+        self.assertIn(["docker", "logs", "--since"], [a[:3] for a in calls])
 
 
 if __name__ == "__main__":
