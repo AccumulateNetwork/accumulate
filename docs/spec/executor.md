@@ -1518,6 +1518,24 @@ has got is visible: `accumulate_join_sections_not_loaded{partition}`, `Loading
 the sections not loaded` at most once a minute, and `Every section is loaded`
 once.
 
+**The look-ahead** (Paul, 2026-10-10). Beside the fill and with its
+lifecycle, a node loads first the sections its next blocks touch. A node
+behind the network executes blocks whose records the peers already hold: at
+each block it commits, it reads the records of the 20 blocks after it
+(`ChangedAccountStates` after its block, one call) and loads every section
+they name that it has not loaded, as of its block, in parallel, taking only
+an answer that hashes to the marker, and hands each to the next block's
+batch as the fill does. A block that still reads a section not loaded loads
+it itself, as before: an account a block reads but does not change (a key
+page a signature is checked against) is in no record. Without it a block
+loaded each section it touched itself, one at a time, a page and a states
+call or more each, and the fill, highest first, reached them last: run
+20261009T175728Z executed 1–6 blocks a minute while the fill ran and 290 the
+minute it was done. What it did is on the fill's line: `ahead-loaded`, and
+`ahead-missed` for a section no peer answered as of the node's block, which
+is left to the block (`fillAhead`,
+`TestTheSectionsTheNextBlocksTouchAreLoadedAheadOfThem`).
+
 The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
 `TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`,
 `TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt`,

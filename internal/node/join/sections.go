@@ -66,6 +66,11 @@ type sections struct {
 	// that paused on fillReady.
 	fillPages, fillStates, fillAlone, fillCapped atomic.Int64
 
+	// What the look-ahead did, for the same line: sections the records of
+	// the blocks after the node's named and it loaded, and those it could
+	// not take as of the node's block (left to the block).
+	aheadLoaded, aheadMissed atomic.Int64
+
 	// spanSize is how many sections one page covered, measured by the
 	// fill's first page and kept for its later passes.
 	spanSize int
@@ -918,6 +923,127 @@ func (x *sections) makeReady(ld *loadedSection) {
 	}
 }
 
+// aheadBlocks is how many blocks past its own the look-ahead reads the
+// records of: at the network's block a second, enough that a node behind it
+// finds each block's sections loaded, and few enough that a pass of it is a
+// handful of calls.
+const aheadBlocks = 20
+
+// fillAhead loads, ahead of the blocks, the sections the next blocks touch
+// (executor spec, "Sync", §3a, "The look-ahead"; Paul, 2026-10-10). A node
+// behind the network executes blocks whose records the peers already hold:
+// it reads the records of the aheadBlocks after its own block and loads the
+// sections they name that it has not loaded, as of its block, for the next
+// block's batch to write -- in parallel, so a block does not load them one
+// at a time itself (run 20261009T175728Z: 1-6 blocks a minute while the fill
+// ran, 290 once it was done). The key-order fill does not reach them first:
+// it starts from the highest section, and a peer answering only its current
+// tree leaves it every section changed since the node's block, which is
+// every one the next blocks touch. Like the fill it takes only what hashes
+// to the marker; what it cannot take is left to the block.
+func (x *sections) fillAhead(ctx context.Context, active func() bool) {
+	var after uint64
+	var asked map[bpt.Section]uint64 // section -> block it was asked as of
+	for ctx.Err() == nil {
+		if !active() || x.count() == 0 {
+			if !pause(ctx, backfillPause) {
+				return
+			}
+			continue
+		}
+		h, err := x.committedBlock()
+		if err != nil || h == after {
+			if !pause(ctx, 100*time.Millisecond) {
+				return
+			}
+			continue
+		}
+		after = h
+		srcs := x.peers(ctx)
+		if len(srcs) == 0 {
+			if !pause(ctx, backfillPause) {
+				return
+			}
+			continue
+		}
+		secs := x.aheadSections(ctx, srcs, h)
+		if asked == nil {
+			asked = map[bpt.Section]uint64{}
+		}
+		var todo []bpt.Section
+		for _, s := range secs {
+			if asked[s] == h {
+				continue
+			}
+			asked[s] = h
+			x.mu.Lock()
+			_, ready := x.ready[s]
+			_, notLoaded := x.hash[s]
+			x.mu.Unlock()
+			if notLoaded && !ready {
+				todo = append(todo, s)
+			}
+		}
+		slots := make(chan struct{}, max(1, statesInFlight*len(srcs)))
+		var wg sync.WaitGroup
+		for _, s := range todo {
+			want, ok := x.expected(s)
+			if !ok {
+				continue
+			}
+			slots <- struct{}{}
+			wg.Add(1)
+			go func(s bpt.Section, want [32]byte) {
+				defer wg.Done()
+				defer func() { <-slots }()
+				ld, _, err := x.fetch(ctx, s, h, want, false)
+				if err != nil {
+					x.aheadMissed.Add(1)
+					return
+				}
+				x.aheadLoaded.Add(1)
+				x.makeReady(ld)
+			}(s, want)
+		}
+		wg.Wait()
+	}
+}
+
+// aheadSections is the sections the records of the aheadBlocks after h
+// name, once each, in the order the blocks name them: one ChangedAccountStates
+// call, asked of the peers in turn until one answers.
+func (x *sections) aheadSections(ctx context.Context, srcs []pull.Source, h uint64) []bpt.Section {
+	if n := len(srcs); n > 1 {
+		turn := int(x.turn.Add(1) % uint64(n))
+		srcs = append(append([]pull.Source(nil), srcs[turn:]...), srcs[:turn]...)
+	}
+	for _, src := range srcs {
+		if ctx.Err() != nil {
+			return nil
+		}
+		rec, err := src.QueryChangedAccountStates(ctx, x.partition, &api.ChangedAccountStatesQuery{After: h})
+		if err != nil || rec == nil {
+			continue
+		}
+		seen := map[bpt.Section]bool{}
+		var out []bpt.Section
+		for _, r := range rec.Records {
+			if r == nil || r.Index <= h || r.Index > h+aheadBlocks {
+				continue
+			}
+			for _, u := range api.RecordNames(r.Entries) {
+				s := database.SectionOfAccount(u)
+				if !seen[s] {
+					seen[s] = true
+					out = append(out, s)
+				}
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 // fill loads every section not loaded, in key order, as of the block the
 // node last committed, and hands each to the next block's batch to write
 // (Opened). It never commits: a commit beside a block's would write tree
@@ -929,6 +1055,11 @@ func (x *sections) fill(ctx context.Context, active func() bool) {
 	if x == nil {
 		return
 	}
+	aheadCtx, stopAhead := context.WithCancel(ctx)
+	var aheadDone sync.WaitGroup
+	aheadDone.Add(1)
+	go func() { defer aheadDone.Done(); x.fillAhead(aheadCtx, active) }()
+	defer func() { stopAhead(); aheadDone.Wait() }()
 	for ctx.Err() == nil {
 		if !active() {
 			if !pause(ctx, backfillPause) {
@@ -1052,5 +1183,5 @@ func (x *sections) logPass(started time.Time, spans, before int) {
 	x.log.Info("The fill made a pass",
 		"partition", x.partition, "spans", spans, "sections-before", before, "sections-left", left,
 		"pages", x.fillPages.Swap(0), "states-calls", x.fillStates.Swap(0), "alone", x.fillAlone.Swap(0),
-		"paused-on-ready", x.fillCapped.Swap(0), "took", time.Since(started).Round(time.Millisecond))
+		"paused-on-ready", x.fillCapped.Swap(0), "ahead-loaded", x.aheadLoaded.Swap(0), "ahead-missed", x.aheadMissed.Swap(0), "took", time.Since(started).Round(time.Millisecond))
 }
