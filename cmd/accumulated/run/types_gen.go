@@ -1056,6 +1056,8 @@ func (v *PrivateKeyType) UnmarshalJSON(b []byte) error {
 type Querier struct {
 	Partition string
 	Storage   *StorageOrRef
+	// Sidecar is the URL of a sidecar server (issue 4561). When set, a read the API makes that misses the live database is read from the sidecar. The executor never reads it, and nothing read from it is kept.
+	Sidecar string
 }
 
 func (Querier) Type() ServiceType { return ServiceTypeQuerier }
@@ -1166,6 +1168,7 @@ const (
 	ServiceTypeNetwork   ServiceType = 4
 	ServiceTypeQuerier   ServiceType = 3
 	ServiceTypeRouter    ServiceType = 8
+	ServiceTypeSidecar   ServiceType = 12
 	ServiceTypeSnapshot  ServiceType = 9
 	ServiceTypeStorage   ServiceType = 1
 	ServiceTypeSubnode   ServiceType = 11
@@ -1196,6 +1199,35 @@ func (v ServiceType) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON unmarshals the ServiceType from JSON.
 func (v *ServiceType) UnmarshalJSON(b []byte) error {
 	return sServiceType.UnmarshalJSON(b, v)
+}
+
+type SidecarService struct {
+	// Path is the path to the sidecar database (issue 4273), which this node serves read-only to other nodes (issue 4561).
+	Path string
+	// Listen are the addresses to serve it on.
+	Listen []Multiaddr
+}
+
+func (SidecarService) Type() ServiceType { return ServiceTypeSidecar }
+
+// Copy returns a copy of the SidecarService.
+func (v *SidecarService) Copy() *SidecarService {
+	return sSidecarService.Copy(v)
+}
+
+// EqualSidecarService returns true if V is equal to U.
+func (v *SidecarService) Equal(u *SidecarService) bool {
+	return sSidecarService.Equal(v, u)
+}
+
+// MarshalBinary marshals the SidecarService to JSON.
+func (v *SidecarService) MarshalJSON() ([]byte, error) {
+	return sSidecarService.MarshalJSON(v)
+}
+
+// UnmarshalJSON unmarshals the SidecarService from JSON.
+func (v *SidecarService) UnmarshalJSON(b []byte) error {
+	return sSidecarService.UnmarshalJSON(b, v)
 }
 
 type SnapshotService struct {

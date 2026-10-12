@@ -338,6 +338,8 @@ Service:
           value: 10
         Subnode:
           value: 11
+        Sidecar:
+          value: 12
 
   members:
     - name: StorageService
@@ -407,6 +409,21 @@ Service:
         - name: Storage
           type: '*StorageOrRef'
           optional: true
+        - name: Sidecar
+          description: 'is the URL of a sidecar server (issue 4561). When set, a read the API makes that misses the live database is read from the sidecar. The executor never reads it, and nothing read from it is kept'
+          type: string
+          optional: true
+
+    - name: SidecarService
+      class: composite
+      pointer: true
+      fields:
+        - name: Path
+          description: is the path to the sidecar database (issue 4273), which this node serves read-only to other nodes (issue 4561)
+          type: string
+        - name: Listen
+          description: are the addresses to serve it on
+          type: '[]Multiaddr'
 
     - name: NetworkService
       class: composite

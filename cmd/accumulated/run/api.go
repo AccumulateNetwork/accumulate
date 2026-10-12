@@ -15,6 +15,7 @@ import (
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/sidecar"
 )
 
 var (
@@ -49,7 +50,7 @@ func (q *Querier) Provides() []ioc.Provided {
 }
 
 func (q *Querier) start(inst *Instance) error {
-	store, err := q.Storage.open(inst, q.Partition)
+	store, err := q.open(inst)
 	if err != nil {
 		return err
 	}
@@ -67,6 +68,16 @@ func (q *Querier) start(inst *Instance) error {
 	})
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
 	return querierProvides.Register(inst.services, q, impl)
+}
+
+// open returns the API's store: the partition's, with the sidecar behind it
+// when one is configured. Only the API reads through to the sidecar.
+func (q *Querier) open(inst *Instance) (keyvalue.Beginner, error) {
+	store, err := q.Storage.open(inst, q.Partition)
+	if err != nil || q.Sidecar == "" {
+		return store, err
+	}
+	return sidecar.Over(store, &sidecar.Client{URL: q.Sidecar, Logger: inst.logger.With("module", "sidecar")}), nil
 }
 
 func (n *NetworkService) Requires() []ioc.Requirement {

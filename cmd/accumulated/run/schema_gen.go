@@ -62,6 +62,7 @@ var (
 	sRouterService              schema.Methods[*RouterService, *RouterService, *schema.CompositeType]
 	sService                    schema.UnionMethods[Service, ServiceType]
 	sServiceType                schema.EnumMethods[ServiceType]
+	sSidecarService             schema.Methods[*SidecarService, *SidecarService, *schema.CompositeType]
 	sSnapshotService            schema.Methods[*SnapshotService, *SnapshotService, *schema.CompositeType]
 	sStorage                    schema.UnionMethods[Storage, StorageType]
 	sStorageService             schema.Methods[*StorageService, *StorageService, *schema.CompositeType]
@@ -1210,6 +1211,12 @@ func init() {
 					Elem:     schema.TypeReferenceFor[StorageOrRef](),
 				},
 			},
+			{
+				Name:        "Sidecar",
+				Description: "is the URL of a sidecar server (issue 4561). When set, a read the API makes that misses the live database is read from the sidecar. The executor never reads it, and nothing read from it is kept",
+				Optional:    true,
+				Type:        &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
 		},
 	}).SetGoType()
 
@@ -1286,6 +1293,13 @@ func init() {
 						TypeBase: schema.TypeBase{},
 					}).
 						ResolveElemTo(&deferredTypes, "Querier"),
+				},
+				{
+					Discriminator: "sidecar",
+					Type: (&schema.PointerType{
+						TypeBase: schema.TypeBase{},
+					}).
+						ResolveElemTo(&deferredTypes, "SidecarService"),
 				},
 				{
 					Discriminator: "network",
@@ -1385,6 +1399,10 @@ func init() {
 					Name:  "Router",
 					Value: 8,
 				},
+				"Sidecar": {
+					Name:  "Sidecar",
+					Value: 12,
+				},
 				"Snapshot": {
 					Name:  "Snapshot",
 					Value: 9,
@@ -1399,6 +1417,27 @@ func init() {
 				},
 			},
 		}).SetGoType()
+
+	sSidecarService = schema.WithMethods[*SidecarService, *SidecarService](&schema.CompositeType{
+		TypeBase: schema.TypeBase{
+			Name: "SidecarService",
+		},
+		Fields: []*schema.Field{
+			{
+				Name:        "Path",
+				Description: "is the path to the sidecar database (issue 4273), which this node serves read-only to other nodes (issue 4561)",
+				Type:        &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
+			{
+				Name:        "Listen",
+				Description: "are the addresses to serve it on",
+				Type: (&schema.ArrayType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "Multiaddr"),
+			},
+		},
+	}).SetGoType()
 
 	sSnapshotService = schema.WithMethods[*SnapshotService, *SnapshotService](&schema.CompositeType{
 		TypeBase: schema.TypeBase{
@@ -1694,6 +1733,7 @@ func init() {
 		sRouterService.Type,
 		sService.Type,
 		sServiceType.Type,
+		sSidecarService.Type,
 		sSnapshotService.Type,
 		sStorage.Type,
 		sStorageService.Type,

@@ -2,7 +2,7 @@
 
 Builds the **sidecar**: the history mainnet lost in the 13 July 2025 reorg (#4270), recovered from pre-reorg databases into a separate LevelDB store that a node reads when its live database misses (#4273). This text is the tool's spec, carried from `docs/spec/database.md` on dagbft-integration (main has no `docs/spec/`).
 
-**The built sidecar** (2026-09-24, at 148c148e2, against server5's follower copy): `sidecar.db` is 182 GB and holds 718,415,890 records (200 GB of values) from six read-only archives (Directory B/A, Apollo B/A, Yutu A, Chandrayaan A). Beside it, `conflicts.db` (1.3 GB) holds 5,529,964 keys that two partitions hold with different values. Exactly 9,585 Directory keys (February 2025, Directory blocks 32,867,745–33,044,270) are in no copy; see #4273.
+**The built sidecar** (2026-09-24, at 148c148e2, against server5's follower copy): `sidecar.db` is 182 GB and holds 718,415,890 records (200 GB of values) from six read-only archives (Directory B/A, Apollo B/A, Yutu A, Chandrayaan A). Beside it, `conflicts.db` (1.3 GB) holds 5,529,964 keys that two partitions hold with different values. 9,585 Directory keys (February 2025, Directory blocks 32,867,745–33,044,270) were in no copy; 2,499 of them (chain elements and mark points) were rebuilt from mark points and blocks and proven, and 7,086 remain lost, listed in `lost-9585.tsv` beside it; see #4273.
 
 ## Recovered history
 
@@ -59,4 +59,12 @@ holds. Records that feed `hashChains` (anchor chains, the BPT) are never served
 from it: they are consensus state, restored only by #4020's mechanism.
 
 
-**Mounting it** (#4468): a LevelDB node's storage takes `Sidecar: <path>`; a read that misses the primary falls through to the sidecar and is written back to the primary in the background (`pkg/database/keyvalue/overlay`, repair-on-hit). Still open: no rule yet keeps a deliberately pruned key, or consensus state, from falling through — the overlay falls through for every miss.
+**Serving it from another node** (#4561): the sidecar is deployed to one node, and other nodes read it over the network instead of each carrying it. That adds a hop to a read that misses, and saves every other node the sidecar's disk.
+
+- The serving node runs a `SidecarService` (`Path`: the sidecar database, `Listen`: its addresses). It answers `GET /key/<hex>`, where the key is the record's 32-byte storage key, with the raw value, or 404 when it does not hold it. It only reads.
+- A reading node sets `Sidecar: <url>` on its `Querier` service. A read the API makes that misses the live database is read from the sidecar (`pkg/database/keyvalue/sidecar`).
+- **Only the API reads it.** The executor and every other service read the live database alone, so what a node agrees on cannot depend on whether it has a sidecar.
+- **Nothing is kept.** A value read from the sidecar is not written to the live database; the node's disk does not grow with what is read.
+- **It fails soft.** A sidecar that is unreachable, slow (2 s) or broken leaves the read with the live database's not-found, as for a node without one, and the failure is logged.
+
+**Mounting it locally** (#4468): a LevelDB node's storage takes `Sidecar: <path>`; a read that misses the primary falls through to the sidecar and is written back to the primary in the background (`pkg/database/keyvalue/overlay`, repair-on-hit). This puts the sidecar under every reader, the executor included, and no rule yet keeps a deliberately pruned key, or consensus state, from falling through (#4560). Serving it from another node is the deployed form.
