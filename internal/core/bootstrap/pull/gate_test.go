@@ -78,3 +78,78 @@ func TestQueriesToOnePeerAreGatedAndABusyAnswerIsAskedAgain(t *testing.T) {
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.NotReady), "a peer busy past the pauses was not reported busy: %v", err)
 }
+
+// heldQuerier holds every background query until release is closed, and
+// answers a block's at once, busy for its first busyFor calls.
+type heldQuerier struct {
+	release           chan struct{}
+	background, block atomic.Int64
+	busyFor           int64
+}
+
+func (q *heldQuerier) Query(ctx context.Context, scope *url.URL, query api.Query) (api.Record, error) {
+	if !isUrgent(ctx) {
+		q.background.Add(1)
+		select {
+		case <-q.release:
+		case <-ctx.Done():
+		}
+		return &api.ErrorRecord{}, nil
+	}
+	if q.block.Add(1) <= q.busyFor {
+		return nil, errors.NotReady.With("query capacity exhausted, retry later")
+	}
+	return &api.ErrorRecord{}, nil
+}
+
+// TestABlocksQueryGoesBeforeTheBackground — #4557, run 20261010T194045Z: a
+// follower's fill and look-ahead held every slot of its gate to a peer, and
+// the section a block waited for queued behind them, was answered busy, and
+// paused up to 10 s at a time, until its 30 s were gone and the block was
+// held, twice in 26 joins. A block's query takes a slot the background never
+// holds, no background query starts to the peer while one is waiting or in
+// flight, and a busy answer is asked again after a short pause for as long as
+// the block's context lasts.
+func TestABlocksQueryGoesBeforeTheBackground(t *testing.T) {
+	peer := &heldQuerier{release: make(chan struct{})}
+	gate := NewGate()
+	q := Gated(peer, gate)
+	bg, stop := context.WithCancel(context.Background())
+	defer stop()
+	for i := 0; i < 10; i++ {
+		go func() { _, _ = q.Query(bg, nil, &api.DefaultQuery{}) }()
+	}
+	require.Eventually(t, func() bool { return peer.background.Load() == PeerInFlight-1 }, time.Second, time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	require.Equal(t, int64(PeerInFlight-1), peer.background.Load(), "the background took the slot kept for a block")
+
+	ctx, cancel := context.WithTimeout(Urgent(context.Background()), time.Second)
+	defer cancel()
+	_, err := q.Query(ctx, nil, &api.DefaultQuery{})
+	require.NoError(t, err, "a block's query waited behind the background")
+
+	// While a block's query is waiting, as it is during a busy peer's pause,
+	// the background held finishes and none starts.
+	peer.busyFor = 1 << 30
+	waiting, cancelWaiting := context.WithCancel(Urgent(context.Background()))
+	done := make(chan struct{})
+	go func() { defer close(done); _, _ = q.Query(waiting, nil, &api.DefaultQuery{}) }()
+	require.Eventually(t, func() bool { return peer.block.Load() >= 3 }, time.Second, time.Millisecond)
+	close(peer.release)
+	time.Sleep(50 * time.Millisecond)
+	require.Equal(t, int64(PeerInFlight-1), peer.background.Load(), "a background query started while a block's was waiting")
+	cancelWaiting()
+	<-done
+	require.Eventually(t, func() bool { return peer.background.Load() == 10 }, time.Second, time.Millisecond, "the background did not resume")
+
+	// A busy peer is asked again quickly, past the background's give, for as
+	// long as the block's context lasts.
+	// Six busy answers: 3.5 s of a block's pauses; the background's would be
+	// 15.75 s, past its 15 s give.
+	busy := &heldQuerier{busyFor: 6}
+	start := time.Now()
+	_, err = Gated(busy, NewGate()).Query(Urgent(context.Background()), nil, &api.DefaultQuery{})
+	require.NoError(t, err)
+	require.Less(t, time.Since(start), 8*time.Second, "a block's query paused as the background does")
+	require.Equal(t, int64(7), busy.block.Load())
+}

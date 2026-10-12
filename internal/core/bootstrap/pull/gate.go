@@ -8,6 +8,7 @@ package pull
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,10 +29,72 @@ const PeerInFlight = 4
 
 // A Gate is the queries in flight to one peer. Every querier of that peer the
 // node holds shares it.
-type Gate struct{ slots chan struct{} }
+//
+// A block's queries go first (#4557, run 20261010T194045Z): the fill and the
+// look-ahead held every slot to a peer, and the section a block waited for
+// queued behind them until its time was gone and the block was held. The
+// background holds at most PeerInFlight-1 slots, so one is always free for a
+// block, and starts nothing to the peer while a block's query is waiting or in
+// flight, so what the peer admits goes to the block.
+type Gate struct {
+	mu       sync.Mutex
+	inFlight int           // queries holding a slot
+	urgent   int           // a block's queries, waiting, paused or holding a slot
+	changed  chan struct{} // closed, and made again, when either falls
+}
 
 // NewGate is a gate with PeerInFlight slots.
-func NewGate() *Gate { return &Gate{slots: make(chan struct{}, PeerInFlight)} }
+func NewGate() *Gate { return &Gate{changed: make(chan struct{})} }
+
+// enter takes a slot, waiting for one the caller may hold.
+func (g *Gate) enter(ctx context.Context, urgent bool) error {
+	g.mu.Lock()
+	for g.inFlight >= PeerInFlight || !urgent && (g.urgent > 0 || g.inFlight >= PeerInFlight-1) {
+		changed := g.changed
+		g.mu.Unlock()
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return errors.UnknownError.Wrap(ctx.Err())
+		}
+		g.mu.Lock()
+	}
+	g.inFlight++
+	g.mu.Unlock()
+	return nil
+}
+
+func (g *Gate) exit() {
+	g.mu.Lock()
+	g.inFlight--
+	g.signal()
+	g.mu.Unlock()
+}
+
+// claim and release count a block's query from its first slot to its answer,
+// pauses included.
+func (g *Gate) claim() {
+	g.mu.Lock()
+	g.urgent++
+	g.mu.Unlock()
+}
+
+func (g *Gate) release() {
+	g.mu.Lock()
+	g.urgent--
+	g.signal()
+	g.mu.Unlock()
+}
+
+func (g *Gate) signal() {
+	close(g.changed)
+	g.changed = make(chan struct{})
+}
+
+// urgentPause is how long a block's query waits after a busy answer, doubling
+// from first up to most, for as long as the block's context lasts: the
+// background's pauses, up to 10 s each, spent a block's 30 s in three.
+var urgentPause = struct{ first, most time.Duration }{100 * time.Millisecond, time.Second}
 
 // Gated returns q behind gate: a query waits for a slot, and one the peer
 // answers busy is asked again after a pause that doubles, streamPause.give in
@@ -74,22 +137,26 @@ func (g gatedQuerier) Query(ctx context.Context, scope *url.URL, query api.Query
 	if query != nil {
 		kind = query.QueryType().String()
 	}
-	pause := streamPause.first
+	urgent := isUrgent(ctx)
+	pause, most := streamPause.first, streamPause.most
+	if urgent {
+		pause, most = urgentPause.first, urgentPause.most
+		g.gate.claim()
+		defer g.gate.release()
+	}
 	var waited time.Duration
 	for {
 		t0 := time.Now()
-		select {
-		case g.gate.slots <- struct{}{}:
-		case <-ctx.Done():
-			return nil, errors.UnknownError.Wrap(ctx.Err())
+		if err := g.gate.enter(ctx, urgent); err != nil {
+			return nil, err
 		}
 		t1 := time.Now()
 		mGateSlotWait.Add(t1.Sub(t0).Seconds())
 		r, err := g.Querier.Query(ctx, scope, query)
-		<-g.gate.slots
+		g.gate.exit()
 		mGateCalls.WithLabelValues(kind).Inc()
 		mGateSeconds.WithLabelValues(kind).Add(time.Since(t1).Seconds())
-		if err == nil || !isBusy(err) || waited+pause > streamPause.give {
+		if err == nil || !isBusy(err) || !urgent && waited+pause > streamPause.give {
 			return r, err
 		}
 		mGateBusy.WithLabelValues(kind).Inc()
@@ -102,6 +169,18 @@ func (g gatedQuerier) Query(ctx context.Context, scope *url.URL, query api.Query
 		case <-t.C:
 		}
 		waited += pause
-		pause = min(2*pause, streamPause.most)
+		pause = min(2*pause, most)
 	}
+}
+
+type urgentKey struct{}
+
+// Urgent marks ctx as a block's: a block is waiting on its queries, which go
+// before the background's and ask a busy peer again until ctx ends, so ctx
+// must have a deadline (#4557).
+func Urgent(ctx context.Context) context.Context { return context.WithValue(ctx, urgentKey{}, true) }
+
+func isUrgent(ctx context.Context) bool {
+	u, _ := ctx.Value(urgentKey{}).(bool)
+	return u
 }

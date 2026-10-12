@@ -1536,6 +1536,26 @@ minute it was done. What it did is on the fill's line: `ahead-loaded`, and
 is left to the block (`fillAhead`,
 `TestTheSectionsTheNextBlocksTouchAreLoadedAheadOfThem`).
 
+**A block's queries go first** (#4557). The fill, the look-ahead, the
+backfill and a block's own asks share the node's gate to each peer
+(`PeerInFlight`, 4, what a validator admits). A block's asks — a section it
+reads (`Load`, 30 s), its record and the system accounts as of it (the
+overlap's, 5 s each) — are marked as the block's (`pull.Urgent`): such a
+query takes the next free slot to the peer; the background never holds more
+than `PeerInFlight`-1 slots, so one is always free for a block; and while a
+block's query to a peer is waiting, paused or in flight, no background query
+starts to that peer, so what the peer admits goes to the block. A busy answer
+to a block's query is asked again after 100 ms, doubling up to 1 s, for as
+long as the block's ask lasts — the background's pauses, 250 ms doubling up
+to 10 s, spent a load's 30 s in three. Without it, run 20261010T194045Z lost
+2 of 26 joins: minutes after ACTIVE, with the fill still running, a block's
+load of a section timed out on every peer while the node's own pulls were
+answered `query capacity exhausted`; one block was held past its bound and
+the node synced again, and in the other the overlap's states as of the block
+timed out too, the block diverged and the node repaired from the ledger
+(`TestABlocksQueryGoesBeforeTheBackground`,
+`TestABlocksLoadIsNotQueuedBehindTheBackground`).
+
 The tests: `TestAJoinerExecutesBeforeEverySectionIsLoaded`,
 `TestABlockThatWritesAColdAccountIsNotHeldAndTakesItsRecord`,
 `TestAnAccountInASectionNotLoadedIsLoadedWhenABlockWritesIt`,

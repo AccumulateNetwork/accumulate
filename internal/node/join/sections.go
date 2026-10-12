@@ -315,7 +315,7 @@ func (x *sections) Load(batch *database.Batch, s bpt.Section) error {
 		return errors.UnknownError.Wrap(err)
 	}
 	// Beside the join, not on its goroutine: a block is executing.
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), backfillKey{}, true), x.timeout)
+	ctx, cancel := context.WithTimeout(pull.Urgent(context.WithValue(context.Background(), backfillKey{}, true)), x.timeout)
 	defer cancel()
 	var last error
 	for ctx.Err() == nil {

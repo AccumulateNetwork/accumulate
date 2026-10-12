@@ -345,7 +345,7 @@ func (o *overlap) settle(batch *database.Batch, n uint64) error {
 		return nil
 	}
 	// Beside the join, not on its goroutine: a block is executing.
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), backfillKey{}, true), o.ask)
+	ctx, cancel := context.WithTimeout(pull.Urgent(context.WithValue(context.Background(), backfillKey{}, true)), o.ask)
 	defer cancel()
 
 	records, src, ok := o.record(ctx, n)
@@ -479,7 +479,7 @@ func (o *overlap) verifySystem(s *settling) error {
 			urls = append(urls, u)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), backfillKey{}, true), o.ask)
+	ctx, cancel := context.WithTimeout(pull.Urgent(context.WithValue(context.Background(), backfillKey{}, true)), o.ask)
 	defer cancel()
 	states, err := statesAt(ctx, s.src, o.partition, urls, s.n)
 	if err != nil {
