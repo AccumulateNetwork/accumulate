@@ -696,6 +696,8 @@ func (v *Instrumentation) UnmarshalJSON(b []byte) error {
 
 type LevelDBStorage struct {
 	Path string
+	// Sidecar is the path to a read-only sidecar database (issue 4468). When set, a read that misses in the primary database falls through to it, and is written back into the primary in the background.
+	Sidecar string
 }
 
 func (LevelDBStorage) Type() StorageType { return StorageTypeLevelDB }
