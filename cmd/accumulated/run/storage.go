@@ -17,6 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bolt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/overlay"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var storageProvides = ioc.Provides[keyvalue.Beginner](func(c *StorageService) string { return c.Name })
@@ -127,8 +129,29 @@ func (s *LevelDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {
 		return nil, err
 	}
 
-	inst.cleanup("storage", func(context.Context) error { return db.Close() })
-	return db, nil
+	if s.Sidecar == "" {
+		inst.cleanup("storage", func(context.Context) error { return db.Close() })
+		return db, nil
+	}
+
+	side, err := leveldb.Open(inst.path(s.Sidecar))
+	if err != nil {
+		return nil, err
+	}
+
+	over := overlay.OpenWithRepair(db, side)
+	// Registered as one cleanup, in the order that matters: stop the
+	// background writer before either store it writes to and reads from can
+	// close underneath it. inst.cleanup runs every registration as an
+	// independent, unordered goroutine, so this must not be three separate
+	// calls.
+	inst.cleanup("storage", func(context.Context) error {
+		errOver := over.Close()
+		errSide := side.Close()
+		errDB := db.Close()
+		return errors.Join(errOver, errSide, errDB)
+	})
+	return over, nil
 }
 
 func (s *ExpBlockDBStorage) open(inst *Instance) (keyvalue.Beginner, error) {

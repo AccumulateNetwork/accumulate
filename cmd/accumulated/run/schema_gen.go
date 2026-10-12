@@ -836,6 +836,11 @@ func init() {
 				Name: "Path",
 				Type: &schema.SimpleType{Type: schema.SimpleTypeString},
 			},
+			{
+				Name:        "Sidecar",
+				Description: "is the path to a read-only sidecar database (issue 4468). When set, a read that misses in the primary database falls through to it, and is written back into the primary in the background",
+				Type:        &schema.SimpleType{Type: schema.SimpleTypeString},
+			},
 		},
 	}).SetGoType()
 
