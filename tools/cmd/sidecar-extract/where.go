@@ -45,6 +45,11 @@ type holding struct {
 	values map[string][]byte // from conflicts, by archive
 }
 
+// model reads through the live databases and the sidecar.
+func (s *stores) model() *coredb.Batch {
+	return coredb.New(layered(append(s.live[:len(s.live):len(s.live)], s.sidecar)), nil).Begin(false)
+}
+
 func (s *stores) locate(key *database.Key) holding {
 	h := key.Hash()
 	var out holding
@@ -181,6 +186,37 @@ func where(currentPaths []string, sidecarPath, conflictsPath string, accounts []
 		fmt.Printf("\tmain state %s: %s\n", hashOf(acct.Main().Key()), s.locate(acct.Main().Key()))
 		fmt.Printf("\tmain chain head %s: %s\n", hashOf(acct.MainChain().Head().Key()), s.locate(acct.MainChain().Head().Key()))
 
+		// the main chain's entries, read through live and the sidecar, and
+		// where each entry's message is
+		if chain, err := s.model().Account(u).MainChain().Get(); err == nil {
+			msgs := map[string]int{}
+			var unread int
+			var shown bool // the first message no store holds, with its keys
+			for i := int64(0); i < chain.Height(); i++ {
+				h, err := chain.Entry(i)
+				if err != nil {
+					unread++
+					continue
+				}
+				// a message is under Message(hash).Main, or for the older
+				// ones under Transaction(hash).Main (database.messageMain)
+				m := s.locate(batch.Message2(h).Main().Key())
+				if m.in == "none" {
+					if t := s.locate(batch.Transaction(h).Main().Key()); t.in != "none" {
+						m = t
+						m.all[0] += "(legacy)"
+						m.in = m.all[0]
+					}
+				}
+				if m.in == "none" && !shown {
+					shown = true
+					fmt.Printf("\tentry %d %x: message key %s, transaction key %s: none\n", i, h, hashOf(batch.Message2(h).Main().Key()), hashOf(batch.Transaction(h).Main().Key()))
+				}
+				msgs[m.String()]++
+			}
+			fmt.Printf("\tmain chain %d entries, %d unreadable; messages: %s\n", chain.Height(), unread, tally(msgs))
+		}
+
 		countKey := acct.Data().Entry().Key()
 		count := s.locate(countKey)
 		fmt.Printf("\tdata count %s: %s", hashOf(countKey), count)
@@ -233,6 +269,19 @@ func where(currentPaths []string, sidecarPath, conflictsPath string, accounts []
 			}
 		}
 		fmt.Printf("\t%d entries: %s\n", n, tally(entries))
+		// an index the live store restarted after the reorg hides the
+		// sidecar's entries at and beyond its count
+		if count.in == "live" {
+			m := n
+			for ; m < n+1<<20; m++ {
+				if _, err := s.sidecar.Get(hashBytes(countKey.Append(int(m))), nil); err != nil {
+					break
+				}
+			}
+			if m > n {
+				fmt.Printf("\tsidecar entries beyond the live count: %d..%d (%d)\n", n, m-1, m-n)
+			}
+		}
 		if len(missing) > 0 {
 			fmt.Printf("\tentries in no store: %d (first %d)\n", len(missing), missing[0])
 		}
@@ -255,6 +304,11 @@ func tally(m map[string]int) string {
 		parts = append(parts, fmt.Sprintf("%s %d", k, m[k]))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func hashBytes(key *database.Key) []byte {
+	h := key.Hash()
+	return h[:]
 }
 
 func hashOf(key *database.Key) string {

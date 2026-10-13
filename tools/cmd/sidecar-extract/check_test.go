@@ -69,7 +69,7 @@ func TestCheckDataIndex(t *testing.T) {
 	writeDataAccount(t, filepath.Join(dir, "live"), u, 3, false)
 	writeDataAccount(t, filepath.Join(dir, "sidecar"), u, 3, true)
 
-	results := runChecks([]*leveldb.DB{openRO(t, filepath.Join(dir, "live"))}, openRO(t, filepath.Join(dir, "sidecar")), "", []*url.URL{u})
+	results := runChecks([]*leveldb.DB{openRO(t, filepath.Join(dir, "live"))}, openRO(t, filepath.Join(dir, "sidecar")), "", false, []*url.URL{u})
 	require.Len(t, results, 2)
 
 	live, both := results[0], results[1]

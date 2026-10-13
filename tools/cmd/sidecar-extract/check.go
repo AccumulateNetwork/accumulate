@@ -10,6 +10,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
@@ -48,6 +50,7 @@ type checkResult struct {
 	// bridge makes (#4268). DataWrong lists entries whose transaction does
 	// not write them.
 	IsData    bool
+	Skipped   bool // not a data account, and only those were asked for
 	DataTotal uint64
 	DataRead  uint64
 	DataWrong []uint64
@@ -60,7 +63,7 @@ type checkResult struct {
 // over every entry — through the API's own Querier, from the live database
 // alone and then with the sidecar behind it (#4268, #4269). Every store is
 // opened read-only.
-func check(currentPaths []string, sidecarPath, partition string, accounts []string) error {
+func check(currentPaths []string, sidecarPath, partition, accountsPath string, dataOnly bool, accounts []string) error {
 	var live []*leveldb.DB
 	for _, p := range currentPaths {
 		db, err := leveldb.OpenFile(p, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
@@ -76,6 +79,17 @@ func check(currentPaths []string, sidecarPath, partition string, accounts []stri
 	}
 	defer side.Close()
 
+	if accountsPath != "" {
+		b, err := os.ReadFile(accountsPath)
+		if err != nil {
+			return err
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				accounts = append(accounts, line)
+			}
+		}
+	}
 	var urls []*url.URL
 	for _, s := range accounts {
 		u, err := url.Parse(s)
@@ -84,15 +98,58 @@ func check(currentPaths []string, sidecarPath, partition string, accounts []stri
 		}
 		urls = append(urls, u)
 	}
-	for _, r := range runChecks(live, side, partition, urls) {
+	sums := map[string]*checkSummary{}
+	for _, r := range runChecks(live, side, partition, dataOnly, urls) {
+		if r.Skipped {
+			continue
+		}
 		fmt.Println(r)
+		if sums[r.Layer] == nil {
+			sums[r.Layer] = new(checkSummary)
+		}
+		sums[r.Layer].add(r)
+	}
+	for _, layer := range []string{"live", "live+sidecar"} {
+		if s := sums[layer]; s != nil {
+			fmt.Printf("summary\t%s\t%s\n", layer, s)
+		}
 	}
 	return nil
 }
 
+// checkSummary counts accounts by what their queries returned.
+type checkSummary struct {
+	Accounts, HistoryWhole, HistoryWrong, DataAccounts, DataWhole, LatestOK int
+}
+
+func (s *checkSummary) add(r checkResult) {
+	s.Accounts++
+	if r.HistoryErr == nil && r.Read == r.Total {
+		s.HistoryWhole++
+	}
+	if len(r.Wrong) > 0 {
+		s.HistoryWrong++
+	}
+	if !r.IsData {
+		return
+	}
+	s.DataAccounts++
+	if r.DataErr == nil && r.DataRead == r.DataTotal && len(r.DataWrong) == 0 {
+		s.DataWhole++
+	}
+	if r.LatestErr == nil {
+		s.LatestOK++
+	}
+}
+
+func (s *checkSummary) String() string {
+	return fmt.Sprintf("accounts %d, history whole %d, history with a wrong entry %d, data accounts %d, data whole %d, latest ok %d",
+		s.Accounts, s.HistoryWhole, s.HistoryWrong, s.DataAccounts, s.DataWhole, s.LatestOK)
+}
+
 // runChecks checks each account from the live stores alone, then with the
 // sidecar behind them.
-func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, accounts []*url.URL) []checkResult {
+func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, dataOnly bool, accounts []*url.URL) []checkResult {
 	layers := []struct {
 		name string
 		dbs  []*leveldb.DB
@@ -103,7 +160,7 @@ func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, accounts 
 		for _, l := range layers {
 			db := coredb.New(layered(l.dbs), nil)
 			q := api.Querier2{Querier: v3.NewQuerier(v3.QuerierParams{Database: db, Partition: partition})}
-			r := checkAccount(q, db, u)
+			r := checkAccount(q, db, u, dataOnly)
 			r.Layer = l.name
 			results = append(results, r)
 		}
@@ -111,9 +168,23 @@ func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, accounts 
 	return results
 }
 
-func checkAccount(q api.Querier2, db *coredb.Database, u *url.URL) checkResult {
+func checkAccount(q api.Querier2, db *coredb.Database, u *url.URL, dataOnly bool) checkResult {
 	ctx := context.Background()
 	r := checkResult{Account: u}
+
+	batch := db.Begin(false)
+	defer batch.Discard()
+	main, err := batch.Account(u).Main().Get()
+	if err == nil {
+		switch main.Type() {
+		case protocol.AccountTypeDataAccount, protocol.AccountTypeLiteDataAccount:
+			r.IsData = true
+		}
+	}
+	if dataOnly && !r.IsData {
+		r.Skipped = true
+		return r
+	}
 
 	// query-tx-history, page by page; a page the API refuses is read entry
 	// by entry so the count is of entries, not pages
@@ -151,16 +222,7 @@ func checkAccount(q api.Querier2, db *coredb.Database, u *url.URL) checkResult {
 
 	// data: the newest entry as query-data asks for it, then every entry as
 	// query-data-set does
-	batch := db.Begin(false)
-	defer batch.Discard()
-	main, err := batch.Account(u).Main().Get()
-	if err != nil {
-		return r
-	}
-	switch main.Type() {
-	case protocol.AccountTypeDataAccount, protocol.AccountTypeLiteDataAccount:
-		r.IsData = true
-	default:
+	if !r.IsData {
 		return r
 	}
 	_, r.LatestErr = q.QueryDataEntry(ctx, u, &api.DataQuery{})
