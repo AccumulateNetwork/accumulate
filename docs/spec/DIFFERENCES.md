@@ -2254,3 +2254,28 @@ take its state and route requests to it. The code (#4447/#4466) lets each node
 resume from its own block when fewer peers serve than the signing threshold,
 so nodes can resume at different blocks, and a peer that times out counts as
 not serving. Not built.
+
+## Anchoring: nothing anchors to Bitcoin (#4562)
+
+[anchoring.md](anchoring.md) (Paul, 2026-10-12) has the Directory's root chain
+anchor committed to Bitcoin at every due height from an address on a published
+list, the validators signing at the network's threshold through a coordination
+data account, a proof builder keeping each listed account's entries' receipts
+to the next anchored root, and a verifier that checks a package with Bitcoin
+and one pinned transaction. None of it exists:
+
+- **B1. No accounts, no types.** `dn.acme/bitcoin/addresses` and
+  `dn.acme/bitcoin/anchors` are not created by genesis or by any transaction;
+  `pkg/anchoring` and its payload, list and record types do not exist.
+- **B2. No coordination.** No validator proposes, signs or broadcasts an anchor
+  (anchoring.md §2.4).
+- **B3. No proof builder.** Nothing reads the block ledgers for a configured
+  set of accounts and keeps receipts to an anchored root; the only account
+  proofs are `ProofService`'s, built on request against the current BPT and
+  the major-block spine, which does not cross a restart (§2.5).
+- **B4. No verifier.** Nothing checks a package, and no alarm watches the
+  anchors (§2.6).
+
+Order: B3 first — receipts to the Directory root are useful against today's
+spine before any anchor exists — then B1 with B2, then B4. Issues are the
+children of #4562.
