@@ -61,6 +61,21 @@ func openRO(t *testing.T, path string) *leveldb.DB {
 	return db
 }
 
+// A data index the live store restarted after the reorg is reported: its own
+// count hides the sidecar's entries at and beyond it.
+func TestCheckRestartedIndex(t *testing.T) {
+	dir := t.TempDir()
+	u := url.MustParse("acc://staking.acme/registered")
+	writeDataAccount(t, filepath.Join(dir, "live"), u, 2, true)
+	writeDataAccount(t, filepath.Join(dir, "sidecar"), u, 5, true)
+
+	results := runChecks([]*leveldb.DB{openRO(t, filepath.Join(dir, "live"))}, openRO(t, filepath.Join(dir, "sidecar")), "", false, []*url.URL{u})
+	live := results[0]
+	require.EqualValues(t, 2, live.DataTotal)
+	require.EqualValues(t, 3, live.Hidden, "entries 2, 3 and 4 of the sidecar's index are never read")
+	require.Contains(t, live.String(), "restarted: hides 3")
+}
+
 // The bridge's data queries fail on the live store, which has the
 // transactions but not the index, and succeed with the sidecar behind it.
 func TestCheckDataIndex(t *testing.T) {

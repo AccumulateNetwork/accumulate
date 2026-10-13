@@ -50,7 +50,8 @@ type checkResult struct {
 	// bridge makes (#4268). DataWrong lists entries whose transaction does
 	// not write them.
 	IsData    bool
-	Skipped   bool // not a data account, and only those were asked for
+	Skipped   bool   // not a data account, and only those were asked for
+	Hidden    uint64 // sidecar index entries at and beyond the live count, which a restarted index hides
 	DataTotal uint64
 	DataRead  uint64
 	DataWrong []uint64
@@ -119,7 +120,7 @@ func check(currentPaths []string, sidecarPath, partition, accountsPath string, d
 
 // checkSummary counts accounts by what their queries returned.
 type checkSummary struct {
-	Accounts, HistoryWhole, HistoryWrong, DataAccounts, DataWhole, LatestOK int
+	Accounts, HistoryWhole, HistoryWrong, DataAccounts, DataWhole, LatestOK, Restarted int
 }
 
 func (s *checkSummary) add(r checkResult) {
@@ -140,11 +141,14 @@ func (s *checkSummary) add(r checkResult) {
 	if r.LatestErr == nil {
 		s.LatestOK++
 	}
+	if r.Hidden > 0 {
+		s.Restarted++
+	}
 }
 
 func (s *checkSummary) String() string {
-	return fmt.Sprintf("accounts %d, history whole %d, history with a wrong entry %d, data accounts %d, data whole %d, latest ok %d",
-		s.Accounts, s.HistoryWhole, s.HistoryWrong, s.DataAccounts, s.DataWhole, s.LatestOK)
+	return fmt.Sprintf("accounts %d, history whole %d, history with a wrong entry %d, data accounts %d, data whole %d, latest ok %d, index restarted %d",
+		s.Accounts, s.HistoryWhole, s.HistoryWrong, s.DataAccounts, s.DataWhole, s.LatestOK, s.Restarted)
 }
 
 // runChecks checks each account from the live stores alone, then with the
@@ -162,6 +166,9 @@ func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, dataOnly 
 			q := api.Querier2{Querier: v3.NewQuerier(v3.QuerierParams{Database: db, Partition: partition})}
 			r := checkAccount(q, db, u, dataOnly)
 			r.Layer = l.name
+			if l.name == "live" && r.IsData && r.DataTotal > 0 {
+				r.Hidden = hidden(side, u, r.DataTotal)
+			}
 			results = append(results, r)
 		}
 	}
@@ -259,6 +266,23 @@ func checkAccount(q api.Querier2, db *coredb.Database, u *url.URL, dataOnly bool
 	return r
 }
 
+// hidden counts the sidecar's index entries from the live count on: a data
+// index the live store restarted after the reorg counts only its own entries,
+// so the sidecar's at and beyond that count are never read.
+func hidden(side *leveldb.DB, u *url.URL, liveCount uint64) uint64 {
+	batch := coredb.New(memory.New(nil), nil).Begin(false)
+	defer batch.Discard()
+	key := batch.Account(u).Data().Entry().Key()
+	var n uint64
+	for ; n < 1<<20; n++ {
+		h := key.Append(int(liveCount + n)).Hash()
+		if _, err := side.Get(h[:], nil); err != nil {
+			break
+		}
+	}
+	return n
+}
+
 func (r *checkResult) countHistory(e *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) {
 	if e == nil || e.Value == nil || e.Value.Message == nil {
 		return
@@ -311,6 +335,9 @@ func (r checkResult) String() string {
 		return s
 	}
 	s += fmt.Sprintf("\tdata %d of %d", r.DataRead, r.DataTotal)
+	if r.Hidden > 0 {
+		s += fmt.Sprintf(", restarted: hides %d in the sidecar", r.Hidden)
+	}
 	if len(r.DataWrong) > 0 {
 		s += fmt.Sprintf(", %d wrong (first %d)", len(r.DataWrong), r.DataWrong[0])
 	}
