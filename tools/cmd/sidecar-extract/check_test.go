@@ -54,6 +54,12 @@ func writeDataAccount(t *testing.T, path string, u *url.URL, n int, index bool) 
 	require.NoError(t, batch.Commit())
 }
 
+func collect(live, side *leveldb.DB, u *url.URL) []checkResult {
+	var results []checkResult
+	runChecks([]*leveldb.DB{live}, side, "", false, []*url.URL{u}, func(r checkResult) { results = append(results, r) })
+	return results
+}
+
 func openRO(t *testing.T, path string) *leveldb.DB {
 	db, err := leveldb.OpenFile(path, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
 	require.NoError(t, err)
@@ -69,7 +75,7 @@ func TestCheckRestartedIndex(t *testing.T) {
 	writeDataAccount(t, filepath.Join(dir, "live"), u, 2, true)
 	writeDataAccount(t, filepath.Join(dir, "sidecar"), u, 5, true)
 
-	results := runChecks([]*leveldb.DB{openRO(t, filepath.Join(dir, "live"))}, openRO(t, filepath.Join(dir, "sidecar")), "", false, []*url.URL{u})
+	results := collect(openRO(t, filepath.Join(dir, "live")), openRO(t, filepath.Join(dir, "sidecar")), u)
 	live := results[0]
 	require.EqualValues(t, 2, live.DataTotal)
 	require.EqualValues(t, 3, live.Hidden, "entries 2, 3 and 4 of the sidecar's index are never read")
@@ -84,7 +90,7 @@ func TestCheckDataIndex(t *testing.T) {
 	writeDataAccount(t, filepath.Join(dir, "live"), u, 3, false)
 	writeDataAccount(t, filepath.Join(dir, "sidecar"), u, 3, true)
 
-	results := runChecks([]*leveldb.DB{openRO(t, filepath.Join(dir, "live"))}, openRO(t, filepath.Join(dir, "sidecar")), "", false, []*url.URL{u})
+	results := collect(openRO(t, filepath.Join(dir, "live")), openRO(t, filepath.Join(dir, "sidecar")), u)
 	require.Len(t, results, 2)
 
 	live, both := results[0], results[1]

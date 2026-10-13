@@ -68,3 +68,11 @@ from it: they are consensus state, restored only by #4020's mechanism.
 - **It fails soft.** A sidecar that is unreachable, slow (2 s) or broken leaves the read with the live database's not-found, as for a node without one, and the failure is logged.
 
 **Mounting it locally** (#4468): a LevelDB node's storage takes `Sidecar: <path>`; a read that misses the primary falls through to the sidecar and is written back to the primary in the background (`pkg/database/keyvalue/overlay`, repair-on-hit). This puts the sidecar under every reader, the executor included, and no rule yet keeps a deliberately pruned key, or consensus state, from falling through (#4560). Serving it from another node is the deployed form.
+
+## Checking what it answers
+
+Two modes read the sidecar beside a copy of the live databases, every store read-only, and say what the queries that motivated it (#4268, #4269) get:
+
+- `-check <sidecar> -current <live>... [-accounts <list>] [-data-only] [<account>...]` makes the calls the bridge makes — query-tx-history, query-data for the newest entry, query-data-set over every entry — through the API's own `Querier`, from the live databases alone and then with the sidecar behind them. Per account and layering it reports the main chain's entries and messages read and their transaction types, the data index's entries read, whether the newest-entry query answers, and a data index the live store **restarted** after the reorg: a count of its own that hides the sidecar's entries at and beyond it. `-data-only` skips accounts that are not data accounts; the run ends with one summary line per layering.
+- `-where -sidecar <sidecar> -conflicts <conflicts> -current <live>... <account>...` says which store holds each of an account's records — main state, main chain head, each main-chain entry's message (under `Message` or the older `Transaction` key), and the data index's count, entries and entry-to-transaction map: `live`, `sidecar`, `conflicts[...]` with the archives that hold it grouped by value, or `none`.
+

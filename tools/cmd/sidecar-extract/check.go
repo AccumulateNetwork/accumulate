@@ -100,16 +100,16 @@ func check(currentPaths []string, sidecarPath, partition, accountsPath string, d
 		urls = append(urls, u)
 	}
 	sums := map[string]*checkSummary{}
-	for _, r := range runChecks(live, side, partition, dataOnly, urls) {
+	runChecks(live, side, partition, dataOnly, urls, func(r checkResult) {
 		if r.Skipped {
-			continue
+			return
 		}
 		fmt.Println(r)
 		if sums[r.Layer] == nil {
 			sums[r.Layer] = new(checkSummary)
 		}
 		sums[r.Layer].add(r)
-	}
+	})
 	for _, layer := range []string{"live", "live+sidecar"} {
 		if s := sums[layer]; s != nil {
 			fmt.Printf("summary\t%s\t%s\n", layer, s)
@@ -152,14 +152,13 @@ func (s *checkSummary) String() string {
 }
 
 // runChecks checks each account from the live stores alone, then with the
-// sidecar behind them.
-func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, dataOnly bool, accounts []*url.URL) []checkResult {
+// sidecar behind them, handing each result to report as it is done.
+func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, dataOnly bool, accounts []*url.URL, report func(checkResult)) {
 	layers := []struct {
 		name string
 		dbs  []*leveldb.DB
 	}{{"live", live}, {"live+sidecar", append(live[:len(live):len(live)], side)}}
 
-	var results []checkResult
 	for _, u := range accounts {
 		for _, l := range layers {
 			db := coredb.New(layered(l.dbs), nil)
@@ -169,10 +168,9 @@ func runChecks(live []*leveldb.DB, side *leveldb.DB, partition string, dataOnly 
 			if l.name == "live" && r.IsData && r.DataTotal > 0 {
 				r.Hidden = hidden(side, u, r.DataTotal)
 			}
-			results = append(results, r)
+			report(r)
 		}
 	}
-	return results
 }
 
 func checkAccount(q api.Querier2, db *coredb.Database, u *url.URL, dataOnly bool) checkResult {
@@ -193,37 +191,63 @@ func checkAccount(q api.Querier2, db *coredb.Database, u *url.URL, dataOnly bool
 		return r
 	}
 
-	// query-tx-history, page by page; a page the API refuses is read entry
-	// by entry so the count is of entries, not pages
+	// query-tx-history: the first and last pages through the API, as the
+	// bridge reads them; every entry and its message through the model, which
+	// is what those pages read less the Merkle state of each entry
 	expand := true
-	for start := uint64(0); ; start += checkPage {
+	chain, err := batch.Account(u).MainChain().Get()
+	if err != nil {
+		r.HistoryErr = fmt.Errorf("main chain: %w", err)
+		return r
+	}
+	r.Total = uint64(chain.Height())
+	for i := int64(0); i < chain.Height(); i++ {
+		h, err := chain.Entry(i)
+		if err != nil {
+			if r.HistoryErr == nil {
+				r.HistoryErr = fmt.Errorf("entry %d: %w", i, err)
+			}
+			continue
+		}
+		msg, err := batch.Message2(h).Main().Get()
+		if err != nil {
+			if r.HistoryErr == nil {
+				r.HistoryErr = fmt.Errorf("message of entry %d: %w", i, err)
+			}
+			continue
+		}
+		r.Read++
+		if msg.ID().Hash() != [32]byte(h) {
+			r.Wrong = append(r.Wrong, uint64(i))
+		}
+		if r.Types == nil {
+			r.Types = map[string]int{}
+		}
+		if txn, ok := msg.(*messaging.TransactionMessage); ok && txn.Transaction != nil && txn.Transaction.Body != nil {
+			r.Types[txn.Transaction.Body.Type().String()]++
+		} else {
+			r.Types[msg.Type().String()]++
+		}
+	}
+	pages := []uint64{0}
+	if r.Total > checkPage {
+		pages = append(pages, (r.Total-1)/checkPage*checkPage)
+	}
+	for _, start := range pages {
 		count := uint64(checkPage)
 		page, err := q.QueryMainChainEntries(ctx, u, &api.ChainQuery{Name: "main", Range: &api.RangeOptions{Start: start, Count: &count, Expand: &expand}})
 		if err != nil {
 			if r.HistoryErr == nil {
-				r.HistoryErr = fmt.Errorf("history from %d: %w", start, err)
-			}
-			if r.Total == 0 {
-				break
-			}
-			for i := start; i < start+checkPage && i < r.Total; i++ {
-				e, err := q.QueryMainChainEntry(ctx, u, &api.ChainQuery{Name: "main", Index: &i})
-				if err != nil {
-					continue
-				}
-				r.countHistory(e)
-			}
-			if start+checkPage >= r.Total {
-				break
+				r.HistoryErr = fmt.Errorf("history page from %d: %w", start, err)
 			}
 			continue
 		}
-		r.Total = page.Total
 		for _, e := range page.Records {
-			r.countHistory(e)
-		}
-		if start+checkPage >= page.Total {
-			break
+			if e == nil || e.Value == nil || e.Value.Message == nil {
+				if r.HistoryErr == nil {
+					r.HistoryErr = fmt.Errorf("history page from %d: an entry without its transaction", start)
+				}
+			}
 		}
 	}
 
@@ -281,22 +305,6 @@ func hidden(side *leveldb.DB, u *url.URL, liveCount uint64) uint64 {
 		}
 	}
 	return n
-}
-
-func (r *checkResult) countHistory(e *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) {
-	if e == nil || e.Value == nil || e.Value.Message == nil {
-		return
-	}
-	r.Read++
-	if e.Value.ID.Hash() != e.Entry {
-		r.Wrong = append(r.Wrong, e.Index)
-	}
-	if r.Types == nil {
-		r.Types = map[string]int{}
-	}
-	if e.Value.Message.Transaction != nil && e.Value.Message.Transaction.Body != nil {
-		r.Types[e.Value.Message.Transaction.Body.Type().String()]++
-	}
 }
 
 func (r *checkResult) countData(e *api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]) {
