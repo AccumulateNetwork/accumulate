@@ -78,9 +78,9 @@ var flagRebuild = flag.Bool("rebuild", false, "rebuild every main, signature and
 var flagProfile = flag.String("cpuprofile", "", "write a CPU profile here")
 var flagMerge = flag.String("merge", "", "a store to copy into -out (a sidecar), and exit")
 var flagIdentify = flag.String("identify", "", "a lost list: name every lost key the partition's model can name (-partition, -height), writing to -out, and exit")
-var flagPartition = flag.String("partition", "", "the partition (for -identify)")
+var flagPartition = flag.String("partition", "", "the partition (for -identify, -check)")
 var flagHeight = flag.Uint64("height", 0, "the partition's last block (for -identify)")
-var flagSidecar = flag.String("sidecar", "", "the sidecar; a lost key it now holds is not lost (for -identify)")
+var flagSidecar = flag.String("sidecar", "", "the sidecar; a lost key it now holds is not lost (for -identify, -where)")
 var flagInspect = flag.String("inspect", "", "a key list: report the archive's index entry for each (version, log position, length), and exit")
 var flagHeightAt = flag.String("height-at", "", "a CometBFT block store: print the heights there at the times of -of's heights -from and -to, and exit")
 var flagOf = flag.String("of", "", "the block store -from and -to are heights of (for -height-at)")
@@ -93,6 +93,8 @@ var flagFill = flag.String("fill-sets", "", "mark sets to rebuild from the block
 var flagDebug = flag.Bool("debug", false, "print investigation output")
 var flagRootFrom = flag.Uint64("root-from", 0, "first root chain index to load (for -fill-sets of the ledger's bpt)")
 var flagRootTo = flag.Uint64("root-to", 0, "last root chain index to load (for -fill-sets of the ledger's bpt)")
+var flagWhere = flag.Bool("where", false, "report which store — -current, -sidecar, -conflicts or none — holds each account's data-entry index records, and exit")
+var flagConflicts = flag.String("conflicts", "", "the conflicts database beside the sidecar (for -where)")
 var flagTypeOf = flag.String("type-of", "", "a hash list (16+ hex chars each): print each one's message type, and exit")
 var flagDest listFlag
 var flagCurrent listFlag
@@ -221,8 +223,14 @@ func main() {
 		}
 		return
 	}
+	if *flagWhere {
+		if err := where(flagCurrent, *flagSidecar, *flagConflicts, flag.Args()); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	if *flagCheck != "" {
-		if err := check(flagCurrent, *flagCheck, flag.Args()); err != nil {
+		if err := check(flagCurrent, *flagCheck, *flagPartition, flag.Args()); err != nil {
 			log.Fatal(err)
 		}
 		return
