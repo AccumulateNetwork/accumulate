@@ -2269,10 +2269,12 @@ and one pinned transaction. None of it exists:
   `pkg/anchoring` and its payload, list and record types do not exist.
 - **B2. No coordination.** No validator proposes, signs or broadcasts an anchor
   (anchoring.md §2.4).
-- **B3. No proof builder.** Nothing reads the block ledgers for a configured
-  set of accounts and keeps receipts to an anchored root; the only account
-  proofs are `ProofService`'s, built on request against the current BPT and
-  the major-block spine, which does not cross a restart (§2.5).
+- **B3. The proof builder is built, not deployed.** `internal/anchoring/proofs`
+  (#4563) reads a partition's block ledgers for a configured set of accounts
+  and keeps each entry's receipt to the Directory root that committed it, with
+  the evidence package of §2.5 minus the anchor. Not yet: a node service that
+  runs it beside a follower's API, the HTTP face that serves packages, and the
+  extension to the next *anchored* height, which waits on B2.
 - **B4. No verifier.** Nothing checks a package, and no alarm watches the
   anchors (§2.6).
 
