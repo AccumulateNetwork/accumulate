@@ -25,7 +25,7 @@ header-includes:
 | network undisturbed | 0 heals, 0 wedge captures, 0 delivery-stall captures, 0 reconcile pulls, 0 stalled channels at the end |
 | memory | no OOM, no GC thrash; both GOMEMLIMIT arms stayed under their container limits |
 
-What this run does **not** show: 10 tps (the issue text named the 10 tps conf; this ran at 5), any disturbance (nothing was paused, restarted or killed), and history older than 24 hours — a follower joining a network with weeks of blocks was not measured.
+What this run does **not** show: 10 tps (the issue text named the 10 tps conf; this ran at 5), any disturbance (nothing was paused, restarted or killed), and history older than 24 hours — a follower joining a network with weeks of blocks was not measured. What the day's slopes imply for a network running for years is the section of that name.
 
 # Setup
 
@@ -115,6 +115,64 @@ Read-back probe, validators, whole run: 426,034 timed reads, p50 1.7 ms, p95 13.
 
 The store grew at roughly 7.8 GB/h across the project's volume (read by hand from `docker system df` during the run: ~173 GB at hour 22; the harness does not record volume size). The disk was never the limiter: the 24 ms worst write wait is one sample, and the busy figure's periodic dips are the follower removals.
 
+# What this implies for a network running for years
+
+A day is 86,000 blocks and 450,000 transactions. A year is 31 million blocks per partition and, at 5 tps, 158 million transactions. Every quantity below was measured over one day; what matters for years is its *slope* across the day, and whether the slope is tied to time, to block count, or to the size of the state. Where the run cannot separate those, it says so.
+
+## What was flat
+
+- **Block production**: 0.99 blocks/s from block 40 to block 85,674. Nothing in commit or consensus slowed with the block count in this range.
+- **Goroutines**: 290–344 on every validator all day — no goroutine leak at this scale.
+- **Follower agreement**: the all-day follower matched the validators' root and BPT on 163,045 blocks with 0 mismatches; the lag never exceeded 1 block.
+- **Delivery**: 0 heals, 0 delivery stalls, 0 reconcile pulls. Nothing accumulated in the synthetic or anchor streams.
+
+## What grew, and with what
+
+| quantity | hour 1–3 | hour 20–22 | slope | tied to |
+|---|---|---|---|---|
+| added → ACTIVE (join) | 41 s | 77 s | +4 ms per account in the universe | state size (accounts), not block count |
+| live heap floor, 2000 arm (min heapAlloc per hour) | 328 MiB | 446 MiB | +11 MiB/h between releases; ~+2.5 MiB/h net of them | unknown: state size or time |
+| live heap floor, 1300 arm | 323 MiB | 436 MiB | same | same |
+| CPU per validator per hour | 790 s (2000) / 814 s (1300) | 1,013 s / 1,074 s | +28–32 % over the day at constant 5 tps | unknown: state size or uptime |
+| read latency by entry age, p50 / p95 | 1.2 / 2.3 ms (< 5,000 blocks old) | 2.4 / 16.6 ms (> 20,000 blocks old) | roughly doubles across the day's range | entry age in blocks |
+| store, whole project | — | ~173 GB at hour 22 | ~7.8 GB/h ≈ 0.5 GB/h per node | transactions, not time |
+
+### Joins
+
+The join pulls state and heads, not history (the design), so the chain's age does not enter it: 85,674 blocks of history cost the last joins nothing the first joins did not pay. What it pays for is accounts — about 4 ms each, measured across a universe growing 131 → 20,305. Extrapolated linearly, one follower stays inside the one-hour bar up to roughly 900,000 accounts; beyond that the state pull itself exceeds the bar, and the serial records phase (#4552, open for a decision) is the item that changes the slope. A years-old network also has years of history for the background fill; this run had at most 24 hours of it, and the background fill of real history was not measured.
+
+### Memory
+
+The live heap — the floor the GC gets back to, read as the hour's minimum `heapAlloc` — rose 11 MiB/h on both arms, identically, from 328 MiB to 529 MiB over 18 hours; it was released twice (hours 7 and 19), and each release landed about 30 MiB above the previous one: 328 → 358 → 388 MiB. Net of the releases the floor climbs ~2.5 MiB/h, 60 MiB/day.
+
+The hourly heap profiles name what the 19:00 CT release was, on `bvn2-val1` (18:06 → 19:07 CT, in-use heap 598 → 366 MB): anchor envelopes decoded for block production (`BlockAnchor` via `adapter.blockEnvelopes`, held somewhere after `ProduceBlock`) 88.5 → 6.5 MB, the BlockchainDB `immutableCache` 61 → 36 MB, and the receipts and Merkle states inside those envelopes. What triggers the release — a retention window of about 12 hours, or a store event — was not identified (filed as a question, #4571).
+
+For years the question is whether the ~60 MiB/day net climb is **retained state** (a cache keyed by accounts, which would plateau when the account set stops growing — and this run's account set grew 155× in a day, so anything proportional to it looks exactly like a leak) or **retained time** (something held per block or per anchor that no release empties). If it were linear and unbounded, the 1300 MiB arm's live heap would reach its limit in roughly two weeks (≈ 800 MiB of headroom at 2.5 MiB/h), after which the GC thrashes and then the container is killed. The run cannot distinguish the two; a run with a fixed universe can (below).
+
+### CPU
+
+Per-validator CPU per hour rose about 30 % across the day at a constant 5 tps and a constant 1 block/s. The same confound applies: a larger state makes every transaction cost more (BPT depth, cache misses), and separately the validators are known to slow with uptime in ways a restart resets. Over years neither can be left as it is: a 30 %/day rise at constant load is not sustainable even if it flattens, and the run did not see it flatten.
+
+### Reads
+
+Reads of an entry 20,000+ blocks old cost twice what reads under 5,000 blocks cost at p50, and seven times at p95. In a years-old network almost every read is of an old entry — a year is 31 million blocks — and this run measured the latency only out to ~85,000 blocks of age. Whether the curve is logarithmic (a tree walk) or worse (a scan of history pages) is the thing to measure; the run does not say.
+
+### Storage
+
+The store grows with transactions, not time, and nothing in it is reclaimed. At 5 tps the whole 16-node project wrote ~7.8 GB/h — about 0.5 GB per node-hour, or **~4 TB per node-year at 5 tps**, scaling with the rate. The node logs are a second stream of the same order (8.6 GB across 16 nodes in 24 h, ~0.2 TB per node-year) and are a deployment matter — rotate them.
+
+## The run that answers the years question
+
+This run could not separate "grows with the state" from "grows with time", because the load generator grew the state all day. The run that can:
+
+1. **Fixed universe**: the load generator stops adding accounts after, say, 10,000 and keeps transacting among them at 5 tps for 72 h or more. If the heap floor, CPU/h and join time flatten when the universe does, they are state-bound and the year's cost is set by the account count. If they keep climbing, they are time-bound and are defects.
+2. **One restart at hour 48** on half the validators: whatever drops at the restart and climbs again is uptime, not state.
+3. **Reads binned to 250,000 blocks of age** (the probe's reservoir needs to keep older entries), to get the shape of the latency curve.
+4. **A join against an aged store**: start a follower against the 72-hour network and time the background history fill, which this run never exercised.
+
+Until that run, the honest statement is: a day of the follower walk shows no cost tied to block count, a join cost tied to the account count at 4 ms per account, and three climbs — live heap, CPU per hour, and old-entry read latency — whose cause the day cannot name.
+
+
 # Things to know about the record
 
 - `manifest.md` carries a heading "Stopped early by stallkill … monitor unreachable for 120 s" dated 05:00:00Z. The driver had already exited cleanly (exit 0, 24.01 h) at 04:58:03Z; the watchdog then found the monitor gone and tore the project down as it is meant to. The heading is wrong for a run that finished, and `soak.sh` reads it as `stopped_early=stallkill` — filed as a harness defect.
@@ -127,7 +185,8 @@ The store grew at roughly 7.8 GB/h across the project's volume (read by hand fro
 
 - **#4568** — the monitor's RSS alarm must read each container's `HostConfig.Memory`; the manifest should report both arms.
 - **#4569** — `soak.sh` should start `hostsample.py` itself.
-- Manifest "Stopped early" heading after a clean finish — #4570.
+- **#4570** — manifest "Stopped early" heading after a clean finish.
+- **#4571** — what holds ~90 MB of decoded anchor envelopes for ~12 h on every validator, what releases them, and whether the ~60 MiB/day residual is per account or per block..
 - #4559 left open for the decision on 5 vs 10 tps.
 
 \newpage
