@@ -95,6 +95,8 @@ var flagRootFrom = flag.Uint64("root-from", 0, "first root chain index to load (
 var flagRootTo = flag.Uint64("root-to", 0, "last root chain index to load (for -fill-sets of the ledger's bpt)")
 var flagDataOnly = flag.Bool("data-only", false, "check only data accounts (for -check)")
 var flagRouteArchive = flag.String("route-archive", "", "name=path of an archive to read the routing table from, for -route, when the live databases and the sidecar do not hold it")
+var flagKeepOverwritten = flag.Bool("keep-overwritten", false, "build overwritten.db in -out: for every key -current holds, each archive argument's value for it when it differs, under key||archive index; and exit")
+var flagOverwritten = flag.String("overwritten", "", "the overwritten store beside the sidecar (for -route, -where): the archives' values for keys the live databases hold with another value")
 var flagRoute = flag.Bool("route", false, "route each account with the last routing table the live databases and the sidecar hold, and test its main-index chain against that partition's root chain; exit")
 var flagWhere = flag.Bool("where", false, "report which store — -current, -sidecar, -conflicts or none — holds each account's data-entry index records, and exit")
 var flagConflicts = flag.String("conflicts", "", "the conflicts database beside the sidecar (for -where)")
@@ -226,8 +228,15 @@ func main() {
 		}
 		return
 	}
+	if *flagKeepOverwritten {
+		if err := keepOverwritten(*flagOut, flagCurrent, flag.Args()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *flagRoute {
-		if err := route(flagCurrent, *flagSidecar, *flagConflicts, *flagRouteArchive, *flagPartition, flag.Args()); err != nil {
+		if err := route(flagCurrent, *flagSidecar, *flagConflicts, *flagOverwritten, *flagRouteArchive, *flagPartition, flag.Args()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

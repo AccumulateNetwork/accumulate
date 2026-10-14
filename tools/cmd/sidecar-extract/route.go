@@ -16,6 +16,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -27,14 +28,16 @@ import (
 // partition it routes to. The live routing account was restarted at the
 // reorg, so the chain's later elements -- the pre-reorg tables -- are read
 // past the live head, straight from the sidecar.
-func route(currentPaths []string, sidecarPath, conflictsPath, archiveArg, livePartition string, accounts []string) error {
-	s, closeStores, err := openStores(currentPaths, sidecarPath, conflictsPath)
+func route(currentPaths []string, sidecarPath, conflictsPath, overwrittenPath, archiveArg, livePartition string, accounts []string) error {
+	s, closeStores, err := openStores(currentPaths, sidecarPath, conflictsPath, overwrittenPath)
 	if err != nil {
 		return err
 	}
 	defer closeStores()
 	batch := s.model()
 	defer batch.Discard()
+	era := s.era()
+	defer era.Discard()
 
 	var table *protocol.RoutingTable
 	if archiveArg != "" {
@@ -62,7 +65,7 @@ func route(currentPaths []string, sidecarPath, conflictsPath, archiveArg, livePa
 			continue
 		}
 		fmt.Printf("%s routes to %s\n", u, partition)
-		indexRoots(batch, u, partition, livePartition)
+		indexRoots(batch, era, u, partition, livePartition)
 	}
 	return nil
 }
@@ -171,35 +174,39 @@ func routingTables(batch *coredb.Batch) ([]routingAt, error) {
 	return out, nil
 }
 
-// indexRoots tests each main-index entry of an account against the root
-// chain of the partition it routed to before the reorg and then, for the
-// entries that do not prove there, against the live partition's: an entry
-// written since the reorg anchors into the live root chain.
-func indexRoots(batch *coredb.Batch, u *url.URL, routed, live string) {
-	roots := map[string]*coredb.Chain{}
-	for _, p := range []string{routed, live} {
-		if p == "" {
-			continue
-		}
-		root, err := batch.Account(protocol.PartitionUrl(p).JoinPath(protocol.Ledger)).RootChain().Get()
+// indexRoots splits an account's main-index chain at the reorg and proves
+// each side against its root chain. Index entries are in order and block
+// numbers only rise within an era, so the first entry whose block number is
+// below the one before it is the restore's: everything before it anchors
+// into the root chain of the partition the account routed to, read as it was
+// before the reorg (era); it and everything after anchor into the live
+// partition's. A chain with no such entry is all one era: new if its first
+// entry proves against the live root chain, else old.
+func indexRoots(live, era *coredb.Batch, u *url.URL, routed, livePartition string) {
+	oldRoot, err := era.Account(protocol.PartitionUrl(routed).JoinPath(protocol.Ledger)).RootChain().Get()
+	if err != nil {
+		fmt.Printf("\t%s root chain (era): %v\n", routed, err)
+		return
+	}
+	var newRoot *coredb.Chain
+	if livePartition != "" {
+		newRoot, err = live.Account(protocol.PartitionUrl(livePartition).JoinPath(protocol.Ledger)).RootChain().Get()
 		if err != nil {
-			fmt.Printf("\t%s root chain: %v\n", p, err)
+			fmt.Printf("\t%s root chain: %v\n", livePartition, err)
 			return
 		}
-		roots[p] = root
 	}
-	main, err := batch.Account(u).MainChain().Get()
+	main, err := live.Account(u).MainChain().Get()
 	if err != nil {
 		return
 	}
-	index, err := batch.Account(u).MainChain().Index().Get()
+	index, err := live.Account(u).MainChain().Index().Get()
 	if err != nil {
 		fmt.Printf("\tindex: %v\n", err)
 		return
 	}
-	counts := map[string]int{}
+	var entries []*protocol.IndexEntry
 	var unread int
-	var firstNone *protocol.IndexEntry
 	for i := int64(0); i < index.Height(); i++ {
 		b, err := index.Entry(i)
 		if err != nil {
@@ -211,36 +218,103 @@ func indexRoots(batch *coredb.Batch, u *url.URL, routed, live string) {
 			unread++
 			continue
 		}
+		entries = append(entries, e)
+	}
+	proves := func(root *coredb.Chain, e *protocol.IndexEntry) bool {
+		if root == nil || int64(e.Anchor) >= root.Height() {
+			return false
+		}
 		anchor, err := main.AnchorAt(e.Source)
 		if err != nil {
-			unread++
-			continue
+			return false
 		}
-		proved := "none"
-		for _, p := range []string{routed, live} {
-			root := roots[p]
-			if root == nil || int64(e.Anchor) >= root.Height() {
-				continue
+		rootEntry, err := root.Entry(int64(e.Anchor))
+		return err == nil && bytes.Equal(rootEntry, anchor)
+	}
+
+	// The transition
+	t := -1
+	for i := 1; i < len(entries); i++ {
+		if entries[i].BlockIndex < entries[i-1].BlockIndex {
+			t = i
+			break
+		}
+	}
+	switch {
+	case t >= 0:
+		fmt.Printf("\tindex %d entries, %d unreadable; transition at %d: block %d then %d\n", len(entries), unread, t, entries[t-1].BlockIndex, entries[t].BlockIndex)
+	case len(entries) == 0:
+		fmt.Printf("\tindex 0 entries, %d unreadable\n", unread)
+		return
+	case proves(newRoot, entries[0]):
+		t = 0
+		fmt.Printf("\tindex %d entries, %d unreadable; no transition, all since the reorg\n", len(entries), unread)
+	default:
+		t = len(entries)
+		fmt.Printf("\tindex %d entries, %d unreadable; no transition, all before the reorg\n", len(entries), unread)
+	}
+
+	var oldOK, newOK int
+	var firstOld, firstNew *protocol.IndexEntry
+	for i, e := range entries {
+		if i < t {
+			if proves(oldRoot, e) {
+				oldOK++
+			} else if firstOld == nil {
+				firstOld = e
 			}
-			rootEntry, err := root.Entry(int64(e.Anchor))
-			if err == nil && bytes.Equal(rootEntry, anchor) {
-				proved = p
-				break
+		} else {
+			if proves(newRoot, e) {
+				newOK++
+			} else if firstNew == nil {
+				firstNew = e
 			}
 		}
-		counts[proved]++
-		if proved == "none" && firstNone == nil {
-			firstNone = e
+	}
+	if t > 0 {
+		fmt.Printf("\t  before: %d of %d prove on %s\n", oldOK, t, routed)
+		if firstOld != nil {
+			fmt.Printf("\t    first that does not: source %d anchor %d block %d\n", firstOld.Source, firstOld.Anchor, firstOld.BlockIndex)
+		}
+		secondHop(era, oldRoot, routed, entries[0])
+	}
+	if t < len(entries) {
+		fmt.Printf("\t  since: %d of %d prove on %s\n", newOK, len(entries)-t, livePartition)
+		if firstNew != nil {
+			fmt.Printf("\t    first that does not: source %d anchor %d block %d\n", firstNew.Source, firstNew.Anchor, firstNew.BlockIndex)
 		}
 	}
-	if routed == live || live == "" {
-		fmt.Printf("\tindex %d entries: %d prove on %s, %d on neither, %d unreadable\n",
-			index.Height(), counts[routed], routed, counts["none"], unread)
-	} else {
-		fmt.Printf("\tindex %d entries: %d prove on %s, %d on %s, %d on neither, %d unreadable\n",
-			index.Height(), counts[routed], routed, counts[live], live, counts["none"], unread)
+}
+
+// secondHop says whether the directory's anchor(P)-root chain, read in the
+// same era, holds P's root anchor for the block an index entry was written
+// in: the hop a receipt from that entry binds through.
+func secondHop(batch *coredb.Batch, root *coredb.Chain, partition string, e *protocol.IndexEntry) {
+	received := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(partition).Root()
+	rc, err := received.Get()
+	if err != nil || rc.Height() == 0 {
+		fmt.Printf("\t  dn anchor(%s)-root: none\n", partition)
+		return
 	}
-	if firstNone != nil {
-		fmt.Printf("\t  first on neither: source %d anchor %d block %d\n", firstNone.Source, firstNone.Anchor, firstNone.BlockIndex)
+	rootIndex, err := batch.Account(protocol.PartitionUrl(partition).JoinPath(protocol.Ledger)).RootChain().Index().Get()
+	if err != nil {
+		fmt.Printf("\t  %s root index chain: %v\n", partition, err)
+		return
 	}
+	_, re, err := indexing.SearchIndexChain(rootIndex, uint64(rootIndex.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainBySource(e.Anchor))
+	if err != nil {
+		fmt.Printf("\t  %s root index chain (%d entries): no entry covers root height %d: %v\n", partition, rootIndex.Height(), e.Anchor, err)
+		return
+	}
+	blockAnchor, err := root.AnchorAt(re.Source)
+	if err != nil {
+		fmt.Printf("\t  %s root chain anchor at %d: %v\n", partition, re.Source, err)
+		return
+	}
+	at, err := rc.HeightOf(blockAnchor)
+	if err != nil {
+		fmt.Printf("\t  dn anchor(%s)-root (%d entries) does not hold %s's root anchor at height %d (block %d)\n", partition, rc.Height(), partition, re.Source, re.BlockIndex)
+		return
+	}
+	fmt.Printf("\t  dn anchor(%s)-root (%d entries) holds %s's root anchor at height %d (block %d) at entry %d\n", partition, rc.Height(), partition, re.Source, re.BlockIndex, at)
 }

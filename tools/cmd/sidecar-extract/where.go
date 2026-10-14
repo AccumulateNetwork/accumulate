@@ -11,6 +11,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -32,10 +34,12 @@ import (
 // conflicts store, whose keys are the record key followed by the index of the
 // archive that held the value.
 type stores struct {
-	live      []*leveldb.DB
-	sidecar   *leveldb.DB
-	conflicts *leveldb.DB
-	archives  []string
+	live         []*leveldb.DB
+	sidecar      *leveldb.DB
+	conflicts    *leveldb.DB
+	archives     []string
+	overwritten  *leveldb.DB // the archives' values for keys live holds with another value
+	overArchives []string    // its archives, in index order
 }
 
 // holding is every store that holds one record. A reader sees the first, in
@@ -51,6 +55,53 @@ type holding struct {
 // model reads through the live databases and the sidecar.
 func (s *stores) model() *coredb.Batch {
 	return coredb.New(layered(append(s.live[:len(s.live):len(s.live)], s.sidecar)), nil).Begin(false)
+}
+
+// era reads the databases as they were before the reorg: the overwritten
+// store's value for a key the live database changed (the first archive, in
+// index order, that holds one), then the live databases, then the sidecar.
+// Without an overwritten store it is the model.
+func (s *stores) era() *coredb.Batch {
+	if s.overwritten == nil {
+		return s.model()
+	}
+	var gets []func(h []byte) ([]byte, error)
+	for i := range s.overArchives {
+		i := byte(i)
+		gets = append(gets, func(h []byte) ([]byte, error) {
+			return s.overwritten.Get(append(append([]byte(nil), h...), i), nil)
+		})
+	}
+	for _, db := range append(s.live[:len(s.live):len(s.live)], s.sidecar) {
+		db := db
+		gets = append(gets, func(h []byte) ([]byte, error) { return db.Get(h, nil) })
+	}
+	return coredb.New(getters(gets), nil).Begin(false)
+}
+
+// getters is a read-only store that answers each key from the first
+// function that has it.
+type getters []func(h []byte) ([]byte, error)
+
+func (g getters) Begin(prefix *database.Key, writable bool) keyvalue.ChangeSet {
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix: prefix,
+		Get: func(key *database.Key) ([]byte, error) {
+			h := key.Hash()
+			for _, get := range g {
+				v, err := get(h[:])
+				if err == nil {
+					return v, nil
+				}
+				if !errors.Is(err, leveldb.ErrNotFound) {
+					return nil, err
+				}
+			}
+			return nil, (*database.NotFoundError)(key)
+		},
+		Commit:  func(map[[32]byte]memory.Entry) error { return errors.New("read-only") },
+		Discard: func() {},
+	})
 }
 
 func (s *stores) locate(key *database.Key) holding {
@@ -146,7 +197,7 @@ func uintOf(v []byte) string {
 // the conflicts store (and which archives' values), or none.
 // openStores opens the live databases, the sidecar and, if named, the
 // conflicts store, every one read-only.
-func openStores(currentPaths []string, sidecarPath, conflictsPath string) (*stores, func(), error) {
+func openStores(currentPaths []string, sidecarPath, conflictsPath, overwrittenPath string) (*stores, func(), error) {
 	s := new(stores)
 	var closers []func()
 	closeStores := func() {
@@ -186,11 +237,30 @@ func openStores(currentPaths []string, sidecarPath, conflictsPath string) (*stor
 		}
 	}
 
+	if overwrittenPath != "" {
+		s.overwritten, err = leveldb.OpenFile(overwrittenPath, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+		if err != nil {
+			closeStores()
+			return nil, nil, fmt.Errorf("overwritten: %w", err)
+		}
+		closers = append(closers, func() { s.overwritten.Close() })
+		b, err := os.ReadFile(filepath.Join(filepath.Dir(overwrittenPath), "overwritten.json"))
+		if err != nil {
+			closeStores()
+			return nil, nil, fmt.Errorf("overwritten: %w", err)
+		}
+		var o Overwritten
+		if err := json.Unmarshal(b, &o); err != nil {
+			closeStores()
+			return nil, nil, fmt.Errorf("overwritten.json: %w", err)
+		}
+		s.overArchives = o.Archives
+	}
 	return s, closeStores, nil
 }
 
 func where(currentPaths []string, sidecarPath, conflictsPath, partition string, accounts []string) error {
-	s, closeStores, err := openStores(currentPaths, sidecarPath, conflictsPath)
+	s, closeStores, err := openStores(currentPaths, sidecarPath, conflictsPath, "")
 	if err != nil {
 		return err
 	}
