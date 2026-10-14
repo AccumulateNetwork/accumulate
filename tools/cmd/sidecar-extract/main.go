@@ -94,6 +94,8 @@ var flagDebug = flag.Bool("debug", false, "print investigation output")
 var flagRootFrom = flag.Uint64("root-from", 0, "first root chain index to load (for -fill-sets of the ledger's bpt)")
 var flagRootTo = flag.Uint64("root-to", 0, "last root chain index to load (for -fill-sets of the ledger's bpt)")
 var flagDataOnly = flag.Bool("data-only", false, "check only data accounts (for -check)")
+var flagRouteArchive = flag.String("route-archive", "", "name=path of an archive to read the routing table from, for -route, when the live databases and the sidecar do not hold it")
+var flagRoute = flag.Bool("route", false, "route each account with the last routing table the live databases and the sidecar hold, and test its main-index chain against that partition's root chain; exit")
 var flagWhere = flag.Bool("where", false, "report which store — -current, -sidecar, -conflicts or none — holds each account's data-entry index records, and exit")
 var flagConflicts = flag.String("conflicts", "", "the conflicts database beside the sidecar (for -where)")
 var flagTypeOf = flag.String("type-of", "", "a hash list (16+ hex chars each): print each one's message type, and exit")
@@ -221,6 +223,13 @@ func main() {
 	if *flagSurvey != "" {
 		if err := blockSurvey(flag.Arg(0), *flagSurvey, *flagAccounts, *flagSample); err != nil {
 			log.Fatal(err)
+		}
+		return
+	}
+	if *flagRoute {
+		if err := route(flagCurrent, *flagSidecar, *flagConflicts, *flagRouteArchive, *flagPartition, flag.Args()); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
 		return
 	}

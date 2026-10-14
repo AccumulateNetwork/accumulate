@@ -144,28 +144,39 @@ func uintOf(v []byte) string {
 // chain head, and each record of its data-entry index — the count, the entries
 // and the entry-to-transaction map (#4268): the live databases, the sidecar,
 // the conflicts store (and which archives' values), or none.
-func where(currentPaths []string, sidecarPath, conflictsPath, partition string, accounts []string) error {
-	var s stores
+// openStores opens the live databases, the sidecar and, if named, the
+// conflicts store, every one read-only.
+func openStores(currentPaths []string, sidecarPath, conflictsPath string) (*stores, func(), error) {
+	s := new(stores)
+	var closers []func()
+	closeStores := func() {
+		for _, c := range closers {
+			c()
+		}
+	}
 	for _, p := range currentPaths {
 		db, err := leveldb.OpenFile(p, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
 		if err != nil {
-			return fmt.Errorf("current %s: %w", p, err)
+			closeStores()
+			return nil, nil, fmt.Errorf("current %s: %w", p, err)
 		}
-		defer db.Close()
+		closers = append(closers, func() { db.Close() })
 		s.live = append(s.live, db)
 	}
 	var err error
 	s.sidecar, err = leveldb.OpenFile(sidecarPath, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
 	if err != nil {
-		return fmt.Errorf("sidecar: %w", err)
+		closeStores()
+		return nil, nil, fmt.Errorf("sidecar: %w", err)
 	}
-	defer s.sidecar.Close()
+	closers = append(closers, func() { s.sidecar.Close() })
 	if conflictsPath != "" {
 		s.conflicts, err = leveldb.OpenFile(conflictsPath, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
 		if err != nil {
-			return fmt.Errorf("conflicts: %w", err)
+			closeStores()
+			return nil, nil, fmt.Errorf("conflicts: %w", err)
 		}
-		defer s.conflicts.Close()
+		closers = append(closers, func() { s.conflicts.Close() })
 		b, err := os.ReadFile(filepath.Join(filepath.Dir(conflictsPath), "progress.json"))
 		if err == nil {
 			var p Progress
@@ -174,6 +185,16 @@ func where(currentPaths []string, sidecarPath, conflictsPath, partition string, 
 			}
 		}
 	}
+
+	return s, closeStores, nil
+}
+
+func where(currentPaths []string, sidecarPath, conflictsPath, partition string, accounts []string) error {
+	s, closeStores, err := openStores(currentPaths, sidecarPath, conflictsPath)
+	if err != nil {
+		return err
+	}
+	defer closeStores()
 
 	// The batch only derives keys
 	batch := coredb.New(memory.New(nil), nil).Begin(false)
