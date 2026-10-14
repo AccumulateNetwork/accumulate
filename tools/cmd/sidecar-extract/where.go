@@ -21,6 +21,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -385,6 +386,8 @@ func indexRoot(batch *coredb.Batch, u *url.URL, partition string) {
 			fails++
 			if first == nil {
 				first = e
+				fmt.Printf("\t  root chain element %d key %s: holds %x, the main chain anchor at %d is %x\n",
+					e.Anchor, hashOf(batch.Account(ledger).RootChain().Inner().Element(e.Anchor).Key()), rootEntry[:8], e.Source, anchor[:8])
 			}
 		}
 	}
@@ -397,24 +400,38 @@ func indexRoot(batch *coredb.Batch, u *url.URL, partition string) {
 		fmt.Printf("\t  first that does: source %d anchor %d block %d\n", firstOK.Source, firstOK.Anchor, firstOK.BlockIndex)
 	}
 
-	// the second hop: the directory's anchor(P)-root chain holds every root
-	// chain anchor P sent it, and its last entry is P's root chain anchor at
-	// some height
+	// the second hop, for the first entry that proves: the root index
+	// chain entry covering its anchor names the root chain height the block
+	// ended at, and the directory's anchor(P)-root chain holds that anchor
+	// if P sent it
+	if firstOK == nil {
+		return
+	}
 	received := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(partition).Root()
 	rc, err := received.Get()
 	if err != nil || rc.Height() == 0 {
 		fmt.Printf("\t  dn anchor(%s)-root: none\n", partition)
 		return
 	}
-	last, err := rc.Entry(rc.Height() - 1)
+	rootIndex, err := batch.Account(ledger).RootChain().Index().Get()
 	if err != nil {
-		fmt.Printf("\t  dn anchor(%s)-root: %d entries, last unreadable\n", partition, rc.Height())
+		fmt.Printf("\t  %s root index chain: %v\n", partition, err)
 		return
 	}
-	at, err := root.HeightOf(last)
+	_, re, err := indexing.SearchIndexChain(rootIndex, uint64(rootIndex.Height())-1, indexing.MatchAfter, indexing.SearchIndexChainBySource(firstOK.Anchor))
 	if err != nil {
-		fmt.Printf("\t  dn anchor(%s)-root: %d entries, last entry %x is not an anchor of the root chain read here\n", partition, rc.Height(), last[:4])
+		fmt.Printf("\t  %s root index chain (%d entries): no entry covers root height %d: %v\n", partition, rootIndex.Height(), firstOK.Anchor, err)
 		return
 	}
-	fmt.Printf("\t  dn anchor(%s)-root: %d entries, last entry = %s root chain anchor at height %d\n", partition, rc.Height(), partition, at)
+	blockAnchor, err := root.AnchorAt(re.Source)
+	if err != nil {
+		fmt.Printf("\t  %s root chain anchor at %d: %v\n", partition, re.Source, err)
+		return
+	}
+	at, err := rc.HeightOf(blockAnchor)
+	if err != nil {
+		fmt.Printf("\t  dn anchor(%s)-root (%d entries) does not hold %s's root anchor at height %d (block %d)\n", partition, rc.Height(), partition, re.Source, re.BlockIndex)
+		return
+	}
+	fmt.Printf("\t  dn anchor(%s)-root (%d entries) holds %s's root anchor at height %d (block %d) at entry %d\n", partition, rc.Height(), partition, re.Source, re.BlockIndex, at)
 }

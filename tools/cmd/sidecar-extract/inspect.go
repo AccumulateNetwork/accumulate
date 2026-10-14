@@ -35,7 +35,7 @@ func inspect(archiveArg, keysPath string) error {
 	defer f.Close()
 	txn := db.NewTransaction(false)
 	defer txn.Discard()
-	fmt.Println("key\tversion\tmeta\tvlog\toffset\tlength")
+	fmt.Println("key\tversion\tmeta\tvlog\toffset\tlength\tvalue")
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		k, err := hex.DecodeString(strings.Fields(sc.Text())[0])
@@ -50,12 +50,16 @@ func inspect(archiveArg, keysPath string) error {
 		rv := reflect.ValueOf(item).Elem()
 		meta := byte(rv.FieldByName("meta").Uint())
 		vptr := rv.FieldByName("vptr").Bytes()
+		v, _ := item.ValueCopy(nil)
+		if len(v) > 16 {
+			v = v[:16]
+		}
 		if meta&bitValuePointer == 0 || len(vptr) < 12 {
-			fmt.Printf("%x\t%d\t%x\tinline\t-\t%d\n", k, item.Version(), meta, len(vptr))
+			fmt.Printf("%x\t%d\t%x\tinline\t-\t%d\t%x\n", k, item.Version(), meta, len(vptr), v)
 			continue
 		}
-		fmt.Printf("%x\t%d\t%x\t%d\t%d\t%d\n", k, item.Version(), meta,
-			binary.BigEndian.Uint32(vptr[0:4]), binary.BigEndian.Uint32(vptr[8:12]), binary.BigEndian.Uint32(vptr[4:8]))
+		fmt.Printf("%x\t%d\t%x\t%d\t%d\t%d\t%x\n", k, item.Version(), meta,
+			binary.BigEndian.Uint32(vptr[0:4]), binary.BigEndian.Uint32(vptr[8:12]), binary.BigEndian.Uint32(vptr[4:8]), v)
 	}
 	return sc.Err()
 }
