@@ -225,7 +225,7 @@ func main() {
 		return
 	}
 	if *flagWhere {
-		if err := where(flagCurrent, *flagSidecar, *flagConflicts, flag.Args()); err != nil {
+		if err := where(flagCurrent, *flagSidecar, *flagConflicts, *flagPartition, flag.Args()); err != nil {
 			log.Fatal(err)
 		}
 		return

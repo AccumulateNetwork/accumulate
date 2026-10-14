@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -23,6 +24,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // stores is where a record may be: the live databases, the sidecar, and the
@@ -141,7 +143,7 @@ func uintOf(v []byte) string {
 // chain head, and each record of its data-entry index — the count, the entries
 // and the entry-to-transaction map (#4268): the live databases, the sidecar,
 // the conflicts store (and which archives' values), or none.
-func where(currentPaths []string, sidecarPath, conflictsPath string, accounts []string) error {
+func where(currentPaths []string, sidecarPath, conflictsPath, partition string, accounts []string) error {
 	var s stores
 	for _, p := range currentPaths {
 		db, err := leveldb.OpenFile(p, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
@@ -215,6 +217,15 @@ func where(currentPaths []string, sidecarPath, conflictsPath string, accounts []
 				msgs[m.String()]++
 			}
 			fmt.Printf("\tmain chain %d entries, %d unreadable; messages: %s\n", chain.Height(), unread, tally(msgs))
+		}
+
+		// the main chain's index chain: each entry names the root chain
+		// height its anchor landed at, but not whose root chain. Test each
+		// against the root chain of -partition.
+		for _, p := range strings.Split(partition, ",") {
+			if p != "" {
+				indexRoot(s.model(), u, p)
+			}
 		}
 
 		countKey := acct.Data().Entry().Key()
@@ -314,4 +325,96 @@ func hashBytes(key *database.Key) []byte {
 func hashOf(key *database.Key) string {
 	h := key.Hash()
 	return hex.EncodeToString(h[:])
+}
+
+// indexRoot reports how many of an account's main-index entries prove
+// against the named partition's root chain: the root chain entry at
+// IndexEntry.Anchor equals the main chain's anchor at IndexEntry.Source.
+func indexRoot(batch *coredb.Batch, u *url.URL, partition string) {
+	ledger := protocol.PartitionUrl(partition).JoinPath(protocol.Ledger)
+	root, err := batch.Account(ledger).RootChain().Get()
+	if err != nil {
+		fmt.Printf("\tindex: %s root chain: %v\n", partition, err)
+		return
+	}
+	main, err := batch.Account(u).MainChain().Get()
+	if err != nil {
+		return
+	}
+	index, err := batch.Account(u).MainChain().Index().Get()
+	if err != nil {
+		fmt.Printf("\tindex: %v\n", err)
+		return
+	}
+	var proves, fails, beyond, unread int
+	var first, firstOK *protocol.IndexEntry
+	for i := int64(0); i < index.Height(); i++ {
+		b, err := index.Entry(i)
+		if err != nil {
+			unread++
+			continue
+		}
+		e := new(protocol.IndexEntry)
+		if e.UnmarshalBinary(b) != nil {
+			unread++
+			continue
+		}
+		if int64(e.Anchor) >= root.Height() {
+			beyond++
+			if first == nil {
+				first = e
+			}
+			continue
+		}
+		rootEntry, err := root.Entry(int64(e.Anchor))
+		if err != nil {
+			unread++
+			continue
+		}
+		anchor, err := main.AnchorAt(e.Source)
+		if err != nil {
+			unread++
+			continue
+		}
+		if bytes.Equal(rootEntry, anchor) {
+			proves++
+			if firstOK == nil {
+				firstOK = e
+			}
+		} else {
+			fails++
+			if first == nil {
+				first = e
+			}
+		}
+	}
+	fmt.Printf("\tindex %d entries against %s root chain (height %d): %d prove, %d do not, %d beyond its height, %d unreadable\n",
+		index.Height(), partition, root.Height(), proves, fails, beyond, unread)
+	if first != nil {
+		fmt.Printf("\t  first that does not: source %d anchor %d block %d\n", first.Source, first.Anchor, first.BlockIndex)
+	}
+	if firstOK != nil {
+		fmt.Printf("\t  first that does: source %d anchor %d block %d\n", firstOK.Source, firstOK.Anchor, firstOK.BlockIndex)
+	}
+
+	// the second hop: the directory's anchor(P)-root chain holds every root
+	// chain anchor P sent it, and its last entry is P's root chain anchor at
+	// some height
+	received := batch.Account(protocol.DnUrl().JoinPath(protocol.AnchorPool)).AnchorChain(partition).Root()
+	rc, err := received.Get()
+	if err != nil || rc.Height() == 0 {
+		fmt.Printf("\t  dn anchor(%s)-root: none\n", partition)
+		return
+	}
+	last, err := rc.Entry(rc.Height() - 1)
+	if err != nil {
+		fmt.Printf("\t  dn anchor(%s)-root: %d entries, last unreadable\n", partition, rc.Height())
+		return
+	}
+	at, err := root.HeightOf(last)
+	if err != nil {
+		fmt.Printf("\t  dn anchor(%s)-root: %d entries, last entry %x is not an anchor of the root chain read here\n", partition, rc.Height(), last[:4])
+		return
+	}
+	fmt.Printf("\t  dn anchor(%s)-root: %d entries, last entry = %s root chain anchor at height %d\n", partition, rc.Height(), partition, at)
 }
