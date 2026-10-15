@@ -180,6 +180,17 @@ func (s *Sim) restartStaggered(nodes, first []*simNode, gap, executorFirst time.
 		node.Restore(cp)
 		sn.lastSaved = cp
 		sn.height.Store(cp.BlockIndex)
+		// The node produces every block after the checkpoint again: one
+		// whose last blocks were empty resumes below the last block it
+		// produced (persist.ResumeFrom). Its record of the blocks it
+		// executed ends where it resumes, or a node that resumed a block
+		// lower than its peers records that block twice and the record
+		// differs from theirs from there on (#4558).
+		sn.seqMu.Lock()
+		if uint64(len(sn.seq)) > cp.BlockIndex {
+			sn.seq = sn.seq[:cp.BlockIndex]
+		}
+		sn.seqMu.Unlock()
 		sn.resumedAt, sn.keptAtRestart = cp.BlockIndex, sn.kept.Load()
 		sn.nodeP.Store(node)
 	}
