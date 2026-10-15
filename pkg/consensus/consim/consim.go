@@ -344,6 +344,16 @@ type Result struct {
 // ErrStalled is returned (wrapped) when a partition stops executing.
 var ErrStalled = errors.New("partition stalled")
 
+// newGossipSub builds a host's GossipSub with the options of the node's own
+// (pkg/api/v3/p2p startServiceDiscovery), which its DAG-BFT services share.
+// Flood publishing matters on a restart: a node stopped and started again
+// leaves and rejoins its topics within the unsubscribe backoff, its peers
+// refuse its graft, and without flood publishing what it publishes reaches
+// them only through gossip, most batches not at all (#4582).
+func newGossipSub(ctx context.Context, h host.Host) (*pubsub.PubSub, error) {
+	return pubsub.NewGossipSub(ctx, h, pubsub.WithPeerExchange(true), pubsub.WithFloodPublish(true))
+}
+
 // New builds the network: one libp2p host per validator, a Directory node on
 // every host, and a BVN node on each host for its validator's BVN — the
 // soak's dual topology, where all partitions share each validator's host,
@@ -398,7 +408,7 @@ func New(cfg Config) (*Sim, error) {
 	// nodes — as in production.
 	pss := make([]*pubsub.PubSub, nVals)
 	for i, h := range s.hosts {
-		ps, err := pubsub.NewGossipSub(ctx, h)
+		ps, err := newGossipSub(ctx, h)
 		if err != nil {
 			s.Close()
 			return nil, fmt.Errorf("pubsub %d: %w", i, err)
