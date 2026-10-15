@@ -204,28 +204,38 @@ func TestProcessCommittedCertificate_HaltedRefusesToExecute(t *testing.T) {
 }
 
 // TestRecordStateHash_DivergenceHalts: the state-hash tracker is the
-// cross-node divergence tripwire — a remote validator reporting a DIFFERENT
-// hash for the same round must halt this node rather than let two histories
-// keep executing.
+// cross-node divergence tripwire. A node halts when a quorum of its committee
+// reports a hash for the round other than its own, and never on one
+// validator's report (consensus spec, "State hash comparison").
 func TestRecordStateHash_DivergenceHalts(t *testing.T) {
 	svc, _, _ := newCommitService(t, 1)
 
-	remote, _, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
+	remotes := make([]ed25519.PublicKey, 3)
+	infos := []types.ValidatorInfo{{PublicKey: svc.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey), Stake: 1}}
+	for i := range remotes {
+		pub, _, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		remotes[i] = pub
+		infos = append(infos, types.ValidatorInfo{PublicKey: pub, Stake: 1})
+	}
+	svc.stateHashTracker.SetCommittee(types.NewCommittee(infos, 1))
 
 	svc.RecordStateHash(6, 3, types.StateHash{0xAA})
 	require.False(t, svc.IsHalted())
 
 	// A matching remote hash is harmony.
-	div := svc.stateHashTracker.RecordRemoteHash(6, remote, types.StateHash{0xAA})
-	require.Nil(t, div)
-	require.False(t, svc.IsHalted())
+	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[0], types.StateHash{0xAA}))
 
-	// A mismatched remote hash for the same round is divergence — halt.
-	div = svc.stateHashTracker.RecordRemoteHash(6, remote, types.StateHash{0xBB})
-	require.NotNil(t, div, "a mismatched remote hash must be reported as divergence")
-	svc.onStateDivergence(div)
-	require.True(t, svc.IsHalted(), "state divergence must halt the node")
+	// One validator reporting another hash decides nothing.
+	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[1], types.StateHash{0xBB}))
+	require.Never(t, svc.IsHalted, 100*time.Millisecond, 10*time.Millisecond,
+		"one validator's hash must not halt an honest node")
+
+	// A quorum reporting another hash is divergence: halt.
+	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[2], types.StateHash{0xBB}))
+	require.NotNil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[0], types.StateHash{0xBB}),
+		"a quorum's other hash must be reported as divergence")
+	require.Eventually(t, svc.IsHalted, time.Second, 10*time.Millisecond, "state divergence must halt the node")
 	require.Error(t, svc.HaltReason())
 }
 

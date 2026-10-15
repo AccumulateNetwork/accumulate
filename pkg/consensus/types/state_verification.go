@@ -176,12 +176,20 @@ func (e *StateDivergenceError) Error() string {
 	return "state divergence detected at round " + string(rune(e.Round))
 }
 
-// StateHashTracker tracks state hashes from validators for consistency verification.
+// StateHashTracker tracks state hashes from validators for consistency
+// verification. A node's state has diverged from its partition's at a round
+// when a quorum of the committee reports one hash for the round and the
+// node's own is another (consensus spec, "State hash comparison"). One
+// validator's report, or a split, decides nothing.
 type StateHashTracker struct {
 	mu sync.RWMutex
 
-	// stateHashes maps round -> validator pubkey hex -> state hash
-	stateHashes map[Round]map[string]StateHash
+	// committee is who may report a hash, and with what stake. Until it is
+	// set, remote hashes are not recorded.
+	committee *Committee
+
+	// stateHashes maps round -> validator pubkey hex -> reported hash
+	stateHashes map[Round]map[string]remoteHash
 
 	// localHashes maps round -> our local state hash
 	localHashes map[Round]StateHash
@@ -193,16 +201,30 @@ type StateHashTracker struct {
 	divergenceCallbacks []func(*StateDivergenceError)
 }
 
+// remoteHash is a hash a committee member reported, with its stake.
+type remoteHash struct {
+	hash   StateHash
+	author ed25519.PublicKey
+	stake  uint64
+}
+
 // NewStateHashTracker creates a new StateHashTracker.
 func NewStateHashTracker(maxRounds int) *StateHashTracker {
 	if maxRounds <= 0 {
 		maxRounds = 100
 	}
 	return &StateHashTracker{
-		stateHashes:      make(map[Round]map[string]StateHash),
+		stateHashes:      make(map[Round]map[string]remoteHash),
 		localHashes:      make(map[Round]StateHash),
 		maxTrackedRounds: maxRounds,
 	}
+}
+
+// SetCommittee sets the committee whose members' hashes are counted.
+func (t *StateHashTracker) SetCommittee(c *Committee) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.committee = c
 }
 
 // OnDivergence registers a callback for state divergence events.
@@ -218,54 +240,60 @@ func (t *StateHashTracker) RecordLocalHash(round Round, hash StateHash) {
 	defer t.mu.Unlock()
 
 	t.localHashes[round] = hash
-
-	// Check for divergence with any already-received hashes
-	if roundHashes, ok := t.stateHashes[round]; ok {
-		for _, remoteHash := range roundHashes {
-			if hash != remoteHash {
-				// Divergence detected!
-				err := &StateDivergenceError{
-					Round:        round,
-					ExpectedHash: hash,
-					ActualHash:   remoteHash,
-				}
-				t.notifyDivergenceLocked(err)
-				return
-			}
-		}
+	if err := t.divergenceLocked(round); err != nil {
+		t.notifyDivergenceLocked(err)
 	}
 }
 
-// RecordRemoteHash records a state hash received from another validator.
-// Returns a StateDivergenceError if the hash conflicts with our local hash.
+// RecordRemoteHash records a state hash a committee member reported. Returns
+// a StateDivergenceError if, with it, a quorum reports a hash other than our
+// local one. A hash from a key outside the committee is not recorded.
 func (t *StateHashTracker) RecordRemoteHash(round Round, validator ed25519.PublicKey, hash StateHash) *StateDivergenceError {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	validatorKey := hexEncode(validator)
-
-	// Initialize map for this round if needed
-	if t.stateHashes[round] == nil {
-		t.stateHashes[round] = make(map[string]StateHash)
+	if t.committee == nil {
+		return nil
+	}
+	stake := t.committee.StakeOf(validator)
+	if stake == 0 {
+		return nil
 	}
 
-	// Store the hash
-	t.stateHashes[round][validatorKey] = hash
+	if t.stateHashes[round] == nil {
+		t.stateHashes[round] = make(map[string]remoteHash)
+	}
+	t.stateHashes[round][hexEncode(validator)] = remoteHash{hash: hash, author: validator, stake: stake}
 
-	// Check for divergence with our local hash
-	if localHash, ok := t.localHashes[round]; ok {
-		if hash != localHash {
-			err := &StateDivergenceError{
+	err := t.divergenceLocked(round)
+	if err != nil {
+		t.notifyDivergenceLocked(err)
+	}
+	return err
+}
+
+// divergenceLocked reports divergence at round if we have a local hash and a
+// quorum of the committee reports one other hash.
+func (t *StateHashTracker) divergenceLocked(round Round) *StateDivergenceError {
+	local, ok := t.localHashes[round]
+	if !ok || t.committee == nil {
+		return nil
+	}
+	stake := map[StateHash]uint64{}
+	for _, r := range t.stateHashes[round] {
+		if r.hash == local {
+			continue
+		}
+		stake[r.hash] += r.stake
+		if t.committee.HasQuorum(stake[r.hash]) {
+			return &StateDivergenceError{
 				Round:          round,
-				ExpectedHash:   localHash,
-				ActualHash:     hash,
-				ConflictAuthor: validator,
+				ExpectedHash:   local,
+				ActualHash:     r.hash,
+				ConflictAuthor: r.author,
 			}
-			t.notifyDivergenceLocked(err)
-			return err
 		}
 	}
-
 	return nil
 }
 
@@ -291,10 +319,8 @@ func (t *StateHashTracker) GetRemoteHashes(round Round) map[string]StateHash {
 	defer t.mu.RUnlock()
 
 	result := make(map[string]StateHash)
-	if roundHashes, ok := t.stateHashes[round]; ok {
-		for k, v := range roundHashes {
-			result[k] = v
-		}
+	for k, v := range t.stateHashes[round] {
+		result[k] = v.hash
 	}
 	return result
 }
@@ -314,8 +340,8 @@ func (t *StateHashTracker) CheckConsistency(round Round) bool {
 
 	// If we have local hash, check against all remotes
 	if hasLocal && hasRemote {
-		for _, remoteHash := range remoteHashes {
-			if remoteHash != localHash {
+		for _, remote := range remoteHashes {
+			if remote.hash != localHash {
 				return false
 			}
 		}
@@ -325,13 +351,13 @@ func (t *StateHashTracker) CheckConsistency(round Round) bool {
 	if hasRemote && len(remoteHashes) > 1 {
 		var firstHash StateHash
 		first := true
-		for _, hash := range remoteHashes {
+		for _, remote := range remoteHashes {
 			if first {
-				firstHash = hash
+				firstHash = remote.hash
 				first = false
 				continue
 			}
-			if hash != firstHash {
+			if remote.hash != firstHash {
 				return false
 			}
 		}

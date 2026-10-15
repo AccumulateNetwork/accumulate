@@ -1212,6 +1212,25 @@ restarted node replayed its tail with whichever committee its state named
   should be running and synced before the change is submitted: until it has
   joined it orders nothing, and a join's seed window is 34 rounds.
 
+### State hash comparison
+
+A node records the state hash each block leaves (`Service.RecordStateHash`,
+`StateHashTracker.RecordLocalHash`), and the tracker compares it with the
+hashes the partition's validators report for the same round
+(`StateHashTracker.RecordRemoteHash`). **A node's state has diverged from
+its partition's only when a quorum of the committee, by stake, reports one
+hash for the round and the node's own is another.** Then the node is the
+minority and halts (`Service.onStateDivergence`): it stops producing blocks
+and says why. A report from a key outside the committee is not recorded; one
+validator's report, or a split among them, decides nothing, so no single
+validator can halt the others.
+
+**The comparison is not wired to the network today.** No message carries a
+validator's state hash to its peers: `Service.BroadcastStateHash` builds and
+signs one and returns it, and `Service.VerifyRemoteStateHash` has no caller.
+Divergence is detected by the quorum-signed anchors instead (executor.md,
+"Two mismatches"), and repaired or halted there.
+
 ### DAG retention
 
 The DAG keeps `DAGGCDepth` (2,000) rounds of certificates behind **whichever
