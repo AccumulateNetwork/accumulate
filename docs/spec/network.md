@@ -82,6 +82,16 @@ major block boundary so partitions switch together — is #4267's remaining
 scope. Until then a deployed network's cadence is immutable, which is a
 limitation, not a design.
 
+## When a major block opens
+
+The Directory opens a major block at the first block whose time, plus one
+second (kept for compatibility), reaches the schedule's next time after the
+last major block (`MajorBlockSchedule`, `shouldOpenMajorBlock`). Genesis
+records its own time as the last major block's and opens none itself,
+whatever second of the schedule it falls on, so the first scheduled time
+after boot has its major block, and a halt requested as the network boots
+happens there (#4585).
+
 ## Where the validator set lives
 
 A partition's validator set and its threshold are the **network definition**,
