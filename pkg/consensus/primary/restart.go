@@ -125,8 +125,9 @@ func (p *Primary) RoundStatus() RoundStatus {
 // current round to count as producing there (RoundStatus.Authors). A live
 // member in a round that does not complete keeps sending: it rebroadcasts its
 // header about once a second, its certified one too once the round has
-// stalled (#4581), and re-sends its vote on each rebroadcast it sees. A stopped one's last header stays in the DAG and in memory, and
-// counting it made a partition that lost two of four report three producing.
+// stalled (#4581), and re-sends its vote on each rebroadcast it sees. A
+// stopped one's last header stays in the DAG and in memory, and counting it
+// made a partition that lost two of four report three producing.
 const HeardWithin = 10 * time.Second
 
 type seenAt struct {
