@@ -27,7 +27,7 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the full consensus stack for tens of seconds")
 	}
-	const restarted, target = 7, 400
+	const restarted, restartAt, target = 7, 40, 400
 	cfg := Config{
 		BVNs:             3,
 		ValidatorsPerBVN: 4,
@@ -41,7 +41,7 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 		StallAfter:       30 * time.Second,
 		StateDir:         t.TempDir(),
 		Restarts: []Restart{{
-			Part: "Directory", Vals: []int{restarted}, AtHeight: 40,
+			Part: "Directory", Vals: []int{restarted}, AtHeight: restartAt,
 			StopFirst: []int{restarted}, StopFirstFor: 2 * time.Second,
 		}},
 		Out: os.Stdout,
@@ -60,8 +60,23 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 		t.Fatalf("ordering differs across the restart: %v", err)
 	}
 	if h := sim.byPart["Directory"][restarted].height.Load(); h < target {
-		diagnoseWedge(t, sim, "Directory", restarted)
-		t.Fatalf("the restarted Directory validator reached only height %d of %d", h, target)
+		// The run stops at Duration when the network is too slow to reach
+		// target: a 2-CPU runner carries these 25 nodes at under a block a
+		// second (#4558). Then the restarted validator must stand where its
+		// peers stand, and they must have gone well past the restart; a
+		// wedged one is left hundreds of rounds behind them.
+		const moved, behind = 50, 10
+		var top uint64
+		for i, sn := range sim.byPart["Directory"] {
+			if x := sn.height.Load(); i != restarted && x > top {
+				top = x
+			}
+		}
+		if top < restartAt+moved || h+behind < top {
+			diagnoseWedge(t, sim, "Directory", restarted)
+			t.Fatalf("the restarted Directory validator reached only height %d of %d; its peers reached %d", h, target, top)
+		}
+		t.Logf("the network reached only height %d of %d in %s; the restarted validator reached %d", top, target, cfg.Duration, h)
 	}
 	t.Logf("reached heights %v in %s", res.Heights, res.Elapsed.Truncate(time.Second))
 }
