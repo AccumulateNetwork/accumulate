@@ -239,7 +239,7 @@ func (s *Service) requestHandoff(req handoffRequest) error {
 func (s *Service) performResume() error {
 	s.mu.RLock()
 	collecting, overrun, awaiting := s.collecting, s.bufferOverrun, s.awaitingSeed
-	q, round := s.lastBlockIndex, s.lastLeaderRound
+	q, round, at := s.lastBlockIndex, s.lastLeaderRound, s.lastBlockTime
 	s.mu.RUnlock()
 	switch {
 	case !collecting:
@@ -249,7 +249,7 @@ func (s *Service) performResume() error {
 	case awaiting:
 		return errors.NotReady.WithFormat("%s: no consensus checkpoint matched block %d, so this node does not know the round its state was produced at", s.config.Partition.ID, q)
 	}
-	return s.performHandoffAt(q, round)
+	return s.performHandoffAt(q, round, at)
 }
 
 // performHandoff runs in the block production loop. It reads the system
@@ -272,30 +272,31 @@ func (s *Service) performHandoff(q uint64) error {
 		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
 	}
 
-	round, err := s.pulledRound(q)
+	round, at, err := s.pulledBlock(q)
 	if err != nil {
 		return err
 	}
 	if err := s.adoptPulledState(round); err != nil {
 		return err
 	}
-	return s.performHandoffAt(q, round)
+	return s.performHandoffAt(q, round, at)
 }
 
-// pulledRound reads the system ledger of the state the join pulled and
-// returns the leader round that committed block q. A ledger that names
-// another block is not the state q is (Conflict); one that records no round
-// says nothing about which collected group is the next block (NotReady).
-func (s *Service) pulledRound(q uint64) (types.Round, error) {
+// pulledBlock reads the system ledger of the state the join pulled and
+// returns the leader round that committed block q and the time it records for
+// q. A ledger that names another block is not the state q is (Conflict); one
+// that records no round says nothing about which collected group is the next
+// block (NotReady).
+func (s *Service) pulledBlock(q uint64) (types.Round, time.Time, error) {
 	var ledger *protocol.SystemLedger
 	err := s.config.Database.View(func(batch *database.Batch) error {
 		return batch.Account(protocol.PartitionUrl(s.config.Partition.ID).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
 	})
 	if err != nil {
-		return 0, errors.UnknownError.WithFormat("%s: read the pulled state's system ledger: %w", s.config.Partition.ID, err)
+		return 0, time.Time{}, errors.UnknownError.WithFormat("%s: read the pulled state's system ledger: %w", s.config.Partition.ID, err)
 	}
 	if ledger.Index != q {
-		return 0, errors.Conflict.WithFormat("%s: cannot hand off at block %d: the state's system ledger is block %d",
+		return 0, time.Time{}, errors.Conflict.WithFormat("%s: cannot hand off at block %d: the state's system ledger is block %d",
 			s.config.Partition.ID, q, ledger.Index)
 	}
 	if ledger.LeaderRound == 0 {
@@ -303,9 +304,9 @@ func (s *Service) pulledRound(q uint64) (types.Round, error) {
 		// about which collected group is the next block. Counting groups
 		// from where the node stood cannot stand in for it (#4351, #4362);
 		// the join waits for a state that records one.
-		return 0, errors.NotReady.WithFormat("%s: the state at block %d records no leader round", s.config.Partition.ID, q)
+		return 0, time.Time{}, errors.NotReady.WithFormat("%s: the state at block %d records no leader round", s.config.Partition.ID, q)
 	}
-	return types.Round(ledger.LeaderRound), nil
+	return types.Round(ledger.LeaderRound), ledger.Timestamp, nil
 }
 
 // seedBelow is how far below the first state a joining node proves its
@@ -481,7 +482,8 @@ func (s *Service) checkRound(q uint64, round types.Round) error {
 
 // performHandoffAt leaves collecting mode at block q, whose system ledger
 // records the leader round it was committed at, and produces the buffered
-// groups committed at a round above that one, in order, from q + 1.
+// groups committed at a round above that one, in order, from q + 1. The first
+// one's time is raised above at, block q's time (consensus spec, "Restart").
 //
 // Consensus commits leaders in one order on every node, so a group is in the
 // pulled state exactly when its round is at or below the state's round: the
@@ -509,7 +511,7 @@ func (s *Service) checkRound(q uint64, round types.Round) error {
 // here is buffered and neither executed nor anchored (#4402), and the join
 // can sync again and hand off again. The error is returned so the join
 // counts the attempt.
-func (s *Service) performHandoffAt(q uint64, round types.Round) error {
+func (s *Service) performHandoffAt(q uint64, round types.Round, at time.Time) error {
 	s.mu.Lock()
 	if err := s.checkRound(q, round); err != nil {
 		s.mu.Unlock()
@@ -532,6 +534,7 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	s.collecting = false
 	s.heldBlock = 0
 	s.lastBlockIndex = q
+	s.lastBlockTime = at
 	s.lastLeaderRound = round
 	s.mu.Unlock()
 
@@ -669,7 +672,7 @@ func (s *Service) stageThroughNow(block uint64) error {
 	if overrun {
 		return errors.NotReady.WithFormat("%s: the join buffer overran; the join must start again", s.config.Partition.ID)
 	}
-	round, err := s.pulledRound(q)
+	round, _, err := s.pulledBlock(q)
 	if err != nil {
 		return err
 	}

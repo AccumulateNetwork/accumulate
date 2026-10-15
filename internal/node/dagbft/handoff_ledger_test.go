@@ -150,7 +150,7 @@ func TestHandoffAtLeaderRound_RefusesARoundNoGroupWasCommittedAt(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	err := svc.performHandoffAt(60, 6)
+	err := svc.performHandoffAt(60, 6, time.Time{})
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
 	require.True(t, svc.Collecting())
 	require.Len(t, svc.Buffered(), 2)
@@ -189,12 +189,12 @@ func TestHandoffAtLeaderRound_ARestartedNodeStandsAtItsCheckpointsRound(t *testi
 		require.NoError(t, err)
 	}
 
-	err = svc.performHandoffAt(38, 26)
+	err = svc.performHandoffAt(38, 26, time.Time{})
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
 	require.True(t, svc.Collecting())
 	require.Empty(t, ca.blocks, "32 is not block 39: 28 and 30 are in neither the buffer nor the state")
 
-	require.NoError(t, svc.performHandoffAt(40, 30))
+	require.NoError(t, svc.performHandoffAt(40, 30, time.Time{}))
 	require.Len(t, ca.blocks, 1)
 	require.Equal(t, uint64(41), ca.blocks[0].Index)
 	require.Equal(t, types.Round(32), ca.blocks[0].LeaderRound)

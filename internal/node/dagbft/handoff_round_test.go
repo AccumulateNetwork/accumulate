@@ -49,7 +49,7 @@ func TestHandoffAtLeaderRound_ProducesTheGroupsAboveThePulledRound(t *testing.T)
 
 	// The pulled state is block 42, committed at round 8: only round 10 is
 	// produced, and it is block 43.
-	require.NoError(t, svc.performHandoffAt(42, 8))
+	require.NoError(t, svc.performHandoffAt(42, 8, time.Time{}))
 	require.False(t, svc.Collecting(), "a node that has handed off is not collecting")
 	require.Empty(t, svc.Buffered(), "the buffer is spent")
 	require.Len(t, ca.blocks, 1, "the groups at or below the pulled round are in the state already")
@@ -77,7 +77,7 @@ func TestHandoffAtLeaderRound_DoesNotDependOnWhereCollectingStarted(t *testing.T
 
 	// The node never learned its block; the pulled state is block 70 at
 	// round 12.
-	require.NoError(t, svc.performHandoffAt(70, 12))
+	require.NoError(t, svc.performHandoffAt(70, 12, time.Time{}))
 	require.Len(t, ca.blocks, 2)
 	require.Equal(t, uint64(71), ca.blocks[0].Index)
 	require.Equal(t, types.Round(14), ca.blocks[0].LeaderRound)
@@ -101,7 +101,7 @@ func TestHandoffAtLeaderRound_WaitsForARoundItHasNotCollected(t *testing.T) {
 		[]types.PayloadEntry{{Digest: b.Digest(), Worker: w.ID()}})))
 	require.NoError(t, err)
 
-	err = svc.performHandoffAt(45, 20)
+	err = svc.performHandoffAt(45, 20, time.Time{})
 	require.Error(t, err)
 	require.True(t, errors.Is(err, errors.NotReady), "got %v", err)
 	require.True(t, svc.Collecting(), "and it is still joining")

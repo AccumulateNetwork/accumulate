@@ -1542,6 +1542,26 @@ orders. A node without a state directory records no handed groups, so it
 reports no floor and prunes at the frontier. The checkpoint copies only the
 window it keeps, from 2 × `RescueWindow` below its leader.
 
+**The position carries its block's time** (`Checkpoint.BlockTime`). A
+block's time is its leader's header stamp, raised to 1 ms after the
+previous block's time when it is not later (`Service.produce`), so the
+previous block's time is an input to the next block's, and block time is
+executed state. A node that resumed without it raised its first block from
+the zero time while its peers raised it from the last block's, and recorded
+a different time for a block whose leader stamped it before its
+predecessor. The time is known before the block is produced, so it is
+written with the position. The next block's time is raised above:
+
+| what the node resumes from | the time |
+|---|---|
+| a checkpoint that records a time | that time, exactly as its peers hold it |
+| a checkpoint written before checkpoints recorded one, or none | the time the system ledger records for the executor's last block (`Service.stateBlockTime`) |
+| a joined state, at the handoff | the time the pulled state's ledger records for its block (`Service.pulledBlock`) |
+
+The ledger records time to the second, and records nothing for a block the
+executor discarded as empty, so the last two rows match the peers exactly
+only when the next block's leader stamped it after the last block's time.
+
 **A restart reloads the DAG it stopped with** (#4448). The DAG lives in
 memory, and a header needs a quorum of the previous round's certificates as
 parents: a partition restarted as a whole otherwise holds no parent anywhere

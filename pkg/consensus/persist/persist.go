@@ -47,6 +47,12 @@ type Checkpoint struct {
 	// to restore (#4238).
 	BlockIndex uint64 `json:"block_index,omitempty"`
 
+	// BlockTime is the time of block BlockIndex: its leader's stamp, raised
+	// to after the previous block's time. A restarted node raises the next
+	// block's time above it, as its peers do. A checkpoint written before it
+	// was recorded has none.
+	BlockTime time.Time `json:"block_time,omitzero"`
+
 	// CurrentRound is the consensus round at checkpoint time.
 	CurrentRound types.Round `json:"current_round"`
 

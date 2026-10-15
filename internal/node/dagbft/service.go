@@ -496,7 +496,7 @@ const (
 // saveCheckpoint writes the node's consensus position for blockIndex, keeping
 // the previous block's position as well. A failure to write is reported, not
 // fatal: the next block writes again.
-func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
+func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round, blockTime time.Time) {
 	if s.config.DataDir == "" {
 		return
 	}
@@ -508,6 +508,7 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 	}
 	cp := s.node.CheckpointAt(leaderRound)
 	cp.BlockIndex = blockIndex
+	cp.BlockTime = blockTime
 	if s.lastSaved != nil {
 		if err := s.prevCheckpoint.Save(s.lastSaved); err != nil {
 			s.logger.Error("Saving previous consensus checkpoint", "error", err, "block", s.lastSaved.BlockIndex)
@@ -566,11 +567,33 @@ func (s *Service) seedFromCheckpoint() (bool, error) {
 	// block is numbered after the checkpoint's, as every peer that did not
 	// restart numbers it.
 	s.lastBlockIndex = cp.BlockIndex
+	// The next block's time is raised above this block's, as on every peer
+	// that did not restart. A checkpoint that records no time leaves the
+	// time of the executor's last block, from initializeGenesis.
+	if !cp.BlockTime.IsZero() {
+		s.lastBlockTime = cp.BlockTime
+	}
 	// Consensus resumes after this round, so the groups it commits from
 	// here are the ones after it; a join's handoff at a state below it
 	// would need groups this node will not be delivered (#4362).
 	s.lastLeaderRound = cp.LastCommitRound
 	return true, nil
+}
+
+// stateBlockTime is the time the system ledger records for the executor's
+// last block, to the second, or zero when the store has no ledger.
+func (s *Service) stateBlockTime() time.Time {
+	var ledger *protocol.SystemLedger
+	err := s.config.Database.View(func(batch *database.Batch) error {
+		return batch.Account(protocol.PartitionUrl(s.config.Partition.ID).JoinPath(protocol.Ledger)).Main().GetAs(&ledger)
+	})
+	if err != nil {
+		if !errors.Is(err, errors.NotFound) {
+			s.logger.Error("Reading the system ledger for the last block's time", "error", err)
+		}
+		return time.Time{}
+	}
+	return ledger.Timestamp
 }
 
 // initializeGenesis initializes the DAG with genesis certificates.
@@ -584,6 +607,7 @@ func (s *Service) initializeGenesis() error {
 	if lastIndex > 0 {
 		// Already have state, skip genesis initialization
 		s.lastBlockIndex = lastIndex
+		s.lastBlockTime = s.stateBlockTime()
 		return nil
 	}
 
@@ -1064,7 +1088,7 @@ func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, le
 	// produced: a crash on either side of ProduceBlock leaves a checkpoint
 	// that matches the executor's last block (#4238).
 	if checkpoint {
-		s.saveCheckpoint(blockIndex, leader.Header.Round)
+		s.saveCheckpoint(blockIndex, leader.Header.Round, blockTime)
 	}
 
 	s.blockRound.Store(uint64(leader.Header.Round))
