@@ -354,6 +354,9 @@ func newGossipSub(ctx context.Context, h host.Host) (*pubsub.PubSub, error) {
 	return pubsub.NewGossipSub(ctx, h, pubsub.WithPeerExchange(true), pubsub.WithFloodPublish(true))
 }
 
+// beforeGossipSub lets a test delay the creation of validator i's GossipSub.
+var beforeGossipSub = func(i int) {}
+
 // New builds the network: one libp2p host per validator, a Directory node on
 // every host, and a BVN node on each host for its validator's BVN — the
 // soak's dual topology, where all partitions share each validator's host,
@@ -394,6 +397,22 @@ func New(cfg Config) (*Sim, error) {
 		s.hosts[i] = h
 	}
 	ctx := context.Background()
+
+	// One GossipSub per host, shared by that validator's Directory and BVN
+	// nodes — as in production. Created before the connections, as a node's
+	// exists before its peers dial it: a GossipSub that finds a connection to
+	// a host with none yet takes it for a host that does not speak pubsub and
+	// never sends to it (#4586), as the follower's comment says.
+	pss := make([]*pubsub.PubSub, nVals)
+	for i, h := range s.hosts {
+		beforeGossipSub(i)
+		ps, err := newGossipSub(ctx, h)
+		if err != nil {
+			s.Close()
+			return nil, fmt.Errorf("pubsub %d: %w", i, err)
+		}
+		pss[i] = ps
+	}
 	for i := range s.hosts {
 		for j := i + 1; j < len(s.hosts); j++ {
 			err := s.hosts[i].Connect(ctx, peer.AddrInfo{ID: s.hosts[j].ID(), Addrs: s.hosts[j].Addrs()})
@@ -402,18 +421,6 @@ func New(cfg Config) (*Sim, error) {
 				return nil, fmt.Errorf("connect %d<->%d: %w", i, j, err)
 			}
 		}
-	}
-
-	// One GossipSub per host, shared by that validator's Directory and BVN
-	// nodes — as in production.
-	pss := make([]*pubsub.PubSub, nVals)
-	for i, h := range s.hosts {
-		ps, err := newGossipSub(ctx, h)
-		if err != nil {
-			s.Close()
-			return nil, fmt.Errorf("pubsub %d: %w", i, err)
-		}
-		pss[i] = ps
 	}
 
 	mkNode := func(part string, committee *types.Committee, val int) (*simNode, error) {
