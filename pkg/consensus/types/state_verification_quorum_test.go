@@ -159,7 +159,7 @@ func TestStateHashTracker_OneReportPerMemberPerRound(t *testing.T) {
 	tr.SetCommittee(NewCommittee([]ValidatorInfo{{PublicKey: pub, Stake: 1}}, 1))
 
 	for block := uint64(0); block < 100; block++ {
-		tr.RecordRemoteHash(StatePosition{Epoch: 1, Round: 6, BlockIndex: block}, pub, StateHash{0xBB})
+		require.Nil(t, tr.RecordRemoteHash(StatePosition{Epoch: 1, Round: 6, BlockIndex: block}, pub, StateHash{0xBB}))
 	}
 	reports := 0
 	for _, r := range tr.stateHashes {
