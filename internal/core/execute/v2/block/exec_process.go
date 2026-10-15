@@ -335,7 +335,7 @@ func (d *bundle) mergeIntoBlock() {
 	// Update the block state, in execution order: the chain segment
 	// bookkeeping downstream depends on appends folding in chain order.
 	_ = d.state.For(func(_ [32]byte, state *chain.ProcessTransactionState) error {
-		b.State.MergeTransaction(state)
+		b.mergeTransactionState(state)
 		return nil
 	})
 
@@ -435,4 +435,11 @@ func (b *bundle) callSignatureExecutor(batch *database.Batch, ctx *SignatureCont
 	st, err := x.Process(batch, ctx)
 	err = errors.UnknownError.Wrap(err)
 	return st, err
+}
+
+// mergeTransactionState folds one message's state into the block's. How a
+// reported major block merges depends on the executor version.
+func (b *Block) mergeTransactionState(state *chain.ProcessTransactionState) {
+	byIndex := state.MakeMajorBlock > 0 && b.Executor.globals().Active.ExecutorVersion.V2CanaveralEnabled()
+	b.State.MergeTransaction(state, byIndex)
 }

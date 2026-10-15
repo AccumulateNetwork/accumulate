@@ -23,9 +23,12 @@ type BlockState struct {
 	OpenedMajorBlock   bool
 	MakeMajorBlock     uint64
 	MakeMajorBlockTime time.Time
-	Delivered          uint64
-	Signed             uint64
-	Produced           int
+	// MajorBlockNotices is every major block a BVN learned of this block, in
+	// the order the notices merged (from v2-canaveral; MergeTransaction).
+	MajorBlockNotices []MajorBlockState
+	Delivered         uint64
+	Signed            uint64
+	Produced          int
 	// LocalDeliveries counts queue traffic — messages enqueued for or
 	// drained from the #4146 delivery queues this block. A block whose only
 	// content is queue movement must still COMMIT (#4155): discarding it as
@@ -164,13 +167,24 @@ func (s *BlockState) MergeSignature(r *ProcessSignatureState) {
 	s.Signed++
 }
 
-func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState) {
+// MergeTransaction folds one message's state into the block's. With
+// byIndex (from v2-canaveral) the block's major block is the newest one any
+// message reported, and every one is kept; otherwise the last merged wins.
+func (s *BlockState) MergeTransaction(r *chain.ProcessTransactionState, byIndex bool) {
 	s.Delivered++
 	s.ChainUpdates.Merge(&r.ChainUpdates)
 	s.ReceivedAnchors = append(s.ReceivedAnchors, r.ReceivedAnchors...)
-	if r.MakeMajorBlock > 0 {
+	switch {
+	case r.MakeMajorBlock == 0:
+	case !byIndex:
 		s.MakeMajorBlock = r.MakeMajorBlock
 		s.MakeMajorBlockTime = r.MakeMajorBlockTime
+	default:
+		s.MajorBlockNotices = append(s.MajorBlockNotices, MajorBlockState{Index: r.MakeMajorBlock, Time: r.MakeMajorBlockTime})
+		if r.MakeMajorBlock > s.MakeMajorBlock {
+			s.MakeMajorBlock = r.MakeMajorBlock
+			s.MakeMajorBlockTime = r.MakeMajorBlockTime
+		}
 	}
 	s.AcmeBurnt.Add(&s.AcmeBurnt, &r.AcmeBurnt)
 	s.NetworkUpdate = append(s.NetworkUpdate, r.NetworkUpdate...)

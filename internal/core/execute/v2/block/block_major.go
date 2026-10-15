@@ -7,8 +7,11 @@
 package block
 
 import (
+	"cmp"
+	"slices"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -66,23 +69,72 @@ func (x *Executor) recordMajorBlock(block *Block, rootIndexIndex uint64) error {
 	if !ok {
 		return nil
 	}
+	opened := []MajorBlockState{{Index: blockIndex, Time: blockTime}}
+
+	// From v2-canaveral a BVN records every major block it learned of this
+	// block, in order, and none at or below the last it recorded (executor
+	// spec, "Major blocks on a BVN")
+	account := block.Batch.Account(x.Describe.AnchorPool())
+	if x.globals().Active.ExecutorVersion.V2CanaveralEnabled() &&
+		x.Describe.NetworkType != protocol.PartitionTypeDirectory {
+		last, err := lastMajorBlock(account.MajorBlockChain())
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		opened = majorBlocksAfter(last, block.State.MajorBlockNotices)
+		if len(opened) == 0 {
+			return nil
+		}
+	}
 
 	// Load the chain
-	account := block.Batch.Account(x.Describe.AnchorPool())
 	mainChain, err := account.MainChain().Get()
 	if err != nil {
 		return errors.UnknownError.WithFormat("load anchor ledger main chain: %w", err)
 	}
 
-	_, err = addIndexChainEntry(account.MajorBlockChain(), &protocol.IndexEntry{
-		Source:         uint64(mainChain.Height() - 1),
-		RootIndexIndex: rootIndexIndex,
-		BlockIndex:     blockIndex,
-		BlockTime:      &blockTime,
-	})
-	if err != nil {
-		return errors.UnknownError.WithFormat("add anchor ledger index chain entry: %w", err)
+	for _, m := range opened {
+		_, err = addIndexChainEntry(account.MajorBlockChain(), &protocol.IndexEntry{
+			Source:         uint64(mainChain.Height() - 1),
+			RootIndexIndex: rootIndexIndex,
+			BlockIndex:     m.Index,
+			BlockTime:      &m.Time,
+		})
+		if err != nil {
+			return errors.UnknownError.WithFormat("add anchor ledger index chain entry: %w", err)
+		}
 	}
 
 	return nil
+}
+
+// lastMajorBlock is the index of the last major block the chain records, or
+// zero when it records none.
+func lastMajorBlock(c *database.Chain2) (uint64, error) {
+	head, err := c.Head().Get()
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain: %w", err)
+	}
+	if head.Count == 0 {
+		return 0, nil
+	}
+	entry := new(protocol.IndexEntry)
+	err = c.EntryAs(head.Count-1, entry)
+	if err != nil {
+		return 0, errors.UnknownError.WithFormat("load major block chain entry %d: %w", head.Count-1, err)
+	}
+	return entry.BlockIndex, nil
+}
+
+// majorBlocksAfter is the notices of major blocks after last, one per index,
+// in increasing order.
+func majorBlocksAfter(last uint64, notices []MajorBlockState) []MajorBlockState {
+	var after []MajorBlockState
+	for _, m := range notices {
+		if m.Index > last {
+			after = append(after, m)
+		}
+	}
+	slices.SortStableFunc(after, func(a, b MajorBlockState) int { return cmp.Compare(a.Index, b.Index) })
+	return slices.CompactFunc(after, func(a, b MajorBlockState) bool { return a.Index == b.Index })
 }
