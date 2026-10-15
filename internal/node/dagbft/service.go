@@ -1350,13 +1350,14 @@ func (s *Service) HaltReason() error {
 }
 
 // RecordStateHash records the local state hash for a round after block execution.
-// This is called by the block production loop after successfully producing a block.
+// This is called by the block production loop after successfully producing a
+// block, with the service's lock held.
 func (s *Service) RecordStateHash(round types.Round, blockIndex uint64, stateHash types.StateHash) {
 	if s.stateHashTracker == nil {
 		return
 	}
 
-	s.stateHashTracker.RecordLocalHash(round, stateHash)
+	s.stateHashTracker.RecordLocalHash(types.StatePosition{Epoch: s.committee.Epoch, Round: round, BlockIndex: blockIndex}, stateHash)
 
 	// Periodically prune old state hashes
 	s.stateHashTracker.Prune(round)
@@ -1374,8 +1375,20 @@ func (s *Service) VerifyRemoteStateHash(msg *types.StateHashMessage) error {
 		return fmt.Errorf("invalid state hash message: %w", err)
 	}
 
+	// A report is about this partition's state at this epoch, or it is not
+	// about this node's state at all (consensus spec, "State hash comparison")
+	if msg.Partition != s.config.Partition.ID {
+		return fmt.Errorf("state hash message is for partition %s, not %s", msg.Partition, s.config.Partition.ID)
+	}
+	s.mu.RLock()
+	epoch := s.committee.Epoch
+	s.mu.RUnlock()
+	if msg.Epoch != epoch {
+		return fmt.Errorf("state hash message is for epoch %d, not %d", msg.Epoch, epoch)
+	}
+
 	// Record and check for divergence
-	if divergence := s.stateHashTracker.RecordRemoteHash(msg.Round, msg.Author, msg.StateHash); divergence != nil {
+	if divergence := s.stateHashTracker.RecordRemoteHash(msg.Position(), msg.Author, msg.StateHash); divergence != nil {
 		return divergence
 	}
 
@@ -1442,7 +1455,7 @@ func (s *Service) ResumeAfterSync(newHeight uint64, newStateHash types.StateHash
 
 	// Record the new state hash
 	if s.stateHashTracker != nil {
-		s.stateHashTracker.RecordLocalHash(s.CurrentRound(), newStateHash)
+		s.stateHashTracker.RecordLocalHash(types.StatePosition{Epoch: s.committee.Epoch, Round: s.CurrentRound(), BlockIndex: newHeight}, newStateHash)
 	}
 
 	return nil
@@ -1461,7 +1474,7 @@ func (s *Service) GetStateHashForRound(round types.Round) (types.StateHash, bool
 func (s *Service) BroadcastStateHash(round types.Round, blockIndex uint64, stateHash types.StateHash) (*types.StateHashMessage, error) {
 	pubKey := s.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
 
-	msg := types.NewStateHashMessage(round, s.committee.Epoch, blockIndex, stateHash, pubKey)
+	msg := types.NewStateHashMessage(s.config.Partition.ID, round, s.committee.Epoch, blockIndex, stateHash, pubKey)
 	if err := msg.Sign(s.config.NodeConfig.KeyPair); err != nil {
 		return nil, fmt.Errorf("failed to sign state hash message: %w", err)
 	}

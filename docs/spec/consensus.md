@@ -1214,16 +1214,28 @@ restarted node replayed its tail with whichever committee its state named
 
 ### State hash comparison
 
-A node records the state hash each block leaves (`Service.RecordStateHash`,
-`StateHashTracker.RecordLocalHash`), and the tracker compares it with the
-hashes the partition's validators report for the same round
+A node records the state hash each block leaves at the block's **position**
+— the committee epoch, the leader round that committed the block, and the
+block index (`types.StatePosition`; `Service.RecordStateHash`,
+`StateHashTracker.RecordLocalHash`) — and the tracker compares it with the
+hashes the partition's validators report for the same position
 (`StateHashTracker.RecordRemoteHash`). **A node's state has diverged from
-its partition's only when a quorum of the committee, by stake, reports one
-hash for the round and the node's own is another.** Then the node is the
-minority and halts (`Service.onStateDivergence`): it stops producing blocks
-and says why. A report from a key outside the committee is not recorded; one
-validator's report, or a split among them, decides nothing, so no single
-validator can halt the others.
+its partition's only when validators holding a quorum of the current
+committee's stake report one hash for its position and the node's own is
+another.** Then the node is the minority and halts
+(`Service.onStateDivergence`): it stops producing blocks and says why. A
+report from a key outside the committee is not recorded, and stake is read
+from the committee when the divergence is decided, so a validator that has
+left counts for nothing. One validator's report, a split among them, or
+reports for another position decide nothing, so no single validator can halt
+the others.
+
+**A report is bound to its partition.** A node runs several partitions with
+one validator key, and every partition numbers its rounds from the start, so
+the signed content of a report (`types.StateHashMessage`) is a domain tag,
+the partition, the position and the hash; a report for another partition, or
+for another epoch than the committee's, is refused before it is recorded
+(`Service.VerifyRemoteStateHash`).
 
 **The comparison is not wired to the network today.** No message carries a
 validator's state hash to its peers: `Service.BroadcastStateHash` builds and

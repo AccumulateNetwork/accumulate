@@ -33,6 +33,7 @@ func TestStateHashTracker_DivergenceNeedsAQuorum(t *testing.T) {
 	require.NoError(t, err)
 
 	local, other, third := StateHash{0xAA}, StateHash{0xBB}, StateHash{0xCC}
+	at6 := StatePosition{Epoch: 1, Round: 6, BlockIndex: 3}
 
 	newTracker := func() (*StateHashTracker, chan *StateDivergenceError) {
 		tr := NewStateHashTracker(100)
@@ -52,48 +53,99 @@ func TestStateHashTracker_DivergenceNeedsAQuorum(t *testing.T) {
 
 	t.Run("one validator", func(t *testing.T) {
 		tr, got := newTracker()
-		tr.RecordLocalHash(6, local)
-		require.Nil(t, tr.RecordRemoteHash(6, keys[1], other))
+		tr.RecordLocalHash(at6, local)
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[1], other))
 		none(t, got)
 	})
 
 	t.Run("a split", func(t *testing.T) {
 		tr, got := newTracker()
-		tr.RecordLocalHash(6, local)
-		require.Nil(t, tr.RecordRemoteHash(6, keys[1], other))
-		require.Nil(t, tr.RecordRemoteHash(6, keys[2], third))
-		require.Nil(t, tr.RecordRemoteHash(6, keys[3], other))
+		tr.RecordLocalHash(at6, local)
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[1], other))
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[2], third))
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[3], other))
 		none(t, got)
 	})
 
 	t.Run("not in the committee", func(t *testing.T) {
 		tr, got := newTracker()
-		tr.RecordLocalHash(6, local)
+		tr.RecordLocalHash(at6, local)
 		for i := 0; i < 4; i++ {
-			require.Nil(t, tr.RecordRemoteHash(6, outsider, other))
+			require.Nil(t, tr.RecordRemoteHash(at6, outsider, other))
 		}
 		none(t, got)
 	})
 
 	t.Run("a quorum", func(t *testing.T) {
 		tr, got := newTracker()
-		tr.RecordLocalHash(6, local)
-		require.Nil(t, tr.RecordRemoteHash(6, keys[1], other))
-		require.Nil(t, tr.RecordRemoteHash(6, keys[2], other))
-		err := tr.RecordRemoteHash(6, keys[3], other)
+		tr.RecordLocalHash(at6, local)
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[1], other))
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[2], other))
+		err := tr.RecordRemoteHash(at6, keys[3], other)
 		require.NotNil(t, err)
 		require.Equal(t, local, err.ExpectedHash)
 		require.Equal(t, other, err.ActualHash)
 		require.NotNil(t, <-got)
 	})
 
+	t.Run("a quorum at another position", func(t *testing.T) {
+		for _, pos := range []StatePosition{
+			{Epoch: 2, Round: 6, BlockIndex: 3},
+			{Epoch: 1, Round: 6, BlockIndex: 4},
+		} {
+			tr, got := newTracker()
+			tr.RecordLocalHash(at6, local)
+			for _, k := range keys[1:] {
+				require.Nil(t, tr.RecordRemoteHash(pos, k, other))
+			}
+			none(t, got)
+		}
+	})
+
+	t.Run("reports of validators the committee no longer has", func(t *testing.T) {
+		tr, got := newTracker()
+		tr.RecordLocalHash(at6, local)
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[1], other))
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[2], other))
+		// keys[1] and keys[2] leave; the committee is keys[0], keys[3] and
+		// two newcomers.
+		infos := []ValidatorInfo{{PublicKey: keys[0], Stake: 1}, {PublicKey: keys[3], Stake: 1}}
+		for i := 0; i < 2; i++ {
+			pub, _, err := ed25519.GenerateKey(rand.Reader)
+			require.NoError(t, err)
+			infos = append(infos, ValidatorInfo{PublicKey: pub, Stake: 1})
+		}
+		tr.SetCommittee(NewCommittee(infos, 2))
+		require.Nil(t, tr.RecordRemoteHash(at6, keys[3], other))
+		none(t, got)
+	})
+
 	t.Run("a quorum before the local hash", func(t *testing.T) {
 		tr, got := newTracker()
 		for _, k := range keys[1:] {
-			require.Nil(t, tr.RecordRemoteHash(6, k, other))
+			require.Nil(t, tr.RecordRemoteHash(at6, k, other))
 		}
 		none(t, got)
-		tr.RecordLocalHash(6, local)
+		tr.RecordLocalHash(at6, local)
 		require.NotNil(t, <-got)
 	})
+}
+
+// A state hash message is signed for one partition: changing the partition
+// it names breaks the signature.
+func TestStateHashMessage_SignedForItsPartition(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	msg := NewStateHashMessage("BVN0", 6, 1, 3, StateHash{0xAA}, pub)
+	require.NoError(t, msg.Sign(priv))
+	require.NoError(t, msg.Verify())
+
+	data, err := msg.Marshal()
+	require.NoError(t, err)
+	got, err := UnmarshalStateHashMessage(data)
+	require.NoError(t, err)
+	require.Equal(t, msg, got)
+
+	msg.Partition = "Directory"
+	require.Error(t, msg.Verify())
 }

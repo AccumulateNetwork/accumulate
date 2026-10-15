@@ -15,8 +15,13 @@ import (
 
 // StateHashMessage represents a state hash announcement from a validator.
 // Validators gossip these messages after executing committed certificates
-// to enable cross-validation of state consistency.
+// to enable cross-validation of state consistency. A message is for one
+// partition, at one epoch, round and block, and its signature covers all of
+// them: a node runs several partitions with one key, and its partitions number
+// their rounds alike.
 type StateHashMessage struct {
+	// Partition is the partition whose state this is.
+	Partition string
 	// Round is the consensus round after which the state hash was computed.
 	Round Round
 	// Epoch is the epoch in which this message was created.
@@ -31,9 +36,17 @@ type StateHashMessage struct {
 	Signature []byte
 }
 
+// stateHashDomain separates a state hash signature from every other message
+// a validator key signs.
+const stateHashDomain = "accumulate/dagbft/state-hash/v1"
+
+// maxPartitionIDLen bounds the partition ID a message may carry.
+const maxPartitionIDLen = 255
+
 // NewStateHashMessage creates a new state hash message.
-func NewStateHashMessage(round Round, epoch uint64, blockIndex uint64, stateHash StateHash, author ed25519.PublicKey) *StateHashMessage {
+func NewStateHashMessage(partition string, round Round, epoch uint64, blockIndex uint64, stateHash StateHash, author ed25519.PublicKey) *StateHashMessage {
 	return &StateHashMessage{
+		Partition:  partition,
 		Round:      round,
 		Epoch:      epoch,
 		BlockIndex: blockIndex,
@@ -42,23 +55,22 @@ func NewStateHashMessage(round Round, epoch uint64, blockIndex uint64, stateHash
 	}
 }
 
-// messageContent returns the bytes to be signed/verified.
+// Position is where the message's state stands.
+func (m *StateHashMessage) Position() StatePosition {
+	return StatePosition{Epoch: m.Epoch, Round: m.Round, BlockIndex: m.BlockIndex}
+}
+
+// messageContent returns the bytes to be signed/verified: the domain, the
+// partition, and the position and hash.
 func (m *StateHashMessage) messageContent() []byte {
-	// round(8) + epoch(8) + blockIndex(8) + stateHash(32)
-	data := make([]byte, 8+8+8+32)
-	offset := 0
-
-	binary.BigEndian.PutUint64(data[offset:], uint64(m.Round))
-	offset += 8
-
-	binary.BigEndian.PutUint64(data[offset:], m.Epoch)
-	offset += 8
-
-	binary.BigEndian.PutUint64(data[offset:], m.BlockIndex)
-	offset += 8
-
-	copy(data[offset:], m.StateHash[:])
-
+	data := make([]byte, 0, len(stateHashDomain)+1+len(m.Partition)+8+8+8+32)
+	data = append(data, stateHashDomain...)
+	data = append(data, byte(len(m.Partition)))
+	data = append(data, m.Partition...)
+	data = binary.BigEndian.AppendUint64(data, uint64(m.Round))
+	data = binary.BigEndian.AppendUint64(data, m.Epoch)
+	data = binary.BigEndian.AppendUint64(data, m.BlockIndex)
+	data = append(data, m.StateHash[:]...)
 	return data
 }
 
@@ -66,6 +78,9 @@ func (m *StateHashMessage) messageContent() []byte {
 func (m *StateHashMessage) Sign(key ed25519.PrivateKey) error {
 	if len(key) != ed25519.PrivateKeySize {
 		return errors.New("invalid private key size")
+	}
+	if len(m.Partition) > maxPartitionIDLen {
+		return errors.New("partition ID too long")
 	}
 
 	content := m.messageContent()
@@ -83,6 +98,10 @@ func (m *StateHashMessage) Verify() error {
 		return errors.New("invalid signature size")
 	}
 
+	if len(m.Partition) > maxPartitionIDLen {
+		return errors.New("partition ID too long")
+	}
+
 	content := m.messageContent()
 	if !ed25519.Verify(m.Author, content, m.Signature) {
 		return errors.New("invalid state hash message signature")
@@ -93,42 +112,40 @@ func (m *StateHashMessage) Verify() error {
 
 // Marshal serializes the state hash message.
 func (m *StateHashMessage) Marshal() ([]byte, error) {
-	// round(8) + epoch(8) + blockIndex(8) + stateHash(32) + author(32) + sigLen(4) + sig
-	size := 8 + 8 + 8 + 32 + 32 + 4 + len(m.Signature)
-	data := make([]byte, size)
-	offset := 0
-
-	binary.BigEndian.PutUint64(data[offset:], uint64(m.Round))
-	offset += 8
-
-	binary.BigEndian.PutUint64(data[offset:], m.Epoch)
-	offset += 8
-
-	binary.BigEndian.PutUint64(data[offset:], m.BlockIndex)
-	offset += 8
-
-	copy(data[offset:], m.StateHash[:])
-	offset += 32
-
-	copy(data[offset:], m.Author)
-	offset += 32
-
-	binary.BigEndian.PutUint32(data[offset:], uint32(len(m.Signature)))
-	offset += 4
-
-	copy(data[offset:], m.Signature)
-
+	if len(m.Partition) > maxPartitionIDLen {
+		return nil, errors.New("partition ID too long")
+	}
+	// partitionLen(1) + partition + round(8) + epoch(8) + blockIndex(8) +
+	// stateHash(32) + author(32) + sigLen(4) + sig
+	data := make([]byte, 0, 1+len(m.Partition)+8+8+8+32+32+4+len(m.Signature))
+	data = append(data, byte(len(m.Partition)))
+	data = append(data, m.Partition...)
+	data = binary.BigEndian.AppendUint64(data, uint64(m.Round))
+	data = binary.BigEndian.AppendUint64(data, m.Epoch)
+	data = binary.BigEndian.AppendUint64(data, m.BlockIndex)
+	data = append(data, m.StateHash[:]...)
+	author := make([]byte, 32)
+	copy(author, m.Author)
+	data = append(data, author...)
+	data = binary.BigEndian.AppendUint32(data, uint32(len(m.Signature)))
+	data = append(data, m.Signature...)
 	return data, nil
 }
 
 // UnmarshalStateHashMessage deserializes a state hash message.
 func UnmarshalStateHashMessage(data []byte) (*StateHashMessage, error) {
-	if len(data) < 92 { // 8 + 8 + 8 + 32 + 32 + 4
+	if len(data) < 1 {
+		return nil, errors.New("state hash message too short")
+	}
+	n := int(data[0])
+	if len(data) < 1+n+8+8+8+32+32+4 {
 		return nil, errors.New("state hash message too short")
 	}
 
 	m := &StateHashMessage{}
-	offset := 0
+	offset := 1
+	m.Partition = string(data[offset : offset+n])
+	offset += n
 
 	m.Round = Round(binary.BigEndian.Uint64(data[offset:]))
 	offset += 8
@@ -176,11 +193,21 @@ func (e *StateDivergenceError) Error() string {
 	return "state divergence detected at round " + string(rune(e.Round))
 }
 
+// StatePosition is where a state stands: the epoch, the leader round that
+// committed its block, and the block. Two reports describe the same state only
+// at the same position.
+type StatePosition struct {
+	Epoch      uint64
+	Round      Round
+	BlockIndex uint64
+}
+
 // StateHashTracker tracks state hashes from validators for consistency
-// verification. A node's state has diverged from its partition's at a round
-// when a quorum of the committee reports one hash for the round and the
-// node's own is another (consensus spec, "State hash comparison"). One
-// validator's report, or a split, decides nothing.
+// verification. A node's state has diverged from its partition's at a
+// position when validators holding a quorum of the current committee's stake
+// report one hash for that position and the node's own is another (consensus
+// spec, "State hash comparison"). One validator's report, a split, or reports
+// for another position decide nothing.
 type StateHashTracker struct {
 	mu sync.RWMutex
 
@@ -188,11 +215,11 @@ type StateHashTracker struct {
 	// set, remote hashes are not recorded.
 	committee *Committee
 
-	// stateHashes maps round -> validator pubkey hex -> reported hash
-	stateHashes map[Round]map[string]remoteHash
+	// stateHashes maps position -> validator pubkey hex -> reported hash
+	stateHashes map[StatePosition]map[string]remoteHash
 
-	// localHashes maps round -> our local state hash
-	localHashes map[Round]StateHash
+	// localHashes maps round -> our local state hash and its position
+	localHashes map[Round]localHash
 
 	// maxTrackedRounds is the maximum number of rounds to track
 	maxTrackedRounds int
@@ -201,11 +228,16 @@ type StateHashTracker struct {
 	divergenceCallbacks []func(*StateDivergenceError)
 }
 
-// remoteHash is a hash a committee member reported, with its stake.
+// remoteHash is a hash a committee member reported.
 type remoteHash struct {
 	hash   StateHash
 	author ed25519.PublicKey
-	stake  uint64
+}
+
+// localHash is this node's hash and the position it is for.
+type localHash struct {
+	position StatePosition
+	hash     StateHash
 }
 
 // NewStateHashTracker creates a new StateHashTracker.
@@ -214,13 +246,15 @@ func NewStateHashTracker(maxRounds int) *StateHashTracker {
 		maxRounds = 100
 	}
 	return &StateHashTracker{
-		stateHashes:      make(map[Round]map[string]remoteHash),
-		localHashes:      make(map[Round]StateHash),
+		stateHashes:      make(map[StatePosition]map[string]remoteHash),
+		localHashes:      make(map[Round]localHash),
 		maxTrackedRounds: maxRounds,
 	}
 }
 
-// SetCommittee sets the committee whose members' hashes are counted.
+// SetCommittee sets the committee whose members' hashes are counted. Stake is
+// read from the committee when a divergence is decided, so a report from a
+// validator that has left counts for nothing.
 func (t *StateHashTracker) SetCommittee(c *Committee) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -234,61 +268,60 @@ func (t *StateHashTracker) OnDivergence(callback func(*StateDivergenceError)) {
 	t.divergenceCallbacks = append(t.divergenceCallbacks, callback)
 }
 
-// RecordLocalHash records our local state hash for a round.
-func (t *StateHashTracker) RecordLocalHash(round Round, hash StateHash) {
+// RecordLocalHash records our local state hash at a position.
+func (t *StateHashTracker) RecordLocalHash(pos StatePosition, hash StateHash) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.localHashes[round] = hash
-	if err := t.divergenceLocked(round); err != nil {
+	t.localHashes[pos.Round] = localHash{position: pos, hash: hash}
+	if err := t.divergenceLocked(pos.Round); err != nil {
 		t.notifyDivergenceLocked(err)
 	}
 }
 
-// RecordRemoteHash records a state hash a committee member reported. Returns
-// a StateDivergenceError if, with it, a quorum reports a hash other than our
-// local one. A hash from a key outside the committee is not recorded.
-func (t *StateHashTracker) RecordRemoteHash(round Round, validator ed25519.PublicKey, hash StateHash) *StateDivergenceError {
+// RecordRemoteHash records a state hash a committee member reported for a
+// position. Returns a StateDivergenceError if, with it, a quorum reports a
+// hash other than our local one at our position. A hash from a key outside
+// the committee is not recorded.
+func (t *StateHashTracker) RecordRemoteHash(pos StatePosition, validator ed25519.PublicKey, hash StateHash) *StateDivergenceError {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.committee == nil {
-		return nil
-	}
-	stake := t.committee.StakeOf(validator)
-	if stake == 0 {
+	if t.committee == nil || t.committee.StakeOf(validator) == 0 {
 		return nil
 	}
 
-	if t.stateHashes[round] == nil {
-		t.stateHashes[round] = make(map[string]remoteHash)
+	if t.stateHashes[pos] == nil {
+		t.stateHashes[pos] = make(map[string]remoteHash)
 	}
-	t.stateHashes[round][hexEncode(validator)] = remoteHash{hash: hash, author: validator, stake: stake}
+	t.stateHashes[pos][hexEncode(validator)] = remoteHash{hash: hash, author: validator}
 
-	err := t.divergenceLocked(round)
+	err := t.divergenceLocked(pos.Round)
 	if err != nil {
 		t.notifyDivergenceLocked(err)
 	}
 	return err
 }
 
-// divergenceLocked reports divergence at round if we have a local hash and a
-// quorum of the committee reports one other hash.
+// divergenceLocked reports divergence at round if we have a local hash and
+// validators holding a quorum of the current committee's stake report one
+// other hash at the same position.
 func (t *StateHashTracker) divergenceLocked(round Round) *StateDivergenceError {
 	local, ok := t.localHashes[round]
 	if !ok || t.committee == nil {
 		return nil
 	}
 	stake := map[StateHash]uint64{}
-	for _, r := range t.stateHashes[round] {
-		if r.hash == local {
+	for _, r := range t.stateHashes[local.position] {
+		if r.hash == local.hash {
 			continue
 		}
-		stake[r.hash] += r.stake
+		stake[r.hash] += t.committee.StakeOf(r.author)
 		if t.committee.HasQuorum(stake[r.hash]) {
 			return &StateDivergenceError{
 				Round:          round,
-				ExpectedHash:   local,
+				BlockIndex:     local.position.BlockIndex,
+				ExpectedHash:   local.hash,
 				ActualHash:     r.hash,
 				ConflictAuthor: r.author,
 			}
@@ -309,60 +342,66 @@ func (t *StateHashTracker) notifyDivergenceLocked(err *StateDivergenceError) {
 func (t *StateHashTracker) GetLocalHash(round Round) (StateHash, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	hash, ok := t.localHashes[round]
-	return hash, ok
+	local, ok := t.localHashes[round]
+	return local.hash, ok
 }
 
-// GetRemoteHashes returns all remote state hashes for a round.
+// GetRemoteHashes returns the remote state hashes reported at our position
+// for a round, or at every position for the round if we have none.
 func (t *StateHashTracker) GetRemoteHashes(round Round) map[string]StateHash {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
 	result := make(map[string]StateHash)
-	for k, v := range t.stateHashes[round] {
-		result[k] = v.hash
+	for _, r := range t.reportsLocked(round) {
+		for k, v := range r {
+			result[k] = v.hash
+		}
 	}
 	return result
 }
 
+// reportsLocked is the reports for a round: at our position if we have a
+// local hash for it, otherwise at every position with that round.
+func (t *StateHashTracker) reportsLocked(round Round) []map[string]remoteHash {
+	if local, ok := t.localHashes[round]; ok {
+		if r, ok := t.stateHashes[local.position]; ok {
+			return []map[string]remoteHash{r}
+		}
+		return nil
+	}
+	var all []map[string]remoteHash
+	for pos, r := range t.stateHashes {
+		if pos.Round == round {
+			all = append(all, r)
+		}
+	}
+	return all
+}
+
 // CheckConsistency checks if all validators have the same state hash for a round.
-// Returns true if consistent (or no data), false if divergence detected.
+// Returns true if consistent (or no data), false if any report differs.
 func (t *StateHashTracker) CheckConsistency(round Round) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	localHash, hasLocal := t.localHashes[round]
-	remoteHashes, hasRemote := t.stateHashes[round]
-
-	if !hasLocal && !hasRemote {
-		return true // No data to check
+	local, hasLocal := t.localHashes[round]
+	var first *StateHash
+	if hasLocal {
+		first = &local.hash
 	}
-
-	// If we have local hash, check against all remotes
-	if hasLocal && hasRemote {
-		for _, remote := range remoteHashes {
-			if remote.hash != localHash {
-				return false
-			}
-		}
-	}
-
-	// Check all remote hashes against each other
-	if hasRemote && len(remoteHashes) > 1 {
-		var firstHash StateHash
-		first := true
-		for _, remote := range remoteHashes {
-			if first {
-				firstHash = remote.hash
-				first = false
+	for _, r := range t.reportsLocked(round) {
+		for _, v := range r {
+			if first == nil {
+				h := v.hash
+				first = &h
 				continue
 			}
-			if remote.hash != firstHash {
+			if v.hash != *first {
 				return false
 			}
 		}
 	}
-
 	return true
 }
 
@@ -378,9 +417,9 @@ func (t *StateHashTracker) Prune(currentRound Round) {
 		cutoff = 0
 	}
 
-	for round := range t.stateHashes {
-		if round < cutoff {
-			delete(t.stateHashes, round)
+	for pos := range t.stateHashes {
+		if pos.Round < cutoff {
+			delete(t.stateHashes, pos)
 		}
 	}
 
@@ -397,8 +436,11 @@ func (t *StateHashTracker) ValidatorHashCount(round Round) int {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 
-	if roundHashes, ok := t.stateHashes[round]; ok {
-		return len(roundHashes)
+	seen := map[string]bool{}
+	for _, r := range t.reportsLocked(round) {
+		for k := range r {
+			seen[k] = true
+		}
 	}
-	return 0
+	return len(seen)
 }

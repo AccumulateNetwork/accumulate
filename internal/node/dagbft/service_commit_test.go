@@ -218,25 +218,67 @@ func TestRecordStateHash_DivergenceHalts(t *testing.T) {
 		remotes[i] = pub
 		infos = append(infos, types.ValidatorInfo{PublicKey: pub, Stake: 1})
 	}
-	svc.stateHashTracker.SetCommittee(types.NewCommittee(infos, 1))
+	svc.committee = types.NewCommittee(infos, 1)
+	svc.stateHashTracker.SetCommittee(svc.committee)
 
 	svc.RecordStateHash(6, 3, types.StateHash{0xAA})
 	require.False(t, svc.IsHalted())
+	at6 := types.StatePosition{Epoch: svc.committee.Epoch, Round: 6, BlockIndex: 3}
 
 	// A matching remote hash is harmony.
-	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[0], types.StateHash{0xAA}))
+	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(at6, remotes[0], types.StateHash{0xAA}))
 
 	// One validator reporting another hash decides nothing.
-	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[1], types.StateHash{0xBB}))
+	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(at6, remotes[1], types.StateHash{0xBB}))
 	require.Never(t, svc.IsHalted, 100*time.Millisecond, 10*time.Millisecond,
 		"one validator's hash must not halt an honest node")
 
 	// A quorum reporting another hash is divergence: halt.
-	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[2], types.StateHash{0xBB}))
-	require.NotNil(t, svc.stateHashTracker.RecordRemoteHash(6, remotes[0], types.StateHash{0xBB}),
+	require.Nil(t, svc.stateHashTracker.RecordRemoteHash(at6, remotes[2], types.StateHash{0xBB}))
+	require.NotNil(t, svc.stateHashTracker.RecordRemoteHash(at6, remotes[0], types.StateHash{0xBB}),
 		"a quorum's other hash must be reported as divergence")
 	require.Eventually(t, svc.IsHalted, time.Second, 10*time.Millisecond, "state divergence must halt the node")
 	require.Error(t, svc.HaltReason())
+}
+
+// A state hash report is for one partition, at one epoch: a quorum of the
+// same keys reporting for another partition (a node runs the Directory and its
+// BVN with one key) or another epoch is refused and halts nothing.
+func TestVerifyRemoteStateHash_IsBoundToPartitionAndEpoch(t *testing.T) {
+	bvn, _, _ := newCommitService(t, 1)
+	infos := []types.ValidatorInfo{{PublicKey: bvn.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey), Stake: 1}}
+	privs := make([]ed25519.PrivateKey, 3)
+	for i := range privs {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		privs[i] = priv
+		infos = append(infos, types.ValidatorInfo{PublicKey: pub, Stake: 1})
+	}
+	bvn.committee = types.NewCommittee(infos, 1)
+	bvn.stateHashTracker.SetCommittee(bvn.committee)
+	bvn.RecordStateHash(6, 3, types.StateHash{0xAA})
+
+	report := func(partition string, epoch uint64) error {
+		var last error
+		for _, priv := range privs {
+			msg := types.NewStateHashMessage(partition, 6, epoch, 3, types.StateHash{0xDD}, priv.Public().(ed25519.PublicKey))
+			require.NoError(t, msg.Sign(priv))
+			last = bvn.VerifyRemoteStateHash(msg)
+		}
+		return last
+	}
+
+	err := report(protocol.Directory, 1)
+	require.Error(t, err)
+	require.NotErrorAs(t, err, new(*types.StateDivergenceError), "another partition's reports must not count")
+	err = report(bvn.config.Partition.ID, 2)
+	require.Error(t, err)
+	require.NotErrorAs(t, err, new(*types.StateDivergenceError), "another epoch's reports must not count")
+	require.Never(t, bvn.IsHalted, 100*time.Millisecond, 10*time.Millisecond)
+
+	// The same quorum, for this partition and epoch, is divergence.
+	require.ErrorAs(t, report(bvn.config.Partition.ID, 1), new(*types.StateDivergenceError))
+	require.Eventually(t, bvn.IsHalted, time.Second, 10*time.Millisecond)
 }
 
 // TestSubmitterService_ErrorMapping: the submitter is the front door for
