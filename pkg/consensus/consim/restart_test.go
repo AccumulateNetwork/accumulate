@@ -152,20 +152,21 @@ func runNetworkRestart(t *testing.T, loadUntil map[string]uint64) {
 	}
 	const restartAt, sustained = 60, 150
 	sim, err := New(Config{
-		BVNs:               1,
-		ValidatorsPerBVN:   4,
-		TPS:                20,
-		MinRoundInterval:   5 * time.Millisecond,
-		BatchTimeout:       10 * time.Millisecond,
-		BatchSize:          20,
-		TargetHeight:       restartAt + 30 + sustained,
-		Duration:           3 * time.Minute,
-		StallAfter:         20 * time.Second,
-		StateDir:           t.TempDir(),
-		DiscardEmptyBlocks: true,
-		LoadUntilHeight:    loadUntil,
-		Restarts:           []Restart{{Part: "BVN1", Network: true, AtHeight: restartAt}},
-		Out:                os.Stdout,
+		BVNs:                1,
+		ValidatorsPerBVN:    4,
+		TPS:                 20,
+		MinRoundInterval:    5 * time.Millisecond,
+		BatchTimeout:        10 * time.Millisecond,
+		BatchSize:           20,
+		TargetHeight:        restartAt + 30 + sustained,
+		SustainAfterRestart: sustained,
+		Duration:            3 * time.Minute,
+		StallAfter:          20 * time.Second,
+		StateDir:            t.TempDir(),
+		DiscardEmptyBlocks:  true,
+		LoadUntilHeight:     loadUntil,
+		Restarts:            []Restart{{Part: "BVN1", Network: true, AtHeight: restartAt}},
+		Out:                 os.Stdout,
 	})
 	if err != nil {
 		t.Fatalf("build sim: %v", err)
@@ -187,6 +188,7 @@ func runNetworkRestart(t *testing.T, loadUntil map[string]uint64) {
 			if sn.resumedAt == 0 {
 				t.Fatalf("%s node %d was not restarted", part, i)
 			}
+			t.Logf("%s node %d resumed at block %d and reached %d", part, i, sn.resumedAt, sn.height.Load())
 			if h := sn.height.Load(); h < sn.resumedAt+sustained {
 				t.Fatalf("%s node %d resumed at block %d and produced only to %d; want %d blocks after it", part, i, sn.resumedAt, h, sustained)
 			}
