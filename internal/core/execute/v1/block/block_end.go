@@ -666,6 +666,15 @@ func (x *Executor) shouldOpenMajorBlock(block *Block) (bool, time.Time, error) {
 		return false, time.Time{}, nil
 	}
 
+	// Nor does genesis. It records its time as the last major block's so the
+	// network does not open one as it boots, but with the second added below
+	// a genesis in the last second before a scheduled time would open that
+	// major block itself, and the first scheduled time after boot would have
+	// none (#4585).
+	if block.Index == protocol.GenesisBlock {
+		return false, time.Time{}, nil
+	}
+
 	var anchor *protocol.AnchorLedger
 	err := block.Batch.Account(x.Describe.AnchorPool()).Main().GetAs(&anchor)
 	if err != nil {
