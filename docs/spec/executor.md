@@ -3184,6 +3184,16 @@ From v2-canaveral:
 The Directory records the one major block it opened, as before; its indices
 increase by construction.
 
+A notice at or below the last recorded index does not execute from
+v2-canaveral, so the block's major block is always a new one: from
+v2-vandenberg a BVN learns of major blocks only from `MakeMajorBlock`
+messages (a Directory anchor's `MakeMajorBlock` field is read only before
+it), the Directory produces one per index, in increasing order, when it
+opens the major block (`block_end.go`), and they reach the BVN on the
+Directory's synthetic stream, which executes each number once and in order
+(a copy at or below `Delivered` is tossed). The check in `recordMajorBlock`
+is the second line.
+
 ### Anchor emission, and the heartbeat
 
 Step 5 above decides whether the block sends an anchor. It does, if any of:

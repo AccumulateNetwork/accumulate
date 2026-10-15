@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -79,6 +80,21 @@ func TestMajorBlockNotices(t *testing.T) {
 		}
 		require.Equal(t, uint64(7), b.State.MakeMajorBlock)
 		require.Equal(t, at(7), b.State.MakeMajorBlockTime)
+		require.NoError(t, b.Executor.recordMajorBlock(b, 1))
+		require.Equal(t, []uint64{5, 6, 7}, recorded(t, b))
+	})
+
+	// The same through the message executor and the bundle's merge: two
+	// MakeMajorBlock messages executed in one block, the newer first.
+	t.Run("two MakeMajorBlock messages in one block", func(t *testing.T) {
+		b := newBlock(t, protocol.ExecutorVersionV2Canaveral, 5)
+		d := &bundle{Block: b}
+		for _, i := range []uint64{7, 6} {
+			msg := &messaging.MakeMajorBlock{MajorBlockIndex: i, MajorBlockTime: at(i)}
+			require.NoError(t, MakeMajorBlock{}.process(&MessageContext{bundle: d, message: msg}, msg))
+		}
+		d.mergeIntoBlock()
+		require.Equal(t, uint64(7), b.State.MakeMajorBlock)
 		require.NoError(t, b.Executor.recordMajorBlock(b, 1))
 		require.Equal(t, []uint64{5, 6, 7}, recorded(t, b))
 	})
