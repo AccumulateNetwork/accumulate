@@ -91,7 +91,7 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// Stamp the author's clock. Executors use this (not their own clocks) as
 	// the block time so that execution is deterministic across validators —
 	// see types.Header.Timestamp (#4054).
-	header.Timestamp = time.Now().UnixNano()
+	header.Timestamp = p.now().UnixNano()
 
 	// 4. Sign
 	if err := header.Sign(p.config.KeyPair); err != nil {

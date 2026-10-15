@@ -193,14 +193,30 @@ So a validator holds batches in four places, for four reasons:
     no more than **`MaxHeaderTimeAhead` = 5 s** ahead of the validator's own
     clock, and a certificate is a quorum's statement that its header's time
     was within that bound when they voted. The bound is a protocol constant,
-    the same in every node, not a setting. A header stamped further ahead is
-    not refused for good: the author rebroadcasts it, and the vote goes out
-    once the voter's clock has reached it, so an author whose clock runs
-    ahead is delayed by its own skew and no more. A stamp behind the voter's
-    clock is not refused, because a round's headers can wait on parents and
-    batches for longer than any useful bound, and a round none of whose
-    headers can be certified never advances; the executor keeps block time
-    increasing instead (Block time, below).
+    the same in every node, not a setting. **Assumption and bound:** if the
+    clocks of the honest validators are within sigma of one another, every
+    certificate carries at least one honest vote (a quorum is more than two
+    thirds), so a certified header's time is at most that voter's clock plus
+    5 s at the moment it voted, hence no more than 5 s plus sigma ahead of
+    any honest clock then; one validator's clock cannot carry block time
+    further. A primary's vote on its own header is not checked, including
+    the one `RestoreAuthored` records after a restart: the header was
+    stamped from that primary's clock. The bound does not need it: with f
+    of at least 1, a quorum's f+1 or more honest votes include one from a
+    validator other than the author, and that vote is checked. A header stamped further ahead is not refused for good: the
+    author rebroadcasts it, and the vote goes out once the voter's clock is
+    within the bound of the stamp. But a header is voted on only while its
+    round is within one of the voter's, so an author whose clock runs ahead
+    by more than 5 s plus about two rounds has its headers pass out of the
+    voters' round window before they become votable, and contributes no
+    certificate at all. With f or fewer such authors the partition proceeds
+    on the others; with more than f, rounds advance only as their headers
+    become votable. The bound turns the clock assumption on a single leader
+    into one on more than two thirds of the validators. A stamp behind the
+    voter's clock is not refused, because a round's headers can wait on
+    parents and batches for longer than any useful bound, and a round none of
+    whose headers can be certified never advances; the executor keeps block
+    time increasing instead (Block time, below).
 
 ## 2. Specification — how it is implemented
 
@@ -403,7 +419,7 @@ the gaps numbers them (#4601): Narwhal §3 is the model, §4 the core design (§
 mempool protocol, §4.3 garbage collection), §6 reconfiguration; Bullshark §4
 is the DAG construction and its safety argument, §5.2 the ordering of the
 DAG, §6 the eventually synchronous protocol, §7 garbage collection. What
-the code does not yet do is in [DIFFERENCES.md](DIFFERENCES.md), C21, C23 and the entries after them.
+the code does not yet do is in [DIFFERENCES.md](DIFFERENCES.md), C21, C24 and the entries after them.
 
 **The objects.** A **header** (`types.Header`, `types/header.go:40-73`) is
 one validator's proposal for one round: its author's key, the round, the
@@ -525,17 +541,17 @@ are this network's.
 - **Timestamp.** The header carries its author's wall clock in Unix
   nanoseconds, covered by the digest and so by the signature
   (`header.go:47-54`, set at `header_builder.go:92-95`). No voter checks
-  it: not against its own clock, not against the parents'. It matters
-  once: the **leader's** header timestamp is the block time of the block
-  its group produces, clamped only forward, to be strictly after the
+  it against the parents'. A voter checks it against its own clock, and
+  only forward: it does not vote for a header stamped more than
+  `MaxHeaderTimeAhead` (5 s) ahead of it (invariant 13, "Block time").
+  It matters once: the **leader's** header timestamp is the block time of
+  the block its group produces, clamped forward, to be strictly after the
   previous block's time (`internal/node/dagbft/service.go:1015-1026`), so
   every validator derives the same block time and a bad clock cannot move
   time backwards. Block time is executed state: a per-validator clock
   diverged the state trees on the first block, which is why the leader's
-  timestamp is used at all (#4054). Nothing bounds how far forward it
-  goes: a faulty leader moves block time arbitrarily far ahead, and every
-  later block is clamped above it. The bound is undecided (DIFFERENCES
-  C23). Genesis headers carry zero.
+  timestamp is used at all (#4054). A faulty leader cannot move block time
+  further ahead than a quorum's clocks allow. Genesis headers carry zero.
 
 #### The vote rule
 
@@ -970,7 +986,8 @@ decided with the rest.
 
 The author stamps a header with its wall clock when it builds it
 (`Header.Timestamp`, Unix nanoseconds, covered by the header's signature;
-`Primary.createHeaderLockedWithRound`). The block produced from a committed
+`Primary.createHeaderLockedWithRound`, from `Primary.now`, the same clock the
+vote check reads). The block produced from a committed
 leader group takes the leader certificate's stamp as its time, raised to
 1 ms after the previous block's time when it is not later
 (`Service.produce`), so block time strictly increases and every node
@@ -980,10 +997,12 @@ A validator checks the stamp before it votes (invariant 13;
 `Primary.OnHeaderReceived`): a header stamped more than
 `MaxHeaderTimeAhead` (5 s, `primary.MaxHeaderTimeAhead`) after the
 validator's clock is not voted on, and is logged at `Debug`. The check sits
-after the epoch and round checks, so a header from a round out of range
-still drives round sync, and before the vote is recorded, so a rebroadcast
-of the same header is checked again and voted on once it is within the
-bound. The check is on voting only: a certificate received from a peer,
+after the epoch, round and round-limit checks, so a header from a round out
+of range still drives round sync, and before the vote-once check and its
+record (#4590), so a header refused for its time leaves no record: a
+rebroadcast of it is checked again and voted on once it is within the
+bound, and it does not stand in the way of another header from its author
+for the round. The check is on voting only: a certificate received from a peer,
 live or through catch-up, is not checked against the receiver's clock, since
 its votes already were, and a node catching up receives certificates whose
 stamps are far behind its clock.

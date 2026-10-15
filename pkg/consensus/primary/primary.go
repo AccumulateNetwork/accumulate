@@ -315,8 +315,9 @@ type Primary struct {
 	// author another for its round. Nil means nothing is persisted.
 	onAuthored func(*types.Header) error
 
-	// now is the clock a header's time is checked against before a vote
-	// (MaxHeaderTimeAhead): time.Now, and a fixed clock in tests.
+	// now is this validator's clock: what its headers are stamped with, and
+	// what a header's time is checked against before a vote
+	// (MaxHeaderTimeAhead). time.Now, and a set clock in tests.
 	now func() time.Time
 
 	// Lifecycle management

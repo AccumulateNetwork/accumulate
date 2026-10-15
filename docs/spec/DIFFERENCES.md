@@ -686,7 +686,6 @@ departs:
   F3). A node executing from an unproven or wrong state therefore signs its
   roots with its committee key. The gating is #4443.
 
-
 **Spec** ([executor.md](executor.md), "Sync", as rewritten 2026-09-19): a
 node that joins — or restarts, which is a join — validates the spine first
 (the network definition and the anchors its validators sign, by signature,
@@ -1914,7 +1913,6 @@ silently. Nothing gates the change: a partition must be installed fresh, or
 upgraded all at once, onto builds that carry it. The entry goes when no
 deployment runs an older build.
 
-
 ### C15. A restored or rejoining node catches up in the live protocol
 
 *[#4515](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4515), PLAN R8-2*
@@ -2215,20 +2213,6 @@ threshold, `L` is committed only when a later leader's linked walk reaches
 it, one or more leader rounds later. Safety is unaffected, since the walk
 is the same on every node; the latency of that leader's group is what
 differs.
-
-### C23. A leader's timestamp moves block time forward without bound
-
-*No issue yet; #4054 is where block time became the leader's timestamp*
-
-consensus.md, "Header validity", "Timestamp": no voter checks a header's
-timestamp, against its own clock or the parents', and the leader's
-timestamp becomes the block time, clamped only forward, to be strictly
-after the previous block's (`internal/node/dagbft/service.go:1015-1026`).
-A faulty leader, or an honest one with a bad clock, moves block time
-arbitrarily far ahead; every later block is clamped above it, and nothing
-moves it back. Whether to bound it, and against what — the parents'
-timestamps, the voter's clock with a skew limit, or both — is undecided.
-The spec states the facts and no bound.
 
 ### C24. The router judges an old epoch's message by epoch, not by round
 
