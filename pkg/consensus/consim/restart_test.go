@@ -123,8 +123,9 @@ func TestRestartDoesNotReauthorARound(t *testing.T) {
 // with that rule, and TestOnHeaderReceived_AsksForEveryMissingBatch pins #4503
 // instead (#4582). The restart still needs a fetch for the batches made while
 // nodes were down: a node that cannot fetch stalls BVN1 for about 16 s in most
-// runs, which the 10 s bound below catches (some runs leave nothing to fetch;
-// TestSoakTopologyLiveness guards the node's fetch every time). It does not reproduce #4502 (a survivor's authored
+// runs (7 of 9 measured), which the 10 s bound below catches; some runs leave
+// nothing to fetch, and TestSoakTopologyLiveness guards the node's fetch every
+// time. It does not reproduce #4502 (a survivor's authored
 // header whose batches a checkpoint deleted): it passes with and without that
 // fix, which rests on TestCheckpointKeepsTheAuthoredHeadersBatches. Until
 // 2026-10-03 the stagger itself was not wired (scheduledRestarts ignored
