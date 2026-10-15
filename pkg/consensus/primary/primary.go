@@ -830,34 +830,7 @@ func (p *Primary) rebroadcastPendingHeaders() {
 		return
 	}
 
-	p.roundMu.Lock()
-	currentRound := p.currentRound
-	p.roundMu.Unlock()
-
-	p.pendingMu.Lock()
-	// Collect headers that need rebroadcast (those without certificates yet)
-	var toRebroadcast []*types.Header
-	for digest, header := range p.ourHeaders {
-		// Voters accept rounds no older than their current round minus one, so
-		// a header two or more rounds behind can never gather votes — drop it
-		// here rather than spam the network with it (cleanupOldHeaders only
-		// runs when the round advances, which it may not during a stall).
-		// Same rule as cleanupOldHeaders: a header that never certified still
-		// holds consumed batches — requeue them or their transactions are lost.
-		if header.Round+1 < currentRound {
-			if _, certified := p.ourCerts[header.Round]; !certified {
-				p.requeueHeaderBatches(header)
-			}
-			delete(p.ourHeaders, digest)
-			delete(p.pendingVotes, digest)
-			continue
-		}
-		// Only rebroadcast if we don't have a certificate for this round yet
-		if _, hasCert := p.ourCerts[header.Round]; !hasCert {
-			toRebroadcast = append(toRebroadcast, header)
-		}
-	}
-	p.pendingMu.Unlock()
+	toRebroadcast := p.headersToRebroadcast()
 
 	// Rebroadcast outside the lock
 	for _, header := range toRebroadcast {
@@ -882,13 +855,56 @@ func (p *Primary) rebroadcastPendingHeaders() {
 	}
 }
 
+// headersToRebroadcast collects this primary's headers that have not achieved
+// quorum, dropping the ones too old to gather votes, and, while the round is
+// stalled, its certified header at the round: the same header again, so its
+// peers still hear it producing there (RoundStatus.Authors, #4581).
+func (p *Primary) headersToRebroadcast() []*types.Header {
+	p.roundMu.Lock()
+	currentRound := p.currentRound
+	stalled := !p.lastRoundAdvance.IsZero() && time.Since(p.lastRoundAdvance) > roundStallAfter
+	p.roundMu.Unlock()
+
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	var toRebroadcast []*types.Header
+	for digest, header := range p.ourHeaders {
+		// Voters accept rounds no older than their current round minus one, so
+		// a header two or more rounds behind can never gather votes — drop it
+		// here rather than spam the network with it (cleanupOldHeaders only
+		// runs when the round advances, which it may not during a stall).
+		// Same rule as cleanupOldHeaders: a header that never certified still
+		// holds consumed batches — requeue them or their transactions are lost.
+		if header.Round+1 < currentRound {
+			if _, certified := p.ourCerts[header.Round]; !certified {
+				p.requeueHeaderBatches(header)
+			}
+			delete(p.ourHeaders, digest)
+			delete(p.pendingVotes, digest)
+			continue
+		}
+		// Only rebroadcast if we don't have a certificate for this round yet
+		if _, hasCert := p.ourCerts[header.Round]; !hasCert {
+			toRebroadcast = append(toRebroadcast, header)
+		}
+	}
+	if cert, ok := p.ourCerts[currentRound]; ok && stalled && cert.Header != nil {
+		toRebroadcast = append(toRebroadcast, cert.Header)
+	}
+	return toRebroadcast
+}
+
+// roundStallAfter is how long a round may go without advancing before this
+// primary treats it as stalled (recoverFromStall).
+const roundStallAfter = 5 * time.Second
+
 // recoverFromStall re-shares the current round's certificates and requests
 // the ones we are missing when the round has not advanced for a while. Paced
 // internally; a no-op while consensus is healthy.
 func (p *Primary) recoverFromStall() {
 	p.roundMu.Lock()
 	current := p.currentRound
-	stalled := !p.lastRoundAdvance.IsZero() && time.Since(p.lastRoundAdvance) > 5*time.Second
+	stalled := !p.lastRoundAdvance.IsZero() && time.Since(p.lastRoundAdvance) > roundStallAfter
 	p.roundMu.Unlock()
 	if !stalled {
 		return
