@@ -58,6 +58,7 @@ type Querier struct {
 	consensus api.ConsensusService
 	nodeState nodestate.Serving
 	redirect  func(context.Context) []string
+	gate      *Gate
 }
 
 var _ api.Querier = (*Querier)(nil)
@@ -80,6 +81,10 @@ type QuerierParams struct {
 	// names them, so the asker can ask a node that holds it (executor spec,
 	// "Sync", Redirection; Paul, 2026-10-02). Nil names nobody.
 	Redirect func(context.Context) []string
+
+	// QueryGate admits the querier's queries. Nil is the process's gate,
+	// which every querier of a node shares (gate.go).
+	QueryGate *Gate
 }
 
 func NewQuerier(params QuerierParams) *Querier {
@@ -89,6 +94,10 @@ func NewQuerier(params QuerierParams) *Querier {
 	s.consensus = params.Consensus
 	s.nodeState = params.NodeState
 	s.redirect = params.Redirect
+	s.gate = params.QueryGate
+	if s.gate == nil {
+		s.gate = queryGate
+	}
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
 }
@@ -129,10 +138,10 @@ func (s *Querier) Query(ctx context.Context, scope *url.URL, query api.Query) (a
 	// Admission control BEFORE the database is touched — see gate.go. An
 	// ungated query path let pollers drive 45% of validator CPU into state
 	// reads and collapse the network (#4164).
-	if err := queryGate.enter(ctx); err != nil {
+	if err := s.gate.enter(ctx); err != nil {
 		return nil, err
 	}
-	defer queryGate.exit()
+	defer s.gate.exit()
 
 	// Start a batch. If the ABCI were updated to commit in the middle of a
 	// block, this would no longer be safe.

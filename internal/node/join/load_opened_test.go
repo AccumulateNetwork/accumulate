@@ -66,9 +66,17 @@ func TestTheSectionsARoundOpenedAreLoadedInParallel(t *testing.T) {
 		writeAccount(t, peerDB, accounts[i], 2)
 	}
 	var inflight, most atomic.Int64
-	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
-	a := &pageSource{Source: served, inflight: &inflight, most: &most}
-	b := &pageSource{Source: served, inflight: &inflight, most: &most}
+	// Each peer is one a joining node holds: its own query gate, as another
+	// node has, behind the node's gate for that peer (QueryPeers.clientFor).
+	// Sharing the process's gate, the round's eight loads met four slots, the
+	// slow ones were refused by both peers, and their accounts were owed
+	// (#4602).
+	served := func() pull.Source {
+		q := apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0", QueryGate: apiimpl.NewQueryGate()})
+		return api.Querier2{Querier: pull.Gated(q, pull.NewGate())}
+	}
+	a := &pageSource{Source: served(), inflight: &inflight, most: &most}
+	b := &pageSource{Source: served(), inflight: &inflight, most: &most}
 
 	db := database.OpenInMemory(nil)
 	t.Cleanup(func() { _ = db.Close() })

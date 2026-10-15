@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // The query gates are the DoS boundary (#4164): admission must be bounded,
@@ -45,4 +47,30 @@ func TestGate_GraceWindowAdmitsOnRelease(t *testing.T) {
 	go func() { time.Sleep(50 * time.Millisecond); g.exit() }()
 	require.NoError(t, g.enter(context.Background()), "a slot freed inside the grace window is taken, not rejected")
 	g.exit()
+}
+
+// A querier given its own gate is admitted by that gate alone: two peers
+// served from one process each have their own capacity, as two nodes do
+// (#4602). A querier given none is behind the process's gate.
+func TestAQuerierIsAdmittedByItsOwnGate(t *testing.T) {
+	db := database.OpenInMemory(nil)
+	t.Cleanup(func() { _ = db.Close() })
+	ctx := context.Background()
+	full, free := NewQueryGate(), NewQueryGate()
+	for i := 0; i < cap(full.slots); i++ {
+		require.NoError(t, full.enter(ctx))
+	}
+	defer func() {
+		for i := 0; i < cap(full.slots); i++ {
+			full.exit()
+		}
+	}()
+
+	u := protocol.AccountUrl("nobody")
+	_, err := NewQuerier(QuerierParams{Database: db, Partition: "BVN0", QueryGate: full}).Query(ctx, u, nil)
+	require.ErrorContains(t, err, "query capacity exhausted", "the querier whose gate is full must refuse")
+	_, err = NewQuerier(QuerierParams{Database: db, Partition: "BVN0", QueryGate: free}).Query(ctx, u, nil)
+	require.False(t, errors.Is(err, errors.NotReady), "the querier with a free gate must not refuse: %v", err)
+
+	require.Same(t, queryGate, NewQuerier(QuerierParams{Database: db, Partition: "BVN0"}).gate)
 }
