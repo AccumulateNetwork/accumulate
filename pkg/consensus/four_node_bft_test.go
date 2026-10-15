@@ -66,8 +66,9 @@ func TestFourNodeBFTQuorum(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		// Wait for rounds to progress - proves all nodes are participating
-		err = net.WaitForRound(2, 15*time.Second)
+		// Every node must reach round 2: three are a quorum, so one node
+		// reaching it does not show the fourth participates (#4583).
+		err = net.WaitForAllNodesRound(2, 15*time.Second)
 		require.NoError(t, err, "all nodes should participate and reach round 2")
 
 		// Verify all 4 nodes are active
