@@ -159,7 +159,7 @@ Reads of an entry 20,000+ blocks old cost twice what reads under 5,000 blocks co
 
 ### Storage
 
-The store grows with transactions, not time, and nothing in it is reclaimed. At 5 tps the whole 16-node project wrote ~7.8 GB/h — about 0.5 GB per node-hour, or **~4 TB per node-year at 5 tps**, scaling with the rate. The node logs are a second stream of the same order (8.6 GB across 16 nodes in 24 h, ~0.2 TB per node-year) and are a deployment matter — rotate them.
+The store grows with blocks as much as with transactions (see "On separate servers for a year": about half the record writes are per block × validators), and nothing in it is reclaimed. At 5 tps the whole 16-node project wrote ~7.8 GB/h — about 0.5 GB per node-hour, or **~4 TB per node-year at 5 tps**, scaling with the rate. The node logs are a second stream of the same order (8.6 GB across 16 nodes in 24 h, ~0.2 TB per node-year) and are a deployment matter — rotate them.
 
 ## The run that answers the years question
 
@@ -171,6 +171,50 @@ This run could not separate "grows with the state" from "grows with time", becau
 4. **A join against an aged store**: start a follower against the 72-hour network and time the background history fill, which this run never exercised.
 
 Until that run, the honest statement is: a day of the follower walk shows no cost tied to block count, a join cost tied to the account count at 4 ms per account, and three climbs — live heap, CPU per hour, and old-entry read latency — whose cause the day cannot name.
+
+
+# On separate servers for a year
+
+The deployment to evaluate: every node on its own server — 8 cores, one 1 TB SSD, a high-speed internet link — for a year, at this run's load (5 tps) and shape (3 BVNs × 4 validators, Directory on all 12, 1 s blocks). The run put 17 containers on one 24-core host with one shared NVMe and a 66 GB page cache, ~0.05 ms between nodes. Below, each resource is taken per node from the run, then carried to a year; where the run is pessimistic or optimistic about a dedicated server, it says which.
+
+| resource | per node, measured | per node, a year at 5 tps | on 8 cores / 1 TB / fast link |
+|---|---|---|---|
+| CPU | median 0.25 cores, p95 0.5–0.65, peak 1.05 (validators); 0.57 median while joining | +30 %/day climb, cause unresolved | 3 % of the box; fine unless the climb is unbounded |
+| memory | 2.03 GiB peak (2000 MiB arm), 1.33 GiB (1300 arm) | live heap +60 MiB/day net (#4571) | 2–4 GiB container; the climb is the risk, not the level |
+| store | ~13.5 GB/day (~0.56 GB/h) | **~4.9 TB**; ~2 TB at zero load | **1 TB is full in ~75 days; ~5 months idle** |
+| SSD writes | ~6 MB/s (46× the growth) | ~190 TB written | consumer 1 TB (≈600 TBW) ≈ 3 years of endurance |
+| SSD reads | ~3.7 MB/s, ~630 reads/s | — | trivial; depends on the page cache |
+| network | not measured (#4579); ≥ 1.3 Mbit/s received by what is persisted | ≥ 0.4 TB/month | bandwidth irrelevant; latency adds 20–40 % to a join |
+
+## Storage is the binding constraint
+
+The store grew ~7.8 GB/h across ~14 node stores: 13.5 GB per node-day, 4.9 TB per node-year at 5 tps, and nothing is reclaimed. A 1 TB SSD holds about 75 days.
+
+Most of that is not user transactions. The BlockchainDB shape counters (`storage-stats/*.json`) show a BVN database writing 27 `Message.Main` records per block and the Directory database 38, against 1.8 user transactions per BVN block. Each Directory → BVN anchor arrives with the 12 Directory validators' signatures (13 of the 27); the Directory records each BVN anchor with its 4 validators' signatures plus its own (most of the 38). Roughly **half of all record writes are per block × validators, independent of load**. At 1 s blocks that is a floor on the order of 2 TB per node-year with no users at all — counts, not bytes, because the harness does not record bytes per shape, so the proportion is approximate. Filed as #4580: the choices are blocks only when there is something to commit (quiescence was given up from Kourou, #4277), not storing every validator's signature once an anchor is certified, history offload, or all three.
+
+Write amplification is the second storage finding: the host wrote 101 MB/s to grow the store 2.2 MB/s, 46×. Per node that is ~6 MB/s, 190 TB a year — within an enterprise SSD's rating, about three years of a consumer drive's. Reads were 3.7 MB/s and 630/s per node, nothing for any SSD; but the run's host had 66 GB of page cache over a 173 GB store, and the old-entry read latency (p95 16.6 ms at > 20,000 blocks) was measured with that cache. A server with 16 GB of RAM in front of a 1 TB store will see those reads go to the SSD; 32 GB is the sensible minimum.
+
+On a dedicated SSD the run's disk pressure disappears: the shared NVMe at 69 % busy becomes ~4 % per node, and the Monday fstrim stall that killed an earlier run (#4559's history) cannot recur. The run is pessimistic about disk *contention* and says nothing about disk *capacity* except that it will run out.
+
+## CPU and memory are not — unless the climbs are real
+
+A validator used a quarter of a core at the median and one core at peak; a follower joining used 0.57 cores while it pulled state. Eight cores are 3 % used. The climb — CPU per hour +30 % across the day at constant load — is the only thing that could change that: taken linearly and unbounded it fills 8 cores in about four months, but the run cannot say whether it is bound to the account set (which grew 155× in the day) or to uptime. The same holds for memory: 2 GiB peak is nothing on a server, and a 4 GiB GOMEMLIMIT halves the GC work seen here; the live heap's +60 MiB/day net climb (#4571) would reach a 4 GiB limit in about two months if unbounded. Both are settled by the fixed-universe run in the previous section, not by hardware.
+
+A year also contains restarts — upgrades, reboots — and this run had none. Restart behaviour is proven on the restart branch (#4502, #4545), not here.
+
+## The network link
+
+Bandwidth was not recorded (#4579). A lower bound is what a validator persists, 13.5 GB/day ≈ 1.3 Mbit/s received; with gossip fan-out and the headers, votes and certificates of two partitions at 1 block/s, a few Mbit/s is the likely figure — under 1 % of a gigabit link, but 0.5–2 TB a month against a metered VPS allowance.
+
+Latency is where the run is optimistic. Docker gave 0.05 ms between nodes; the internet gives 20–100 ms. Consequences:
+
+- **Consensus**: a DAG round is at least two message hops; at 100 ms RTT that is inside the 1 s block, but a Directory of 12 validators across continents is RTT-bound in a way this run did not exercise.
+- **Joins**: the records phase pulls 64 states per call (`join/state.go`, `statesChunk`). The 4 ms per account measured is ~0.25 s of validator-side work per call, so a 20,000-account join is ~320 calls; adding 50–100 ms RTT to each is +16–32 s on a 77 s join (+20–40 %). The one-hour bar is then reached near 700,000 accounts rather than 900,000.
+- **Follower lag**: ≤ 1 block in the run, bound by gossip propagation; at 100 ms RTT still sub-second.
+
+## The year, in one paragraph
+
+On 8 cores, 1 TB and a fast link, at 5 tps, a node from this run runs out of disk in about 75 days and would run out in about 5 months with no load at all; that is the finding that decides the deployment, and it is a protocol choice (#4580), not a hardware one. CPU and memory are each under 5 % of the box, and the link is under 1 % used; the three climbs the day recorded — CPU per hour, live heap, old-entry read latency — are the only way those change, and whether they stop when the account set stops growing is the one question the next run must answer. Internet latency makes joins 20–40 % slower and consensus RTT-bound, neither of which this run measured. Logs need rotation (~0.2 TB per node-year). Restarts are not covered.
 
 
 # Things to know about the record
@@ -186,6 +230,8 @@ Until that run, the honest statement is: a day of the follower walk shows no cos
 - **#4568** — the monitor's RSS alarm must read each container's `HostConfig.Memory`; the manifest should report both arms.
 - **#4569** — `soak.sh` should start `hostsample.py` itself.
 - **#4570** — manifest "Stopped early" heading after a clean finish.
+- **#4579** — the hourly `docker stats` capture drops NET I/O and BLOCK I/O; the store size is read by hand.
+- **#4580** — ~half the store's record writes are per block × validators, independent of load; a 1 TB node fills in months.
 - **#4571** — what holds ~90 MB of decoded anchor envelopes for ~12 h on every validator, what releases them, and whether the ~60 MiB/day residual is per account or per block..
 - #4559 left open for the decision on 5 vs 10 tps.
 
