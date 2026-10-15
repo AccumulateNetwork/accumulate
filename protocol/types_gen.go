@@ -992,7 +992,9 @@ type SystemLedger struct {
 	PreviousValidators [][]byte `json:"previousValidators,omitempty" form:"previousValidators" query:"previousValidators"`
 	// PreviousCommitteeActivationRound is the DAG round from which the previous network definition's validators ordered and verified this partition's rounds, zero when that definition took effect before v2-canaveral or at genesis.
 	PreviousCommitteeActivationRound uint64 `json:"previousCommitteeActivationRound,omitempty" form:"previousCommitteeActivationRound" query:"previousCommitteeActivationRound"`
-	extraData                        []byte
+	// BlockTimeNanos is the block's time in Unix nanoseconds, from v2-canaveral; zero on older blocks. Timestamp holds it to the second.
+	BlockTimeNanos int64 `json:"blockTimeNanos,omitempty" form:"blockTimeNanos" query:"blockTimeNanos"`
+	extraData      []byte
 }
 
 type SystemWriteData struct {
@@ -3449,6 +3451,7 @@ func (v *SystemLedger) Copy() *SystemLedger {
 		u.PreviousValidators[i] = encoding.BytesCopy(v)
 	}
 	u.PreviousCommitteeActivationRound = v.PreviousCommitteeActivationRound
+	u.BlockTimeNanos = v.BlockTimeNanos
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -6077,6 +6080,9 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 		}
 	}
 	if !(v.PreviousCommitteeActivationRound == u.PreviousCommitteeActivationRound) {
+		return false
+	}
+	if !(v.BlockTimeNanos == u.BlockTimeNanos) {
 		return false
 	}
 
@@ -13565,6 +13571,7 @@ var fieldNames_SystemLedger = []string{
 	12: "PreviousNetworkVersion",
 	13: "PreviousValidators",
 	14: "PreviousCommitteeActivationRound",
+	15: "BlockTimeNanos",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -13622,6 +13629,9 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.PreviousCommitteeActivationRound == 0) {
 		writer.WriteUint(14, v.PreviousCommitteeActivationRound)
+	}
+	if !(v.BlockTimeNanos == 0) {
+		writer.WriteInt(15, v.BlockTimeNanos)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -19398,6 +19408,9 @@ func (v *SystemLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUint(14); ok {
 		v.PreviousCommitteeActivationRound = x
 	}
+	if x, ok := reader.ReadInt(15); ok {
+		v.BlockTimeNanos = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
 	if err != nil {
@@ -21132,6 +21145,7 @@ func init() {
 		encoding.NewTypeField("previousNetworkVersion", "uint64"),
 		encoding.NewTypeField("previousValidators", "bytes[]"),
 		encoding.NewTypeField("previousCommitteeActivationRound", "uint64"),
+		encoding.NewTypeField("blockTimeNanos", "int64"),
 	}, "SystemLedger", "systemLedger")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -23414,6 +23428,7 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 		PreviousNetworkVersion           uint64                                       `json:"previousNetworkVersion,omitempty"`
 		PreviousValidators               encoding.JsonList[*string]                   `json:"previousValidators,omitempty"`
 		PreviousCommitteeActivationRound uint64                                       `json:"previousCommitteeActivationRound,omitempty"`
+		BlockTimeNanos                   int64                                        `json:"blockTimeNanos,omitempty"`
 		ExtraData                        *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -23458,6 +23473,9 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.PreviousCommitteeActivationRound == 0) {
 		u.PreviousCommitteeActivationRound = v.PreviousCommitteeActivationRound
+	}
+	if !(v.BlockTimeNanos == 0) {
+		u.BlockTimeNanos = v.BlockTimeNanos
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -26932,6 +26950,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 		PreviousNetworkVersion           uint64                                       `json:"previousNetworkVersion,omitempty"`
 		PreviousValidators               encoding.JsonList[*string]                   `json:"previousValidators,omitempty"`
 		PreviousCommitteeActivationRound uint64                                       `json:"previousCommitteeActivationRound,omitempty"`
+		BlockTimeNanos                   int64                                        `json:"blockTimeNanos,omitempty"`
 		ExtraData                        *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -26951,6 +26970,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 		u.PreviousValidators[i] = encoding.BytesToJSON(x)
 	}
 	u.PreviousCommitteeActivationRound = v.PreviousCommitteeActivationRound
+	u.BlockTimeNanos = v.BlockTimeNanos
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -26985,6 +27005,7 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 		}
 	}
 	v.PreviousCommitteeActivationRound = u.PreviousCommitteeActivationRound
+	v.BlockTimeNanos = u.BlockTimeNanos
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

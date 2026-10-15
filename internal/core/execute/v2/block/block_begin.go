@@ -146,6 +146,15 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 	if x.globals().Active.ExecutorVersion.V2KourouEnabled() {
 		ledgerState.LeaderRound = block.LeaderRound
 	}
+
+	// From v2-canaveral the ledger also records the block's time to the
+	// nanosecond. Timestamp encodes it to the second, and a node that joins
+	// or restarts raises its next block above this block's time as its peers
+	// do only if it reads the time they hold (consensus spec, "Restart").
+	ledgerState.BlockTimeNanos = 0
+	if x.globals().Active.ExecutorVersion.V2CanaveralEnabled() {
+		ledgerState.BlockTimeNanos = block.Time.UnixNano()
+	}
 	ledgerState.PendingUpdates = nil
 	ledgerState.AcmeBurnt = *big.NewInt(0)
 	ledgerState.Anchor = nil

@@ -2186,7 +2186,10 @@ it did. The pulled ledger hashes into the signed root, so the handoff reads
 `Q` and its round `P` from the same record, and a ledger whose `Index` is
 not `Q` is not the state `Q` is. The groups at or below `P` are in the
 state; the groups above it, in the order consensus committed them, are
-`Q + 1`, `Q + 2`, … (`Service.performHandoffAt`). Nothing is counted: the
+`Q + 1`, `Q + 2`, … (`Service.performHandoffAt`). From v2-canaveral the
+same record holds `Q`'s time to the nanosecond (`SystemLedger.BlockTimeNanos`,
+field 15; consensus.md, "Restart"), and the first block produced after the
+handoff is raised above it as the peers raised it. Nothing is counted: the
 first design numbered the buffer from the block the node stood at when it
 started collecting, which depends on when collecting started relative to the
 service learning its block (#4351) and produces a second time, under numbers

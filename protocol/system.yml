@@ -57,6 +57,10 @@ SystemLedger:
       description: is the DAG round from which the previous network definition's validators ordered and verified this partition's rounds, zero when that definition took effect before v2-canaveral or at genesis
       type: uint
       optional: true
+    - name: BlockTimeNanos
+      description: is the block's time in Unix nanoseconds, from v2-canaveral; zero on older blocks. Timestamp holds it to the second
+      type: int
+      optional: true
 
 SyntheticLedger:
   union: { type: account }

@@ -580,8 +580,17 @@ func (s *Service) seedFromCheckpoint() (bool, error) {
 	return true, nil
 }
 
+// ledgerBlockTime is the time a system ledger records for its block: to the
+// nanosecond from v2-canaveral, and before it to the second.
+func ledgerBlockTime(ledger *protocol.SystemLedger) time.Time {
+	if ledger.BlockTimeNanos != 0 {
+		return time.Unix(0, ledger.BlockTimeNanos).UTC()
+	}
+	return ledger.Timestamp
+}
+
 // stateBlockTime is the time the system ledger records for the executor's
-// last block, to the second, or zero when the store has no ledger.
+// last block, or zero when the store has no ledger.
 func (s *Service) stateBlockTime() time.Time {
 	var ledger *protocol.SystemLedger
 	err := s.config.Database.View(func(batch *database.Batch) error {
@@ -593,7 +602,7 @@ func (s *Service) stateBlockTime() time.Time {
 		}
 		return time.Time{}
 	}
-	return ledger.Timestamp
+	return ledgerBlockTime(ledger)
 }
 
 // initializeGenesis initializes the DAG with genesis certificates.

@@ -306,7 +306,7 @@ func (s *Service) pulledBlock(q uint64) (types.Round, time.Time, error) {
 		// the join waits for a state that records one.
 		return 0, time.Time{}, errors.NotReady.WithFormat("%s: the state at block %d records no leader round", s.config.Partition.ID, q)
 	}
-	return types.Round(ledger.LeaderRound), ledger.Timestamp, nil
+	return types.Round(ledger.LeaderRound), ledgerBlockTime(ledger), nil
 }
 
 // seedBelow is how far below the first state a joining node proves its

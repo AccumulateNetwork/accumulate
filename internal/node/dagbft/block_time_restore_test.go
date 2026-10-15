@@ -18,15 +18,29 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// pullStateAt is pullState with the time the ledger records for the block.
+// pullStateAt is pullState with the time the ledger records for the block,
+// as an executor from v2-canaveral records it: to the nanosecond, and to the
+// second in Timestamp.
 func pullStateAt(t *testing.T, svc *Service, index uint64, round types.Round, at time.Time) {
 	t.Helper()
-	u := protocol.PartitionUrl(svc.config.Partition.ID).JoinPath(protocol.Ledger)
+	putLedger(t, svc, &protocol.SystemLedger{Index: index, LeaderRound: uint64(round), Timestamp: at, BlockTimeNanos: at.UnixNano()})
+}
+
+// pullStateAtSeconds is pullStateAt as an executor before v2-canaveral records
+// it: to the second, in Timestamp alone.
+func pullStateAtSeconds(t *testing.T, svc *Service, index uint64, round types.Round, at time.Time) {
+	t.Helper()
+	putLedger(t, svc, &protocol.SystemLedger{Index: index, LeaderRound: uint64(round), Timestamp: at})
+}
+
+func putLedger(t *testing.T, svc *Service, ledger *protocol.SystemLedger) {
+	t.Helper()
+	ledger.Url = protocol.PartitionUrl(svc.config.Partition.ID).JoinPath(protocol.Ledger)
 	require.NoError(t, svc.config.Database.Update(func(batch *database.Batch) error {
 		if err := putNetwork(batch, svc.config.Partition.ID, svc.Committee()); err != nil {
 			return err
 		}
-		return batch.Account(u).Main().Put(&protocol.SystemLedger{Url: u, Index: index, LeaderRound: uint64(round), Timestamp: at})
+		return batch.Account(ledger.Url).Main().Put(ledger)
 	}))
 }
 
@@ -91,7 +105,7 @@ func TestBlockTime_ACheckpointWithoutATimeFallsBackToTheLedger(t *testing.T) {
 	restarted.config.DataDir = dir
 	ca.last = 1
 	recorded := time.Unix(100, 0).UTC()
-	pullStateAt(t, restarted, 1, 4, recorded)
+	pullStateAtSeconds(t, restarted, 1, 4, recorded)
 	require.NoError(t, restarted.initializeGenesis())
 	seeded, err := restarted.seedFromCheckpoint()
 	require.NoError(t, err)
@@ -104,7 +118,8 @@ func TestBlockTime_ACheckpointWithoutATimeFallsBackToTheLedger(t *testing.T) {
 }
 
 // A joining node produces the blocks after the state it pulled, and raises
-// the first one's time above the time that state's ledger records.
+// the first one's time above the time that state's ledger records. A ledger
+// written before v2-canaveral records it to the second.
 func TestBlockTime_AJoinedNodeTimesTheNextBlockAfterThePulledState(t *testing.T) {
 	svc, ca, author := newJoiningService(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -120,10 +135,77 @@ func TestBlockTime_AJoinedNodeTimesTheNextBlockAfterThePulledState(t *testing.T)
 	defer func() { cancel(); svc.wg.Wait() }()
 
 	recorded := time.Unix(200, 0).UTC()
-	pullStateAt(t, svc, 90, 20, recorded)
+	pullStateAtSeconds(t, svc, 90, 20, recorded)
 	require.NoError(t, svc.Handoff(90))
 
 	require.Len(t, ca.blocks, 1)
 	require.Equal(t, uint64(91), ca.blocks[0].Index)
+	require.Equal(t, recorded.Add(time.Millisecond), ca.blocks[0].Time)
+}
+
+// From v2-canaveral the ledger records the block's time to the nanosecond, so
+// a joining node raises the first block after the state it pulled exactly as
+// its peers raised it, even when that block's leader stamped it before the
+// pulled block's time.
+func TestBlockTime_AJoinedNodeTimesTheNextBlockAsItsPeers(t *testing.T) {
+	t90 := time.Unix(200, 999_500_000)
+	t91 := time.Unix(200, 500_000_000) // the next leader's clock is behind
+
+	peer, peerBlocks, pa := newCommitService(t, 1)
+	peer.node.Bullshark().SetLastCommitRound(19)
+	peer.node.Primary().SetRound(20)
+	for _, g := range []struct {
+		round types.Round
+		at    time.Time
+	}{{20, t90}, {22, t91}} {
+		_, err := peer.processCommittedGroup(group(commitCert(pa, g.round, g.at, nil)))
+		require.NoError(t, err)
+	}
+	want := peerBlocks.blocks[1].Time
+
+	svc, ca, author := newJoiningService(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	svc.ctx = ctx
+	svc.StartCollecting()
+	for _, g := range []struct {
+		round types.Round
+		at    time.Time
+	}{{20, t90}, {22, t91}} {
+		_, err := svc.processCommittedGroup(group(commitCert(author, g.round, g.at, nil)))
+		require.NoError(t, err)
+	}
+	svc.wg.Add(1)
+	go svc.blockProductionLoop()
+	defer func() { cancel(); svc.wg.Wait() }()
+
+	pullStateAt(t, svc, 90, 20, t90)
+	require.NoError(t, svc.Handoff(90))
+	require.Len(t, ca.blocks, 1)
+	require.Equal(t, want, ca.blocks[0].Time, "the joined node must time block 91 as its peer does")
+}
+
+// A restart with a checkpoint that records no time reads the block's time
+// from the ledger, to the nanosecond from v2-canaveral.
+func TestBlockTime_ALedgerTimeIsReadToTheNanosecond(t *testing.T) {
+	dir := t.TempDir()
+	store := persist.NewStore(dir)
+	store.SetFilename(checkpointFile)
+	require.NoError(t, store.Save(&persist.Checkpoint{
+		Version: 1, Partition: "bvn1", BlockIndex: 1, CurrentRound: 5, LastCommitRound: 4,
+	}))
+
+	restarted, ca, author := newCommitService(t, 1)
+	restarted.config.DataDir = dir
+	ca.last = 1
+	recorded := time.Unix(100, 999_500_000).UTC()
+	pullStateAt(t, restarted, 1, 4, recorded)
+	require.NoError(t, restarted.initializeGenesis())
+	seeded, err := restarted.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.True(t, seeded)
+
+	_, err = restarted.processCommittedGroup(group(commitCert(author, 6, time.Unix(100, 500_000_000), nil)))
+	require.NoError(t, err)
+	require.Len(t, ca.blocks, 1)
 	require.Equal(t, recorded.Add(time.Millisecond), ca.blocks[0].Time)
 }

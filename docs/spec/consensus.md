@@ -1546,21 +1546,23 @@ window it keeps, from 2 × `RescueWindow` below its leader.
 block's time is its leader's header stamp, raised to 1 ms after the
 previous block's time when it is not later (`Service.produce`), so the
 previous block's time is an input to the next block's, and block time is
-executed state. A node that resumed without it raised its first block from
-the zero time while its peers raised it from the last block's, and recorded
-a different time for a block whose leader stamped it before its
-predecessor. The time is known before the block is produced, so it is
-written with the position. The next block's time is raised above:
+executed state. A node that resumes or joins raises its next block above the
+time its peers hold for the block before it, read from:
 
 | what the node resumes from | the time |
 |---|---|
-| a checkpoint that records a time | that time, exactly as its peers hold it |
-| a checkpoint written before checkpoints recorded one, or none | the time the system ledger records for the executor's last block (`Service.stateBlockTime`) |
-| a joined state, at the handoff | the time the pulled state's ledger records for its block (`Service.pulledBlock`) |
+| a checkpoint that records a time | that time, written with the position before its block is produced |
+| a checkpoint that records none, or no checkpoint | the system ledger's time for the executor's last block (`Service.stateBlockTime`) |
+| a joined state, at the handoff | the pulled state's ledger time for its block (`Service.pulledBlock`) |
 
-The ledger records time to the second, and records nothing for a block the
-executor discarded as empty, so the last two rows match the peers exactly
-only when the next block's leader stamped it after the last block's time.
+**The system ledger records the block's time to the nanosecond from
+v2-canaveral** (`SystemLedger.BlockTimeNanos`, written at block begin beside
+`Timestamp`, which encodes it to the second; `ledgerBlockTime`). Before
+v2-canaveral only `Timestamp` exists, so the last two rows read the time to the
+second and match the peers only when the next block's leader stamped it
+after the last block's time. The ledger records nothing for a block the
+executor discarded as empty: the second row then reads the last recorded
+block's time, which a checkpoint that records a time makes moot.
 
 **A restart reloads the DAG it stopped with** (#4448). The DAG lives in
 memory, and a header needs a quorum of the previous round's certificates as
