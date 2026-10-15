@@ -16,11 +16,12 @@ import (
 // resume, then checks each one executed again against what it dropped
 // (#4558).
 func TestABlockExecutedAgainAfterARestartMustBeTheSame(t *testing.T) {
-	sim := &Sim{byPart: map[string][]*simNode{"BVN1": {{part: "BVN1"}, {part: "BVN1"}}}}
-	a, b := sim.byPart["BVN1"][0], sim.byPart["BVN1"][1]
+	// One node, so no other node's record can differ from its own: only the
+	// check against what it executed before the restart can report.
+	sim := &Sim{byPart: map[string][]*simNode{"BVN1": {{part: "BVN1"}}}}
+	a := sim.byPart["BVN1"][0]
 	for _, e := range []string{"2:x", "4:y", "6:z"} {
 		a.record(e)
-		b.record(e)
 	}
 
 	a.resumeRecord(1)
@@ -31,7 +32,8 @@ func TestABlockExecutedAgainAfterARestartMustBeTheSame(t *testing.T) {
 
 	a.record("8:w")
 	err := sim.CheckSequences("BVN1")
-	if err == nil || !strings.Contains(err.Error(), "block 3") {
-		t.Fatalf("block 3 executed as 8:w after the restart and 6:z before: got %v", err)
+	want := "node 0 executed block 3: 6:z before the restart, 8:w after"
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("block 3 executed as 8:w after the restart and 6:z before: got %v, want %q", err, want)
 	}
 }
