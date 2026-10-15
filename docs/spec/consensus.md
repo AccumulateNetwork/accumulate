@@ -328,6 +328,11 @@ broadcast:
   (`requestRoundCatchUp`). A node whose round has not advanced for 5 s
   re-shares the certificates of its current and previous round and asks for
   the rounds either side of its own, at most every 2 s (`recoverFromStall`).
+  Over the same stall it rebroadcasts its own certified header at its round,
+  the same header, about once a second with the uncertified ones: a member
+  whose header is certified and that cannot author the next round sends
+  nothing else its peers can attribute to it, and the stall line must count
+  it producing (`RoundStatus.Authors`, #4581).
 - **By digest.** A certificate whose parents the node lacks asks for those
   parents, and so does a header it will not vote on for the same reason.
   Digest requests are batched, deduplicated for 5 s and retried up to ten
