@@ -11,6 +11,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 )
 
 // TestAPartitionThatLostItsQuorumSaysSo — #4512 (executor spec, "A partition
@@ -48,8 +50,17 @@ func TestAPartitionThatLostItsQuorumSaysSo(t *testing.T) {
 	if res != nil && res.Ok {
 		t.Fatalf("BVN1 reached height 400 with two of four validators: the loss did not happen")
 	}
+	// A member counts as producing for primary.HeardWithin after the last
+	// header or vote it sent, and the run stops StallAfter after BVN1's last
+	// block, which is sooner: read then, a lost validator's last header still
+	// counts (#4558). Ask again until HeardWithin has passed, and no longer.
+	deadline := time.Now().Add(primary.HeardWithin + 5*time.Second)
 	for _, v := range []int{0, 1} {
 		rs := sim.byPart["BVN1"][v].n().Primary().RoundStatus()
+		for rs.Authors >= rs.Quorum && time.Now().Before(deadline) {
+			time.Sleep(100 * time.Millisecond)
+			rs = sim.byPart["BVN1"][v].n().Primary().RoundStatus()
+		}
 		t.Logf("BVN1 node %d: round %d, %d of %d producing, quorum %d", v, rs.Round, rs.Authors, rs.Committee, rs.Quorum)
 		if rs.Committee != 4 || rs.Quorum != 3 {
 			t.Fatalf("node %d: committee %d quorum %d, want 4 and 3", v, rs.Committee, rs.Quorum)
