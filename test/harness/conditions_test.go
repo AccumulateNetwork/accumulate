@@ -50,3 +50,37 @@ func TestAConditionAsksAgainWhenItsQueryIsShed(t *testing.T) {
 		t.Fatalf("queried %d times, want 2: the shed query and the one after it", s.calls)
 	}
 }
+
+// shedPendingFirst answers the message query with a message not yet
+// executed, sheds the first query for the account's pending IDs and lists the
+// message in every later one.
+type shedPendingFirst struct {
+	Services
+	pending int
+	id      *url.TxID
+}
+
+func (s *shedPendingFirst) Query(_ context.Context, _ *url.URL, q api.Query) (api.Record, error) {
+	if _, ok := q.(*api.PendingQuery); !ok {
+		return &api.MessageRecord[messaging.Message]{
+			ID:      s.id,
+			Message: &messaging.TransactionMessage{Transaction: &protocol.Transaction{Body: new(protocol.SendTokens)}},
+		}, nil
+	}
+	s.pending++
+	if s.pending == 1 {
+		return nil, errors.NotReady.With("query capacity exhausted, retry later")
+	}
+	return &api.RecordRange[api.Record]{Records: []api.Record{&api.TxIDRecord{Value: s.id}}}, nil
+}
+
+// The same for a pending condition whose query for the account's pending IDs
+// is shed (#4558).
+func TestAPendingConditionAsksAgainWhenItsQueryIsShed(t *testing.T) {
+	s := &shedPendingFirst{id: url.MustParse("alice").WithTxID([32]byte{1})}
+	h := New(t, s, TimeStep(0))
+	h.StepUntilN(3, Txn(s.id).IsPending())
+	if s.pending != 2 {
+		t.Fatalf("asked for the pending IDs %d times, want 2: the shed query and the one after it", s.pending)
+	}
+}
