@@ -180,17 +180,7 @@ func (s *Sim) restartStaggered(nodes, first []*simNode, gap, executorFirst time.
 		node.Restore(cp)
 		sn.lastSaved = cp
 		sn.height.Store(cp.BlockIndex)
-		// The node produces every block after the checkpoint again: one
-		// whose last blocks were empty resumes below the last block it
-		// produced (persist.ResumeFrom). Its record of the blocks it
-		// executed ends where it resumes, or a node that resumed a block
-		// lower than its peers records that block twice and the record
-		// differs from theirs from there on (#4558).
-		sn.seqMu.Lock()
-		if uint64(len(sn.seq)) > cp.BlockIndex {
-			sn.seq = sn.seq[:cp.BlockIndex]
-		}
-		sn.seqMu.Unlock()
+		sn.resumeRecord(cp.BlockIndex)
 		sn.resumedAt, sn.keptAtRestart = cp.BlockIndex, sn.kept.Load()
 		sn.nodeP.Store(node)
 	}
@@ -278,9 +268,48 @@ func (s *Sim) Sequences(part string) [][]string {
 	return out
 }
 
-// CheckSequences reports the first block at which two nodes of a partition
+// record appends a block the node executed to its record. A block it
+// executes again after a restart must be the one it executed before.
+func (sn *simNode) record(block string) {
+	sn.seqMu.Lock()
+	defer sn.seqMu.Unlock()
+	if len(sn.redo) > 0 {
+		if block != sn.redo[0] && sn.redoDiff == "" {
+			sn.redoDiff = fmt.Sprintf("block %d: %s before the restart, %s after", len(sn.seq)+1, sn.redo[0], block)
+		}
+		sn.redo = sn.redo[1:]
+	}
+	sn.seq = append(sn.seq, block)
+}
+
+// resumeRecord ends the record at the block a restarted node resumes after.
+// The node produces every block after its checkpoint again: one whose last
+// blocks were empty resumes below the last block it produced
+// (persist.ResumeFrom). Kept in the record, those blocks would be there
+// twice, and a node that resumed a block lower than its peers would differ
+// from them from there on; they are kept aside instead, and record checks
+// each block executed again against them (#4558).
+func (sn *simNode) resumeRecord(block uint64) {
+	sn.seqMu.Lock()
+	defer sn.seqMu.Unlock()
+	if uint64(len(sn.seq)) > block {
+		sn.redo = append(append([]string(nil), sn.seq[block:]...), sn.redo...)
+		sn.seq = sn.seq[:block]
+	}
+}
+
+// CheckSequences reports a block a node executed again after a restart
+// differently, and the first block at which two nodes of a partition
 // executed different things.
 func (s *Sim) CheckSequences(part string) error {
+	for i, sn := range s.byPart[part] {
+		sn.seqMu.Lock()
+		diff := sn.redoDiff
+		sn.seqMu.Unlock()
+		if diff != "" {
+			return fmt.Errorf("%s: node %d executed %s", part, i, diff)
+		}
+	}
 	seqs := s.Sequences(part)
 	for i := 1; i < len(seqs); i++ {
 		n := min(len(seqs[0]), len(seqs[i]))
