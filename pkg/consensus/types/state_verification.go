@@ -291,10 +291,23 @@ func (t *StateHashTracker) RecordRemoteHash(pos StatePosition, validator ed25519
 		return nil
 	}
 
+	// One report per member per round, its latest: a report at another
+	// position for the round replaces the member's earlier one
+	key := hexEncode(validator)
+	for p, reports := range t.stateHashes {
+		if p.Round != pos.Round || p == pos {
+			continue
+		}
+		delete(reports, key)
+		if len(reports) == 0 {
+			delete(t.stateHashes, p)
+		}
+	}
+
 	if t.stateHashes[pos] == nil {
 		t.stateHashes[pos] = make(map[string]remoteHash)
 	}
-	t.stateHashes[pos][hexEncode(validator)] = remoteHash{hash: hash, author: validator}
+	t.stateHashes[pos][key] = remoteHash{hash: hash, author: validator}
 
 	err := t.divergenceLocked(pos.Round)
 	if err != nil {

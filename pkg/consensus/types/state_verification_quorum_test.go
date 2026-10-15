@@ -149,3 +149,22 @@ func TestStateHashMessage_SignedForItsPartition(t *testing.T) {
 	msg.Partition = "Directory"
 	require.Error(t, msg.Verify())
 }
+
+// A committee member holds one report per round, its latest: varying the
+// position does not grow the tracker.
+func TestStateHashTracker_OneReportPerMemberPerRound(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	tr := NewStateHashTracker(100)
+	tr.SetCommittee(NewCommittee([]ValidatorInfo{{PublicKey: pub, Stake: 1}}, 1))
+
+	for block := uint64(0); block < 100; block++ {
+		tr.RecordRemoteHash(StatePosition{Epoch: 1, Round: 6, BlockIndex: block}, pub, StateHash{0xBB})
+	}
+	reports := 0
+	for _, r := range tr.stateHashes {
+		reports += len(r)
+	}
+	require.Equal(t, 1, reports)
+	require.Contains(t, tr.stateHashes, StatePosition{Epoch: 1, Round: 6, BlockIndex: 99}, "the latest report is kept")
+}
