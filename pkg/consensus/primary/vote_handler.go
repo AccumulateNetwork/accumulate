@@ -380,6 +380,22 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 		return
 	}
 
+	// A leader's header time is its block's time, so a vote is a statement
+	// that the time is not ahead of this validator's clock by more than the
+	// bound (consensus spec, invariant 13). A header stamped further ahead is
+	// voted on at a rebroadcast once this clock has reached it; one stamped
+	// behind is not refused, as the executor keeps block time increasing.
+	if ahead := time.Unix(0, header.Timestamp).Sub(p.now()); ahead > MaxHeaderTimeAhead {
+		if debugEnabled() {
+			slog.Debug("Header time ahead of this validator's clock — not voting",
+				"partition", p.config.Partition,
+				"author", hexEncode(header.Author),
+				"round", header.Round,
+				"ahead", ahead)
+		}
+		return
+	}
+
 	// Check if we already voted on this header (uses pendingMu)
 	headerDigest := header.Digest()
 	p.pendingMu.Lock()

@@ -184,6 +184,24 @@ So a validator holds batches in four places, for four reasons:
     (#4597, "Certificate catch-up"). Which peers a validator exchanges these
     topics with is not yet decided (DIFFERENCES C17).
 
+13. **A block's time is its leader's header time, bounded by the voters'
+    clocks.** The author of a header stamps it with its clock, and the
+    executor takes the leader's stamp as the block time, raised where needed
+    so block time strictly increases. Block time is executed state: the major
+    block schedule, expiry by time and every other comparison with the time
+    in state read it. So a validator votes on a header only when its stamp is
+    no more than **`MaxHeaderTimeAhead` = 5 s** ahead of the validator's own
+    clock, and a certificate is a quorum's statement that its header's time
+    was within that bound when they voted. The bound is a protocol constant,
+    the same in every node, not a setting. A header stamped further ahead is
+    not refused for good: the author rebroadcasts it, and the vote goes out
+    once the voter's clock has reached it, so an author whose clock runs
+    ahead is delayed by its own skew and no more. A stamp behind the voter's
+    clock is not refused, because a round's headers can wait on parents and
+    batches for longer than any useful bound, and a round none of whose
+    headers can be certified never advances; the executor keeps block time
+    increasing instead (Block time, below).
+
 ## 2. Specification — how it is implemented
 
 `pkg/consensus/worker` (the worker, its pending list, active store and
@@ -947,6 +965,28 @@ above a committee's recovery bursts, because banning a committee member
 is a liveness hazard (#4054). A bound keyed on the relaying peer silences
 everyone relayed through it (#4162 item 18); #4596 part 2 is where that is
 decided with the rest.
+
+### Block time
+
+The author stamps a header with its wall clock when it builds it
+(`Header.Timestamp`, Unix nanoseconds, covered by the header's signature;
+`Primary.createHeaderLockedWithRound`). The block produced from a committed
+leader group takes the leader certificate's stamp as its time, raised to
+1 ms after the previous block's time when it is not later
+(`Service.produce`), so block time strictly increases and every node
+derives the same time from the same certificate.
+
+A validator checks the stamp before it votes (invariant 13;
+`Primary.OnHeaderReceived`): a header stamped more than
+`MaxHeaderTimeAhead` (5 s, `primary.MaxHeaderTimeAhead`) after the
+validator's clock is not voted on, and is logged at `Debug`. The check sits
+after the epoch and round checks, so a header from a round out of range
+still drives round sync, and before the vote is recorded, so a rebroadcast
+of the same header is checked again and voted on once it is within the
+bound. The check is on voting only: a certificate received from a peer,
+live or through catch-up, is not checked against the receiver's clock, since
+its votes already were, and a node catching up receives certificates whose
+stamps are far behind its clock.
 
 ### The DAG facts the rest of the specification relies on
 

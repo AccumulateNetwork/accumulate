@@ -131,6 +131,13 @@ func debugEnabled() bool {
 // of traffic, not a buffer.
 const DefaultMaxExecutionLag = 8
 
+// MaxHeaderTimeAhead is how far ahead of a voter's clock a header may be
+// stamped and still be voted on (consensus spec, invariant 13). It is a
+// protocol constant, not a node setting: a leader's header time is its
+// block's time, and a certificate is the quorum's statement that the time was
+// within this bound of their clocks.
+const MaxHeaderTimeAhead = 5 * time.Second
+
 // DefaultMaxHeaderBytes is the bound on the batches one header carries. It is
 // sized to about one block interval of the executor's capacity -- some 500
 // transactions at ~250 bytes -- so a backlog of several blocks is spread over
@@ -308,6 +315,10 @@ type Primary struct {
 	// author another for its round. Nil means nothing is persisted.
 	onAuthored func(*types.Header) error
 
+	// now is the clock a header's time is checked against before a vote
+	// (MaxHeaderTimeAhead): time.Now, and a fixed clock in tests.
+	now func() time.Time
+
 	// Lifecycle management
 	// lifecycleMu guards ctx/cancel: Start runs in a goroutine spawned by
 	// Node.Start, so an early Stop raced the write (caught by -race once the
@@ -411,6 +422,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		newCerts:       make(chan *types.Certificate, config.NewCertsChannelSize),
 		deferred:       newDeferredVotes(),
 		retests:        make(chan *types.Header, 256),
+		now:            time.Now,
 	}
 	for _, w := range workers {
 		w.SetOnStored(p.BatchStored)
