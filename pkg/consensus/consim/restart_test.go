@@ -119,13 +119,16 @@ func TestRestartDoesNotReauthorARound(t *testing.T) {
 // It found #4503 (a voter asked for one missing batch per rebroadcast, so a
 // header naming hundreds took minutes to certify) while the simulator's
 // GossipSub had no flood publishing and lost most batches published after the
-// restart. With the node's options it loses next to none, passes with that
-// rule, and TestOnHeaderReceived_AsksForEveryMissingBatch pins #4503 instead
-// (#4582). It does not reproduce #4502 (a survivor's authored header whose
-// batches a checkpoint deleted): it passes with and without that fix, which
-// rests on TestCheckpointKeepsTheAuthoredHeadersBatches. Until 2026-10-03 the
-// stagger itself was not wired (scheduledRestarts ignored StopFirst) and the
-// test ran a plain simultaneous restart.
+// restart. With the node's options gossip loses next to none, the test passes
+// with that rule, and TestOnHeaderReceived_AsksForEveryMissingBatch pins #4503
+// instead (#4582). The restart still needs a fetch for the batches made while
+// nodes were down: a node that cannot fetch stalls BVN1 for about 16 s, which
+// the 10 s bound below catches (TestSoakTopologyLiveness guards the node's
+// fetch in steady state). It does not reproduce #4502 (a survivor's authored
+// header whose batches a checkpoint deleted): it passes with and without that
+// fix, which rests on TestCheckpointKeepsTheAuthoredHeadersBatches. Until
+// 2026-10-03 the stagger itself was not wired (scheduledRestarts ignored
+// StopFirst) and the test ran a plain simultaneous restart.
 func TestRestartAfterTwoNodesStopFirst(t *testing.T) {
 	runRestartOf(t,
 		Restart{Part: "BVN1", Vals: []int{0, 1, 2, 3}, AtHeight: 40, StopFirst: []int{2, 3}, StopFirstFor: 500 * time.Millisecond},
@@ -135,6 +138,10 @@ func TestRestartAfterTwoNodesStopFirst(t *testing.T) {
 			// empty, and an empty header needs no batch to be voted.
 			c.TPS = 200
 			c.MinRoundInterval = 20 * time.Millisecond
+			// Recovery takes 0-2 s of no executed progress. A node that
+			// cannot fetch a batch it lacks takes 16 s, under the default
+			// 20 s, so the bound is tighter here (#4582).
+			c.StallAfter = 10 * time.Second
 		})
 }
 
