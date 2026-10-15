@@ -28,8 +28,8 @@ type recordedLog struct {
 }
 
 func (h *recordedLog) Enabled(context.Context, slog.Level) bool { return true }
-func (h *recordedLog) WithAttrs([]slog.Attr) slog.Handler        { return h }
-func (h *recordedLog) WithGroup(string) slog.Handler             { return h }
+func (h *recordedLog) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h *recordedLog) WithGroup(string) slog.Handler            { return h }
 func (h *recordedLog) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()

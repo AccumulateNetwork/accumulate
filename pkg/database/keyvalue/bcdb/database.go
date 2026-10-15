@@ -55,10 +55,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-
-	bcdb "github.com/AccumulateNetwork/BlockchainDB/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
