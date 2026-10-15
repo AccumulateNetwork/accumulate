@@ -405,6 +405,11 @@ func getMessageResult(h *Harness, id *url.TxID) (*msgResult, bool) {
 	case errors.Is(err, errors.NotFound):
 		return nil, false
 
+	case errors.Is(err, errors.NotReady):
+		// The node shed the query (its API gate was full) and said to retry
+		// later: ask again at the next step.
+		return nil, false
+
 	default:
 		// Unknown error
 		require.NoError(h.TB, err)
@@ -657,6 +662,9 @@ func isPending(h *Harness, c *condition, r *msgResult) bool {
 				return true
 			}
 		}
+
+	case errors.Is(err, errors.NotReady):
+		// Shed by the node's API gate: ask again at the next step.
 
 	case !errors.Is(err, errors.NotFound):
 		// Unknown error
