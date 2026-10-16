@@ -69,6 +69,12 @@ type Config struct {
 	// has: a partition ahead at the restart resumes higher, and a target
 	// fixed beforehand could end the run before it had the blocks (#4603).
 	SustainAfterRestart uint64
+	// MaxBehind stops at success only once no node of a partition is more
+	// than this many blocks short of the partition's furthest: a node still
+	// catching up is given until Duration, as with TargetEveryNode, and one
+	// that executes slower than its peers never comes within it, for the
+	// caller to fail (#4603).
+	MaxBehind uint64
 
 	// NumWorkers per node. The soak runs 4 (cmd_init_network sets it), and the
 	// batch-store byte budget is divided among them, so a sim on 1 worker is
@@ -873,6 +879,9 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 				allAtTarget = false
 			}
 			if s.cfg.TargetEveryNode && minH < s.cfg.TargetHeight {
+				allAtTarget = false
+			}
+			if s.cfg.MaxBehind > 0 && maxH-minH > s.cfg.MaxBehind {
 				allAtTarget = false
 			}
 			for _, sn := range s.byPart[part] {
