@@ -26,9 +26,10 @@ import (
 // served as it is. The two are told apart by one read: a restarted index has
 // an entry in the era at the live count, a whole one cannot.
 type dataView struct {
-	live *indexing.DataIndexer
-	era  *indexing.DataIndexer // nil without an era
-	pre  uint64                // entries before the reorg that the live index does not count
+	live  *indexing.DataIndexer
+	era   *indexing.DataIndexer // nil without an era
+	pre   uint64                // entries before the reorg that the live index does not count
+	count uint64                // the live index's own count, when pre is set
 }
 
 // dataViews remembers each account's pre-reorg count. It never changes, so
@@ -44,8 +45,15 @@ func (s *Querier) dataView(batch *database.Batch, era *indexing.Era, u *url.URL)
 		return v, nil
 	}
 	v.era = indexing.Data(era.Batch, u)
+	var err error
 	if pre, ok := s.dataViews.Load(u.String()); ok {
 		v.pre = pre.(uint64)
+		if v.pre > 0 {
+			v.count, err = v.live.Count()
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("get count: %w", err)
+			}
+		}
 		return v, nil
 	}
 	live, err := v.live.Count()
@@ -57,7 +65,7 @@ func (s *Querier) dataView(batch *database.Batch, era *indexing.Era, u *url.URL)
 		return nil, err
 	}
 	s.dataViews.Store(u.String(), pre)
-	v.pre = pre
+	v.pre, v.count = pre, live
 	return v, nil
 }
 
@@ -131,10 +139,15 @@ func (v *dataView) Count() (uint64, error) {
 }
 
 // Entry returns the hash of entry i: the era's for i below the pre-reorg
-// count, else the live index's, renumbered.
+// count, else the live index's, renumbered. The live index is read through
+// the sidecar, which holds the pre-reorg entries under the live numbers, so
+// a live read is bounded by the live count: past it, the entry is not found.
 func (v *dataView) Entry(i uint64) ([]byte, error) {
 	if i < v.pre {
 		return v.era.Entry(i)
+	}
+	if v.pre > 0 && i-v.pre >= v.count {
+		return nil, errors.NotFound.WithFormat("data entry %d not found: the index has %d entries", i, v.pre+v.count)
 	}
 	return v.live.Entry(i - v.pre)
 }

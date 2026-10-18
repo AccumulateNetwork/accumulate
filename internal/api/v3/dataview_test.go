@@ -15,6 +15,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/overlay"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/encoding"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -39,9 +41,20 @@ func TestDataViewMapsARestartedIndex(t *testing.T) {
 	old := database.OpenInMemory(nil).Begin(true)
 	defer old.Discard()
 	writeEntries(t, old, u, "old", 409)
-	live := database.OpenInMemory(nil).Begin(true)
+	// The live index is read as the API reads it: through the sidecar, which
+	// holds the pre-reorg entries under the same numbers
+	side := memory.New(nil)
+	require.NoError(t, old.Commit())
+	liveStore := memory.New(nil)
+	live := database.New(overlay.Open(liveStore, side), nil).Begin(true)
 	defer live.Discard()
 	writeEntries(t, live, u, "new", 4)
+	require.NoError(t, live.Commit())
+	sideBatch := database.New(side, nil).Begin(true)
+	writeEntries(t, sideBatch, u, "old", 409)
+	require.NoError(t, sideBatch.Commit())
+	live = database.New(overlay.Open(liveStore, side), nil).Begin(false)
+	defer live.Discard()
 
 	s := new(Querier)
 	v, err := s.dataView(live, &indexing.Era{Batch: old}, u)
@@ -57,7 +70,7 @@ func TestDataViewMapsARestartedIndex(t *testing.T) {
 		require.Equal(t, want, got, "entry %d", i)
 	}
 	_, err = v.Entry(413)
-	require.Error(t, err)
+	require.ErrorIs(t, err, errors.NotFound, "the sidecar's entry 4 leaked through the live index")
 
 	// Remembered: the second view does not read the era's count again
 	_, ok := s.dataViews.Load(u.String())
