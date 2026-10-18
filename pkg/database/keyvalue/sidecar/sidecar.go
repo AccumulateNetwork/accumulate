@@ -11,7 +11,9 @@
 //
 // A record travels as its storage key, the 32-byte hash of its record key: GET
 // /key/<hex> answers 200 with the raw value, or 404 if the sidecar does not
-// hold it.
+// hold it. GET /era/<hex> answers with the value the key had before the reorg
+// (#4567): the overwritten store's, where the live database changed a key it
+// kept, else the sidecar's.
 package sidecar
 
 import (
@@ -33,6 +35,7 @@ import (
 )
 
 const keyPath = "/key/"
+const eraPath = "/era/"
 
 // maxValue bounds what the client reads from one answer. The largest record
 // in the sidecar is far smaller; this only stops a broken server.
@@ -43,18 +46,40 @@ const DefaultTimeout = 2 * time.Second
 
 // Handler serves store's values by storage key. It only reads.
 func Handler(store keyvalue.Beginner) http.Handler {
+	return HandlerWithEra(store, nil)
+}
+
+// HandlerWithEra is [Handler], and also serves era, the databases as they were
+// before the reorg (see [OpenEra]), under /era/. Without an era every /era/
+// read is not found.
+func HandlerWithEra(store, era keyvalue.Beginner) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, keyPath) {
+		var hexKey string
+		from := store
+		switch {
+		case r.Method != http.MethodGet:
+			http.NotFound(w, r)
+			return
+		case strings.HasPrefix(r.URL.Path, keyPath):
+			hexKey = r.URL.Path[len(keyPath):]
+		case strings.HasPrefix(r.URL.Path, eraPath):
+			hexKey = r.URL.Path[len(eraPath):]
+			from = era
+		default:
 			http.NotFound(w, r)
 			return
 		}
-		b, err := hex.DecodeString(r.URL.Path[len(keyPath):])
+		b, err := hex.DecodeString(hexKey)
 		if err != nil || len(b) != 32 {
 			http.Error(w, "the key must be 32 bytes of hex", http.StatusBadRequest)
 			return
 		}
+		if from == nil {
+			http.NotFound(w, r)
+			return
+		}
 
-		batch := store.Begin(nil, false)
+		batch := from.Begin(nil, false)
 		defer batch.Discard()
 		v, err := batch.Get(record.KeyFromHash(record.KeyHash(b)))
 		switch {
@@ -78,6 +103,16 @@ type Client struct {
 	Timeout time.Duration
 	HTTP    *http.Client
 	Logger  *slog.Logger
+
+	// Era reads /era/ instead of /key/: the value a key had before the reorg.
+	Era bool
+}
+
+// AsEra returns a client for the same server that reads the era.
+func (c *Client) AsEra() *Client {
+	d := *c
+	d.Era = true
+	return &d
 }
 
 // Begin implements [keyvalue.Beginner]. The change set only reads.
@@ -116,7 +151,11 @@ func (c *Client) fetch(h record.KeyHash) ([]byte, bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(c.URL, "/")+keyPath+hex.EncodeToString(h[:]), nil)
+	path := keyPath
+	if c.Era {
+		path = eraPath
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(c.URL, "/")+path+hex.EncodeToString(h[:]), nil)
 	if err != nil {
 		return nil, false, err
 	}
@@ -145,11 +184,41 @@ func (c *Client) fetch(h record.KeyHash) ([]byte, bool, error) {
 }
 
 // Over returns live with the sidecar behind it: a read that misses live is
-// read from the sidecar. Nothing read from the sidecar is written to live —
-// the node keeps no copy — and every write goes to live.
+// read from the sidecar, if the policy lets that record fall through, and the
+// records the policy says to keep are written back into live in the background
+// (#4560), so the hop is paid once. Every write goes to live.
 //
 // Only the API's database is opened this way. The executor reads live alone,
-// so what a node agrees on never depends on whether it has a sidecar.
-func Over(live keyvalue.Beginner, side *Client) keyvalue.Beginner {
-	return overlay.Open(live, side)
+// so what a node agrees on never depends on whether it has a sidecar; the
+// policy is what keeps the write-back from touching a record the executor
+// reads or writes.
+func Over(live keyvalue.Beginner, side keyvalue.Beginner, policy Policy) *overlay.Database {
+	return overlay.OpenWithRepairWhere(live, &gated{side, policy.FallThrough}, policy.Keep)
+}
+
+// gated answers not found for every key the predicate refuses, and reads the
+// rest from the store behind it.
+type gated struct {
+	store keyvalue.Beginner
+	allow func(*record.Key) bool
+}
+
+func (g *gated) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
+	return memory.NewChangeSet(memory.ChangeSetOptions{
+		Prefix: prefix,
+		Get: func(key *record.Key) ([]byte, error) {
+			if !g.allow(key) {
+				return nil, (*database.NotFoundError)(key)
+			}
+			b := g.store.Begin(nil, false)
+			defer b.Discard()
+			return b.Get(key)
+		},
+		ForEach: func(func(*record.Key, []byte) error) error {
+			return errors.NotAllowed.With("the sidecar cannot be walked")
+		},
+		Commit: func(map[[32]byte]memory.Entry) error {
+			return errors.NotAllowed.With("the sidecar is read-only")
+		},
+	})
 }

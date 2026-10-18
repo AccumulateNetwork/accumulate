@@ -7,6 +7,8 @@
 package run
 
 import (
+	"context"
+
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
@@ -15,6 +17,7 @@ import (
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/overlay"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/sidecar"
 )
 
@@ -50,7 +53,7 @@ func (q *Querier) Provides() []ioc.Provided {
 }
 
 func (q *Querier) start(inst *Instance) error {
-	store, err := q.open(inst)
+	store, era, err := q.open(inst)
 	if err != nil {
 		return err
 	}
@@ -60,24 +63,34 @@ func (q *Querier) start(inst *Instance) error {
 		return err
 	}
 
-	impl := api.NewQuerier(api.QuerierParams{
-		Logger:    (*logging.Slogger)(inst.logger).With("module", "api"),
+	logger := (*logging.Slogger)(inst.logger)
+	params := api.QuerierParams{
+		Logger:    logger.With("module", "api"),
 		Partition: q.Partition,
-		Database:  database.New(store, (*logging.Slogger)(inst.logger)),
+		Database:  database.New(store, logger),
 		Consensus: consensus,
-	})
+	}
+	if era != nil {
+		params.Era = database.New(era, logger)
+	}
+	impl := api.NewQuerier(params)
 	registerRpcService(inst, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
 	return querierProvides.Register(inst.services, q, impl)
 }
 
 // open returns the API's store: the partition's, with the sidecar behind it
-// when one is configured. Only the API reads through to the sidecar.
-func (q *Querier) open(inst *Instance) (keyvalue.Beginner, error) {
-	store, err := q.Storage.open(inst, q.Partition)
+// when one is configured, and then also the era (#4567): the databases as
+// they were before the reorg, which is the sidecar's era in front of the live
+// store. Only the API reads through to the sidecar.
+func (q *Querier) open(inst *Instance) (store, era keyvalue.Beginner, err error) {
+	store, err = q.Storage.open(inst, q.Partition)
 	if err != nil || q.Sidecar == "" {
-		return store, err
+		return store, nil, err
 	}
-	return sidecar.Over(store, &sidecar.Client{URL: q.Sidecar, Logger: inst.logger.With("module", "sidecar")}), nil
+	client := &sidecar.Client{URL: q.Sidecar, Logger: inst.logger.With("module", "sidecar")}
+	over := sidecar.Over(store, client, sidecar.PolicyFor(q.Partition))
+	inst.cleanup("sidecar overlay", func(context.Context) error { return over.Close() })
+	return over, overlay.Open(client.AsEra(), store), nil
 }
 
 func (n *NetworkService) Requires() []ioc.Requirement {

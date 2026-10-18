@@ -297,3 +297,28 @@ func (cs *blockingChangeSet) Commit() error {
 	<-cs.block
 	return cs.ChangeSet.Commit()
 }
+
+// A keep predicate limits what is written back: a hit it refuses is served
+// exactly as before, but never lands in a.
+func TestRepairKeepsOnlyWhatKeepAccepts(t *testing.T) {
+	a, b := memory.New(nil), memory.New(nil)
+	kept, refused := record.NewKey("history"), record.NewKey("state")
+
+	cs := b.Begin(nil, true)
+	require.NoError(t, cs.Put(kept, []byte("1")))
+	require.NoError(t, cs.Put(refused, []byte("2")))
+	require.NoError(t, cs.Commit())
+
+	d := OpenWithRepairWhere(a, b, func(k *record.Key) bool { return k.Equal(kept) })
+	defer d.Close()
+
+	for _, k := range []*record.Key{kept, refused} {
+		cs = d.Begin(nil, false)
+		_, err := cs.Get(k)
+		cs.Discard()
+		require.NoError(t, err)
+	}
+	waitFor(t, func() bool { return has(t, a, kept) })
+	require.False(t, has(t, b, record.NewKey("never")))
+	require.False(t, has(t, a, refused), "a refused key was written back")
+}

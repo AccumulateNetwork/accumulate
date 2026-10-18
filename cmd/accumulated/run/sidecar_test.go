@@ -47,7 +47,7 @@ func TestQuerierReadsTheSidecarFromAnotherNode(t *testing.T) {
 	live := memory.New(nil)
 	require.NoError(t, storageProvides.Register(node.services, &StorageService{Name: "BVN1"}, live))
 
-	api, err := (&Querier{Partition: "BVN1", Sidecar: fmt.Sprintf("http://127.0.0.1:%d", port)}).open(node)
+	api, era, err := (&Querier{Partition: "BVN1", Sidecar: fmt.Sprintf("http://127.0.0.1:%d", port)}).open(node)
 	require.NoError(t, err)
 	got, err := readValue(api, key)
 	require.NoError(t, err)
@@ -56,8 +56,18 @@ func TestQuerierReadsTheSidecarFromAnotherNode(t *testing.T) {
 	_, err = readValue(live, key)
 	require.ErrorIs(t, err, errors.NotFound, "the node's own store has the sidecar's value")
 
+	// The era is the sidecar's era over the live store; this server has no
+	// era, so a key only live holds is all it answers
+	_, err = readValue(era, key)
+	require.ErrorIs(t, err, errors.NotFound)
+	liveOnly := record.NewKey("Account", "new.acme", "Main")
+	putValue(t, live, liveOnly, value)
+	got, err = readValue(era, liveOnly)
+	require.NoError(t, err)
+	require.Equal(t, value, got)
+
 	// Without the setting, the API reads the node's store alone
-	plain, err := (&Querier{Partition: "BVN1"}).open(node)
+	plain, _, err := (&Querier{Partition: "BVN1"}).open(node)
 	require.NoError(t, err)
 	_, err = readValue(plain, key)
 	require.ErrorIs(t, err, errors.NotFound)

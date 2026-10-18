@@ -1206,6 +1206,8 @@ type SidecarService struct {
 	Path string
 	// Listen are the addresses to serve it on.
 	Listen []Multiaddr
+	// Era is the path to the directory holding the overwritten store (overwritten.db and overwritten.json, sidecar-extract -keep-overwritten): the archives' values for the keys the reorg restarted. With it the node also serves the era, the databases as they were before the reorg, under /era/ (issue 4567).
+	Era string
 }
 
 func (SidecarService) Type() ServiceType { return ServiceTypeSidecar }

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -51,7 +52,7 @@ func TestReadThrough(t *testing.T) {
 	put(t, side, both, "stale")
 	put(t, live, both, "live")
 
-	db := Over(live, serve(t, side))
+	db := Over(live, serve(t, side), Policy{})
 
 	v, err := get(db, onlySide)
 	require.NoError(t, err)
@@ -64,7 +65,8 @@ func TestReadThrough(t *testing.T) {
 	_, err = get(db, neither)
 	require.ErrorIs(t, err, errors.NotFound)
 
-	// The node keeps no copy of what it read
+	// The node keeps no copy of current state it read: Main is not history
+	time.Sleep(50 * time.Millisecond)
 	_, err = get(live, onlySide)
 	require.ErrorIs(t, err, errors.NotFound, "a sidecar hit was written to live")
 }
@@ -76,7 +78,7 @@ func TestReadThroughPrefix(t *testing.T) {
 	key := record.NewKey("Account", "old.acme", "Main")
 	put(t, side, prefix.AppendKey(key), "prefixed")
 
-	db := Over(memory.New(nil), serve(t, side))
+	db := Over(memory.New(nil), serve(t, side), Policy{})
 	b := db.Begin(prefix, false)
 	defer b.Discard()
 	v, err := b.Get(key)
@@ -92,7 +94,7 @@ func TestFailsSoft(t *testing.T) {
 		srv := httptest.NewServer(http.NotFoundHandler())
 		url := srv.URL
 		srv.Close()
-		_, err := get(Over(memory.New(nil), &Client{URL: url}), key)
+		_, err := get(Over(memory.New(nil), &Client{URL: url}, Policy{}), key)
 		require.ErrorIs(t, err, errors.NotFound)
 	})
 
@@ -103,7 +105,7 @@ func TestFailsSoft(t *testing.T) {
 		t.Cleanup(srv.Close)
 		logged := new(bytes.Buffer)
 		c := &Client{URL: srv.URL, Logger: slog.New(slog.NewTextHandler(logged, nil))}
-		_, err := get(Over(memory.New(nil), c), key)
+		_, err := get(Over(memory.New(nil), c, Policy{}), key)
 		require.ErrorIs(t, err, errors.NotFound)
 		require.Contains(t, logged.String(), "Sidecar read failed")
 	})

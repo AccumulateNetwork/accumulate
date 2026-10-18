@@ -10,9 +10,11 @@ import (
 	"bytes"
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cometbft/cometbft/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
@@ -33,6 +35,14 @@ type Querier struct {
 	db        database.Viewer
 	partition config.NetworkUrl
 	consensus api.ConsensusService
+
+	// era reads the databases as they were before the reorg (#4567), for a
+	// receipt of an entry written before it. Nil without a sidecar.
+	era      database.Viewer
+	eraRoute struct {
+		sync.Mutex
+		tree *routing.RouteTree
+	}
 }
 
 var _ api.Querier = (*Querier)(nil)
@@ -42,6 +52,10 @@ type QuerierParams struct {
 	Database  database.Viewer
 	Partition string
 	Consensus api.ConsensusService
+
+	// Era is the databases as they were before the reorg (#4567), read
+	// through the sidecar's era; optional.
+	Era database.Viewer
 }
 
 func NewQuerier(params QuerierParams) *Querier {
@@ -50,7 +64,43 @@ func NewQuerier(params QuerierParams) *Querier {
 	s.db = params.Database
 	s.consensus = params.Consensus
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
+	s.era = params.Era
 	return s
+}
+
+// withEra calls fn with the era, if this querier has one, and with nil
+// otherwise. The era's routing table is read once and kept.
+func (s *Querier) withEra(fn func(*indexing.Era) error) error {
+	if s.era == nil {
+		return fn(nil)
+	}
+	return s.era.View(func(batch *database.Batch) error {
+		era := &indexing.Era{Batch: batch}
+		tree, err := s.eraRouteTree(era)
+		if err != nil {
+			return err
+		}
+		era.Route = tree.Route
+		return fn(era)
+	})
+}
+
+func (s *Querier) eraRouteTree(era *indexing.Era) (*routing.RouteTree, error) {
+	s.eraRoute.Lock()
+	defer s.eraRoute.Unlock()
+	if s.eraRoute.tree != nil {
+		return s.eraRoute.tree, nil
+	}
+	table, err := era.RouteTable()
+	if err != nil {
+		return nil, err
+	}
+	tree, err := routing.NewRouteTree(table)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("build the era's route tree: %w", err)
+	}
+	s.eraRoute.tree = tree
+	return tree, nil
 }
 
 func (s *Querier) Type() api.ServiceType { return api.ServiceTypeQuery }
@@ -615,35 +665,56 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	if wantReceipt.ForHeight != 0 {
 		targetHeight = &wantReceipt.ForHeight
 	}
-	block, rootIndexIndex, receipt, err := indexing.ReceiptForChainIndex(s.partition, batch, record, int64(index), targetHeight)
+	var cr *indexing.ChainReceipt
+	var majorBlocks *database.Chain
+	err = s.withEra(func(era *indexing.Era) error {
+		var err error
+		cr, err = indexing.ChainReceiptFor(s.partition, batch, record, int64(index), targetHeight, era)
+		if err != nil {
+			return errors.UnknownError.WithFormat("get chain receipt: %w", err)
+		}
+		// The major block the root index entry is in, in the numbering of
+		// the root chain the receipt terminates at: the live partition's, or
+		// the era's for an entry written before the reorg
+		anchors := batch.Account(s.partition.AnchorPool())
+		if cr.Era {
+			anchors = era.Batch.Account(protocol.PartitionUrl(cr.Partition).JoinPath(protocol.AnchorPool))
+		}
+		majorBlocks, err = anchors.MajorBlockChain().Get()
+		if err != nil {
+			return errors.InternalError.WithFormat("load major block chain: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, errors.UnknownError.WithFormat("get chain receipt: %w", err)
+		return nil, err
 	}
 
 	// These values aren't meaningful once multiple receipts have been combined
+	receipt := cr.Receipt
 	receipt.StartIndex = 0
 	receipt.EndIndex = 0
 
 	r.Receipt = new(api.Receipt)
 	r.Receipt.Receipt = *receipt
-	r.Receipt.LocalBlock = block.BlockIndex
-	if block.BlockTime != nil {
-		r.Receipt.LocalBlockTime = *block.BlockTime
+	r.Receipt.LocalBlock = cr.RootEntry.BlockIndex
+	if cr.RootEntry.BlockTime != nil {
+		r.Receipt.LocalBlockTime = *cr.RootEntry.BlockTime
+	}
+	if cr.Era {
+		// Whose root chain the receipt ends at, since it is not this node's
+		r.Receipt.Partition = cr.Partition
 	}
 
 	// Find the major block
-	rxc, err := batch.Account(s.partition.AnchorPool()).MajorBlockChain().Get()
-	if err != nil {
-		return nil, errors.InternalError.WithFormat("load root index chain: %w", err)
-	}
-	_, major, err := indexing.SearchIndexChain(rxc, 0, indexing.MatchAfter, indexing.SearchIndexChainByRootIndexIndex(rootIndexIndex))
+	_, major, err := indexing.SearchIndexChain(majorBlocks, 0, indexing.MatchAfter, indexing.SearchIndexChainByRootIndexIndex(cr.RootIndexIndex))
 	switch {
 	case err == nil:
 		r.Receipt.MajorBlock = major.BlockIndex
 	case errors.Is(err, errors.NotFound):
 		// Not in a major block yet
 	default:
-		return nil, errors.InternalError.WithFormat("locate major block for root index entry %d: %w", rootIndexIndex, err)
+		return nil, errors.InternalError.WithFormat("locate major block for root index entry %d: %w", cr.RootIndexIndex, err)
 	}
 	return r, nil
 }

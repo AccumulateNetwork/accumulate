@@ -34,8 +34,17 @@ const batchSize = 256
 // hold no record that feeds hashChains, so what this writes changes only what
 // can be read, never what the network agrees on.
 func OpenWithRepair(a, b keyvalue.Beginner) *Database {
+	return OpenWithRepairWhere(a, b, nil)
+}
+
+// OpenWithRepairWhere is [OpenWithRepair], except only a value whose key keep
+// accepts is written into a. A nil keep accepts every key. This is how a
+// reader that puts records under the executor's store (#4560, the sidecar
+// served over the network) limits the write-back to records the executor
+// will never write itself.
+func OpenWithRepairWhere(a, b keyvalue.Beginner, keep func(*record.Key) bool) *Database {
 	d := Open(a, b)
-	d.repair = newRepairer(a)
+	d.repair = newRepairer(a, keep)
 	return d
 }
 
@@ -54,15 +63,17 @@ type entry struct {
 
 type repairer struct {
 	a       keyvalue.Beginner
+	keep    func(*record.Key) bool
 	pending chan entry // never closed: enqueue must never risk a send-on-closed panic
 	stopCh  chan struct{}
 	stopped chan struct{}
 	once    sync.Once
 }
 
-func newRepairer(a keyvalue.Beginner) *repairer {
+func newRepairer(a keyvalue.Beginner, keep func(*record.Key) bool) *repairer {
 	r := &repairer{
 		a:       a,
+		keep:    keep,
 		pending: make(chan entry, queueSize),
 		stopCh:  make(chan struct{}),
 		stopped: make(chan struct{}),
@@ -74,7 +85,7 @@ func newRepairer(a keyvalue.Beginner) *repairer {
 // enqueue is nil-safe: [Open] passes a nil *repairer, so a plain overlay
 // costs nothing here.
 func (r *repairer) enqueue(key *record.Key, value []byte) {
-	if r == nil {
+	if r == nil || (r.keep != nil && !r.keep(key)) {
 		return
 	}
 	select {

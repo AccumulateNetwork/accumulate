@@ -10,6 +10,7 @@ import (
 	"context"
 
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/leveldb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/sidecar"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -32,8 +33,18 @@ func (s *SidecarService) start(inst *Instance) error {
 	}
 	inst.cleanup("sidecar", func(context.Context) error { return db.Close() })
 
+	var era keyvalue.Beginner
+	if s.Era != "" {
+		e, err := sidecar.OpenEra(inst.path(s.Era), db)
+		if err != nil {
+			return errors.UnknownError.WithFormat("open the era: %w", err)
+		}
+		inst.cleanup("sidecar era", func(context.Context) error { return e.Close() })
+		era = e
+	}
+
 	l := &HttpListener{Listen: s.Listen}
 	l.applyHttpDefaults()
-	_, err = l.startHTTP(inst, sidecar.Handler(db))
+	_, err = l.startHTTP(inst, sidecar.HandlerWithEra(db, era))
 	return err
 }
