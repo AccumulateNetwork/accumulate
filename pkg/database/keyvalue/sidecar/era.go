@@ -24,43 +24,62 @@ import (
 // Era is the databases as they were before the reorg (#4567). The extractor
 // keeps a key the live database holds as the live database's, so a chain the
 // reorg restarted under its old keys -- the Directory's root chain, its
-// anchor chains, the routing table -- is in no store it builds except the
-// overwritten store: for every such key, each archive's value when it
-// differs, under the storage key followed by the archive's index
-// (sidecar-extract -keep-overwritten).
+// anchor chains, the routing table -- and a data index it restarted are in
+// no store it builds except the overwritten stores: for every such key, each
+// archive's value when it differs, under the storage key followed by the
+// archive's index (sidecar-extract -keep-overwritten, -keep-overwritten-data).
 //
-// A read answers from the overwritten store, the first archive in index
-// order that holds the key, else from the sidecar. Nothing is written.
+// A read answers from the overwritten stores in order, each from the first
+// archive in index order that holds the key, else from the sidecar. Nothing
+// is written.
 type Era struct {
-	db   *leveldb.DB
-	n    int
-	side keyvalue.Beginner
+	stores []eraStore
+	side   keyvalue.Beginner
 }
 
-// OpenEra opens the overwritten store in dir (overwritten.db beside its
-// overwritten.json) read-only, over the sidecar.
-func OpenEra(dir string, side keyvalue.Beginner) (*Era, error) {
-	b, err := os.ReadFile(filepath.Join(dir, "overwritten.json"))
-	if err != nil {
-		return nil, err
-	}
-	var meta struct {
-		Archives []string `json:"archives"`
-	}
-	if err := json.Unmarshal(b, &meta); err != nil {
-		return nil, err
-	}
-	if len(meta.Archives) == 0 || len(meta.Archives) > 255 {
-		return nil, accerr.BadRequest.WithFormat("overwritten.json names %d archives", len(meta.Archives))
-	}
-	db, err := leveldb.OpenFile(filepath.Join(dir, "overwritten.db"), &opt.Options{ReadOnly: true, ErrorIfMissing: true})
-	if err != nil {
-		return nil, err
-	}
-	return &Era{db: db, n: len(meta.Archives), side: side}, nil
+type eraStore struct {
+	db *leveldb.DB
+	n  int
 }
 
-func (e *Era) Close() error { return e.db.Close() }
+// OpenEra opens the overwritten stores in dirs (overwritten.db beside its
+// overwritten.json, each) read-only, over the sidecar.
+func OpenEra(dirs []string, side keyvalue.Beginner) (*Era, error) {
+	e := &Era{side: side}
+	for _, dir := range dirs {
+		b, err := os.ReadFile(filepath.Join(dir, "overwritten.json"))
+		if err != nil {
+			_ = e.Close()
+			return nil, err
+		}
+		var meta struct {
+			Archives []string `json:"archives"`
+		}
+		if err := json.Unmarshal(b, &meta); err != nil {
+			_ = e.Close()
+			return nil, err
+		}
+		if len(meta.Archives) == 0 || len(meta.Archives) > 255 {
+			_ = e.Close()
+			return nil, accerr.BadRequest.WithFormat("%s: overwritten.json names %d archives", dir, len(meta.Archives))
+		}
+		db, err := leveldb.OpenFile(filepath.Join(dir, "overwritten.db"), &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+		if err != nil {
+			_ = e.Close()
+			return nil, err
+		}
+		e.stores = append(e.stores, eraStore{db, len(meta.Archives)})
+	}
+	return e, nil
+}
+
+func (e *Era) Close() error {
+	var err error
+	for _, s := range e.stores {
+		err = errors.Join(err, s.db.Close())
+	}
+	return err
+}
 
 // Begin implements [keyvalue.Beginner]. The change set only reads.
 func (e *Era) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
@@ -79,14 +98,16 @@ func (e *Era) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 func (e *Era) get(key *record.Key) ([]byte, error) {
 	h := key.Hash()
 	k := append(h[:], 0)
-	for i := 0; i < e.n; i++ {
-		k[32] = byte(i)
-		v, err := e.db.Get(k, nil)
-		switch {
-		case err == nil:
-			return v, nil
-		case !errors.Is(err, leveldb.ErrNotFound):
-			return nil, err
+	for _, s := range e.stores {
+		for i := 0; i < s.n; i++ {
+			k[32] = byte(i)
+			v, err := s.db.Get(k, nil)
+			switch {
+			case err == nil:
+				return v, nil
+			case !errors.Is(err, leveldb.ErrNotFound):
+				return nil, err
+			}
 		}
 	}
 	if e.side == nil {

@@ -34,8 +34,12 @@ func (s *SidecarService) start(inst *Instance) error {
 	inst.cleanup("sidecar", func(context.Context) error { return db.Close() })
 
 	var era keyvalue.Beginner
-	if s.Era != "" {
-		e, err := sidecar.OpenEra(inst.path(s.Era), db)
+	if len(s.Era) > 0 {
+		dirs := make([]string, len(s.Era))
+		for i, d := range s.Era {
+			dirs[i] = inst.path(d)
+		}
+		e, err := sidecar.OpenEra(dirs, db)
 		if err != nil {
 			return errors.UnknownError.WithFormat("open the era: %w", err)
 		}

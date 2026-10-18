@@ -116,7 +116,7 @@ func TestEra(t *testing.T) {
 
 	side := memory.New(nil)
 	put(t, side, dropped, "from the sidecar")
-	era, err := OpenEra(dir, side)
+	era, err := OpenEra([]string{dir}, side)
 	require.NoError(t, err)
 	defer era.Close()
 

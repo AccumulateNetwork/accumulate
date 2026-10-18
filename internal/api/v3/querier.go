@@ -43,6 +43,7 @@ type Querier struct {
 		sync.Mutex
 		tree *routing.RouteTree
 	}
+	dataViews dataViews
 }
 
 var _ api.Querier = (*Querier)(nil)
@@ -83,6 +84,21 @@ func (s *Querier) withEra(fn func(*indexing.Era) error) error {
 		era.Route = tree.Route
 		return fn(era)
 	})
+}
+
+// withDataView calls fn with the view of the account's data index (dataView),
+// through the era when this querier has one.
+func withDataView[T any](s *Querier, batch *database.Batch, u *url.URL, fn func(*dataView) (T, error)) (T, error) {
+	var r T
+	err := s.withEra(func(era *indexing.Era) error {
+		dv, err := s.dataView(batch, era, u)
+		if err != nil {
+			return err
+		}
+		r, err = fn(dv)
+		return err
+	})
+	return r, err
 }
 
 func (s *Querier) eraRouteTree(era *indexing.Era) (*routing.RouteTree, error) {
@@ -232,7 +248,9 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 
 	case *api.DataQuery:
 		if query.Index != nil {
-			r, err := s.queryDataEntryByIndex(ctx, batch, indexing.Data(batch, scope), *query.Index, true)
+			r, err := withDataView(s, batch, scope, func(dv *dataView) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
+				return s.queryDataEntryByIndex(ctx, batch, dv, *query.Index, true)
+			})
 			if r != nil {
 				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
 			}
@@ -240,7 +258,9 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		}
 
 		if query.Entry != nil {
-			r, err := s.queryDataEntryByHash(ctx, batch, indexing.Data(batch, scope), query.Entry, true)
+			r, err := withDataView(s, batch, scope, func(dv *dataView) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
+				return s.queryDataEntryByHash(ctx, batch, dv, query.Entry, true)
+			})
 			if r != nil {
 				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
 			}
@@ -248,14 +268,18 @@ func (s *Querier) query(ctx context.Context, batch *database.Batch, scope *url.U
 		}
 
 		if query.Range != nil {
-			r, err := s.queryDataEntryRange(ctx, batch, indexing.Data(batch, scope), query.Range)
+			r, err := withDataView(s, batch, scope, func(dv *dataView) (*api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]], error) {
+				return s.queryDataEntryRange(ctx, batch, dv, query.Range)
+			})
 			if r != nil {
 				r.LastBlockTime = s.getLastBlockTime(ctx, batch)
 			}
 			return r, err
 		}
 
-		r, err := s.queryLastDataEntry(ctx, batch, indexing.Data(batch, scope))
+		r, err := withDataView(s, batch, scope, func(dv *dataView) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
+			return s.queryLastDataEntry(ctx, batch, dv)
+		})
 		if r != nil {
 			r.LastBlockTime = s.getLastBlockTime(ctx, batch)
 		}
@@ -719,7 +743,7 @@ func (s *Querier) queryChainEntry(ctx context.Context, batch *database.Batch, re
 	return r, nil
 }
 
-func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
+func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Batch, record *dataView, index uint64, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	entryHash, err := record.Entry(index)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get entry hash: %w", err)
@@ -728,7 +752,7 @@ func (s *Querier) queryDataEntryByIndex(ctx context.Context, batch *database.Bat
 	return s.queryDataEntry(ctx, batch, record, index, entryHash, expand)
 }
 
-func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
+func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch, record *dataView) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	count, err := record.Count()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get count: %w", err)
@@ -739,12 +763,12 @@ func (s *Querier) queryLastDataEntry(ctx context.Context, batch *database.Batch,
 	return s.queryDataEntryByIndex(ctx, batch, record, count-1, true)
 }
 
-func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
+func (s *Querier) queryDataEntryByHash(ctx context.Context, batch *database.Batch, record *dataView, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	// TODO: Find a way to get the index without scanning the entire set
 	return s.queryDataEntry(ctx, batch, record, 0, entryHash, expand)
 }
 
-func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, index uint64, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
+func (s *Querier) queryDataEntry(ctx context.Context, batch *database.Batch, record *dataView, index uint64, entryHash []byte, expand bool) (*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]], error) {
 	txnHash, err := record.Transaction(entryHash)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get transaction hash: %w", err)
@@ -789,7 +813,7 @@ func (s *Querier) queryChainEntryRange(ctx context.Context, batch *database.Batc
 	return r, nil
 }
 
-func (s *Querier) queryDataEntryRange(ctx context.Context, batch *database.Batch, record *indexing.DataIndexer, opts *api.RangeOptions) (*api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]], error) {
+func (s *Querier) queryDataEntryRange(ctx context.Context, batch *database.Batch, record *dataView, opts *api.RangeOptions) (*api.RecordRange[*api.ChainEntryRecord[*api.MessageRecord[*messaging.TransactionMessage]]], error) {
 	total, err := record.Count()
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("get count: %w", err)

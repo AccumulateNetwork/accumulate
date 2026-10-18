@@ -8,6 +8,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,8 @@ import (
 	badger "github.com/dgraph-io/badger"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
+	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Overwritten is the progress file beside overwritten.db: the archives in
@@ -173,5 +176,164 @@ func keepOverwritten(out string, currentPaths, archiveArgs []string) error {
 		return err
 	}
 	log.Printf("done in %v: %d live keys; present %v, differ %v, unreadable %v", time.Since(start).Round(time.Second), prog.Seen, prog.Present, prog.Differ, prog.Unreadable)
+	return nil
+}
+
+// keepOverwrittenData builds overwritten.db in out for the data indexes the
+// reorg restarted (#4273): for every data account the live database (one
+// -current, read through the model) holds, each archive's value for the
+// index's count and for every entry below the live count, when it differs.
+// Those are the keys the live database holds with the post-reorg index's
+// values, so the sidecar does not have the pre-reorg ones; the entries at
+// and beyond the live count it does. Together they are the index as it was.
+func keepOverwrittenData(out, currentPath string, archiveArgs []string) error {
+	progPath := filepath.Join(out, "overwritten.json")
+	prog := &Overwritten{Present: map[string]int64{}, Differ: map[string]int64{}, Unreadable: map[string]int64{}}
+	type arch struct {
+		*archive
+		txn   *badger.Txn
+		moves *badger.Iterator
+	}
+	var archives []arch
+	for _, arg := range archiveArgs {
+		name, path, ok := strings.Cut(arg, "=")
+		if !ok {
+			return fmt.Errorf("archive %q: want name=path", arg)
+		}
+		group, _, _ := strings.Cut(name, "/")
+		db, err := badger.Open(badger.DefaultOptions(path).WithReadOnly(true).WithLogger(nil))
+		if err != nil {
+			return fmt.Errorf("archive %s: %w", name, err)
+		}
+		a := &archive{group: group, name: name, db: db, log: &vlog{dir: path}}
+		txn := db.NewTransaction(false)
+		defer txn.Discard()
+		moves := a.newMoves(txn)
+		defer moves.Close()
+		archives = append(archives, arch{a, txn, moves})
+		prog.Archives = append(prog.Archives, name)
+	}
+	if _, err := os.Stat(progPath); err == nil {
+		return fmt.Errorf("%s exists; this mode does not resume, remove the output first", progPath)
+	}
+
+	live, err := leveldb.OpenFile(currentPath, &opt.Options{ReadOnly: true, ErrorIfMissing: true})
+	if err != nil {
+		return fmt.Errorf("current %s: %w", currentPath, err)
+	}
+	defer live.Close()
+	db, err := openOutput(filepath.Join(out, "overwritten.db"))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	batch := coredb.New(layered([]*leveldb.DB{live}), nil).Begin(false)
+	defer batch.Discard()
+
+	// The archive's value for the key, if it has one and it differs from v
+	differing := func(a arch, h [32]byte, v []byte) ([]byte, bool, error) {
+		item, err := a.txn.Get(h[:])
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil, false, nil
+		}
+		if err != nil {
+			return nil, false, fmt.Errorf("archive %s: %w", a.name, err)
+		}
+		prog.Present[a.name]++
+		av, err := a.resolve(item, a.moves)
+		if err != nil {
+			prog.Unreadable[a.name]++
+			return nil, false, nil
+		}
+		if bytes.Equal(av, v) {
+			return nil, false, nil
+		}
+		prog.Differ[a.name]++
+		return av, true, nil
+	}
+
+	wb := new(leveldb.Batch)
+	var accounts, dataAccounts, restarted int
+	start, report := time.Now(), time.Now()
+	err = batch.ForEachAccount(func(account *coredb.Account, _ [32]byte) error {
+		accounts++
+		if time.Since(report) > 30*time.Second {
+			report = time.Now()
+			log.Printf("%v: %d accounts, %d data accounts, %d with an archive value that differs; present %v, differ %v, unreadable %v", time.Since(start).Round(time.Second), accounts, dataAccounts, restarted, prog.Present, prog.Differ, prog.Unreadable)
+		}
+		main, err := account.Main().Get()
+		if err != nil {
+			return nil // not an account with state
+		}
+		switch main.Type() {
+		case protocol.AccountTypeDataAccount, protocol.AccountTypeLiteDataAccount:
+		default:
+			return nil
+		}
+		dataAccounts++
+		index := account.Data().Entry()
+		countKey := index.Key().Hash()
+		liveCount, err := live.Get(countKey[:], nil)
+		if errors.Is(err, leveldb.ErrNotFound) {
+			return nil // no index in the live database: nothing overwritten
+		}
+		if err != nil {
+			return err
+		}
+		n, _ := binary.Uvarint(liveCount)
+		var hit bool
+		for i, a := range archives {
+			av, differs, err := differing(a, countKey, liveCount)
+			if err != nil {
+				return err
+			}
+			if !differs {
+				continue
+			}
+			hit = true
+			wb.Put(append(append([]byte(nil), countKey[:]...), byte(i)), av)
+			for j := uint64(0); j < n; j++ {
+				h := index.Key().Append(int(j)).Hash()
+				lv, err := live.Get(h[:], nil)
+				if err != nil {
+					continue
+				}
+				av, differs, err := differing(a, h, lv)
+				if err != nil {
+					return err
+				}
+				if differs {
+					wb.Put(append(append([]byte(nil), h[:]...), byte(i)), av)
+				}
+			}
+		}
+		if hit {
+			restarted++
+			log.Printf("%v: live count %d, an archive differs", account.Url(), n)
+		}
+		if wb.Len() >= 10000 {
+			if err := db.Write(wb, &opt.WriteOptions{Sync: true}); err != nil {
+				return err
+			}
+			wb.Reset()
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if err := db.Write(wb, &opt.WriteOptions{Sync: true}); err != nil {
+		return err
+	}
+	prog.Done = true
+	b, err := json.MarshalIndent(prog, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(progPath, b, 0644); err != nil {
+		return err
+	}
+	log.Printf("done in %v: %d accounts, %d data accounts, %d with an archive value that differs; present %v, differ %v, unreadable %v", time.Since(start).Round(time.Second), accounts, dataAccounts, restarted, prog.Present, prog.Differ, prog.Unreadable)
 	return nil
 }
