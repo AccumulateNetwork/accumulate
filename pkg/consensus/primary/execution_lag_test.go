@@ -40,28 +40,42 @@ func TestCreateHeader_CarriesNoBatchesWhileExecutionLags(t *testing.T) {
 	require.Len(t, header.Payload, 1, "within the bound, the header takes the batch")
 	require.NoError(t, w.SubmitUser([]byte{9}))
 
-	// Past the bound: no batches, the batch stays available, user work refused
+	// Past the bound: no batches, the batch stays available -- and user work
+	// is still ACCEPTED: it queues in pending, bounded by the own store, and
+	// is not turned away (#4250).
 	w.RequeueBatches([]types.BatchDigest{digest})
 	lag = 5
 	header, err = p.CreateHeader()
 	require.NoError(t, err)
 	require.Empty(t, header.Payload, "past the bound, the header carries no batches")
 	require.Len(t, w.AvailableBatches(), 1, "the batch waits for a later header")
-	require.ErrorIs(t, w.SubmitUser([]byte{9}), worker.ErrExecutionLagging)
+	require.NoError(t, w.SubmitUser([]byte{9}), "user work is accepted while execution lags; it is queued, not refused")
 
-	// Caught up: proposing again, accepting again (listing the queue above
-	// drained it, so the batch is requeued as the worker would)
+	// HYSTERESIS: back under the bound but above half of it, headers stay
+	// empty. Tripping and clearing at one line oscillated with a 28 s period
+	// (#4250).
 	w.RequeueBatches([]types.BatchDigest{digest})
-	lag = 0
+	lag = 3
 	header, err = p.CreateHeader()
 	require.NoError(t, err)
-	require.Len(t, header.Payload, 1)
+	require.Empty(t, header.Payload, "under the bound but not yet at half of it: still no batches")
+
+	// At half the bound: proposing again.
+	w.RequeueBatches([]types.BatchDigest{digest})
+	lag = 2
+	header, err = p.CreateHeader()
+	require.NoError(t, err)
+	require.Len(t, header.Payload, 1, "at half the bound the executor has room: batches flow again")
 	require.NoError(t, w.SubmitUser([]byte{9}))
+
+	// And it does not re-trip until the bound itself is crossed again.
+	w.RequeueBatches([]types.BatchDigest{digest})
+	lag = 4
+	header, err = p.CreateHeader()
+	require.NoError(t, err)
+	require.Len(t, header.Payload, 1, "within the bound after clearing: still proposing")
 }
 
-// After a refusal window the backlog comes back a header at a time: a header
-// carries at most MaxHeaderBytes of batches, always at least one, and the rest
-// wait for the next header in order.
 func TestCreateHeader_MetersTheBacklog(t *testing.T) {
 	v := newTestValidator(t)
 	committee := newTestCommittee([]*testValidator{v}, 1)

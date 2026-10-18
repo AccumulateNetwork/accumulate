@@ -87,9 +87,16 @@ So a validator holds batches in four places, for four reasons:
    submitter can drain. So a validator whose executor is more than
    **`MaxExecutionLag` = 8 blocks** behind the DAG's last commit proposes
    **empty** headers — parents and weak links, no batches; rounds continue,
-   liveness is kept, nothing new is certified — and refuses user work until
-   execution catches up. The bound is a few seconds of traffic and is not a
-   buffer to be made bigger. When execution catches up, the batches that
+   liveness is kept, nothing new is certified — until execution has caught
+   up to **half** the bound. Tripping and clearing at one line was a control
+   loop with a 28-second period: eight full blocks already queued when it
+   tripped, the first header after clearing re-crossing the line, a
+   validator refusing its users 52–58% of the time (#4250). User work is
+   **not refused** while headers are empty: it queues in pending, the
+   synchronous seal slows the submitter, and the own-store budget (invariant
+   4) bounds what waits — a refusal at that moment discards work consensus
+   is about to have room for. The bound is a few seconds of traffic and is
+   not a buffer to be made bigger. When execution catches up, the batches that
    built up meanwhile come back **a header at a time**: a header carries at
    most `MaxHeaderBytes` of batches and the rest wait for the next. Draining
    the backlog into one header made one block the executor took ten to
@@ -101,11 +108,12 @@ So a validator holds batches in four places, for four reasons:
    Directory of eight. Each header therefore gets its share of a per-block
    budget, `MaxBlockBytes / (2 × validators)`, capped by `MaxHeaderBytes`; a
    block is bounded whatever the number of validators.
-10. **A refusal says why.** Refusing for a full own store (consensus is not
-   committing this validator's batches) and refusing for execution lag (commits
-   are fine, the executor is behind) are the same `NotReady` to the submitter
-   and different facts to the operator. Each is reported separately: a reason
-   in the error, and a gauge per reason.
+10. **A refusal says why.** A full own store (consensus is not committing
+   this validator's batches) is the one reason user work is refused, and it
+   says so: a reason in the error, and a gauge per reason. Execution lag is a
+   state, not a refusal (invariant 9, #4250): it is reported as its own gauge
+   and logged on transition, and the submitter sees a slower accept, not
+   `NotReady`.
 
 11. **A vote deferred is a vote asked for.** A validator votes on a header only
     when it holds everything that header names: every parent certificate and
@@ -203,13 +211,13 @@ before every header (`Primary.executionLagging`); when the lag exceeds
 `MaxExecutionLag` (8 blocks, `primary.DefaultMaxExecutionLag`, config
 `max_execution_lag`) the header takes no batches from
 `ConsumeAvailableBatches` — it still carries its parents and weak links so
-rounds and the DAG advance, and the batches stay queued for a later header —
-and every worker enters refusal with reason `execution-lagging`
-(`Worker.SetExecutionLagging`, `ErrExecutionLagging`, `NotReady` to the
-submitter). Both clear when the lag falls back under the bound. The reasons
-are separate gauges, `accumulate_dagbft_batch_store_refusing{partition,worker,reason}`
-with reason `store-full` or `execution-lagging`, and separate transition log
-lines; `accumulate_dagbft_execution_lagging{partition}` is the state. The
+rounds and the DAG advance, and the batches stay queued for a later header.
+It clears when the lag has fallen to half the bound (hysteresis, #4250). The
+workers are not involved: `SubmitUser` keeps accepting into pending, bounded
+by the own-store budget, and refuses only for `store-full`
+(`accumulate_dagbft_batch_store_refusing{partition,worker,reason}`);
+`accumulate_dagbft_execution_lagging{partition}` is the lag state, with a
+transition log line each way. The
 commit channel's depth is then a consequence of the bound plus the DAG's GC
 depth, not a buffer: it never holds more than the bound allows.
 

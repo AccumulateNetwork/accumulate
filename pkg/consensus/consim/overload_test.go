@@ -80,8 +80,13 @@ func TestOverload_BacklogComesBackAHeaderAtATime(t *testing.T) {
 	// Cap on: two batches per header, ~one block interval of capacity each.
 	capped := overloaded(t, 2*oneBatch+oneBatch/2, 30*time.Second)
 
-	require.Greater(t, uncapped.Refused, uint64(0), "the bound engaged: user work was refused")
-	require.Greater(t, uncapped.MaxLag["BVN1"], 8, "and the lag crossed it")
+	// The bound engaged -- the lag crossed it -- and turned no user away:
+	// while headers go empty, user work queues in pending under the
+	// own-store budget instead of being refused (#4250). Before that change
+	// this same run refused work every time the bound tripped, and the
+	// assertion here read Refused > 0.
+	require.Greater(t, uncapped.MaxLag["BVN1"], 8, "the bound engaged: the lag crossed it")
+	require.Zero(t, uncapped.Refused, "and no user work was refused for it")
 
 	// With the cap, one block is at most what four validators' headers may
 	// carry in one committed group, two batches each: its execution time is

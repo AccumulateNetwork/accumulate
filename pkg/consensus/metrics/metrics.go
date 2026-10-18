@@ -615,7 +615,7 @@ var (
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "batch_store_refusing",
-		Help:      "1 while a worker refuses user submissions, by reason: store-full (own uncommitted batches fill its share) or execution-lagging (the executor is more than MaxExecutionLag blocks behind the DAG's commits)",
+		Help:      "1 while a worker refuses user submissions, by reason: store-full (own uncommitted batches fill its share). Execution lag is not a refusal (#4250): while it exceeds MaxExecutionLag the primary proposes empty headers (execution_lagging) and user work queues in pending",
 	}, []string{"partition", "worker", "reason"})
 
 	// ExecutionLagBlocks is how many committed leader groups the executor has

@@ -278,28 +278,47 @@ func (p *Primary) SetExecutionLagSource(lag func() int, max int) {
 	}
 }
 
-// executionLagging decides, once per header, whether the executor is more
-// than MaxExecutionLag blocks behind the DAG's commits. Reported and logged
-// on transition; the workers are told so they refuse user work meanwhile.
+// executionLagging decides, once per header, whether the executor is far
+// enough behind the DAG's commits that the header should carry no batches.
+//
+// With HYSTERESIS (#4250): the bound trips when the lag exceeds
+// MaxExecutionLag and clears only when the lag has fallen to half of it.
+// Tripping and clearing at the same line was a control loop with a 28 s
+// period: eight full blocks were already queued when it tripped, empty
+// headers took a round or two to reach the queue, peers' headers kept the
+// blocks full meanwhile, and the first header after clearing re-crossed the
+// line -- a validator refusing its users 52-58% of wall time at 500 tps,
+// ~240 episodes an hour, for a lag that oscillated 2 -> 17 -> 4 (review
+// 2026-09-06, F4). Clearing at half the bound gives the executor room to
+// actually catch up before batches flow again.
+//
+// The workers are no longer told. While the primary proposes empty headers
+// the workers keep ACCEPTING user work into pending: a submitter is slowed
+// by the synchronous seal and bounded by the own-store budget (invariant 4),
+// which is what turns a refusal into a queue. Refusing was discarding work
+// at the exact moment consensus was about to have room for it.
 func (p *Primary) executionLagging() bool {
 	if p.config.ExecutionLag == nil {
 		return false
 	}
 	lag := p.config.ExecutionLag()
 	metrics.ExecutionLagBlocks.WithLabelValues(p.config.Partition).Set(float64(lag))
-	on := lag > p.config.MaxExecutionLag
+	max := p.config.MaxExecutionLag
+	resume := max / 2
+	was := p.lagging.Load()
+	on := lag > max
+	if was && lag > resume {
+		on = true // tripped, and not yet down to the resume line
+	}
 	if p.lagging.Swap(on) != on {
 		if on {
 			metrics.ExecutionLagging.WithLabelValues(p.config.Partition).Set(1)
 			slog.Warn("Execution lags consensus: proposing headers without batches until it catches up",
-				"lag", lag, "max", p.config.MaxExecutionLag, "partition", p.config.Partition)
+				"lag", lag, "max", max, "resumeAt", resume, "partition", p.config.Partition)
 		} else {
 			metrics.ExecutionLagging.WithLabelValues(p.config.Partition).Set(0)
 			slog.Info("Execution has caught up: proposing batches again",
-				"lag", lag, "max", p.config.MaxExecutionLag, "partition", p.config.Partition)
-		}
-		for _, w := range p.workers {
-			w.SetExecutionLagging(on)
+				"lag", lag, "max", max, "resumeAt", resume, "partition", p.config.Partition)
 		}
 	}
 	return on
