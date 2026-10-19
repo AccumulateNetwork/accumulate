@@ -54,6 +54,14 @@ type DAG struct {
 	gcDepth types.Round
 	// lastCommitRound is the most recently committed round.
 	lastCommitRound types.Round
+	// seed is the round Restore or Rejoin seeded the DAG at: certificates at
+	// it and one above enter without their parents, whose history is in the
+	// restored state (consensus.md, "Restart"). Zero when never seeded.
+	seed types.Round
+	// onInsert is told of each certificate inserted, once (#4595): the node
+	// writes it to the DAG store so the persisted tail is the DAG as of the
+	// crash, whatever a weak link names.
+	onInsert func(*types.Certificate)
 	// latestRound is the highest round number seen.
 	latestRound types.Round
 	// certifiedBatches maps each batch digest a certified header names to
@@ -95,6 +103,13 @@ func (d *DAG) Insert(cert *types.Certificate) error {
 	return d.insert(cert, true)
 }
 
+// SetOnInsert sets the function told of each certificate Insert adds.
+func (d *DAG) SetOnInsert(fn func(*types.Certificate)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onInsert = fn
+}
+
 // Restore inserts certificates a restarted node persisted with its
 // checkpoint (#4448), lowest round first, without requiring their parents:
 // the persisted tail begins RescueWindow below the commit floor, and the
@@ -120,7 +135,18 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 	}
 
 	d.mu.Lock()
-	defer d.mu.Unlock()
+	inserted, err := d.insertLocked(cert, checkParents)
+	onInsert := d.onInsert
+	d.mu.Unlock()
+	if inserted && checkParents && onInsert != nil {
+		onInsert(cert)
+	}
+	return err
+}
+
+// insertLocked is insert under mu. It reports whether the certificate was
+// new to the DAG.
+func (d *DAG) insertLocked(cert *types.Certificate, checkParents bool) (bool, error) {
 
 	round := cert.Round()
 	key := toAuthorKey(cert.Author())
@@ -135,27 +161,34 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 	if roundMap, ok := d.rounds[round]; ok {
 		if existing, exists := roundMap[key]; exists {
 			if existing.Digest() == cert.Digest() {
-				return nil // idempotent re-insert
+				return false, nil // idempotent re-insert
 			}
 			d.equivocations.Add(1)
-			return fmt.Errorf("%w: author %x round %d", ErrEquivocation, key[:4], round)
+			return false, fmt.Errorf("%w: author %x round %d", ErrEquivocation, key[:4], round)
 		}
 	}
 
-	// Validate parents exist (skip for round 0 which has no parents).
-	// Once there is a commit floor, parents at or below it may be
-	// legitimately absent: garbage collection prunes them, and a node
-	// rejoining after a fast sync (#4058) starts with an EMPTY DAG whose
-	// history is embodied in its restored state — requiring parents there
-	// recurses into pruned history and wedges the rejoin. The certificate
-	// itself is quorum-verified before insertion, so accepting it without
-	// its pruned parents does not weaken trust.
-	pruned := d.lastCommitRound > 0 && round <= d.lastCommitRound+1
-	if checkParents && round > 0 && !pruned && len(cert.Parents()) > 0 {
+	// A certificate enters the DAG only with its parents present (Narwhal
+	// §4). Ordering flattens a leader's ancestors as found here and skips a
+	// parent it does not hold, so this is what makes the committed groups
+	// the same on every node whatever order certificates arrived in
+	// (#4595). It used to be waived for everything at or below the last
+	// commit plus one — in normal running, every late certificate.
+	//
+	// Two exceptions, where the parents legitimately cannot be here and no
+	// ordering walk reaches: a seed (Restore, Rejoin) accepts certificates
+	// at S and S+1 without their parents, since its history is embodied in
+	// the restored state and asking for it recurses into collected rounds
+	// (#4058); and a certificate within a weak-link window of the
+	// collection floor may name parents that were collected, which a digest
+	// cannot tell from one that is missing.
+	waived := (d.seed > 0 && round <= d.seed+1) ||
+		(d.gcCutoff > 0 && round <= d.gcCutoff+types.WeakLinkWindow)
+	if checkParents && round > 0 && !waived && len(cert.Parents()) > 0 {
 		for _, parentDigest := range cert.Parents() {
 			// Use digest index for O(1) lookup
 			if _, found := d.digestIndex[parentDigest]; !found {
-				return errors.New("parent certificate not found in DAG")
+				return false, errors.New("parent certificate not found in DAG")
 			}
 		}
 	}
@@ -182,7 +215,10 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 	// Update latest round. The round advance is a collection point too: the
 	// DAG holds gcDepth rounds behind the frontier whether or not this node
 	// is committing, so a halted executor does not grow it without bound
-	// (#4239).
+	// (#4239). A node whose commits fall behind what this collects is
+	// stranded: Bullshark orders nothing more once the collection floor is
+	// within a rescue window of its last commit (#4595), rather than
+	// ordering a group over the collected rounds that its peers did not.
 	if round > d.latestRound {
 		d.latestRound = round
 		if round > d.gcDepth {
@@ -190,7 +226,15 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 		}
 	}
 
-	return nil
+	return true, nil
+}
+
+// CollectedBelow is the round below which every round has been collected;
+// zero when nothing has been.
+func (d *DAG) CollectedBelow() types.Round {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.gcCutoff
 }
 
 // HasCertifiedBatch reports whether a certified header in the DAG names the
@@ -215,7 +259,16 @@ func (d *DAG) InsertGenesis(cert *types.Certificate) error {
 	}
 
 	d.mu.Lock()
-	defer d.mu.Unlock()
+	err := d.insertGenesisLocked(cert)
+	onInsert := d.onInsert
+	d.mu.Unlock()
+	if err == nil && onInsert != nil {
+		onInsert(cert)
+	}
+	return err
+}
+
+func (d *DAG) insertGenesisLocked(cert *types.Certificate) error {
 
 	key := toAuthorKey(cert.Author())
 
@@ -326,6 +379,9 @@ func (d *DAG) SetLastCommitRound(round types.Round) {
 
 	if round > d.lastCommitRound {
 		d.lastCommitRound = round
+	}
+	if round > d.seed {
+		d.seed = round
 	}
 }
 

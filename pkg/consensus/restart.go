@@ -208,18 +208,23 @@ func (n *Node) persistBatches(h *types.Header, names map[string]bool) {
 	}
 }
 
-// persistAuthored is the primary's hook: before a header this node authored
-// is broadcast, the header is on disk, and so is the DAG from a few rounds
-// below its parents up, with the batches this node holds. A block checkpoint
-// follows the executor, which can be many rounds behind consensus when the
-// node stops; the rounds between it and the frontier are then on disk only
-// because each header this node authored wrote them.
-func (n *Node) persistAuthored(h *types.Header) error {
-	from := types.Round(0)
-	if h.Round > 4 {
-		from = h.Round - 4
+// persistInserted is the DAG's hook: a certificate is on disk as soon as it
+// is in the DAG, with the batches it names that this node holds, so the
+// store holds the DAG as of a crash and the restored tail is closed under
+// parents whatever a weak link names (#4595). Writing from four rounds below
+// each authored header missed a straggler named only as a weak link.
+func (n *Node) persistInserted(c *types.Certificate) {
+	if _, err := n.dagStore.PutCertificate(c); err != nil {
+		slog.Error("Persisting certificate for restart", "partition", n.config.Partition, "error", err)
+		return
 	}
-	n.persistRounds(from, map[string]bool{})
+	n.persistBatches(c.Header, map[string]bool{})
+}
+
+// persistAuthored is the primary's hook: before a header this node authored
+// is broadcast, the header is on disk with the batches it names. The DAG it
+// was built on is already there, written as each certificate was inserted.
+func (n *Node) persistAuthored(h *types.Header) error {
 	for _, e := range h.Payload {
 		if b, _ := (multiWorkerBatchStore{n.workers}).GetBatch(e.Digest); b != nil {
 			if _, err := n.dagStore.PutBatch(b); err != nil {

@@ -8,6 +8,7 @@ package bullshark
 
 import (
 	"bytes"
+	"log/slog"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -17,6 +18,22 @@ import (
 // It returns an ordered list of certificates to commit, with the oldest first.
 func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutput {
 	b.mu.Lock()
+
+	// A walk over a collected round orders a group the peers did not
+	// (#4595): a node whose commits trail the frontier by more than the DAG
+	// depth has lost rounds the walk from its last commit still reaches
+	// (consensus.md, "DAG retention"). It is stranded — the batches those
+	// rounds name are outside every peer's retention — and orders nothing
+	// more, rather than something different.
+	if cutoff := b.dag.CollectedBelow(); cutoff > 0 && cutoff+rescueWindow > b.lastCommitRound {
+		if !b.stranded {
+			b.stranded = true
+			slog.Error("Ordering stopped: the DAG has collected rounds the next ordering walk reaches; this node needs to rejoin",
+				"partition", b.partition, "lastCommit", b.lastCommitRound, "collectedBelow", cutoff)
+		}
+		b.mu.Unlock()
+		return nil
+	}
 
 	// Find all uncommitted leaders linked to this one.
 	leaders := b.orderLeaders(leader)
@@ -128,7 +145,7 @@ func (b *Bullshark) orderLeaders(leader *types.Certificate) []*types.Certificate
 // reachable; the old lastCommitRound+1 floor excluded exactly the
 // certificates the weak links exist to save. The committed-digest set keeps
 // the wider walk from re-emitting anything.
-const rescueWindow = 32
+const rescueWindow = types.RescueWindow
 
 // RescueWindow is rescueWindow for a node seeding its position: the first
 // leaders it commits after a seed walk this far below it, and certificates

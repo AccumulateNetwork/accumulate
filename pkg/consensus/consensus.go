@@ -302,6 +302,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 			return nil, err
 		}
 		p.SetOnAuthored(n.persistAuthored)
+		n.dag.SetOnInsert(n.persistInserted)
 	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
@@ -1034,10 +1035,9 @@ func (n *Node) processBullshark() {
 				return
 			}
 
-			// Garbage collect old rounds
-			if lastCommit := n.bullshark.LastCommitRound(); lastCommit > n.config.DAGGCDepth {
-				n.dag.GarbageCollect(lastCommit)
-			}
+			// Tell the DAG the commit round — it bounds collection on round
+			// advance (#4595) — and collect once the depth is passed.
+			n.dag.GarbageCollect(n.bullshark.LastCommitRound())
 		}
 	}
 }

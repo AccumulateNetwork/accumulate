@@ -88,6 +88,10 @@ type Bullshark struct {
 	// already-delivered messages.
 	committed map[types.CertificateDigest]types.Round
 
+	// stranded is set once ordering has refused to proceed over collected
+	// rounds (#4595); the refusal is logged once.
+	stranded bool
+
 	// onCommit is called when certificates are committed.
 	// This callback is used to notify external components (e.g., workers)
 	// that batches associated with these certificates can be pruned.

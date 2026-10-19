@@ -313,6 +313,10 @@ are outside every peer's retention, so it could not have executed them
 (invariant 6, E11). A healthy node commits within a few rounds of the
 frontier, and the round advance collects nothing the commit path would not.
 Collection walks only the rounds the cutoff moved over, never the whole DAG.
+Once the collection floor is within a rescue window of its last commit,
+Bullshark orders nothing more (#4595): the walk from its last commit reaches
+rounds that are gone, and proceeding would order a group its peers did not.
+The refusal is logged once; the node needs a join.
 
 ### Certificate catch-up
 
@@ -344,9 +348,16 @@ named a request of every node at once, and a peer that had seen node A's
 request *k* answered skipped node B's request *k*. A node numbers its
 requests from a random starting point, so one restarted under the same key
 does not reuse the IDs its peers saw answered before it stopped (#4470).
-What arrives is verified against the committee and inserted. A
-certificate whose parents are missing is held (up to `2 × 10 × committee`
-certificates) until they arrive, and its parents are asked for.
+What arrives is verified against the committee and inserted. **A
+certificate enters the DAG only with its parents present** (Narwhal §4),
+whatever the commit floor: ordering flattens a leader's ancestors as found in
+the DAG, so this is what makes the committed groups the same on every node
+whatever order certificates arrived in (#4595). The DAG waives it only where
+the parents legitimately cannot be there and no ordering walk reaches: at a
+seed (`S` and `S + 1`, "Restart") and within a weak-link window of the
+collection floor. A certificate whose parents are missing is held (up to
+`2 × 10 × committee` certificates) until they arrive, and its parents are
+asked for.
 
 **A held certificate is released whenever its parents are in the DAG,
 whoever inserted them** (#4515). A copy of a held certificate is reported
@@ -526,10 +537,16 @@ named by digest, written once):
   again (#4502). Files neither this checkpoint nor the previous one lists
   are removed, except those written after the checkpoint began. The write
   cost per block is the certificates and batches the block adds.
+- **As each certificate is inserted**, that certificate with the batches it
+  names that the node holds (`DAG.SetOnInsert`, `Node.persistInserted`),
+  so the store holds the DAG as of a crash and the restored tail is closed
+  under parents whatever a weak link names (#4595). The executor, and so the
+  checkpoint, can be many rounds behind consensus when the node stops; those
+  rounds are on disk because inserting them wrote them. Writing from four
+  rounds below each authored header missed a straggler named only as a weak
+  link by later headers.
 - **Before each header this node authors is broadcast**, the header itself
-  and the DAG from four rounds below it up, with the batches held. The
-  executor, and so the checkpoint, can be many rounds behind consensus when
-  the node stops; those rounds are on disk only because authoring wrote them.
+  with the batches it names.
 
 On restart, before the primary starts, `Node.Restore` loads every persisted
 certificate into the DAG without parent checks (`DAG.Restore`: each was
