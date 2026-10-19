@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -38,7 +37,7 @@ func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Rou
 	// Pubsub before the connections, as a node's exists before its peers
 	// dial it: a peer whose pubsub dials a host with none yet takes it for a
 	// host that does not speak pubsub.
-	ps, err := pubsub.NewGossipSub(ctx, h)
+	ps, err := newGossipSub(ctx, h)
 	if err != nil {
 		return nil, fmt.Errorf("follower pubsub: %w", err)
 	}
