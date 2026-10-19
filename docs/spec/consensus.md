@@ -503,7 +503,16 @@ position now (`Node.CheckpointAt(leaderRound)`): groups Bullshark has ordered
 since are still in the executor's queue, so the checkpoint's last commit is
 that block's leader round and its committed-digest set leaves out the
 certificates of the groups ordered after it. A restart from Bullshark's
-position now would never be handed those groups.
+position now would never be handed those groups. For the set to be there to
+copy, Bullshark prunes it a rescue window below the **oldest group handed to
+the executor and not yet produced**, not below its own last commit: the
+executor can lag ordering by more than the window (the commit buffer holds
+thousands of groups), and a set pruned against the frontier has nothing left
+for the block being produced, so a node restored from its checkpoint
+re-commits the window's history inside the next group (#4594). The node
+reports that floor as it hands groups over and as it checkpoints
+(`Bullshark.SetDedupFloor`); the set is then bounded by the commit buffer,
+as the handed groups already are.
 
 **A restart reloads the DAG it stopped with** (#4448). The DAG lives in
 memory, and a header needs a quorum of the previous round's certificates as

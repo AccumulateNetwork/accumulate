@@ -66,9 +66,17 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 
 	// Prune the digest dedup as the frontier advances. Anything older than
 	// the rescue window can never appear in another ancestor walk, so its
-	// entry is dead weight.
+	// entry is dead weight — to ordering. The checkpoint of the block being
+	// produced still needs the window below ITS leader, which trails the
+	// frontier by the executor's lag, so the floor is the oldest unproduced
+	// leader when that is lower (#4594). A node that reports none prunes
+	// at the frontier, as before.
+	floor := b.lastCommitRound
+	if b.dedupFloor != 0 && b.dedupFloor < floor {
+		floor = b.dedupFloor
+	}
 	for d, r := range b.committed {
-		if r+rescueWindow+32 < b.lastCommitRound {
+		if r+rescueWindow+32 < floor {
 			delete(b.committed, d)
 		}
 	}

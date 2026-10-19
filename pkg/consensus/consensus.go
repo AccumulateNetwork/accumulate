@@ -985,6 +985,7 @@ func (n *Node) Restore(cp *persist.Checkpoint) {
 		n.bullshark.SetLastCommittedForAuthor(author, round)
 	}
 	n.bullshark.SetCommitted(cp.Committed)
+	n.bullshark.SetDedupFloor(cp.LastCommitRound)
 	n.dag.SetLastCommitRound(cp.LastCommitRound)
 	certs, batches := n.restoreTail(cp)
 	slog.Info("Restored consensus position", "partition", n.config.Partition,

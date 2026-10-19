@@ -56,6 +56,12 @@ func (n *Node) order(cert *types.Certificate) bool {
 		}
 		n.certificatesCommitted.Add(1)
 	}
+	// The oldest group waiting to be produced is where the next checkpoint
+	// is taken; Bullshark keeps its dedup set a rescue window below it,
+	// however far ordering runs ahead of the executor (#4594).
+	if len(n.handed) > 0 {
+		n.bullshark.SetDedupFloor(n.handed[0].leader)
+	}
 	n.orderMu.Unlock()
 
 	// NOTE: Batch pruning is handled by the executor after reading batches
@@ -112,6 +118,8 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 		}
 	}
 	n.handed = keep
+	// Every later checkpoint is at or above this one (#4594).
+	n.bullshark.SetDedupFloor(leaderRound)
 	n.orderMu.Unlock()
 
 	cp := persist.NewCheckpoint(n.config.Partition,
