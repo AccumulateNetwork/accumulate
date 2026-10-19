@@ -8,6 +8,7 @@ package types_test
 
 import (
 	"crypto/ed25519"
+	"encoding/binary"
 	"sync"
 	"testing"
 
@@ -302,4 +303,29 @@ func TestHeaderDigest_String(t *testing.T) {
 
 	str := digest.String()
 	assert.Len(t, str, 64)
+}
+
+// Same rule for headers (#4599): the payload and parent counts are checked
+// against the remaining bytes before their slices are allocated.
+func TestHeader_UnmarshalAllocationBoundedByInput(t *testing.T) {
+	prefix := make([]byte, 32+8+8+8) // author, round, epoch, timestamp
+
+	t.Run("payload", func(t *testing.T) {
+		msg := binary.BigEndian.AppendUint32(prefix, 100_000)
+		per := bytesAllocatedPer(10, func() {
+			_, err := types.UnmarshalHeader(msg)
+			require.Error(t, err)
+		})
+		assert.Less(t, per, uint64(1024), "bytes allocated per UnmarshalHeader claiming 100,000 payload entries")
+	})
+
+	t.Run("parents", func(t *testing.T) {
+		msg := binary.BigEndian.AppendUint32(prefix, 0) // no payload
+		msg = binary.BigEndian.AppendUint32(msg, 10_000)
+		per := bytesAllocatedPer(10, func() {
+			_, err := types.UnmarshalHeader(msg)
+			require.Error(t, err)
+		})
+		assert.Less(t, per, uint64(1024), "bytes allocated per UnmarshalHeader claiming 10,000 parents")
+	})
 }

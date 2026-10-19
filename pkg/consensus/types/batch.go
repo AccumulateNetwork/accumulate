@@ -125,6 +125,15 @@ func UnmarshalBatch(data []byte) (*Batch, error) {
 		return nil, errors.New("batch contains too many transactions")
 	}
 
+	// The count is checked against the bytes that remain before anything is
+	// allocated for it (#4599): every transaction costs at least its 4-byte
+	// length, so a count the data cannot hold is a truncated message, and a
+	// 4-byte message claiming a million transactions costs the error rather
+	// than a 24 MB slice.
+	if int(numTxs) > (len(data)-offset)/4 {
+		return nil, errors.New("batch data truncated: fewer bytes than transactions")
+	}
+
 	transactions := make([][]byte, 0, numTxs)
 
 	for i := uint32(0); i < numTxs; i++ {

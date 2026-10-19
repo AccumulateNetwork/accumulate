@@ -8,6 +8,8 @@ package types_test
 
 import (
 	"bytes"
+	"encoding/binary"
+	"runtime"
 	"sync"
 	"testing"
 
@@ -233,4 +235,28 @@ func TestBatchDigest_String(t *testing.T) {
 
 	str := digest.String()
 	assert.Len(t, str, 64) // 32 bytes = 64 hex chars
+}
+
+// bytesAllocatedPer runs fn n times and reports the bytes allocated per run.
+func bytesAllocatedPer(n int, fn func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	for i := 0; i < n; i++ {
+		fn()
+	}
+	runtime.ReadMemStats(&after)
+	return (after.TotalAlloc - before.TotalAlloc) / uint64(n)
+}
+
+// A count field is checked against the bytes that remain before anything is
+// allocated for it (#4599): a 4-byte message claiming a million transactions
+// must cost the error, not 24 MB.
+func TestBatch_UnmarshalAllocationBoundedByInput(t *testing.T) {
+	msg := binary.BigEndian.AppendUint32(nil, 1_000_000)
+	per := bytesAllocatedPer(10, func() {
+		_, err := types.UnmarshalBatch(msg)
+		require.Error(t, err)
+	})
+	assert.Less(t, per, uint64(1024), "bytes allocated per UnmarshalBatch of a 4-byte message")
 }

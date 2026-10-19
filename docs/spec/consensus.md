@@ -163,6 +163,14 @@ per-worker share must include the wire buffer a stored batch aliases
 (`types.UnmarshalBatch` takes ownership of the pubsub message), because that
 is the memory actually resident.
 
+**Decoding is bounded by the message.** A batch or header from any peer is
+decoded by every validator that receives it, before anything about the peer
+is known. A count field in the encoding (transactions, payload entries,
+parents) is checked against the bytes that remain before a slice is
+allocated for it, so what a message can make a node allocate is bounded by
+the message's own size, not by the caps on the counts. The caps bound a
+well-formed message; the remaining-bytes check bounds a malformed one.
+
 ### Sealing
 
 `Worker.Submit` appends to pending and signals a seal when pending reaches
