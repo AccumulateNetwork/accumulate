@@ -545,8 +545,15 @@ authors that round or a lower one again, its round is raised to that
 header's if it had got further than the checkpoint, and if the header's
 certificate is not in the DAG the header rejoins vote collection so the
 ordinary rebroadcast sends **the same header** again — a second header for a
-round is self-equivocation (#4159 stall 3). A checkpoint written before #4448
-has no tail and no authored header, and restores the position alone
+round is self-equivocation (#4159 stall 3). The authored header is read back
+on **every** start, checkpoint or not (`NewNode`): a start that resumes no
+checkpoint — none for the executor's last block, or a store at genesis —
+otherwise knew nothing of the round and signed a second header for it
+(#4592). Its file and its directory are synced before the header is
+broadcast, so a power loss after the broadcast cannot bring the previous
+header back; the certificates and batches written beside it are not, since
+losing them costs a fetch, not an equivocation. A checkpoint written before
+#4448 has no tail and no authored header, and restores the position alone
 (DIFFERENCES, C9).
 
 **A joining node with no checkpoint orders nothing until the join names a

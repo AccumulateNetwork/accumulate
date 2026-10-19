@@ -83,6 +83,44 @@ func (s *DAGStore) writeFile(name string, data []byte) error {
 	return nil
 }
 
+// writeFileSynced is writeFile with the file and then the directory synced
+// before it returns, for a write whose loss is not merely a loss (#4592):
+// the authored header is broadcast once it returns, and a power loss that
+// brought the previous file back would have the node author the round
+// again. The caller holds mu.
+func (s *DAGStore) writeFileSynced(name string, data []byte) error {
+	path := filepath.Join(s.dir, name)
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	d, err := os.Open(s.dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return d.Sync()
+}
+
 // PutCertificate writes the certificate unless it is already stored.
 func (s *DAGStore) PutCertificate(c *types.Certificate) (string, error) {
 	name := CertName(c.Digest())
@@ -167,7 +205,7 @@ func (s *DAGStore) PutAuthored(h *types.Header) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.writeFile(authoredFile, data)
+	return s.writeFileSynced(authoredFile, data)
 }
 
 // Authored returns the header this node last authored, or nil.
