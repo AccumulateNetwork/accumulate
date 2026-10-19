@@ -424,14 +424,25 @@ func sourceName(s pull.Source) string {
 // locates the accounts the executed block's root differs in, as the match at V
 // does: the node's tree as of that block, from the history it retains,
 // against a peer's as of the same block (#4441). Here the follower's copy of
-// carol's account is changed behind its executor's back after the handoff,
-// and the watch names carol, and nothing else.
+// carol's account is changed behind its executor's back once the overlap
+// after the handoff is over, and the watch names carol, and nothing else.
 func TestAnExecutedBlockThatMissesNamesTheAccountItDiffersIn(t *testing.T) {
 	f := newProvenFixture(t, simulator.BPTHistoryDepth(4096))
 	_, err := f.join(t, 150, nil)
 	require.NoError(t, err)
 	state := f.p.NodeJoinState(provenJoiner)
 	require.Equal(t, nodestate.StateActive, state.Machine().State(), "precondition: the node joined")
+	// Past the overlap: during it a block that leaves an account other than
+	// its record sends the node back to the block ledger, and is not located
+	// (executor spec, "The handoff is an overlap"; #4556). The watch locates
+	// a block's miss once the node executes alone.
+	for i := 0; i < 10*join.OverlapBlocks && state.Overlap().EndedAt == 0; i++ {
+		f.traffic()
+		_, diverged, err := state.Diverged(context.Background())
+		require.NoError(t, err)
+		require.False(t, diverged, "precondition: the follower diverged before its copy was changed")
+	}
+	require.NotZero(t, state.Overlap().EndedAt, "precondition: the overlap did not end")
 
 	// carol's balance, on the follower only.
 	db := f.p.NodeDatabase(provenJoiner)
