@@ -303,6 +303,16 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		}
 		p.SetOnAuthored(n.persistAuthored)
 		n.dag.SetOnInsert(n.persistInserted)
+		// The header this node last authored is read back as soon as the
+		// node exists, checkpoint or not (#4592): a start that resumes no
+		// checkpoint — none for the executor's last block, or a store at
+		// genesis — otherwise knew nothing of that round and signed a
+		// second header for it. Restore reads it again, harmlessly.
+		authored, err := n.dagStore.Authored()
+		if err != nil {
+			slog.Error("Reading the last authored header", "partition", config.Partition, "error", err)
+		}
+		p.RestoreAuthored(authored)
 	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
