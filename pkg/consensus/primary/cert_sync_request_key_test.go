@@ -24,17 +24,25 @@ import (
 func TestSuppressionNamesTheRequester(t *testing.T) {
 	config := CertSyncerConfig{PublicKey: make([]byte, 32), Partition: "t4470"}
 	config.applyDefaults()
-	peer := NewCertSyncer(config, dag.NewDAG(10), nil, NewPendingCertificates(100))
+	d := dag.NewDAG(10)
+	peer := NewCertSyncer(config, d, nil, NewPendingCertificates(100))
+	// The answer this peer saw verified (#4597): what did not verify
+	// suppresses nothing.
+	peer.SetCertReceivedCallback(func(*types.Certificate) CertOutcome { return CertDuplicate })
 
 	nodeA, nodeB := []byte("node A's key"), []byte("node B's key")
 	const k = 7
 
-	// Another peer answered node A's request k, and this peer saw it.
+	// This peer holds the certificate both nodes ask for.
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	h := types.NewHeader(pub, 1, 0, nil, nil)
+	h := types.NewHeader(pub, 0, 0, nil, nil)
 	require.NoError(t, h.Sign(priv))
 	cert := types.NewCertificate(h, [][]byte{h.Signature}, []uint16{0})
+	require.NoError(t, d.InsertGenesis(cert))
+	want := []types.CertificateDigest{cert.Digest()}
+
+	// Another peer answered node A's request k, and this peer saw it.
 	peer.handleSyncResponse(&gossip.CertSyncResponse{
 		Certificates: []*types.Certificate{cert},
 		RequestID:    k,
@@ -42,16 +50,13 @@ func TestSuppressionNamesTheRequester(t *testing.T) {
 	})
 	peer.window.take()
 
-	// This peer holds nothing, so a request it does not suppress is
-	// answered empty; one it suppresses is counted suppressed.
-	want := types.CertificateDigest{1}
-	peer.handleSyncRequest(&gossip.CertSyncRequest{Digests: []types.CertificateDigest{want}, Requester: nodeB, RequestID: k})
-	w := peer.window.take()
-	require.Equal(t, 0, w.suppressed, "node B's request %d was skipped because node A's request %d was answered", k, k)
-	require.Equal(t, 1, w.empty)
+	// Node B's request k is answered; node A's own request k, re-broadcast,
+	// is suppressed.
+	require.NotNil(t, peer.answer(&gossip.CertSyncRequest{Digests: want, Requester: nodeB, RequestID: k}),
+		"node B's request %d was skipped because node A's request %d was answered", k, k)
+	require.Equal(t, 0, peer.window.take().suppressed)
 
-	// Node A's own request k, re-broadcast, is still suppressed.
-	peer.handleSyncRequest(&gossip.CertSyncRequest{Digests: []types.CertificateDigest{want}, Requester: nodeA, RequestID: k})
+	require.Nil(t, peer.answer(&gossip.CertSyncRequest{Digests: want, Requester: nodeA, RequestID: k}))
 	require.Equal(t, 1, peer.window.take().suppressed)
 }
 

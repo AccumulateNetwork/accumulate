@@ -349,7 +349,14 @@ broadcast:
   does not fit unanswered, and it would wait out the 30 s retry (#4469).
 
 A peer answers after a random delay of up to 200 ms with at most 100
-certificates, and does not answer a request it has already seen answered.
+certificates, less those a response to the same request has already
+delivered. A response counts for a certificate only once that certificate
+has verified against the committee, so a response carrying junk suppresses
+nothing, one carrying part of the answer suppresses only that part, and a
+complete honest one suppresses the whole request (#4597). Neither requests
+nor responses are signed, and any peer can publish on the topic (#4596):
+what one message can do to the catch-up path must therefore be nothing
+beyond delivering certificates.
 A request is named by its requester's key and its ID together, and a
 response carries both: every node numbers its own requests, so an ID alone
 named a request of every node at once, and a peer that had seen node A's

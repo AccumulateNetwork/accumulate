@@ -126,8 +126,11 @@ type CertSyncer struct {
 	nextReqID atomic.Uint64
 
 	// Response suppression (#4057): requests are broadcast, so peers skip
-	// answering when another peer's response has already been observed
-	answered   map[requestKey]struct{}
+	// answering what another peer's response has already delivered. Per
+	// request, the digests of the certificates a response carried that
+	// verified against the committee (#4597): a response that carried junk,
+	// or part of the answer, suppresses nothing it did not deliver.
+	answered   map[requestKey]map[types.CertificateDigest]struct{}
 	answeredMu sync.Mutex
 
 	// Callback for received certificates; returns what inserting it did
@@ -165,7 +168,7 @@ func NewCertSyncer(
 	config.applyDefaults()
 
 	s := &CertSyncer{
-		answered: map[requestKey]struct{}{},
+		answered: map[requestKey]map[types.CertificateDigest]struct{}{},
 		config:   config,
 		dag:      d,
 		gossip:   g,
@@ -442,8 +445,8 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 
 	// Requests and responses are broadcast, so without suppression every
 	// peer answers every request — an N-fold amplification that floods the
-	// requester with duplicates (#4057). Delay a beat, then skip if another
-	// peer's response for this request has already been observed.
+	// requester with duplicates (#4057). Delay a beat, then answer with what
+	// another peer's response has not already delivered.
 	jitter := time.Duration(rand.Int64N(int64(200 * time.Millisecond)))
 	if s.ctx != nil {
 		select {
@@ -454,15 +457,43 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 	} else {
 		time.Sleep(jitter)
 	}
-	s.answeredMu.Lock()
-	_, answered := s.answered[keyOf(req.Requester, req.RequestID)]
-	s.answeredMu.Unlock()
-	if answered {
-		s.served("suppressed")
+
+	resp := s.answer(req)
+	if resp == nil {
 		return
 	}
 
-	// Build response
+	// Skip if no gossip layer
+	if s.gossip == nil {
+		return
+	}
+
+	if err := s.gossip.BroadcastSyncResponse(s.ctx, resp); err != nil {
+		slog.Warn("Failed to send sync response",
+			"partition", s.config.Partition,
+			"error", err, "certificates", len(resp.Certificates))
+		return
+	}
+	s.served("answered")
+
+	slog.Debug("Sent sync response",
+		"certificates", len(resp.Certificates),
+		"missing", len(resp.Missing),
+		"rounds", len(req.Rounds),
+		"requestID", req.RequestID)
+}
+
+// answer builds the response to req from what this node holds, less what a
+// response to the same request has already delivered. It is nil, and the
+// request counted empty or suppressed, when nothing is left to send.
+//
+// Suppression is per certificate, not per request (#4597): a response
+// counts only for the certificates in it that verified against the
+// committee (handleSyncResponse), so a forged response suppresses nothing
+// and a partial one suppresses only what it carried. An honest, complete
+// response still suppresses the whole request, which is what the
+// suppression was added for.
+func (s *CertSyncer) answer(req *gossip.CertSyncRequest) *gossip.CertSyncResponse {
 	var certs []*types.Certificate
 	var missing []types.CertificateDigest
 
@@ -502,34 +533,32 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 				"lastRound", req.Rounds[len(req.Rounds)-1],
 				"requestID", req.RequestID)
 		}
-		return
+		return nil
 	}
 
-	resp := &gossip.CertSyncResponse{
+	s.answeredMu.Lock()
+	delivered := s.answered[keyOf(req.Requester, req.RequestID)]
+	s.answeredMu.Unlock()
+	if len(delivered) > 0 {
+		kept := certs[:0]
+		for _, cert := range certs {
+			if _, done := delivered[cert.Digest()]; !done {
+				kept = append(kept, cert)
+			}
+		}
+		certs = kept
+	}
+	if len(certs) == 0 {
+		s.served("suppressed")
+		return nil
+	}
+
+	return &gossip.CertSyncResponse{
 		Certificates: certs,
 		RequestID:    req.RequestID,
 		Requester:    req.Requester,
 		Missing:      missing,
 	}
-
-	// Skip if no gossip layer
-	if s.gossip == nil {
-		return
-	}
-
-	if err := s.gossip.BroadcastSyncResponse(s.ctx, resp); err != nil {
-		slog.Warn("Failed to send sync response",
-			"partition", s.config.Partition,
-			"error", err, "certificates", len(certs))
-		return
-	}
-	s.served("answered")
-
-	slog.Debug("Sent sync response",
-		"certificates", len(certs),
-		"missing", len(missing),
-		"rounds", len(req.Rounds),
-		"requestID", req.RequestID)
 }
 
 // handleSyncResponses processes incoming sync responses from peers.
@@ -596,18 +625,14 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 		return
 	}
 
-	// Note the response so we do not also answer this request (suppression)
-	s.answeredMu.Lock()
-	if len(s.answered) > 4096 {
-		s.answered = make(map[requestKey]struct{})
-	}
-	s.answered[keyOf(resp.Requester, resp.RequestID)] = struct{}{}
-	s.answeredMu.Unlock()
-
 	s.responsesRecv.Add(1)
 	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
 	s.window.response()
 
+	// What this response delivered: the certificates that verified against
+	// the committee, whether inserted, already held, or already in the DAG.
+	// Only these suppress this node's own answer to the request (#4597).
+	var delivered map[types.CertificateDigest]struct{}
 	for _, cert := range resp.Certificates {
 		if cert == nil {
 			continue
@@ -625,9 +650,34 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 			outcome := s.onCertReceived(cert)
 			metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
 			s.window.certificate(outcome)
+			switch outcome {
+			case CertInserted, CertDuplicate, CertBuffered:
+				if delivered == nil {
+					delivered = map[types.CertificateDigest]struct{}{}
+				}
+				delivered[digest] = struct{}{}
+			}
 		}
 
 		s.certificatesRecv.Add(1)
+	}
+
+	if len(delivered) > 0 {
+		s.answeredMu.Lock()
+		if len(s.answered) > 4096 {
+			s.answered = make(map[requestKey]map[types.CertificateDigest]struct{})
+		}
+		key := keyOf(resp.Requester, resp.RequestID)
+		have := s.answered[key]
+		if have == nil {
+			have = delivered
+		} else {
+			for d := range delivered {
+				have[d] = struct{}{}
+			}
+		}
+		s.answered[key] = have
+		s.answeredMu.Unlock()
 	}
 
 	slog.Debug("Received sync response",
