@@ -63,6 +63,19 @@ type Config struct {
 	BatchCollect    time.Duration // CollectBatches bound (0 = library default)
 	Out             io.Writer     // status output; nil = silent
 
+	// SustainAfterRestart stops at success only once every node a restart
+	// brought back has executed this many blocks past the block it resumed
+	// at, besides TargetHeight. Where a node resumes is known only once it
+	// has: a partition ahead at the restart resumes higher, and a target
+	// fixed beforehand could end the run before it had the blocks (#4603).
+	SustainAfterRestart uint64
+	// MaxBehind stops at success only once no node of a partition is more
+	// than this many blocks short of the partition's furthest: a node still
+	// catching up is given until Duration, as with TargetEveryNode, and one
+	// that executes slower than its peers never comes within it, for the
+	// caller to fail (#4603).
+	MaxBehind uint64
+
 	// NumWorkers per node. The soak runs 4 (cmd_init_network sets it), and the
 	// batch-store byte budget is divided among them, so a sim on 1 worker is
 	// not exercising the store sizing the real network has.
@@ -886,6 +899,14 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 			}
 			if s.cfg.TargetEveryNode && minH < s.cfg.TargetHeight {
 				allAtTarget = false
+			}
+			if s.cfg.MaxBehind > 0 && maxH-minH > s.cfg.MaxBehind {
+				allAtTarget = false
+			}
+			for _, sn := range s.byPart[part] {
+				if s.cfg.SustainAfterRestart > 0 && sn.resumedAt > 0 && sn.height.Load() < sn.resumedAt+s.cfg.SustainAfterRestart {
+					allAtTarget = false
+				}
 			}
 			// Lag, the largest block so far and the refused count are what
 			// a stall looks like while it forms: lag climbing past the bound,

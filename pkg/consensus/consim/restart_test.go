@@ -12,6 +12,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/primary"
 )
 
 // runRestart runs one BVN of four validators (every validator hosting the
@@ -153,28 +155,38 @@ func TestRestartAfterTwoNodesStopFirst(t *testing.T) {
 // carry nothing. Each such executor's last block is then below both of its
 // checkpoints; on Docker the BVN validators started at round zero (#4448).
 // Every node of every partition must resume, order what its peers order and
-// go on producing: sustained blocks past its height at the restart.
+// go on producing: sustained blocks past its height at the restart, and at
+// the end no more than behind blocks short of its partition's furthest node.
+// The run waits for both, until Duration (#4603): a node behind its peers
+// after the restart is given until then to catch up, and one that executes
+// slower than its peers never does and fails. Measured at the end of 33
+// runs, no node was more than one block short of its partition's furthest;
+// behind is twice the execution lag past which a node's headers stop
+// carrying batches (invariant 9).
 func runNetworkRestart(t *testing.T, loadUntil map[string]uint64) {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("runs the full consensus stack for tens of seconds")
 	}
 	const restartAt, sustained = 60, 150
+	const behind = 2 * primary.DefaultMaxExecutionLag
 	sim, err := New(Config{
-		BVNs:               1,
-		ValidatorsPerBVN:   4,
-		TPS:                20,
-		MinRoundInterval:   5 * time.Millisecond,
-		BatchTimeout:       10 * time.Millisecond,
-		BatchSize:          20,
-		TargetHeight:       restartAt + 30 + sustained,
-		Duration:           3 * time.Minute,
-		StallAfter:         20 * time.Second,
-		StateDir:           t.TempDir(),
-		DiscardEmptyBlocks: true,
-		LoadUntilHeight:    loadUntil,
-		Restarts:           []Restart{{Part: "BVN1", Network: true, AtHeight: restartAt}},
-		Out:                os.Stdout,
+		BVNs:                1,
+		ValidatorsPerBVN:    4,
+		TPS:                 20,
+		MinRoundInterval:    5 * time.Millisecond,
+		BatchTimeout:        10 * time.Millisecond,
+		BatchSize:           20,
+		TargetHeight:        restartAt + 30 + sustained,
+		SustainAfterRestart: sustained,
+		MaxBehind:           behind,
+		Duration:            3 * time.Minute,
+		StallAfter:          20 * time.Second,
+		StateDir:            t.TempDir(),
+		DiscardEmptyBlocks:  true,
+		LoadUntilHeight:     loadUntil,
+		Restarts:            []Restart{{Part: "BVN1", Network: true, AtHeight: restartAt}},
+		Out:                 os.Stdout,
 	})
 	if err != nil {
 		t.Fatalf("build sim: %v", err)
@@ -192,12 +204,24 @@ func runNetworkRestart(t *testing.T, loadUntil map[string]uint64) {
 		if n := sim.Equivocations(part); n != 0 {
 			t.Fatalf("%s: %d conflicting certificates refused", part, n)
 		}
+		// One read of each node's height, as nodes may still be executing.
+		heights := make([]uint64, len(sim.byPart[part]))
+		var furthest uint64
+		for i, sn := range sim.byPart[part] {
+			heights[i] = sn.height.Load()
+			furthest = max(furthest, heights[i])
+		}
 		for i, sn := range sim.byPart[part] {
 			if sn.resumedAt == 0 {
 				t.Fatalf("%s node %d was not restarted", part, i)
 			}
-			if h := sn.height.Load(); h < sn.resumedAt+sustained {
+			h := heights[i]
+			t.Logf("%s node %d resumed at block %d and reached %d", part, i, sn.resumedAt, h)
+			if h < sn.resumedAt+sustained {
 				t.Fatalf("%s node %d resumed at block %d and produced only to %d; want %d blocks after it", part, i, sn.resumedAt, h, sustained)
+			}
+			if h+behind < furthest {
+				t.Fatalf("%s node %d ended at block %d, %d short of its partition's furthest node at %d; want at most %d", part, i, h, furthest-h, furthest, behind)
 			}
 			if _, quiet := loadUntil[part]; quiet && sn.keptAtRestart >= sn.resumedAt {
 				t.Fatalf("%s node %d kept block %d at the restart: its last blocks were not empty, so the test did not restart the shape it names", part, i, sn.keptAtRestart)
