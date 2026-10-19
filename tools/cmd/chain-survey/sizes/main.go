@@ -25,8 +25,15 @@ func main() {
 		var acct, chain string
 		var start uint64
 		var expand bool
-		fmt.Sscanf(a, "%s %s %d %t", &acct, &chain, &start, &expand)
-		u := url.MustParse(acct)
+		if _, err := fmt.Sscanf(a, "%s %s %d %t", &acct, &chain, &start, &expand); err != nil {
+			fmt.Fprintf(os.Stderr, "%q: want \"<account> <chain> <start> <expand>\": %v\n", a, err)
+			continue
+		}
+		u, err := url.Parse(acct)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%q: %v\n", acct, err)
+			continue
+		}
 		count := uint64(100)
 		t := time.Now()
 		r, err := api.Querier2{Querier: c}.QueryChainEntries(context.Background(), u, &api.ChainQuery{Name: chain, Range: &api.RangeOptions{Start: start, Count: &count, Expand: &expand}})

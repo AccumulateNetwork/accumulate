@@ -8,6 +8,7 @@ package consim
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the full consensus stack for tens of seconds")
 	}
-	const restarted, target = 7, 400
+	const restarted, restartAt, target = 7, 40, 400
 	cfg := Config{
 		BVNs:             3,
 		ValidatorsPerBVN: 4,
@@ -41,7 +42,7 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 		StallAfter:       30 * time.Second,
 		StateDir:         t.TempDir(),
 		Restarts: []Restart{{
-			Part: "Directory", Vals: []int{restarted}, AtHeight: 40,
+			Part: "Directory", Vals: []int{restarted}, AtHeight: restartAt,
 			StopFirst: []int{restarted}, StopFirstFor: 2 * time.Second,
 		}},
 		Out: os.Stdout,
@@ -59,11 +60,42 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 	if err := sim.CheckSequences("Directory"); err != nil {
 		t.Fatalf("ordering differs across the restart: %v", err)
 	}
-	if h := sim.byPart["Directory"][restarted].height.Load(); h < target {
+	h := sim.byPart["Directory"][restarted].height.Load()
+	var top uint64
+	for i, sn := range sim.byPart["Directory"] {
+		if x := sn.height.Load(); i != restarted && x > top {
+			top = x
+		}
+	}
+	if err := restartedCaughtUp(h, top, restartAt, target); err != nil {
 		diagnoseWedge(t, sim, "Directory", restarted)
-		t.Fatalf("the restarted Directory validator reached only height %d of %d", h, target)
+		t.Fatal(err)
+	}
+	if h < target {
+		t.Logf("the network reached only height %d of %d in %s; the restarted validator reached %d", top, target, cfg.Duration, h)
 	}
 	t.Logf("reached heights %v in %s", res.Heights, res.Elapsed.Truncate(time.Second))
+}
+
+// restartedCaughtUp is whether a restarted validator at height h caught up
+// with its peers, the highest of which is at top. It must reach target when
+// they did. The run stops at Duration when the network is too slow to reach
+// target: a 2-CPU runner carries these 25 nodes at under a block a second
+// (#4558). Then the restarted validator must stand where its peers stand,
+// and they must have gone well past the restart; a wedged one is left
+// hundreds of rounds behind them.
+func restartedCaughtUp(h, top, restartAt, target uint64) error {
+	switch {
+	case h >= target:
+		return nil
+	case top >= target:
+		return fmt.Errorf("the restarted Directory validator reached only height %d of %d", h, target)
+	}
+	const moved, behind = 50, 10
+	if top < restartAt+moved || h+behind < top {
+		return fmt.Errorf("the restarted Directory validator reached only height %d of %d; its peers reached %d", h, target, top)
+	}
+	return nil
 }
 
 // diagnoseWedge says why a node stopped collecting: its round and the
@@ -85,4 +117,27 @@ func diagnoseWedge(t *testing.T, sim *Sim, part string, val int) {
 	held, onInserted, lacking := node.Primary().PendingDiagnosis()
 	t.Logf("node %s/%d: round %d, DAG top %d, quorum frontier %d; pending %d, of which %d wait only on parents already in the DAG; %d parents lacked",
 		part, val, node.Primary().CurrentRound(), top, frontier, held, onInserted, lacking)
+}
+
+// A restarted validator short of the target fails, whether its peers are
+// short too and it is far behind them, or they reached the target and it did
+// not (#4558).
+func TestARestartedValidatorShortOfItsPeersFails(t *testing.T) {
+	const restartAt, target = 40, 400
+	for _, c := range []struct {
+		h, top uint64
+		ok     bool
+	}{
+		{400, 405, true},  // reached the target
+		{319, 319, true},  // the network was too slow, it stands with its peers
+		{140, 145, true},  // the same, 5 behind
+		{45, 236, false},  // wedged: left far behind its peers
+		{396, 405, false}, // its peers reached the target and it did not
+		{80, 85, false},   // the network did not move past the restart
+	} {
+		err := restartedCaughtUp(c.h, c.top, restartAt, target)
+		if (err == nil) != c.ok {
+			t.Errorf("restarted at %d, peers at %d: got %v, want ok=%v", c.h, c.top, err, c.ok)
+		}
+	}
 }

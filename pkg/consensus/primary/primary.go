@@ -15,7 +15,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -23,6 +22,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )

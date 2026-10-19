@@ -45,7 +45,46 @@ go test 1/2:
   # integration packages (cmd/consensus-testnet) hold many individually
   # bounded multi-node tests whose sum exceeds it — the package failed on
   # every pipeline while each test inside it was fine.
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet ./...
+  # test/e2e and pkg/consensus/consim run in their own jobs below.
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet
+    $(go list -tags testnet ./... | grep -v -x
+      -e gitlab.com/accumulatenetwork/accumulate/test/e2e
+      -e gitlab.com/accumulatenetwork/accumulate/pkg/consensus/consim)
+
+go test e2e:
+  # test/e2e alone takes longer than the 30 m package timeout on this
+  # runner (#4558): its tests are dealt across the parallel jobs, each
+  # running every Nth (scripts/go-test-shard.sh).
+  extends: .go test
+  parallel: 6
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
+    ACC_ASSERT_IDENTITY_BOUNDARY: '1'
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - scripts/go-test-shard.sh ./test/e2e -timeout 30m -tags testnet
+
+go test consim:
+  # The consensus simulator runs whole networks in one process, paced in
+  # milliseconds. Sharing the runner's two CPUs with another package, its
+  # networks stalled before the events the tests are about (#4558), and the
+  # package takes longer than the 30 m package timeout: it runs alone, dealt
+  # across the parallel jobs.
+  extends: .go test
+  parallel: 3
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - scripts/go-test-shard.sh ./pkg/consensus/consim -timeout 30m -tags testnet
 
 go test 2/2:
   # No-mmap indexer test

@@ -8,9 +8,6 @@ package block
 
 import (
 	"crypto/sha256"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,9 +16,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"

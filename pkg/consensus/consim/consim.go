@@ -257,6 +257,10 @@ type simNode struct {
 	lastSaved     *persist.Checkpoint
 	seqMu         sync.Mutex
 	seq           []string
+	// The blocks a restart resumed below, to be executed again (redo), and
+	// the first one executed again differently (redoDiff).
+	redo     []string
+	redoDiff string
 
 	stopConsume  context.CancelFunc
 	consumeDone  chan struct{}
@@ -567,9 +571,7 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				}
 			}
 			if executedAny {
-				sn.seqMu.Lock()
-				sn.seq = append(sn.seq, fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ",")))
-				sn.seqMu.Unlock()
+				sn.record(fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ",")))
 				h := sn.height.Add(1)
 				if blockTxs > 0 {
 					sn.kept.Store(h)

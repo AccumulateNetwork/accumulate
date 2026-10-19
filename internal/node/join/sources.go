@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"

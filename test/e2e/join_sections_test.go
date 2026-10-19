@@ -475,7 +475,15 @@ func TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchange
 // fill runs the node's fill beside the network until every section is
 // loaded, stepping the network and checking the roots agree at every step,
 // or until stop says to stop.
-func (j *sectionsJoin) fill(stop func(left int) bool) {
+func (j *sectionsJoin) fill(stop func(left int) bool) { j.fillWith(stop, true) }
+
+// fillPart runs the fill until stop holds, a block at a time and sending
+// nothing: a transaction's blocks apply what the fill has ready, up to
+// fillReady sections a block, before stop is asked again, and can take the
+// count from most of the tree to none (563 to 330 to 0; #4558).
+func (j *sectionsJoin) fillPart(stop func(left int) bool) { j.fillWith(stop, false) }
+
+func (j *sectionsJoin) fillWith(stop func(left int) bool, traffic bool) {
 	t := j.t
 	state := j.part.NodeJoinState(j.fresh)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -487,7 +495,7 @@ func (j *sectionsJoin) fill(stop func(left int) bool) {
 		if left == 0 || stop(left) {
 			return
 		}
-		if i%10 == 0 {
+		if traffic && i%10 == 0 {
 			j.send()
 		}
 		j.sim.StepN(1)
@@ -537,7 +545,7 @@ func TestARestartMidFillResumes(t *testing.T) {
 	j := joinWithSectionsNotLoaded(t)
 	start := j.notLoadedAtHandoff
 	require.Positive(t, start)
-	j.fill(func(left int) bool { return left < start/2 })
+	j.fillPart(func(left int) bool { return left < start })
 	before := j.part.NodeJoinState(j.fresh).SectionsNotLoaded()
 	require.Positive(t, before, "precondition: the fill finished before the restart")
 	require.Less(t, before, start, "precondition: the fill loaded nothing before the restart")
