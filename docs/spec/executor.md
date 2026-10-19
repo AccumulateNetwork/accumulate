@@ -2715,6 +2715,11 @@ so it is where "lost in consensus" and "lost in execution" separate.
 `exec_validate.go`, `Executor.Validate`: begins a read-only batch, normalizes
 the envelope, rejects unsigned transactions, and calls each message's validator
 through a bundle whose block is a shell. The batch is discarded unconditionally.
+A refused message still gets a status, and the status carries the message's
+ID, so **a message's ID must not depend on a field a peer can leave out**: a
+`BlockAnchor` without a signature is named under `acc://unknown`, where it
+used to be dereferenced and take the node down (#4572). Validation is reached
+from the worker and the API, with no recover between.
 
 ### Execution
 
