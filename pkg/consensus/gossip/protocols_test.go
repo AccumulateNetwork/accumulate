@@ -431,3 +431,56 @@ func TestProtocolHandler_ConcurrentRequests(t *testing.T) {
 		assert.Equal(t, batches[i].Digest(), results[i].Digest())
 	}
 }
+
+// TestAFetchWhoseServerClosesFirstStillGetsTheAnswer pins #4588. A server
+// reads one request, answers and closes the stream; on QUIC its close stops
+// the client's sending, so a client still to half-close its side failed with
+// "close write: close called for canceled stream" and lost the answer, a batch
+// or certificate it was sent as well as a "not found". Every fetch path is held
+// here until the server has closed.
+func TestAFetchWhoseServerClosesFirstStillGetsTheAnswer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	ptn := newProtocolTestNetwork(t, ctx, 2)
+	batchStore := newMockBatchStore()
+	dagStore := newMockDAGStore()
+	server, err := gossip.NewProtocolHandler(ptn.hosts[0], "test", batchStore, dagStore)
+	require.NoError(t, err)
+	require.NoError(t, server.RegisterHandlers())
+	defer server.UnregisterHandlers()
+	client, err := gossip.NewProtocolHandler(ptn.hosts[1], "test", nil, nil)
+	require.NoError(t, err)
+
+	batch := types.NewBatch([][]byte{[]byte("served")})
+	require.NoError(t, batchStore.StoreBatch(batch))
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	header := types.NewHeader(pub, 5, 1, nil, nil)
+	require.NoError(t, header.Sign(priv))
+	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
+	require.NoError(t, dagStore.StoreCertificate(cert))
+
+	defer gossip.SetBeforeCloseRequest(func() { time.Sleep(200 * time.Millisecond) })()
+	server0 := ptn.hosts[0].ID()
+
+	got, err := client.FetchBatch(ctx, server0, batch.Digest())
+	require.NoError(t, err, "a batch the server holds")
+	require.NotNil(t, got)
+	require.Equal(t, batch.Digest(), got.Digest())
+
+	var missing types.BatchDigest
+	_, _ = rand.Read(missing[:])
+	got, err = client.FetchBatch(ctx, server0, missing)
+	require.NoError(t, err, "a batch the server does not hold is not found, not an error")
+	require.Nil(t, got)
+
+	gotCert, err := client.FetchCertificate(ctx, server0, cert.Round(), pub)
+	require.NoError(t, err, "a certificate the server holds")
+	require.NotNil(t, gotCert)
+	require.Equal(t, cert.Digest(), gotCert.Digest())
+
+	certs, err := client.SyncDAG(ctx, server0, cert.Round(), cert.Round())
+	require.NoError(t, err, "a DAG sync")
+	require.Len(t, certs, 1)
+}
