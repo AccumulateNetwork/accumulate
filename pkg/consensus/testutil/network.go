@@ -179,6 +179,17 @@ func NewTestNetwork(t *testing.T, numNodes int, opts ...NetworkOption) *TestNetw
 			t.Cleanup(func() { _ = h.Close() })
 		}
 
+		// Create pubsub instances before the connections, as a node's exists
+		// before its peers dial it. A pubsub that finds a connection to a host
+		// with none yet takes it for a host that does not speak pubsub and
+		// never sends to it: that node hears nothing and stays at round 0
+		// (#4583).
+		for i := 0; i < numNodes; i++ {
+			ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+			require.NoError(t, err)
+			pubsubs[i] = ps
+		}
+
 		// Connect all hosts to each other
 		for i := 0; i < numNodes; i++ {
 			for j := i + 1; j < numNodes; j++ {
@@ -189,13 +200,6 @@ func NewTestNetwork(t *testing.T, numNodes int, opts ...NetworkOption) *TestNetw
 				err := hosts[i].Connect(ctx, pi)
 				require.NoError(t, err, "failed to connect hosts %d and %d", i, j)
 			}
-		}
-
-		// Create pubsub instances
-		for i := 0; i < numNodes; i++ {
-			ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-			require.NoError(t, err)
-			pubsubs[i] = ps
 		}
 	}
 
