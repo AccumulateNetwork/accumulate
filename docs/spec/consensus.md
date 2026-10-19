@@ -566,10 +566,12 @@ round is self-equivocation (#4159 stall 3). The authored header is read back
 on **every** start, checkpoint or not (`NewNode`): a start that resumes no
 checkpoint — none for the executor's last block, or a store at genesis —
 otherwise knew nothing of the round and signed a second header for it
-(#4592). Its file and its directory are synced before the header is
-broadcast, so a power loss after the broadcast cannot bring the previous
-header back; the certificates and batches written beside it are not, since
-losing them costs a fetch, not an equivocation. A checkpoint written before
+(#4592). Its write is not synced, as nothing in the store is (DIFFERENCES,
+C9): the file survives a process restart, and a power loss inside the
+filesystem's journal window can bring the previous header back. Syncing it
+costs two device flushes per authored round, which the restart simulation
+cannot afford on one shared disk; the cost on a validator with its own disk
+is unmeasured. A checkpoint written before
 #4448 has no tail and no authored header, and restores the position alone
 (DIFFERENCES, C9).
 

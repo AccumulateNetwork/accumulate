@@ -1813,6 +1813,18 @@ batches and its last authored header (#4448). What differs:
   operator decision, not a code path this change adds (#4448 notes).
 - **Nothing is fsynced**, as the checkpoint itself is not: the files survive
   a process or container restart (the page cache survives), not a power loss.
+  That includes the authored header, the one file whose loss is an
+  equivocation rather than a fetch (#4592): a power loss inside the
+  filesystem's journal window (5 s on ext4 by default) after the broadcast
+  can bring the previous header back, and the node authors that round again.
+  Syncing the file and its directory before the broadcast was tried and
+  taken out: two device flushes per authored round slowed a restarted
+  validator's catch-up in `consim` `TestRestartOneNode` from 164–166 to
+  110–150 blocks against a floor of 160, with eight simulated nodes sharing
+  one NVMe; syncing the file alone, which does not make the rename durable,
+  still failed one run in two. The cost on a validator with a disk of its
+  own is unmeasured; measure it on Docker before deciding whether to sync in
+  production.
 - **The checkpoint's position being the produced block's, not Bullshark's
   now**, is exercised only where consim's executor lags; no test isolates it.
 
