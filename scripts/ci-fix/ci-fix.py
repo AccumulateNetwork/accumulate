@@ -498,10 +498,7 @@ class Monitor:
                 if dirty:
                     problems = ["the worktree is not clean; commit what belongs to the fix and "
                                 "remove the rest, then report done: " + "; ".join(dirty[:10])]
-                elif task["kind"] != "gate" and not task.get("existing") and sh(
-                        ["git", "rev-list", "--count", f"{task['base']}..HEAD"], cwd=wt).stdout.strip() == "0":
-                    problems = ["no commit on the branch"]
-                else:
+                else:  # no commit is a valid answer when the check holds: the check decides
                     set_task_state(task["id"], phase="validating")
                     ok, problems, log = check_task(task, wt, repeat=task.get("passes", 1))
             except Exception as e:  # keep the monitor alive; show the error as the failure
