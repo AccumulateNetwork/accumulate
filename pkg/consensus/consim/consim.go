@@ -39,6 +39,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -344,6 +345,12 @@ type Result struct {
 // ErrStalled is returned (wrapped) when a partition stops executing.
 var ErrStalled = errors.New("partition stalled")
 
+// ErrMeshIncomplete is returned (wrapped) when a node's gossip never reaches
+// every other validator of its partition before the load starts: the run
+// would test a partition short of a validator, and its stall would read as
+// a consensus fault.
+var ErrMeshIncomplete = errors.New("gossip mesh incomplete")
+
 // New builds the network: one libp2p host per validator, a Directory node on
 // every host, and a BVN node on each host for its validator's BVN — the
 // soak's dual topology, where all partitions share each validator's host,
@@ -374,7 +381,19 @@ func New(cfg Config) (*Sim, error) {
 	// Hosts: real libp2p on loopback, fully connected. Real GossipSub is the
 	// point — mesh formation, scoring, and per-topic behaviour are part of
 	// the system under study.
+	//
+	// One GossipSub per host, shared by that validator's Directory and BVN
+	// nodes, and created with its host before any connection, as
+	// p2p.NewHost does in production. GossipSub opens its stream to a peer
+	// once, when it first sees the connection, and v0.10.0 never retries
+	// one that fails: connected first, a host whose GossipSub came up before
+	// its peers' was refused by every one of them and stayed without a mesh
+	// for the whole run, while its peers counted it out. CI's loaded runners
+	// hit that on validator 0 (hostPeers=3, headerTopicPeers=0) and its
+	// partition ran on three of four, or stalled (#4610).
 	s.hosts = make([]host.Host, nVals)
+	pss := make([]*pubsub.PubSub, nVals)
+	ctx := context.Background()
 	for i := range s.hosts {
 		h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 		if err != nil {
@@ -382,8 +401,13 @@ func New(cfg Config) (*Sim, error) {
 			return nil, fmt.Errorf("host %d: %w", i, err)
 		}
 		s.hosts[i] = h
+		ps, err := pubsub.NewGossipSub(ctx, h)
+		if err != nil {
+			s.Close()
+			return nil, fmt.Errorf("pubsub %d: %w", i, err)
+		}
+		pss[i] = ps
 	}
-	ctx := context.Background()
 	for i := range s.hosts {
 		for j := i + 1; j < len(s.hosts); j++ {
 			err := s.hosts[i].Connect(ctx, peer.AddrInfo{ID: s.hosts[j].ID(), Addrs: s.hosts[j].Addrs()})
@@ -392,18 +416,6 @@ func New(cfg Config) (*Sim, error) {
 				return nil, fmt.Errorf("connect %d<->%d: %w", i, j, err)
 			}
 		}
-	}
-
-	// One GossipSub per host, shared by that validator's Directory and BVN
-	// nodes — as in production.
-	pss := make([]*pubsub.PubSub, nVals)
-	for i, h := range s.hosts {
-		ps, err := pubsub.NewGossipSub(ctx, h)
-		if err != nil {
-			s.Close()
-			return nil, fmt.Errorf("pubsub %d: %w", i, err)
-		}
-		pss[i] = ps
 	}
 
 	mkNode := func(part string, committee *types.Committee, val int) (*simNode, error) {
@@ -799,6 +811,9 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 	}
 	// Let the gossip mesh form before load; production waits too.
 	time.Sleep(2 * time.Second)
+	if err := s.awaitMesh(ctx, 10*time.Second); err != nil {
+		return s.finish(start, false, err.Error()), err
+	}
 	for _, part := range s.parts {
 		s.wg.Add(1)
 		go s.load(ctx, part)
@@ -907,6 +922,40 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 
 		if allAtTarget {
 			return s.finish(start, true, "target height"), nil
+		}
+	}
+}
+
+// awaitMesh waits until every node sees, on each of its partition's topics,
+// every other validator of the partition, and reports the first node that
+// does not by the deadline.
+func (s *Sim) awaitMesh(ctx context.Context, within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for {
+		short := ""
+		for _, sn := range s.nodes {
+			want := len(s.byPart[sn.part]) - 1
+			for _, pattern := range []string{gossip.TopicBatches, gossip.TopicHeaders, gossip.TopicVotes, gossip.TopicCerts, gossip.TopicCertSync} {
+				topic := fmt.Sprintf(pattern, sn.part)
+				if got := len(sn.ps.ListPeers(topic)); got < want {
+					short = fmt.Sprintf("%s/%d sees %d of %d peers on %s", sn.part, sn.val, got, want, topic)
+					break
+				}
+			}
+			if short != "" {
+				break
+			}
+		}
+		if short == "" {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w after %s: %s", ErrMeshIncomplete, within, short)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
