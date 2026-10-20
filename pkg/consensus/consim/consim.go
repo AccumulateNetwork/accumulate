@@ -258,6 +258,7 @@ type simNode struct {
 	lastSaved     *persist.Checkpoint
 	seqMu         sync.Mutex
 	seq           []string
+	reproduced    []string // blocks produced again after a restore that differ from the first time
 
 	stopConsume  context.CancelFunc
 	consumeDone  chan struct{}
@@ -579,8 +580,19 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				}
 			}
 			if executedAny {
+				// seq holds one entry per block index. A node restored from
+				// its older checkpoint produces the blocks after it again
+				// (#4448): each must be the block it recorded, not another
+				// entry that shifts its sequence against its peers'.
+				entry := fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ","))
 				sn.seqMu.Lock()
-				sn.seq = append(sn.seq, fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ",")))
+				if i := int(sn.height.Load()); i < len(sn.seq) {
+					if sn.seq[i] != entry {
+						sn.reproduced = append(sn.reproduced, fmt.Sprintf("block %d produced again differs:\n  %s\n  %s", i+1, sn.seq[i], entry))
+					}
+				} else {
+					sn.seq = append(sn.seq, entry)
+				}
 				sn.seqMu.Unlock()
 				h := sn.height.Add(1)
 				if blockTxs > 0 {
