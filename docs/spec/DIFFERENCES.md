@@ -1591,6 +1591,27 @@ seventh nobody had named.
 **Size**: large; it is the precondition for a validator restarting under load and for
 chaos returning to a soak.
 
+### E31. A BVN cannot be added to a running network, and an identity cannot move
+
+*[#4609](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4609)*
+
+**Spec** ([network.md](network.md), "Adding a BVN" and "Moving an identity
+between partitions"; [executor.md](executor.md), "A locked identity";
+[database.md](database.md), "The sidecar"): a BVN is added by a write to
+`dn.acme/network`, and an identity moves to it by stage, lock, move, transfer
+and unlock.
+
+**Code**: partitions are created only at init (`internal/node/daemon/init.go`,
+`cmd/accumulated/run/netsim.go`); nothing acts on a partition added to the
+definition later, and nothing builds a partition's genesis on a running
+network. There is no identity lock. The sidecar is not in the code beyond the
+generic `overlay` store, and has no read-repair (#4273).
+
+**Why it stands**: not built. The lock, the move and the transfer change
+executed state, so they arrive under a new `ExecutorVersion`.
+
+**Size**: #4609's work outline, phases 1 to 6.
+
 ---
 
 ## Database abstraction

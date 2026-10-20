@@ -452,6 +452,17 @@ if len(b) == 0 {
 | `overlay` | Composes two stores, reads falling through |
 | `remote` | Serves a store over a connection |
 
+### The sidecar
+
+The sidecar is a second store under the live one (`overlay`), keyed by
+`record.Key.Hash()`, so it serves any partition without knowing which one held
+a record. A read that misses the live store falls through to it, and a hit is
+written back into the live store. It holds two things: history recovered from
+before the 13 July 2025 reorg (#4273), and identities staged for a move
+(network.md, "Moving an identity between partitions"). A staged record enters
+the live store only through a move's third step, after its check against the
+source partition's anchored BPT root; a read never promotes one.
+
 ### Conformance
 
 `pkg/database/keyvalue/kvtest` is the contract. A backend is correct when it

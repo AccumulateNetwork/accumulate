@@ -2744,6 +2744,20 @@ through a bundle whose block is a shell. The batch is discarded unconditionally.
   across nodes would be a consensus failure; the API reads real status from the
   database instead.
 
+### A locked identity
+
+An identity locked for a move (network.md, "Moving an identity between
+partitions") is refused, not held: a transaction whose principal is in it, or
+a signature from one of its key books, fails validation as moving, and the
+error names the move. A synthetic message addressed to it is held in staging
+until the transfer and then forwarded to the identity's new partition.
+
+**A route changes at an anchor.** An override the Directory writes takes
+effect on a partition at the block that executes the Directory anchor carrying
+it. A relay routes by the table as of its last executed block, so a submission
+routed by the old table during a transfer reaches the old partition and is
+refused there as moving.
+
 ### Message executors
 
 `msg_*.go`, registered at init into `messageExecutors`:

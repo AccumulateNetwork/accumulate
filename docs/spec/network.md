@@ -170,6 +170,72 @@ spine starts at a genesis pinned out of band.
 Message types 0x0F and 0x2F are this line's. Main assigns up to 0x0E and 0x2E,
 so they are free there today, and must not be assigned to anything else there.
 
+## Adding a BVN
+
+A BVN is added to a running network, without a restart, by one write to
+`dn.acme/network` that names the new partition and its validators, authorized
+by `dn.acme/operators` like every other change to the definition. The routing
+table gives the new partition no buckets and no overrides, so it holds no
+accounts and receives no user transactions until an identity is moved to it
+(below).
+
+**Genesis.** The Directory builds the new partition's genesis at the block that
+executes the write, from the network definition and globals as of that block.
+It holds the partition's system accounts and nothing else. Nodes serve it as
+the partition's genesis ("How a new node gets its genesis"), so the first
+validators and every later node start from the same bytes.
+
+**Activation.** The partition is active from the first Directory block after
+the write. From then the Directory anchors to it and counts its anchors
+against its validators in the definition. The other BVNs learn of it from the
+Directory anchor that carries the update (`processNetworkAccountUpdates`) and
+create its synthetic and anchor ledger entries on first use
+(`SyntheticLedger.Partition`, `AnchorLedger.Anchor`), so no existing ledger is
+migrated. Until its validators produce a first block it is reported as a
+partition with no blocks, not as a stalled one.
+
+**Validators.** A validator of the new partition runs
+`accumulated init node <peer> --partition <id>` against a node that runs the
+Directory, and joins as any validator joins a running network.
+
+## Moving an identity between partitions
+
+Routing is by identity: the routing tree looks an account up by
+`IdentityAccountID32`, overrides first, then the bucket of `u.Routing()`
+(`RouteTree.Route`). An identity — a root ADI or a lite identity, with every
+account under it — is therefore the unit that moves. It moves from partition
+A to partition B in five steps, each an executed fact at a named block.
+
+1. **Stage.** The operators request the move of identity I from A to B. B's
+   nodes copy I's records from A into their sidecar (database.md, "The
+   sidecar") as of a block of A, and keep the copy current until the lock.
+   Staging changes no state on either partition and may be abandoned.
+2. **Lock.** A lock on I, authorized by `dn.acme/operators`, executes at block
+   L of A. From L, A refuses every new transaction whose principal is in I,
+   and every signature from one of I's key books, as moving (executor.md, "A
+   locked identity"). Synthetic messages addressed to I are held.
+3. **Move.** B takes I's records as of L. Each is checked against A's BPT root
+   at L, anchored in the Directory, before B writes it into its live database
+   and BPT. A record that fails the check stops the move and releases the lock
+   on A.
+4. **Transfer.** The Directory writes an override routing I to B in
+   `dn.acme/routing`. Every partition routes I to B from the block that
+   executes the Directory anchor carrying it. At that block A removes I from
+   its BPT and forwards to B the synthetic messages it held for I. A keeps I's
+   chain records, so history written on A stays readable there.
+5. **Unlock.** B accepts transactions for I from the block that executes the
+   transfer anchor.
+
+A synthetic message produced against the old route that reaches A after the
+transfer is forwarded to B, never dropped. A receipt for an entry made on A
+before the move anchors into A's root chain, which the entry's index names
+(#4567). Pending transactions on I move with I and keep their signatures.
+
+**A bucket** moves by moving every identity in it, then reassigning the bucket
+in `Routes` and removing the overrides the moves wrote.
+
+None of this section or the one above is built yet (DIFFERENCES, E31).
+
 ## Converting a mainnet node
 
 A mainnet node was initialized for CometBFT. Moving it to DAG-BFT is a
