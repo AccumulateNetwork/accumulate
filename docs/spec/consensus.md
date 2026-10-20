@@ -344,6 +344,22 @@ named a request of every node at once, and a peer that had seen node A's
 request *k* answered skipped node B's request *k*. A node numbers its
 requests from a random starting point, so one restarted under the same key
 does not reuse the IDs its peers saw answered before it stopped (#4470).
+
+**A node handles one complete answer to a request.** Suppression works
+only if the first answer reaches a peer before that peer's own delay runs
+out, and under load it does not. On a loaded runner, a joining follower's
+requests were each answered by 8 of its 12 peers at the median. Every node
+receives every answer and handles them one at a time. So the follower's
+own answers waited 24 s at the median behind copies of answers it already
+had, the response queue (500, below) overflowed and dropped the next ones,
+and in CI its Directory sat at its seed round + 2 for the whole of
+`TestFollowerJoinCatchesUp` (#4610). Now a request (its requester's key
+and its ID, as for suppression) that is answered with nothing reported
+missing is done. Later answers to it, whoever asked, are dropped before
+their certificates are read. A partial answer leaves the request open for
+the next one. The `Certificate catch-up` line counts the dropped copies as
+`repeatedAnswers`.
+
 What arrives is verified against the committee and inserted. A
 certificate whose parents are missing is held (up to `2 × 10 × committee`
 certificates) until they arrive, and its parents are asked for.
