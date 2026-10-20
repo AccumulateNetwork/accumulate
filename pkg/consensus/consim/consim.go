@@ -150,6 +150,10 @@ type Config struct {
 	// LoadUntilHeight stops the load to a partition once it has executed
 	// this height, so its blocks from there on are empty.
 	LoadUntilHeight map[string]uint64
+
+	// pubsubStagger pauses New after each host's pubsub is created, as a
+	// setup goroutine descheduled on a loaded runner pauses (#4610).
+	pubsubStagger time.Duration
 }
 
 // Restart names nodes of one partition to restart, by their index in the
@@ -374,7 +378,16 @@ func New(cfg Config) (*Sim, error) {
 	// Hosts: real libp2p on loopback, fully connected. Real GossipSub is the
 	// point — mesh formation, scoring, and per-topic behaviour are part of
 	// the system under study.
+	//
+	// One GossipSub per host, shared by that validator's Directory and BVN
+	// nodes, and created with its host before any peer connects — as in
+	// production (p2p.NewHost). A pubsub opens its stream to every peer it
+	// is connected to when it starts, and drops a peer that has no pubsub
+	// yet until they reconnect: with the hosts connected first, every pubsub
+	// that started before a peer's lost that peer for the whole run (#4610).
+	ctx := context.Background()
 	s.hosts = make([]host.Host, nVals)
+	pss := make([]*pubsub.PubSub, nVals)
 	for i := range s.hosts {
 		h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 		if err != nil {
@@ -382,8 +395,14 @@ func New(cfg Config) (*Sim, error) {
 			return nil, fmt.Errorf("host %d: %w", i, err)
 		}
 		s.hosts[i] = h
+		ps, err := pubsub.NewGossipSub(ctx, h)
+		if err != nil {
+			s.Close()
+			return nil, fmt.Errorf("pubsub %d: %w", i, err)
+		}
+		pss[i] = ps
+		time.Sleep(cfg.pubsubStagger)
 	}
-	ctx := context.Background()
 	for i := range s.hosts {
 		for j := i + 1; j < len(s.hosts); j++ {
 			err := s.hosts[i].Connect(ctx, peer.AddrInfo{ID: s.hosts[j].ID(), Addrs: s.hosts[j].Addrs()})
@@ -392,18 +411,6 @@ func New(cfg Config) (*Sim, error) {
 				return nil, fmt.Errorf("connect %d<->%d: %w", i, j, err)
 			}
 		}
-	}
-
-	// One GossipSub per host, shared by that validator's Directory and BVN
-	// nodes — as in production.
-	pss := make([]*pubsub.PubSub, nVals)
-	for i, h := range s.hosts {
-		ps, err := pubsub.NewGossipSub(ctx, h)
-		if err != nil {
-			s.Close()
-			return nil, fmt.Errorf("pubsub %d: %w", i, err)
-		}
-		pss[i] = ps
 	}
 
 	mkNode := func(part string, committee *types.Committee, val int) (*simNode, error) {
