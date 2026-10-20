@@ -190,25 +190,28 @@ def check_lint(task, cwd, log):
     if not tree_clean(cwd):
         problems.append("tree not clean: tidy/generate/imports not checked (commit first)")
         return problems
+    mine = changed_files(cwd, task["base"]) if task.get("scope") == "changed" else None
     run_logged(["go", "mod", "tidy"], cwd, log)
-    if sh(["git", "diff", "--quiet", "go.mod", "go.sum"], cwd=cwd).returncode != 0:
+    if sh(["git", "diff", "--quiet", "go.mod", "go.sum"], cwd=cwd).returncode != 0 \
+            and (mine is None or mine & {"go.mod", "go.sum"}):
         problems.append("go.mod/go.sum are not tidy")
     sh(["git", "checkout", "--", "go.mod", "go.sum"], cwd=cwd)
     code, _ = run_logged(["go", "generate", "./..."], cwd, log)
     if code != 0:
         problems.append(f"go generate failed ({code})")
-    diff = sh(["git", "status", "--porcelain"], cwd=cwd).stdout.strip()
-    if diff:
-        problems.append("generated files are not up to date: " + " ".join(
-            l[3:] for l in diff.splitlines())[:300])
+    stale = [l[3:] for l in sh(["git", "status", "--porcelain"], cwd=cwd).stdout.splitlines() if l.strip()]
+    if stale:
         sh(["git", "checkout", "--", "."], cwd=cwd)
         sh(["git", "clean", "-fdq"], cwd=cwd)  # the tree was clean before generate
+    if mine is not None:
+        stale = [f for f in stale if f in mine]
+    if stale:
+        problems.append("generated files are not up to date: " + " ".join(stale)[:300])
     dirs = [d for d in sorted(os.listdir(cwd)) if os.path.isdir(os.path.join(cwd, d)) and not d.startswith(".")]
     code, out = run_logged(["go", "run", "github.com/rinchsan/gosimports/cmd/gosimports", "-l"] +
                            [d + "/" for d in dirs], cwd, log)
     bad = [l for l in out.splitlines() if l.endswith(".go")]
-    if task.get("scope") == "changed":
-        mine = changed_files(cwd, task["base"])
+    if mine is not None:
         bad = [b for b in bad if b in mine]
     problems += [f"{b}: not gosimports-formatted" for b in bad]
     return problems
