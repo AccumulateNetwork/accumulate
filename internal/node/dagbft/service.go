@@ -795,7 +795,7 @@ func (s *Service) checkBlockLiveness() {
 			// is, so an operator restores validators rather than hunting a
 			// consensus bug.
 			mBelowQuorum.WithLabelValues(s.config.Partition.ID).Set(1)
-			s.logger.Error("This partition has lost its quorum: fewer of its validators were heard producing at this round in the last 10s than a round needs; it holds its state until enough of them return",
+			s.logger.Error("This partition has lost its quorum: fewer of its validators were heard producing at this round in the last 5s than a round needs; it holds its state until enough of them return",
 				"partition", s.config.Partition.ID, "producing", rs.Authors, "committee", rs.Committee, "quorum", rs.Quorum, "lastBlock", lastIndex)
 		} else {
 			mBelowQuorum.WithLabelValues(s.config.Partition.ID).Set(0)
