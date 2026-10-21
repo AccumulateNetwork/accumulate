@@ -9,7 +9,6 @@ package run
 import (
 	"crypto/ed25519"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"net"
 	"reflect"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
