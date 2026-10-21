@@ -19,8 +19,10 @@ import (
 
 // TestRestoredAuthoredBatchesSurviveEviction: the persisted tail is a whole
 // rescue window of batches and can be larger than the active store. The
-// restart loads it all, the store evicts down to its limit — and the batch
-// this node's own restored header names must not be among what goes: its
+// restart loads it all and the store evicts what it may — not the batches
+// the restored certificates name (consensus spec, invariant 3), and not the
+// batch this node's own restored header names, which no certificate names
+// yet and so is evicted first unless it is held as this node's own: its
 // author is the only node that holds it, every voter defers until it can
 // fetch it from the author, and an author that cannot serve it can neither
 // certify the round nor author it again. Run 20261006T220257Z: all three
@@ -96,12 +98,26 @@ func TestRestoredAuthoredBatchesSurviveEviction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() { _ = n2.workers[0].Start(ctx) }() // blocks until ctx ends
+
+	// Peer batches no header names arrive; they are what the store evicts.
+	for i := 0; i < 8; i++ {
+		tx := make([]byte, batchBytes-64)
+		tx[0], tx[1] = byte(i), 'u'
+		if err := n2.workers[0].StoreBatch(types.NewBatch([][]byte{tx})); err != nil {
+			t.Fatal(err)
+		}
+	}
 	deadline := time.Now().Add(2 * time.Second)
-	for n2.workers[0].BatchCount() > 4 {
+	for n2.workers[0].BatchCount() > 21 {
 		if time.Now().After(deadline) {
-			t.Fatalf("the store did not evict down to its limit: %d batches", n2.workers[0].BatchCount())
+			t.Fatalf("the store did not evict the batches nothing names: %d batches", n2.workers[0].BatchCount())
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	for _, c := range certs {
+		if !n2.workers[0].HasBatch(c.Header.Payload[0].Digest) {
+			t.Fatal("eviction took a batch a restored certificate names")
+		}
 	}
 	if !n2.workers[0].CanServeBatch(own.Digest()) {
 		t.Fatal("eviction took the batch of the header this node authored: no peer can vote for it now")

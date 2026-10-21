@@ -459,7 +459,10 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return // missing batches — do not certify data we do not have; vote when they land (#4611)
 	}
 
-	// Every batch is here, so nothing is waiting on them any more.
+	// Every batch is here, so nothing is waiting on them any more. They are
+	// named by a header this node votes on, so batches no header names are
+	// evicted before them until the certificate protects them (#4598).
+	p.nameHeaderBatches(header)
 	p.releasePins(headerDigest)
 	p.deferred.drop(headerDigest)
 

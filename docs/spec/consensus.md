@@ -54,7 +54,13 @@ So a validator holds batches in four places, for four reasons:
 3. **What a vote needs is never evicted.** The active store evicts least
    recently used batches to stay within budget, but never a batch named by a
    header this validator has not yet voted on or a certificate it has not yet
-   executed. Evicting such a batch only causes it to be fetched again.
+   executed — committed or not. Evicting the first only causes it to be
+   fetched again. Evicting the second breaks what the certificate proves: a
+   certificate says 2f+1 validators hold its batches (Narwhal, sec. 4), and a
+   voter that drops its copy leaves fewer to fetch from when it commits.
+   A batch carries no author, so any peer can send batches no header names;
+   those are evicted first and can only evict each other, never a batch a
+   header this validator voted on names (#4598).
 4. **Own uncommitted batches are bounded by refusing new work, not by
    growing.** A validator's own batches cannot be evicted — it is responsible
    for them reaching a certificate — so when they fill the budget the
@@ -190,18 +196,33 @@ of transactions a few times a second.
 
 `StoreBatch` adds a batch and, when the peer cache exceeds its byte budget,
 runs an LRU eviction over peers' batches that skips pinned ones (those a
-pending vote needs) and those named by a certificate consensus has committed
-and the executor has not yet executed — marked when the group is handed to
-the executor, released when `PruneCommitted` retires them (or the executor
-skips a re-delivered certificate); own batches are counted against their own
-share (invariant 8). A follower casts no vote, so the second mark is the
-only thing that keeps its backlog: without it, a follower 300 blocks behind
-evicted a committed batch the validators had already retired and waited on
-it for good (Docker run `20261007T050444Z`, bvn2-fol1). A node so far behind
+pending vote needs), those a certified header in the DAG names
+(`Config.Certified`, the DAG's `HasCertifiedBatch`), and those named by a
+certificate consensus has committed and the executor has not yet executed —
+marked when the group is handed to the executor, released when
+`PruneCommitted` retires them (or the executor skips a re-delivered
+certificate); own batches are counted against their own share (invariant 8).
+A follower casts no vote and its DAG may be far behind, so the execution
+mark is the only thing that keeps its backlog: without it, a follower 300
+blocks behind evicted a committed batch the validators had already retired
+and waited on it for good (Docker run `20261007T050444Z`, bvn2-fol1). A node so far behind
 that its backlog outgrows memory is past the retention window and resyncs
 (invariant 6). There is no count limit by default: `MaxStoredBatches`
 and `MaxRetainedBatches` are zero, and only a test sets them. A negative
 `MaxRetainedBatches` turns retention off.
+
+A certified batch leaves the active store when `PruneCommitted` retires it
+after execution, or becomes evictable when the DAG collects the round of the
+certificate that named it, if that certificate never committed (DAG
+retention); either way the protected set is bounded by the DAG's.
+Eviction runs in two passes. When the primary votes on a header it marks
+the batches the header names (`NameBatches`); the first pass evicts only
+unmarked batches — those no header this node voted on names, which is what
+an arbitrary peer can send — and the second pass evicts marked ones, oldest
+first, only if the first did not bring the cache within its target. Batches
+normally arrive before the header that names them, so an unmarked batch is
+stored, not refused; the cost of a stream of unnamed batches falls on other
+unnamed batches, which a vote fetches again if it needs them (invariant 11).
 
 ### Refusal and back-pressure
 

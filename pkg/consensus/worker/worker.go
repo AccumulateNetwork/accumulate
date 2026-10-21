@@ -182,7 +182,9 @@ type Config struct {
 	// Certified reports whether a certified header names a batch. A batch it
 	// reports is never re-proposed (consensus spec, invariant 7): the DAG has
 	// it, and the executor will retire it when that certificate's block is
-	// produced. Nil means "unknown", and re-proposal falls back to age alone.
+	// produced. Nor is it evicted (invariant 3): the certificate is a proof
+	// that this validator holds it. Nil means "unknown", and re-proposal falls
+	// back to age alone.
 	Certified func(types.BatchDigest) bool
 }
 
@@ -269,6 +271,10 @@ type lruEntry struct {
 	// traffic is what a lagging executor is often waiting on (consensus spec,
 	// "System traffic is proposed while execution lags"; #4517).
 	user bool
+	// named marks a peer batch that a header this node voted on names.
+	// Eviction takes batches no header names first, so a peer sending
+	// batches nobody names cannot evict one that is (#4598).
+	named bool
 }
 
 // Worker collects transactions and creates batches for the consensus layer.
@@ -1386,37 +1392,55 @@ func (w *Worker) performEviction() {
 	// committed thousands of rounds late; if the author has already
 	// LRU-evicted that leader's batch, CollectBatches finds it nowhere
 	// (absence=no-record, peerHits=0) and the partition wedges permanently
-	// (#4159). Gossiped copies are just cache and stay evictable — the author
-	// is the source of truth and must retain its own batches until PruneCommitted
+	// (#4159). The author must retain its own batches until PruneCommitted
 	// moves them to `retained`. Walk from the LRU back (least-recently-used)
 	// toward the front, skipping own entries.
-	evicted, skippedOwn, skippedPinned := 0, 0, 0
-	for e := w.lruList.Back(); e != nil && overTarget(); {
-		prev := e.Prev()
-		lruDigest := e.Value.(types.BatchDigest)
-		entry, ok := w.batches[lruDigest]
-		if ok && entry.own {
-			skippedOwn++
+	//
+	// Nor a batch a certified header names (invariant 3): the certificate is
+	// a proof that this validator holds it, and if the copy is gone the
+	// author's is the only one left when the certificate commits (#4598).
+	//
+	// A batch carries no author, so any peer can send batches no header
+	// names. The first pass evicts only those; batches a header this node
+	// voted on names are evicted in the second pass, and only if the first
+	// was not enough. Batches nobody names can then only evict each other.
+	evicted, skippedOwn, skippedPinned, skippedCertified := 0, 0, 0, 0
+	for pass := 0; pass < 2 && overTarget(); pass++ {
+		for e := w.lruList.Back(); e != nil && overTarget(); {
+			prev := e.Prev()
+			lruDigest := e.Value.(types.BatchDigest)
+			entry, ok := w.batches[lruDigest]
+			_, held := w.awaiting[lruDigest]
+			switch {
+			case ok && entry.own:
+				if pass == 0 {
+					skippedOwn++
+				}
+			case held || w.pins[lruDigest] > 0:
+				// A header is waiting on this to vote.  Evicting it is not
+				// reclaiming cache, it is undoing work that has to be redone
+				// before the partition can advance.
+				if pass == 0 {
+					skippedPinned++
+				}
+			case w.config.Certified != nil && w.config.Certified(lruDigest):
+				if pass == 0 {
+					skippedCertified++
+				}
+			case pass == 0 && ok && entry.named:
+				// Left for the second pass.
+			default:
+				w.lruList.Remove(e)
+				delete(w.batches, lruDigest)
+				if ok {
+					w.storedBytes -= batchBytes(entry.batch)
+				}
+				w.noteGone(lruDigest, GoneEvicted,
+					fmt.Sprintf("store over limit (%d batches / %d bytes)", w.config.MaxStoredBatches, w.maxStoredBytes), "")
+				evicted++
+			}
 			e = prev
-			continue
 		}
-		if _, held := w.awaiting[lruDigest]; held || w.pins[lruDigest] > 0 {
-			// A header is waiting on this to vote.  Evicting it is not
-			// reclaiming cache, it is undoing work that has to be redone
-			// before the partition can advance.
-			skippedPinned++
-			e = prev
-			continue
-		}
-		w.lruList.Remove(e)
-		delete(w.batches, lruDigest)
-		if ok {
-			w.storedBytes -= batchBytes(entry.batch)
-		}
-		w.noteGone(lruDigest, GoneEvicted,
-			fmt.Sprintf("store over limit (%d batches / %d bytes)", w.config.MaxStoredBatches, w.maxStoredBytes), "")
-		evicted++
-		e = prev
 	}
 
 	w.observeStore()
@@ -1432,17 +1456,19 @@ func (w *Worker) performEviction() {
 			"remaining", len(w.batches),
 			"skippedOwnUncommitted", skippedOwn,
 			"skippedPinned", skippedPinned,
+			"skippedCertified", skippedCertified,
 			"workerID", w.config.ID)
 	}
 	// The peer cache could not reach its target because what is left is
-	// pinned: headers are waiting on more than the budget holds. A state,
-	// logged when it changes and counted while it holds (invariant 5). Own
-	// batches have their own budget and are SubmitUser's to refuse on.
-	w.setOverLimit(overTarget() && skippedPinned > 0, skippedPinned)
+	// pinned or certified: headers and certificates need more than the budget
+	// holds. A state, logged when it changes and counted while it holds
+	// (invariant 5). Own batches have their own budget and are SubmitUser's
+	// to refuse on.
+	w.setOverLimit(overTarget() && skippedPinned+skippedCertified > 0, skippedPinned+skippedCertified)
 }
 
 // setOverLimit records whether the peer cache is over its budget with only
-// pinned batches left to evict, logging the transition and counting it. The
+// pinned or certified batches left to evict, logging the transition and counting it. The
 // caller must hold batchMu.
 func (w *Worker) setOverLimit(over bool, pinned int) {
 	if over == w.overLimit {
@@ -1451,7 +1477,7 @@ func (w *Worker) setOverLimit(over bool, pinned int) {
 	w.overLimit = over
 	w.overLimitChanges.Add(1)
 	if over {
-		slog.Warn("Peer batch cache over budget with only pinned batches left (headers are waiting on more than it holds)",
+		slog.Warn("Peer batch cache over budget with only pinned or certified batches left (headers and certificates need more than it holds)",
 			"stored", len(w.batches),
 			"peerBytes", w.peerBytes(),
 			"ownBytes", w.ownBytes,
@@ -1484,6 +1510,20 @@ func (w *Worker) PinBatches(digests []types.BatchDigest) {
 	}
 	for _, d := range digests {
 		w.pins[d]++
+	}
+}
+
+// NameBatches marks stored batches as named by a header this node voted on,
+// so eviction takes the batches no header names before them. The mark stays
+// until the batch leaves the store; it orders eviction and protects nothing
+// once only named batches are left over the budget.
+func (w *Worker) NameBatches(digests []types.BatchDigest) {
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	for _, d := range digests {
+		if e, ok := w.batches[d]; ok {
+			e.named = true
+		}
 	}
 }
 

@@ -793,6 +793,18 @@ func (p *Primary) pinHeaderBatches(headerDigest types.HeaderDigest, header *type
 	}
 }
 
+// nameHeaderBatches marks the batches a header names on every worker, so
+// eviction takes batches no header names first.
+func (p *Primary) nameHeaderBatches(header *types.Header) {
+	digests := make([]types.BatchDigest, 0, len(header.Payload))
+	for _, entry := range header.Payload {
+		digests = append(digests, entry.Digest)
+	}
+	for _, w := range p.workers {
+		w.NameBatches(digests)
+	}
+}
+
 // releasePins drops the pins a header took: it was voted on, or it aged out.
 func (p *Primary) releasePins(headerDigest types.HeaderDigest) {
 	p.pendingMu.Lock()
