@@ -556,6 +556,8 @@ class Monitor:
                 event(f"{tid}: worker exited 3 times; left for the operator")
             return
         quiet = time.time() - _ts(st.get("updated"))
+        if st.get("status") == "blocked":  # waiting on the operator; nudging only makes noise
+            return
         if quiet > self.NUDGE_AFTER and time.time() - _ts(st.get("nudged")) > self.NUDGE_AFTER:
             set_task_state(tid, nudged=now())
             tell(tid, f"ci-fix monitor: no status from you in {quiet / 60:.0f} minutes. "
