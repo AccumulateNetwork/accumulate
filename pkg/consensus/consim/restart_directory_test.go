@@ -37,9 +37,13 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 		BatchSize:        20,
 		TargetHeight:     target,
 		TargetEveryNode:  true,
-		Duration:         4 * time.Minute,
-		StallAfter:       30 * time.Second,
-		StateDir:         t.TempDir(),
+		// From the CPU it needs, not from a 24-core box (#4610): the run
+		// costs about 829 CPU-seconds, 415 s of 2 vCPUs, and on 2 dedicated
+		// cores the Directory made 1.4 blocks a second, reaching 322 of 400
+		// in the 4 minutes this was. Ten minutes is twice that measured time.
+		Duration:   10 * time.Minute,
+		StallAfter: 30 * time.Second,
+		StateDir:   t.TempDir(),
 		Restarts: []Restart{{
 			Part: "Directory", Vals: []int{restarted}, AtHeight: 40,
 			StopFirst: []int{restarted}, StopFirstFor: 2 * time.Second,
