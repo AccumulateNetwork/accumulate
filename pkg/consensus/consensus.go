@@ -232,6 +232,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		if err != nil {
 			return nil, fmt.Errorf("create gossip layer: %w", err)
 		}
+		g.SetCommittee(committee)
 	}
 
 	// Create workers.
@@ -1103,6 +1104,9 @@ func (n *Node) InitGenesis(validators []genesis.ValidatorInfo) error {
 
 	// Update committee to match genesis committee
 	n.committee = result.Committee
+	if n.gossip != nil {
+		n.gossip.SetCommittee(result.Committee)
+	}
 
 	// Set primary to round 1 since genesis is done
 	n.primary.SetRound(result.InitialRound)
@@ -1176,6 +1180,11 @@ func (n *Node) UpdateCommittee(committee *types.Committee) {
 
 	// Update Bullshark's committee
 	n.bullshark.UpdateCommittee(committee)
+
+	// And the committee gossip judges consensus messages by
+	if n.gossip != nil {
+		n.gossip.SetCommittee(committee)
+	}
 }
 
 // perWorkerBytes splits a per-partition byte budget across workers.

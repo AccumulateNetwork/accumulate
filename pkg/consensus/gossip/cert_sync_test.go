@@ -237,6 +237,9 @@ func TestGossipLayer_BroadcastAndReceiveSyncResponse(t *testing.T) {
 
 	gl2, err := gossip.NewGossipLayer(h2, ps2, "test")
 	require.NoError(t, err)
+	committee, keys := newCommittee(t, 1)
+	gl1.SetCommittee(committee)
+	gl2.SetCommittee(committee)
 
 	err = gl1.Start(ctx)
 	require.NoError(t, err)
@@ -249,14 +252,7 @@ func TestGossipLayer_BroadcastAndReceiveSyncResponse(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Create certificate
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-
-	header := types.NewHeader(pub, 1, 0, nil, nil)
-	err = header.Sign(priv)
-	require.NoError(t, err)
-
-	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
+	cert := quorumCert(t, committee, keys, signedHeader(t, keys[0], 1, committee.Epoch))
 
 	resp := &gossip.CertSyncResponse{
 		Certificates: []*types.Certificate{cert},

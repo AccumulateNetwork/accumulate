@@ -140,6 +140,19 @@ So a validator holds batches in four places, for four reasons:
     and the partition stops while its peers run on. Both halves have now cost
     exactly that — batches in #4159, parent certificates in #4182.
 
+12. **Only the committee speaks for consensus, and a node passes on only
+    what it has checked.** Narwhal assumes authenticated links among the
+    validators; here a partition's consensus topics run on the node's one
+    libp2p router, which any peer can reach. So the authority of a header,
+    vote or certificate is its author's key, not the peer it came from: a
+    node delivers one to consensus, and relays it to its peers, only when
+    its author is a member of the committee of the epoch it names and its
+    signatures are that member's (for a certificate, a quorum of members').
+    The check is made by the router before relay, cheapest part first, so a
+    message from outside the committee costs each receiver a decode and a
+    lookup and goes no further (#4596). Which peers a validator exchanges
+    these topics with is not yet decided (DIFFERENCES C16).
+
 ## 2. Specification — how it is implemented
 
 `pkg/consensus/worker` (the worker, its pending list, active store and
@@ -297,6 +310,45 @@ they are, these are the facts the executor and healing parts depend on:
   history. A certificate no header ever references is never executed and its
   batches are lost; the weak-link window is what makes that impossible in
   practice, and the count of orphaned certificates is a metric.
+
+### Who may send consensus messages
+
+Every consensus topic of a partition has a validator registered with the
+router (`pkg/consensus/gossip/topic-validators.go`). The router runs it on
+every message, including the node's own, before the message is delivered or
+relayed. Checks run in this order and stop at the first that fails: decode
+within the encoding's bounds; the committee of the epoch the message names;
+the author's membership of that committee; signatures.
+
+| topic | delivered and relayed only if |
+|---|---|
+| `headers` | it decodes, and its author is a member of its epoch's committee and signed it |
+| `votes` | it decodes, and its author is a member of its epoch's committee and signed it |
+| `certs` | it decodes, and it verifies against its epoch's committee: the author is a member and signed the header, and distinct members' vote signatures make a quorum |
+| `cert-sync`, request | it decodes. Requests are unsigned, and the nodes that send them, joining nodes among them, need not be in the committee |
+| `cert-sync`, response | it decodes, and every certificate in it is authored by a member of its epoch's committee. The certificates' signatures are verified by the receiver before any is used or counts as an answer ("Certificate catch-up"), not before relay: a response carries up to 100 and every node receives every response |
+| `batches` | it decodes and holds at least one transaction. A batch names no author and carries no signature, so nothing ties it to a member; what batches can cost a validator is bounded by the inbound queue and the store (invariants 1 and 3) |
+
+A message that fails a check is **rejected**. A message naming an epoch the
+node holds no committee for is **ignored**: neither delivered nor relayed,
+but not counted as invalid against its sender, because a node behind on a
+committee change cannot tell a future epoch from a false one. The node holds the
+current committee and the one before it, so around a switch messages of the
+previous epoch are still judged by their own committee; a node that has been
+given no committee ignores every message that needs one. When the committee
+changes, `Node.UpdateCommittee` passes it to gossip with the primary and
+Bullshark. What is refused is counted in
+`accumulate_dagbft_gossip_refused_total{topic,outcome}` and logged at Debug,
+since anyone can send messages that are refused (invariant 5); ignored
+messages rising on one node while its peers accept them is that node behind
+on a committee change. An undecodable certificate is still logged at Info
+(#4054).
+
+A validator that accepts hands the decoded message to the handler, so a
+message is decoded once. The handlers keep their own checks — membership
+before signature for headers and votes, verification for certificates, the
+vote rate limiter — because they are also what judges a message against the
+primary's own round and epoch.
 
 ### DAG retention
 

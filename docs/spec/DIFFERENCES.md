@@ -1879,6 +1879,40 @@ Catch-up is built if PLAN R8-1's Docker run shows restart catch-up still slow
 or bursty. Otherwise this entry records a design that is decided and not yet
 needed.
 
+### C16. Any peer can publish on the consensus topics, and validated messages are relayed for it
+
+*[#4596](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4596) — a design decision*
+
+consensus.md, invariant 12 and "Who may send consensus messages": only the
+committee speaks for consensus, and Narwhal, which the protocol follows,
+assumes authenticated links among the validators. The topic validators make
+the first half true of messages: what is not authored and signed by a
+member of its epoch's committee is neither delivered nor relayed. The links
+are not authenticated. The router that carries the topics is the API node's
+(`cmd/accumulated/run/instance.go`), which accepts any peer, and nothing maps
+a libp2p peer to a committee key: a node's p2p key is its node key, a
+different key from its validator key, and the one binding of a peer ID to a
+validator key, the relay challenge (`internal/node/dagbft/relay_challenge.go`,
+#4366), is a request made on demand, not a record the router can consult.
+So a peer outside the committee can still:
+
+- publish batches, which carry no author: they are bounded by the inbound
+  queue and the batch store (#4598), not refused;
+- publish sync requests, which are unsigned, and sync responses whose
+  certificates name members but do not verify: the receiver verifies each
+  before it is used (#4597), but every node receives and relays them;
+- republish genuine headers, votes and certificates under its own message
+  IDs: each copy passes validation and is relayed, and is recognised as a
+  copy only by the handlers.
+
+**What must be decided** is whether the consensus topics are limited to
+committee peers and, if they are, how the router learns which peers those
+are: a validator's p2p identity bound to its validator key (a signed record,
+or the relay challenge run at connection), and what non-members — followers
+and joining nodes, which take certificates and batches from these topics —
+receive instead. #4587 (committee members are not guaranteed to be connected
+to one another) is the same decision seen from the other side.
+
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
 *[#4420](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4420)*

@@ -274,21 +274,22 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 			"round", header.Round)
 	}
 
-	// Verify header signature
-	if err := header.Verify(); err != nil {
-		slog.Debug("Invalid header signature",
-			"error", err,
-			"author", hexEncode(header.Author))
-		return
-	}
-
-	// Check author is in committee (uses committeeMu)
+	// Check author is in committee (uses committeeMu): the map lookup
+	// before the signature check, as for votes
 	p.committeeMu.RLock()
 	inCommittee := p.committee.ContainsValidator(header.Author)
 	p.committeeMu.RUnlock()
 
 	if !inCommittee {
 		slog.Debug("Header from unknown validator",
+			"author", hexEncode(header.Author))
+		return
+	}
+
+	// Verify header signature
+	if err := header.Verify(); err != nil {
+		slog.Debug("Invalid header signature",
+			"error", err,
 			"author", hexEncode(header.Author))
 		return
 	}
