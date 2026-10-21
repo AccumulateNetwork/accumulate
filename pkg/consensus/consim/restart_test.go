@@ -45,11 +45,15 @@ func runRestartOf(t *testing.T, r Restart, tweak func(*Config)) {
 		BatchTimeout:     10 * time.Millisecond,
 		BatchSize:        20,
 		TargetHeight:     160,
-		Duration:         3 * time.Minute,
-		StallAfter:       20 * time.Second,
-		StateDir:         t.TempDir(),
-		Restarts:         []Restart{r},
-		Out:              os.Stdout,
+		// Every node, not the furthest: the assertion below is per
+		// restarted node, and a run that stopped when one node reached
+		// 160 failed its peer at 159, executing, on a loaded box (#4610).
+		TargetEveryNode: true,
+		Duration:        3 * time.Minute,
+		StallAfter:      20 * time.Second,
+		StateDir:        t.TempDir(),
+		Restarts:        []Restart{r},
+		Out:             os.Stdout,
 	}
 	if tweak != nil {
 		tweak(&cfg)

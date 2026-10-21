@@ -39,6 +39,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -261,6 +262,7 @@ type simNode struct {
 	lastSaved     *persist.Checkpoint
 	seqMu         sync.Mutex
 	seq           []string
+	reproduced    []string // blocks produced again after a restore that differ from the first time
 
 	stopConsume  context.CancelFunc
 	consumeDone  chan struct{}
@@ -347,6 +349,12 @@ type Result struct {
 
 // ErrStalled is returned (wrapped) when a partition stops executing.
 var ErrStalled = errors.New("partition stalled")
+
+// ErrMeshIncomplete is returned (wrapped) when a node's gossip never reaches
+// every other validator of its partition before the load starts: the run
+// would test a partition short of a validator, and its stall would read as
+// a consensus fault.
+var ErrMeshIncomplete = errors.New("gossip mesh incomplete")
 
 // New builds the network: one libp2p host per validator, a Directory node on
 // every host, and a BVN node on each host for its validator's BVN — the
@@ -574,8 +582,19 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				}
 			}
 			if executedAny {
+				// seq holds one entry per block index. A node restored from
+				// its older checkpoint produces the blocks after it again
+				// (#4448): each must be the block it recorded, not another
+				// entry that shifts its sequence against its peers'.
+				entry := fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ","))
 				sn.seqMu.Lock()
-				sn.seq = append(sn.seq, fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ",")))
+				if i := int(sn.height.Load()); i < len(sn.seq) {
+					if sn.seq[i] != entry {
+						sn.reproduced = append(sn.reproduced, fmt.Sprintf("block %d produced again differs:\n  %s\n  %s", i+1, sn.seq[i], entry))
+					}
+				} else {
+					sn.seq = append(sn.seq, entry)
+				}
 				sn.seqMu.Unlock()
 				h := sn.height.Add(1)
 				if blockTxs > 0 {
@@ -806,6 +825,9 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 	}
 	// Let the gossip mesh form before load; production waits too.
 	time.Sleep(2 * time.Second)
+	if err := s.awaitMesh(ctx, 10*time.Second); err != nil {
+		return s.finish(start, false, err.Error()), err
+	}
 	for _, part := range s.parts {
 		s.wg.Add(1)
 		go s.load(ctx, part)
@@ -914,6 +936,40 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 
 		if allAtTarget {
 			return s.finish(start, true, "target height"), nil
+		}
+	}
+}
+
+// awaitMesh waits until every node sees, on each of its partition's topics,
+// every other validator of the partition, and reports the first node that
+// does not by the deadline.
+func (s *Sim) awaitMesh(ctx context.Context, within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for {
+		short := ""
+		for _, sn := range s.nodes {
+			want := len(s.byPart[sn.part]) - 1
+			for _, pattern := range []string{gossip.TopicBatches, gossip.TopicHeaders, gossip.TopicVotes, gossip.TopicCerts, gossip.TopicCertSync} {
+				topic := fmt.Sprintf(pattern, sn.part)
+				if got := len(sn.ps.ListPeers(topic)); got < want {
+					short = fmt.Sprintf("%s/%d sees %d of %d peers on %s", sn.part, sn.val, got, want, topic)
+					break
+				}
+			}
+			if short != "" {
+				break
+			}
+		}
+		if short == "" {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w after %s: %s", ErrMeshIncomplete, within, short)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }

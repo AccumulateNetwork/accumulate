@@ -45,7 +45,29 @@ go test 1/2:
   # integration packages (cmd/consensus-testnet) hold many individually
   # bounded multi-node tests whose sum exceeds it — the package failed on
   # every pipeline while each test inside it was fine.
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet ./...
+  # consim runs in its own job (go test consim).
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet $(go list -tags testnet ./... | grep -v /pkg/consensus/consim)
+
+go test consim:
+  # The in-process consensus simulator, on a runner of its own (#4610).
+  # Beside the rest of ./... on the 2-vCPU runner it shared its cores with
+  # another package, and its sims, timed in seconds, stalled for want of
+  # CPU. The package takes 1670 s on 2 dedicated cores (2026-10-21, every
+  # test passing; TestRestartOneDirectoryValidatorOfTwelve 416 s of it).
+  # -timeout 45m is 1.6 times that; the job adds 15 minutes to fetch
+  # modules and build.
+  extends: .go test
+  timeout: 1h
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
+    ACC_ASSERT_IDENTITY_BOUNDARY: '1'
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 45m -tags testnet ./pkg/consensus/consim/...
 
 go test 2/2:
   # No-mmap indexer test

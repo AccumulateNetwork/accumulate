@@ -268,8 +268,17 @@ func (s *Sim) Sequences(part string) [][]string {
 }
 
 // CheckSequences reports the first block at which two nodes of a partition
-// executed different things.
+// executed different things, or at which a restored node produced a block
+// again differently.
 func (s *Sim) CheckSequences(part string) error {
+	for i, sn := range s.byPart[part] {
+		sn.seqMu.Lock()
+		reproduced := sn.reproduced
+		sn.seqMu.Unlock()
+		if len(reproduced) > 0 {
+			return fmt.Errorf("%s: node %d: %s", part, i, reproduced[0])
+		}
+	}
 	seqs := s.Sequences(part)
 	for i := 1; i < len(seqs); i++ {
 		n := min(len(seqs[0]), len(seqs[i]))
