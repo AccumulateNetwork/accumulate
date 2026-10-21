@@ -145,6 +145,18 @@ func (ReleaseLockedOperation) check(st *StateManager, tx *Delivery) (*protocol.R
 		return nil, nil, nil, errors.BadRequest.WithFormat("referenced transaction is not a locked deposit: got %T", lockedTx.Body)
 	}
 
+	// Only a delivered deposit holds the funds. One that was refunded at
+	// expiration is marked expired.
+	if st.Globals.ExecutorVersion.V2KourouEnabled() {
+		switch txStatus.Code {
+		case errors.Delivered:
+		case errors.Expired:
+			return nil, nil, nil, errors.Expired.With("locked deposit has been refunded")
+		default:
+			return nil, nil, nil, errors.BadRequest.WithFormat("locked deposit has not been delivered: %v", txStatus.Code)
+		}
+	}
+
 	// Verify principal matches locked deposit destination
 	if !tx.Transaction.Header.Principal.Equal(lockedTx.Header.Principal) {
 		return nil, nil, nil, errors.Unauthorized.With("release must be signed by locked deposit recipient")

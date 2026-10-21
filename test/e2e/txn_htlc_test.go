@@ -17,6 +17,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -659,13 +661,155 @@ func TestHTLC_LiteAccountRecipient(t *testing.T) {
 	require.Equal(t, int64(10*AcmePrecision), bobAccount.Balance.Int64())
 }
 
-// TestHTLC_ExpiredLock tests that an expired lock cannot be released.
-// NOTE: This test is skipped because the simulator uses GenesisTime (2022) as its block time,
-// while the hashlock validation uses wall clock time (time.Now() in 2026). This creates a
-// ~4 year gap that makes it impractical to test expiration by advancing simulator block time.
-// The expiration logic is tested implicitly through unit tests and the code path is exercised.
+// expiringLock is a lock from Alice to Bob on a network that makes a major
+// block every minute and caps pending events at one major block, so the
+// expiry event for the lock fires long before the lock's expiration.
+type expiringLock struct {
+	sim        *Sim
+	alice, bob *url.URL
+	bobKey     []byte
+	preimage   []byte
+	expiration time.Time
+	lockedTxID *url.TxID
+}
+
+func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
+	t.Helper()
+	x := new(expiringLock)
+	x.alice = url.MustParse("alice")
+	x.bob = url.MustParse("bob")
+	aliceKey := acctesting.GenerateKey(x.alice)
+	x.bobKey = acctesting.GenerateKey(x.bob)
+
+	g := new(network.GlobalValues)
+	g.ExecutorVersion = version
+	g.Globals = new(NetworkGlobals)
+	g.Globals.MajorBlockSchedule = "* * * * *"
+	g.Globals.Limits = new(NetworkLimits)
+	g.Globals.Limits.PendingMajorBlocks = 1
+
+	// SendTokens checks the expiration against the wall clock, so the
+	// simulator's clock must start there.
+	now := time.Now()
+	x.sim = NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.GenesisWith(now, g),
+	)
+
+	MakeIdentity(t, x.sim.DatabaseFor(x.alice), x.alice, aliceKey[32:])
+	CreditCredits(t, x.sim.DatabaseFor(x.alice), x.alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, x.sim.DatabaseFor(x.alice), &TokenAccount{Url: x.alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, x.sim.DatabaseFor(x.alice), x.alice.JoinPath("tokens"), big.NewInt(100*AcmePrecision))
+
+	MakeIdentity(t, x.sim.DatabaseFor(x.bob), x.bob, x.bobKey[32:])
+	CreditCredits(t, x.sim.DatabaseFor(x.bob), x.bob.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, x.sim.DatabaseFor(x.bob), &TokenAccount{Url: x.bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+
+	x.preimage = []byte("expiring-lock-preimage-32-bytes!")
+	hash := sha256.Sum256(x.preimage)
+	x.expiration = now.Add(11 * time.Minute)
+
+	st := x.sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(x.alice, "tokens").
+			HashLockSHA256(hash, x.expiration).
+			SendTokens(10, AcmePrecisionPower).To(x.bob, "tokens").
+			SignWith(x.alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	x.sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+
+	x.lockedTxID = findLockedDeposit(t, x.sim, st.TxID)
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+	return x
+}
+
+func (x *expiringLock) blockTime(t *testing.T) time.Time {
+	t.Helper()
+	ledger := GetAccount[*SystemLedger](t, x.sim.DatabaseFor(x.alice), PartitionUrl("BVN0").JoinPath(Ledger))
+	return ledger.Timestamp
+}
+
+// stepTo steps until the block time reaches the given time.
+func (x *expiringLock) stepTo(t *testing.T, target time.Time) {
+	t.Helper()
+	for x.blockTime(t).Before(target) {
+		x.sim.Step()
+	}
+}
+
+func (x *expiringLock) balance(t *testing.T, owner *url.URL) int64 {
+	t.Helper()
+	return GetAccount[*TokenAccount](t, x.sim.DatabaseFor(owner), owner.JoinPath("tokens")).Balance.Int64()
+}
+
+func (x *expiringLock) lockStatus() errors2.Status {
+	return x.sim.QueryTransaction(x.lockedTxID, nil).Status
+}
+
+func (x *expiringLock) release(timestamp uint64) *url.TxID {
+	return x.sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(x.bob, "tokens").
+			ReleaseLockedOperation(x.lockedTxID).WithPreimage(x.preimage).
+			SignWith(x.bob, "book", "1").Version(1).Timestamp(timestamp).PrivateKey(x.bobKey)).TxID
+}
+
+// TestHTLC_ExpiredLock verifies that a lock nobody releases is refunded to the
+// sender once it expires, not before, and that a release after the refund
+// fails.
 func TestHTLC_ExpiredLock(t *testing.T) {
-	t.Skip("Simulator block time (GenesisTime 2022) differs from wall clock time used in validation, making expiration testing impractical")
+	x := newExpiringLock(t, ExecutorVersionLatest)
+
+	// The expiry event has fired at least once by now, but the lock has not
+	// expired, so nothing is refunded
+	x.stepTo(t, x.expiration.Add(-30*time.Second))
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+
+	// Two major blocks after the expiration the lock has been refunded
+	x.stepTo(t, x.expiration.Add(2*time.Minute))
+	x.sim.StepN(10)
+	require.Equal(t, errors2.Expired, x.lockStatus())
+	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
+
+	// Bob can no longer release it
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Fails())
+	require.Equal(t, int64(0), x.balance(t, x.bob))
+	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
+}
+
+// TestHTLC_ReleaseAfterEarlyExpiryEvent verifies that a release after the
+// expiry event has fired, but before the lock expires, pays out once: the
+// recipient is paid and the sender is never refunded.
+func TestHTLC_ReleaseAfterEarlyExpiryEvent(t *testing.T) {
+	x := newExpiringLock(t, ExecutorVersionLatest)
+
+	// Let the capped expiry event fire, then release before the expiration
+	x.stepTo(t, x.blockTime(t).Add(3*time.Minute))
+	require.True(t, x.blockTime(t).Before(x.expiration))
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Succeeds())
+	require.Equal(t, int64(10*AcmePrecision), x.balance(t, x.bob))
+
+	// Well past the expiration, the sender has not been refunded
+	x.stepTo(t, x.expiration.Add(3*time.Minute))
+	x.sim.StepN(10)
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+	require.Equal(t, int64(10*AcmePrecision), x.balance(t, x.bob))
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+}
+
+// TestHTLC_ExpiredLockBeforeKourou verifies that a network that has not
+// activated v2-kourou keeps the behaviour it has always had: the expiry event
+// does not refund a delivered lock.
+func TestHTLC_ExpiredLockBeforeKourou(t *testing.T) {
+	x := newExpiringLock(t, ExecutorVersionV2Jiuquan)
+
+	x.stepTo(t, x.expiration.Add(2*time.Minute))
+	x.sim.StepN(10)
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
 }
 
 // TestHTLC_ExpirationRegistration verifies that locked deposits are registered
