@@ -131,10 +131,20 @@ So a validator holds batches in four places, for four reasons:
     wait, and it asks for everything it lacks at once: a header authored
     after a restart names every batch its node accumulated while it was
     down, hundreds of them, and a voter that asked for one per rebroadcast
-    took minutes to certify it (#4503). The author rebroadcasts its header about once a second and each
-    rebroadcast re-tests the same condition, so anything broadcast once and
-    never re-sent — a certificate, a batch — leaves a condition that cannot
-    become true on its own. The cost of getting this wrong is a whole
+    took minutes to certify it (#4503). **A deferred vote is re-tested when
+    what it asked for lands**, not when the author next sends the header:
+    the voter records, per deferred header, the batches and parent
+    certificates it lacks, and the moment the last of them is stored or
+    inserted it tests the header again (#4611). Waiting for the author cost
+    every such header at least one rebroadcast after its batches had
+    arrived, and the headers after a restart carry the backlog a header at
+    a time: a partition went 7–20 s without a block after
+    `TestRestartAfterTwoNodesStopFirst`'s restart, unloaded included. The
+    author still rebroadcasts its header about once a second, and each
+    rebroadcast re-tests the same condition: that is the backstop for a
+    re-test that never fires (a batch evicted again, a notification dropped),
+    and it is why anything broadcast once and never re-sent — a certificate,
+    a batch — leaves a condition that cannot become true on its own. The cost of getting this wrong is a whole
     partition: every validator sits on the round's headers refusing to vote,
     no header reaches the quorum the round needs, the round never advances,
     and the partition stops while its peers run on. Both halves have now cost
