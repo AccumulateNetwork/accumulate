@@ -45,7 +45,14 @@ go test 1/2:
   # integration packages (cmd/consensus-testnet) hold many individually
   # bounded multi-node tests whose sum exceeds it — the package failed on
   # every pipeline while each test inside it was fine.
-  # consim runs in its own job (go test consim).
+  #
+  # The job itself has the project's 1h budget (build_timeout 3600s), and
+  # ./... on this 2-vCPU runner did not fit it (#4610): six jobs from
+  # 2026-10-15 to 2026-10-19 ended job_execution_timeout at 59m35s, with
+  # consim's tests summing ~1750s and test/e2e's ~1440-1580s when killed. The
+  # kill lands on whichever test is running and gotestsum reports it as
+  # FAIL (-1.00s) after "signal: terminated" -- that test did not fail.
+  # consim therefore runs in its own job (go test consim).
   - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet $(go list -tags testnet ./... | grep -v /pkg/consensus/consim)
 
 go test consim:
