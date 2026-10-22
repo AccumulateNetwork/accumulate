@@ -41,6 +41,16 @@ func (s *SignatureContext) maybeSendAuthoritySignature(batch *database.Batch, au
 	authSig.TxID = s.transaction.ID()
 	authSig.Cause = s.message.ID()
 
+	// State the version of the origin, so that whoever consumes the signature
+	// can check that the origin is still at that version (#4614)
+	if s.GetActiveGlobals().ExecutorVersion.V2TanegashimaEnabled() {
+		origin, err := loadSigner(batch, vote.Source)
+		if err != nil {
+			return errors.UnknownError.WithFormat("load origin: %w", err)
+		}
+		authSig.OriginVersion = origin.GetVersion()
+	}
+
 	// Check if the block threshold has been met
 	ok, err := s.blockThresholdIsMet(batch, s.transaction)
 	if err != nil {

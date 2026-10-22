@@ -382,3 +382,7 @@ AuthoritySignature:
     - name: Memo
       type: string
       optional: true
+    - name: OriginVersion
+      description: is the version of the origin when it produced this signature
+      type: uint
+      optional: true

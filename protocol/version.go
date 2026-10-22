@@ -81,6 +81,12 @@ func (v ExecutorVersion) V2KourouEnabled() bool {
 // on a version no network has activated. Kermit already runs v2-kourou; gating
 // on Kourou would have switched the fixes on at deployment and replayed old
 // blocks differently.
+//
+// Tanegashima also makes an authority signature state the version of the page
+// it was produced from (OriginVersion), and refuses the signature if that page
+// is no longer at that version when the signature is consumed to execute its
+// transaction (#4614). Before Tanegashima a signature was checked against the
+// page only when the signature itself was processed.
 func (v ExecutorVersion) V2TanegashimaEnabled() bool {
 	return v >= ExecutorVersionV2Tanegashima
 }

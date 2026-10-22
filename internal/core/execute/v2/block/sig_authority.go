@@ -7,6 +7,8 @@
 package block
 
 import (
+	"strings"
+
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/internal"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -124,6 +126,12 @@ func (x AuthoritySignature) processDirect(batch *database.Batch, ctx *SignatureC
 		return errors.NotAllowed.WithFormat("%v has not been initiated", ctx.transaction.ID())
 	}
 
+	// Verify the origin is still at the version it voted at
+	err = x.checkOriginVersion(batch, ctx, sig)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
 	// Verify the signer is authorized to sign for the principal
 	err = ctx.signerIsAuthorized(batch, sig)
 	if err != nil {
@@ -165,6 +173,12 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		return errors.UnknownError.Wrap(err)
 	}
 
+	// Verify the origin is still at the version it voted at
+	err = x.checkOriginVersion(batch, ctx, sig)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+
 	// Add the signature to the transaction's signature set and chain
 	entry := &database.SignatureSetEntry{
 		KeyIndex: uint64(keyIndex),
@@ -186,4 +200,41 @@ func (x AuthoritySignature) processDelegated(batch *database.Batch, ctx *Signatu
 		Authority: signer.GetAuthority(),
 		Delegator: sig.Delegator[1:],
 	})
+}
+
+// checkOriginVersion verifies that the origin of an authority signature is
+// still at the version it was at when it produced the signature, if the origin
+// is on this partition. The vote was produced when the signature that completed
+// it was processed, and the transaction executes afterwards, possibly after
+// another transaction in the same block has changed the origin. A key signature
+// is refused if its signer version is out of date; the authority's vote is held
+// to the same standard when it is consumed (#4614).
+func (AuthoritySignature) checkOriginVersion(batch *database.Batch, ctx *SignatureContext, sig *protocol.AuthoritySignature) error {
+	if !ctx.GetActiveGlobals().ExecutorVersion.V2TanegashimaEnabled() {
+		return nil
+	}
+
+	// A signature produced before this was enabled, or by an authority that
+	// does not exist (which abstains), does not state a version
+	if sig.OriginVersion == 0 {
+		return nil
+	}
+
+	// The origin can only be checked if it is on this partition
+	partition, err := ctx.Executor.Router.RouteAccount(sig.Origin)
+	if err != nil {
+		return errors.UnknownError.Wrap(err)
+	}
+	if !strings.EqualFold(partition, ctx.Executor.Describe.PartitionId) {
+		return nil
+	}
+
+	origin, err := loadSigner(batch, sig.Origin)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load origin: %w", err)
+	}
+	if origin.GetVersion() != sig.OriginVersion {
+		return errors.BadSignerVersion.WithFormat("invalid version: have %d, got %d", origin.GetVersion(), sig.OriginVersion)
+	}
+	return nil
 }

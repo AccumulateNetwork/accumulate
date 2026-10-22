@@ -152,7 +152,9 @@ type AuthoritySignature struct {
 	Cause     *url.TxID  `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
 	Delegator []*url.URL `json:"delegator,omitempty" form:"delegator" query:"delegator" validate:"required"`
 	Memo      string     `json:"memo,omitempty" form:"memo" query:"memo"`
-	extraData []byte
+	// OriginVersion is the version of the origin when it produced this signature.
+	OriginVersion uint64 `json:"originVersion,omitempty" form:"originVersion" query:"originVersion"`
+	extraData     []byte
 }
 
 type BTCLegacySignature struct {
@@ -1707,6 +1709,7 @@ func (v *AuthoritySignature) Copy() *AuthoritySignature {
 		}
 	}
 	u.Memo = v.Memo
+	u.OriginVersion = v.OriginVersion
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -4298,6 +4301,9 @@ func (v *AuthoritySignature) Equal(u *AuthoritySignature) bool {
 		}
 	}
 	if !(v.Memo == u.Memo) {
+		return false
+	}
+	if !(v.OriginVersion == u.OriginVersion) {
 		return false
 	}
 
@@ -7584,6 +7590,7 @@ var fieldNames_AuthoritySignature = []string{
 	6: "Cause",
 	7: "Delegator",
 	8: "Memo",
+	9: "OriginVersion",
 }
 
 func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
@@ -7619,6 +7626,9 @@ func (v *AuthoritySignature) MarshalBinary() ([]byte, error) {
 	}
 	if !(len(v.Memo) == 0) {
 		writer.WriteString(8, v.Memo)
+	}
+	if !(v.OriginVersion == 0) {
+		writer.WriteUint(9, v.OriginVersion)
 	}
 
 	_, _, err := writer.Reset(fieldNames_AuthoritySignature)
@@ -16123,6 +16133,9 @@ func (v *AuthoritySignature) UnmarshalFieldsFrom(reader *encoding.Reader) error 
 	if x, ok := reader.ReadString(8); ok {
 		v.Memo = x
 	}
+	if x, ok := reader.ReadUint(9); ok {
+		v.OriginVersion = x
+	}
 
 	seen, err := reader.Reset(fieldNames_AuthoritySignature)
 	if err != nil {
@@ -20758,6 +20771,7 @@ func init() {
 		encoding.NewTypeField("cause", "string"),
 		encoding.NewTypeField("delegator", "string[]"),
 		encoding.NewTypeField("memo", "string"),
+		encoding.NewTypeField("originVersion", "uint64"),
 	}, "AuthoritySignature", "authoritySignature")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -21829,15 +21843,16 @@ func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 
 func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      SignatureType               `json:"type"`
-		Origin    *url.URL                    `json:"origin,omitempty"`
-		Authority *url.URL                    `json:"authority,omitempty"`
-		Vote      VoteType                    `json:"vote,omitempty"`
-		TxID      *url.TxID                   `json:"txID,omitempty"`
-		Cause     *url.TxID                   `json:"cause,omitempty"`
-		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
-		Memo      string                      `json:"memo,omitempty"`
-		ExtraData *string                     `json:"$epilogue,omitempty"`
+		Type          SignatureType               `json:"type"`
+		Origin        *url.URL                    `json:"origin,omitempty"`
+		Authority     *url.URL                    `json:"authority,omitempty"`
+		Vote          VoteType                    `json:"vote,omitempty"`
+		TxID          *url.TxID                   `json:"txID,omitempty"`
+		Cause         *url.TxID                   `json:"cause,omitempty"`
+		Delegator     encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+		Memo          string                      `json:"memo,omitempty"`
+		OriginVersion uint64                      `json:"originVersion,omitempty"`
+		ExtraData     *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Origin == nil) {
@@ -21860,6 +21875,9 @@ func (v *AuthoritySignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(len(v.Memo) == 0) {
 		u.Memo = v.Memo
+	}
+	if !(v.OriginVersion == 0) {
+		u.OriginVersion = v.OriginVersion
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -24641,15 +24659,16 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 
 func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      SignatureType               `json:"type"`
-		Origin    *url.URL                    `json:"origin,omitempty"`
-		Authority *url.URL                    `json:"authority,omitempty"`
-		Vote      VoteType                    `json:"vote,omitempty"`
-		TxID      *url.TxID                   `json:"txID,omitempty"`
-		Cause     *url.TxID                   `json:"cause,omitempty"`
-		Delegator encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
-		Memo      string                      `json:"memo,omitempty"`
-		ExtraData *string                     `json:"$epilogue,omitempty"`
+		Type          SignatureType               `json:"type"`
+		Origin        *url.URL                    `json:"origin,omitempty"`
+		Authority     *url.URL                    `json:"authority,omitempty"`
+		Vote          VoteType                    `json:"vote,omitempty"`
+		TxID          *url.TxID                   `json:"txID,omitempty"`
+		Cause         *url.TxID                   `json:"cause,omitempty"`
+		Delegator     encoding.JsonList[*url.URL] `json:"delegator,omitempty"`
+		Memo          string                      `json:"memo,omitempty"`
+		OriginVersion uint64                      `json:"originVersion,omitempty"`
+		ExtraData     *string                     `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Origin = v.Origin
@@ -24659,6 +24678,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	u.Cause = v.Cause
 	u.Delegator = v.Delegator
 	u.Memo = v.Memo
+	u.OriginVersion = v.OriginVersion
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -24673,6 +24693,7 @@ func (v *AuthoritySignature) UnmarshalJSON(data []byte) error {
 	v.Cause = u.Cause
 	v.Delegator = u.Delegator
 	v.Memo = u.Memo
+	v.OriginVersion = u.OriginVersion
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
