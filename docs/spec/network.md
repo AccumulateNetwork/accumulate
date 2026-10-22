@@ -93,6 +93,136 @@ key book (`dn.acme/operators`) authorizes. The operators' page is therefore
 the governance root and the definition is the authority read at run time;
 nothing counts anchor signatures against the operators' page itself (#4301).
 
+## A validator's network identity
+
+A validator is two keys. Its **validator key** signs what the protocol
+counts: anchors, and under DAG-BFT headers, votes and certificates. Its
+**node key** is its libp2p identity (`p2p.key`): the peer ID every connection
+to it is authenticated by, and the key every gossip message it publishes is
+signed with (the router's default `StrictSign` policy; a message's `from` is
+the peer ID whose key signed it). The two are separate keys, and until now
+the only thing that tied them together was the relay challenge
+(`internal/node/dagbft/relay_challenge.go`, #4366): a proof made on demand,
+for one request. Nothing a node could read said which peer a validator is,
+so the consensus topics could not be limited to the committee's peers
+(#4596), and committee members had no way to find one another but the
+deployment's bootstrap lists (#4587).
+
+**The binding is on chain, in the network definition.** Each `ValidatorInfo`
+of `dn.acme/network` carries, beside the validator's key, its node's
+identity (`protocol/general.yml`):
+
+```yaml
+ValidatorInfo:
+  fields:
+    # ... PublicKey, PublicKeyHash, Operator, Partitions, then:
+    - name: Peer
+      description: is the libp2p identity of the node that runs this validator, attested by the validator key
+      type: ValidatorPeer
+      marshal-as: reference
+      pointer: true
+      optional: true
+
+ValidatorPeer:
+  fields:
+    - name: ID
+      description: is the node's libp2p peer ID, the bytes of its multihash
+      type: bytes
+    - name: Signature
+      description: is the validator key's signature over the peer-ID attestation
+      type: bytes
+```
+
+The record is the peer ID itself, not the node's public key: the peer ID is
+what the router compares and what a connection is authenticated by, and it
+is defined for every key type libp2p has, while nothing requires a node key
+to be ed25519 (every key the node writes is). An ed25519 peer ID is 38 bytes,
+an identity multihash with the key inline. In JSON it is hex, as every
+`bytes` field is; tooling prints the base58 form (`12D3KooW…`) beside it. A
+node is one libp2p identity whatever partitions it runs (the Directory and a
+BVN on one host, "Converting a mainnet node"), and a validator key is one
+node's, so the record is per validator, not per partition.
+
+**What is signed, and by which key.** `Signature` is the validator key's
+ed25519 signature over the attestation
+
+```
+"acc-validator-peer-id-v1" ‖ network name ‖ SHA-256(validator public key) ‖ peer ID bytes
+```
+
+The first element is a fixed ASCII tag, in the same role as the relay
+challenge's: the validator key also signs headers, votes, certificates,
+anchors and challenge answers, and the tag is what keeps an attestation from
+being read as any of those, and them as an attestation. The network name is
+in it so an attestation made for a devnet is not one for mainnet. The key
+hash is in it so the record binds *this* validator, and the peer ID so it
+binds *this* node. An attestation holds for the key that made it: a
+validator whose key is rotated (`UpdateValidatorKey`) attests again under
+the new key, in the same write.
+
+Who may say what:
+
+- **Only the validator can bind a peer to its key.** The signature is the
+  validator key's, which no operator and no other validator holds. A
+  definition carrying an entry whose signature does not verify against the
+  entry's own key is refused.
+- **A node proves it is the peer by connecting.** The libp2p handshake
+  authenticates the peer ID with the node key, and every gossip message is
+  signed with it. So the record needs no second signature by the node key:
+  a validator that records a peer it does not run has bound its committee
+  seat to an identity it cannot speak from, and has shut out itself, nobody
+  else.
+- **One peer, one validator.** Two entries naming the same peer ID are
+  refused.
+- **Every active validator has one.** From v2-kourou an entry active on any
+  partition without a `Peer` that verifies is refused. The DAG-BFT
+  integration is unreleased, so there is no network with unbound validators
+  to carry: genesis writes every validator bound.
+
+These are checked where the definition is parsed, `GlobalValues.ParseNetwork`
+(`pkg/types/network/globals.go`), which the executor runs on every write to
+`dn.acme/network` (`network_accounts.go`, beside the check that the version
+increases) and genesis runs on the definition it writes, so the check is one
+and a definition genesis would write is one the executor would accept.
+Twelve validators is twelve ed25519 verifies, once per definition write.
+
+**Registering and rotating.** There is no new transaction. The definition
+changes as it always has: a `WriteData` to `dn.acme/network`, writing to
+state, that the operators' key book `dn.acme/operators` authorizes; the
+write carries the whole definition with its version increased ("Where the
+validator set lives"). To register a peer ID — a new validator's, or a
+validator's new one — the operators write the definition with that
+validator's entry carrying the new attestation. The validator makes the
+attestation, since only it can: the node computes it at start from the two
+keys it holds and serves it in its consensus status (`ConsensusStatus.Peer`),
+and `accumulated` prints it on request; an operator collects it and writes
+it. Genesis (`init network`, `BuildGenesisDocs`) holds both keys of every
+node and writes every validator bound; the simulator's network does the
+same. A node converted from CometBFT has both keys in `migrate-legacy`'s
+hands too; what it writes to the definition belongs to the database
+conversion ("Converting a mainnet node").
+
+A validator **rotates** its peer ID — a new `p2p.key` — by having the new
+binding written before the node restarts under it. The old peer stays
+admitted while the committee its definition named is still scheduled
+(consensus.md, "Which peers may send them"), so the node restarts under the
+new key at any time between the write and then. Restarting under a new key
+before it is written is the one order that does not work: the node comes up
+as a peer no committee admits, and must be written in before it can speak.
+
+**What reads it.** The committee built from the definition
+(`types.Committee`) carries each member's peer ID beside its key
+(`types.ValidatorInfo.PeerID`), through the executor bridge and
+`onValidatorSetChange` as the keys travel today. Consensus uses it for two
+things, both in consensus.md, "Which peers may send them": admitting
+consensus messages only from committee peers, and keeping committee members
+connected to one another. The relay (`internal/node/dagbft/relay.go`) still
+challenges a candidate before handing it a submission; with the peer bound on
+chain, a candidate whose peer ID is a member's *is* that member, and the
+challenge is redundant for it — retiring it is a follow-up, not part of this
+change. The record carries no addresses: a peer's addresses come from the
+peerstore, the DHT or the bootstrap lists, as every peer's do.
+
 ## How a new node gets its genesis
 
 A partition's genesis is the snapshot its nodes load into an empty database
