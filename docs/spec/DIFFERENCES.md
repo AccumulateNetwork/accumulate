@@ -1910,7 +1910,8 @@ So a peer outside the committee can still:
 libp2p peer ID is recorded in its `ValidatorInfo` of `dn.acme/network`,
 signed by its validator key over a tagged attestation, written by the same
 operator-authorized `WriteData` that changes the definition today, and
-required of every active validator from v2-kourou. The admitted peers of a
+required of every active validator from the executor version that activates
+the DAG-BFT rules. The admitted peers of a
 partition are the peer IDs of every committee in its schedule (the one
 before, the one now, the one scheduled by #4593's activation round), so a
 change is never a cut. Every topic validator refuses, before decoding, a
@@ -1927,8 +1928,15 @@ topics; they cannot originate on them.
   `ValidatorInfo`; the attestation (`"acc-validator-peer-id-v1" ‖ network
   name ‖ key hash ‖ peer ID`) made and verified in one place; `ParseNetwork`
   refusing an entry whose attestation does not verify, two entries naming
-  one peer, and an active entry without one (gated on v2-kourou);
+  one peer, and an active entry without one, gated on the version below;
   `UpdateValidatorKey`'s callers re-attesting.
+- An executor version to gate on. v2-kourou (10) is active on Kermit, so
+  it cannot be the gate; !1199 (#4139, the DAG-BFT numbering) defines
+  v2-tanegashima (9) below it and nothing above it but the `VNext` (11)
+  placeholder, which is not for use. The first DAG-BFT version after Kourou
+  has to be named and numbered (in `protocol/enums.yml` and
+  `version_freeze_test.go`, on both lines) before this, and #4593's ledger
+  fields, which say v2-kourou today, can be gated.
 - Genesis (`BuildGenesisDocs`, which holds every node's keys) and the
   simulator's network writing every validator bound; `init network` and
   `netsim` checked to produce definitions the executor accepts.
