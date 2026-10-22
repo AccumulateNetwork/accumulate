@@ -761,24 +761,52 @@ func (x ExpiredTransaction) expireTransaction(batch *database.Batch, ctx *Messag
 func (x ExpiredTransaction) expireLockedDeposit(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction, txn *messaging.TransactionMessage) error {
 	body := txn.Transaction.Body.(*protocol.SyntheticLockedDeposit)
 
-	// Check if the locked deposit was already released by checking for a
-	// ReleaseLockedOperation that references this transaction
 	txHash := msg.TxID.Hash()
 	status, err := batch.Transaction(txHash[:]).Status().Get()
 	if err != nil && !errors.Is(err, errors.NotFound) {
 		return errors.UnknownError.WithFormat("load locked deposit status: %w", err)
 	}
 
-	// If the transaction was already delivered (released), skip it
-	if status != nil && status.Code == errors.Delivered {
+	if ctx.GetActiveGlobals().ExecutorVersion.V2TanegashimaEnabled() {
+		// Only a delivered deposit holds the funds, and a released or
+		// refunded one no longer does
+		if status == nil || status.Code != errors.Delivered {
+			return nil
+		}
+		if result, ok := status.Result.(*protocol.SyntheticLockedDepositResult); ok && result.ReleaseTxID != nil {
+			return nil
+		}
+
+		// The expiry event can fire before the expiration because the wait is
+		// capped at PendingMajorBlocks major blocks. Until the deposit has
+		// expired it can still be released, so check again at the next major
+		// block.
+		if !ctx.Block.Time.After(*body.Expiration) {
+			major, err := getMajorHeight(ctx.Executor.Describe, batch)
+			if err != nil {
+				return errors.UnknownError.Wrap(err)
+			}
+			err = batch.Account(ctx.Executor.Describe.Ledger()).Events().Major().Pending(major + 1).Add(msg.TxID)
+			if err != nil {
+				return errors.UnknownError.WithFormat("requeue locked deposit expiration: %w", err)
+			}
+			return nil
+		}
+
+		// Mark the locked deposit as refunded, which prevents a release
+		status.Code = errors.Expired
+
+	} else if status != nil && status.Code == errors.Delivered {
+		// Before Tanegashima, every locked deposit that landed is delivered,
+		// so none is ever refunded (#4578)
 		return nil
+
+	} else {
+		status = &protocol.TransactionStatus{TxID: msg.TxID}
+		status.Code = errors.Expired
 	}
 
-	// Mark the locked deposit as expired
-	err = batch.Transaction(txHash[:]).Status().Put(&protocol.TransactionStatus{
-		TxID: msg.TxID,
-		Code: errors.Expired,
-	})
+	err = batch.Transaction(txHash[:]).Status().Put(status)
 	if err != nil {
 		return errors.UnknownError.WithFormat("update locked deposit status: %w", err)
 	}
@@ -799,7 +827,13 @@ func (x ExpiredTransaction) expireLockedDeposit(batch *database.Batch, ctx *Mess
 	}
 
 	ctx.State.MergeTransaction(state)
-	return nil
+	if !ctx.GetActiveGlobals().ExecutorVersion.V2TanegashimaEnabled() {
+		return nil
+	}
+
+	// Send the refund
+	err = TransactionMessage{}.postProcess(batch, ctx.txnWith(txn.Transaction), state, false)
+	return errors.UnknownError.Wrap(err)
 }
 
 func (x ExpiredTransaction) eraseSignatures(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction) error {
