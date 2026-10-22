@@ -143,8 +143,11 @@ const ExecutorVersionV2Jiuquan ExecutorVersion = 8
 // ExecutorVersionV2Kourou enables collection proofs for cross-partition messaging.
 const ExecutorVersionV2Kourou ExecutorVersion = 9
 
+// ExecutorVersionV2Tanegashima enables the HTLC fixes (refund at expiration, reclaim, block-time expiration bounds).
+const ExecutorVersionV2Tanegashima ExecutorVersion = 10
+
 // ExecutorVersionVNext is a placeholder for testing. DO NOT USE.
-const ExecutorVersionVNext ExecutorVersion = 10
+const ExecutorVersionVNext ExecutorVersion = 11
 
 // HashAlgorithmUnknown is used when the hash algorithm is not known.
 const HashAlgorithmUnknown HashAlgorithm = 0
@@ -831,7 +834,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionV2Kourou, ExecutorVersionVNext:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionV2Kourou, ExecutorVersionV2Tanegashima, ExecutorVersionVNext:
 		*v = u
 		return true
 	}
@@ -859,6 +862,8 @@ func (v ExecutorVersion) String() string {
 		return "v2-jiuquan"
 	case ExecutorVersionV2Kourou:
 		return "v2-kourou"
+	case ExecutorVersionV2Tanegashima:
+		return "v2-tanegashima"
 	case ExecutorVersionVNext:
 		return "vnext"
 	}
@@ -900,6 +905,10 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV2Kourou, true
 	case "v2-kourou":
 		return ExecutorVersionV2Kourou, true
+	case "v2tanegashima":
+		return ExecutorVersionV2Tanegashima, true
+	case "v2-tanegashima":
+		return ExecutorVersionV2Tanegashima, true
 	case "vnext":
 		return ExecutorVersionVNext, true
 	}

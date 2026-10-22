@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Kourou
+const ExecutorVersionLatest = ExecutorVersionV2Tanegashima
 
 func init() {
 	// Verify that ExecutorVersionLatest has been updated, so that tests can
@@ -69,4 +69,18 @@ func (v ExecutorVersion) V2JiuquanEnabled() bool {
 // never precede acceptance being active network-wide.
 func (v ExecutorVersion) V2KourouEnabled() bool {
 	return v >= ExecutorVersionV2Kourou
+}
+
+// V2TanegashimaEnabled checks if the version is at least V2 Tanegashima.
+// Tanegashima enables the HTLC fixes: an expired locked deposit is refunded to
+// its sender once and never alongside a release (#4578), a hashlock's
+// expiration bounds are measured from the block's time (#4612), and a lock
+// whose expiry event already fired can be reclaimed for its sender (#4613).
+//
+// The fixes change what a block does with a locked deposit, so they are gated
+// on a version no network has activated. Kermit already runs v2-kourou; gating
+// on Kourou would have switched the fixes on at deployment and replayed old
+// blocks differently.
+func (v ExecutorVersion) V2TanegashimaEnabled() bool {
+	return v >= ExecutorVersionV2Tanegashima
 }

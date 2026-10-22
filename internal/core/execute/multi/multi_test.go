@@ -257,6 +257,17 @@ func TestVersionSwitch(t *testing.T) {
 		Txn(st.TxID).Succeeds(),
 		VersionIs(ExecutorVersionV2Kourou))
 
+	// Update to v2 tanegashima
+	fmt.Println("Switching to v2 tanegashima")
+	st = sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2Tanegashima).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(&timestamp).Signer(sim.SignWithNode(Directory, 0))))
+
+	sim.StepUntilN(versionSwitchSteps,
+		Txn(st.TxID).Succeeds(),
+		VersionIs(ExecutorVersionV2Tanegashima))
+
 	if GetAccount[*SystemLedger](t, sim.Database(Directory), DnUrl().JoinPath(Ledger)).ExecutorVersion != ExecutorVersionLatest {
 		c := color.New(color.BgRed, color.FgWhite, color.Bold)
 		t.Fatal(c.Sprint("!!! THIS TEST NEEDS TO BE UPDATED !!!") + `
