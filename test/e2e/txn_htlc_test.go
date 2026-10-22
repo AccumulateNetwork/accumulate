@@ -182,6 +182,12 @@ func findLockedDeposit(t *testing.T, sim *Sim, sendTxID *url.TxID) *url.TxID {
 	return nil
 }
 
+// genesisNow starts the simulator's clock at the wall clock. A hashlock's
+// expiration is checked against the wall clock when the send is submitted and
+// against the block time when it executes, so the two must agree for a send to
+// pass both.
+func genesisNow() simulator.Option { return simulator.Genesis(time.Now()) }
+
 // TestHTLC_SuccessfulRelease_SHA256 tests the complete happy path:
 // Alice sends locked tokens to Bob, Bob releases them with the correct preimage.
 func TestHTLC_SuccessfulRelease_SHA256(t *testing.T) {
@@ -192,7 +198,7 @@ func TestHTLC_SuccessfulRelease_SHA256(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	// Create Alice's accounts
@@ -260,7 +266,7 @@ func TestHTLC_SuccessfulRelease_SHA256D(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -320,7 +326,7 @@ func TestHTLC_SuccessfulRelease_HASH160(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -382,7 +388,7 @@ func TestHTLC_WrongPreimage(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -443,7 +449,7 @@ func TestHTLC_UnauthorizedRelease(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -497,7 +503,7 @@ func TestHTLC_DoubleRelease(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -559,7 +565,7 @@ func TestHTLC_CrossPartition(t *testing.T) {
 	// 2 BVNs for cross-partition testing
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 2, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	// Route Alice to BVN0, Bob to BVN1
@@ -617,7 +623,7 @@ func TestHTLC_LiteAccountRecipient(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -823,7 +829,7 @@ func TestHTLC_ExpirationRegistration(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	// Setup Alice with tokens
@@ -897,61 +903,129 @@ func TestHTLC_ExpirationRegistration(t *testing.T) {
 	t.Log("Locked deposit was delivered and registered for expiration; release succeeded")
 }
 
-// TestHTLC_ValidationErrors tests various validation error cases.
+// htlcSender is Alice, with 100 ACME, who sends locked tokens to Bob.
+type htlcSender struct {
+	sim        *Sim
+	alice, bob *url.URL
+	aliceKey   []byte
+}
+
+func newHTLCSender(t *testing.T, genesis simulator.Option) *htlcSender {
+	t.Helper()
+	x := new(htlcSender)
+	x.alice = url.MustParse("alice")
+	x.bob = url.MustParse("bob")
+	x.aliceKey = acctesting.GenerateKey(x.alice)
+	bobKey := acctesting.GenerateKey(x.bob)
+
+	x.sim = NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 1, 1),
+		genesis,
+	)
+
+	MakeIdentity(t, x.sim.DatabaseFor(x.alice), x.alice, x.aliceKey[32:])
+	CreditCredits(t, x.sim.DatabaseFor(x.alice), x.alice.JoinPath("book", "1"), 1e9)
+	MakeAccount(t, x.sim.DatabaseFor(x.alice), &TokenAccount{Url: x.alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	CreditTokens(t, x.sim.DatabaseFor(x.alice), x.alice.JoinPath("tokens"), big.NewInt(100*AcmePrecision))
+
+	MakeIdentity(t, x.sim.DatabaseFor(x.bob), x.bob, bobKey[32:])
+	MakeAccount(t, x.sim.DatabaseFor(x.bob), &TokenAccount{Url: x.bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
+	return x
+}
+
+// blockTime returns the time of the last block executed by Alice's partition.
+func (x *htlcSender) blockTime(t *testing.T) time.Time {
+	t.Helper()
+	partition, err := x.sim.Router().RouteAccount(x.alice)
+	require.NoError(t, err)
+	ledger := GetAccount[*SystemLedger](t, x.sim.DatabaseFor(x.alice), PartitionUrl(partition).JoinPath(Ledger))
+	return ledger.Timestamp
+}
+
+// send submits a send of 10 ACME from Alice to Bob, locked until the
+// expiration, and returns the submission-time status.
+func (x *htlcSender) send(t *testing.T, timestamp uint64, expiration time.Time) *TransactionStatus {
+	t.Helper()
+	hash := sha256.Sum256([]byte("block-time-preimage"))
+	return x.sim.BuildAndSubmitTxn(
+		build.Transaction().For(x.alice, "tokens").
+			HashLockSHA256(hash, expiration).
+			SendTokens(10, AcmePrecisionPower).To(x.bob, "tokens").
+			SignWith(x.alice, "book", "1").Version(1).Timestamp(timestamp).PrivateKey(x.aliceKey))
+}
+
+func (x *htlcSender) aliceBalance(t *testing.T) int64 {
+	t.Helper()
+	return GetAccount[*TokenAccount](t, x.sim.DatabaseFor(x.alice), x.alice.JoinPath("tokens")).Balance.Int64()
+}
+
+// TestHTLC_ExpirationBoundsUseBlockTime verifies that execution measures a
+// hashlock's expiration from the block's time, not from the node's clock. The
+// block time is pinned at GenesisTime, so the same sends give the same results
+// whenever the test runs, while the wall clock is years past GenesisTime.
+func TestHTLC_ExpirationBoundsUseBlockTime(t *testing.T) {
+	x := newHTLCSender(t, simulator.Genesis(GenesisTime))
+
+	// A lock that expires a day after the block time is long expired by the
+	// wall clock. The submission-time check, which uses the wall clock,
+	// rejects it; the simulator delivers it anyway, and execution accepts it.
+	st := x.send(t, 1, x.blockTime(t).Add(24*time.Hour))
+	require.EqualError(t, st.AsError(), "hashlock expiration must be at least 10 minutes in the future")
+	x.sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+	require.Equal(t, int64(90*AcmePrecision), x.aliceBalance(t))
+
+	// A lock that expires a day after the wall clock passes the
+	// submission-time check but is more than 30 days past the block time, so
+	// execution rejects it.
+	st = x.send(t, 2, time.Now().Add(24*time.Hour))
+	require.NoError(t, st.AsError())
+	x.sim.StepUntil(Txn(st.TxID).Fails().WithMessage("hashlock expiration cannot exceed 30 days"))
+	require.Equal(t, int64(90*AcmePrecision), x.aliceBalance(t))
+}
+
+// TestHTLC_ValidationErrors verifies the expiration bounds, measured from the
+// block time.
 func TestHTLC_ValidationErrors(t *testing.T) {
 	t.Run("HashLockExpirationTooSoon", func(t *testing.T) {
-		alice := url.MustParse("alice")
-		aliceKey := acctesting.GenerateKey(alice)
+		x := newHTLCSender(t, simulator.Genesis(GenesisTime))
 
-		sim := NewSim(t,
-			simulator.SimpleNetwork(t.Name(), 1, 1),
-			simulator.Genesis(GenesisTime),
-		)
-
-		MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
-		CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
-		MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
-		CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(100*AcmePrecision))
-
-		hash := sha256.Sum256([]byte("test"))
 		// Only 5 minutes - less than the 10-minute minimum
-		expiration := time.Now().Add(5 * time.Minute)
-
-		st := sim.BuildAndSubmitTxn(
-			build.Transaction().For(alice, "tokens").
-				HashLockSHA256(hash, expiration).
-				SendTokens(10, AcmePrecisionPower).To("bob/tokens").
-				SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
-
-		sim.StepUntil(Txn(st.TxID).Fails())
+		st := x.send(t, 1, x.blockTime(t).Add(5*time.Minute))
+		x.sim.StepUntil(Txn(st.TxID).Fails().WithMessage("hashlock expiration must be at least 10 minutes in the future"))
+		require.Equal(t, int64(100*AcmePrecision), x.aliceBalance(t))
 	})
 
 	t.Run("HashLockExpirationTooFar", func(t *testing.T) {
-		alice := url.MustParse("alice")
-		aliceKey := acctesting.GenerateKey(alice)
+		x := newHTLCSender(t, simulator.Genesis(GenesisTime))
 
-		sim := NewSim(t,
-			simulator.SimpleNetwork(t.Name(), 1, 1),
-			simulator.Genesis(GenesisTime),
-		)
-
-		MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
-		CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 1e9)
-		MakeAccount(t, sim.DatabaseFor(alice), &TokenAccount{Url: alice.JoinPath("tokens"), TokenUrl: AcmeUrl()})
-		CreditTokens(t, sim.DatabaseFor(alice), alice.JoinPath("tokens"), big.NewInt(100*AcmePrecision))
-
-		hash := sha256.Sum256([]byte("test"))
 		// 60 days - more than the 30-day maximum
-		expiration := time.Now().Add(60 * 24 * time.Hour)
-
-		st := sim.BuildAndSubmitTxn(
-			build.Transaction().For(alice, "tokens").
-				HashLockSHA256(hash, expiration).
-				SendTokens(10, AcmePrecisionPower).To("bob/tokens").
-				SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
-
-		sim.StepUntil(Txn(st.TxID).Fails())
+		st := x.send(t, 1, x.blockTime(t).Add(60*24*time.Hour))
+		x.sim.StepUntil(Txn(st.TxID).Fails().WithMessage("hashlock expiration cannot exceed 30 days"))
+		require.Equal(t, int64(100*AcmePrecision), x.aliceBalance(t))
 	})
+}
+
+// TestHTLC_ExpirationBoundsBeforeTanegashima verifies that a network that has
+// not activated v2-tanegashima keeps the behaviour it has always had: execution
+// measures the expiration from the node's clock, so a lock that expires a day
+// after the pinned block time is rejected and one that expires a day after the
+// wall clock is accepted. Kermit runs v2-kourou, so that is the version the
+// test runs at.
+func TestHTLC_ExpirationBoundsBeforeTanegashima(t *testing.T) {
+	x := newHTLCSender(t, simulator.GenesisWithVersion(GenesisTime, ExecutorVersionV2Kourou))
+
+	st := x.send(t, 1, x.blockTime(t).Add(24*time.Hour))
+	x.sim.StepUntil(Txn(st.TxID).Fails().WithMessage("hashlock expiration must be at least 10 minutes in the future"))
+	require.Equal(t, int64(100*AcmePrecision), x.aliceBalance(t))
+
+	st = x.send(t, 2, time.Now().Add(24*time.Hour))
+	require.NoError(t, st.AsError())
+	x.sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+	require.Equal(t, int64(90*AcmePrecision), x.aliceBalance(t))
 }
 
 // =============================================================================
@@ -977,7 +1051,7 @@ func TestHTLC_CrossChainSwap_AccumulateInitiated(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	// Create Alice's Accumulate account with ACME
@@ -1098,7 +1172,7 @@ func TestHTLC_CrossChainSwap_EthereumInitiated(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	// Create Alice's Accumulate account with ACME
@@ -1253,7 +1327,7 @@ func TestHTLC_CrossChainSwap_WrongPreimage(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
@@ -1332,7 +1406,7 @@ func TestHTLC_CrossChainSwap_MultipleSwaps(t *testing.T) {
 
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),
-		simulator.Genesis(GenesisTime),
+		genesisNow(),
 	)
 
 	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])

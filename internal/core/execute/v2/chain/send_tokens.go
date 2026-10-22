@@ -22,7 +22,17 @@ func (SendTokens) Type() protocol.TransactionType { return protocol.TransactionT
 
 func (x SendTokens) Validate(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	_, err := x.check(st, tx)
-	return nil, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate runs when the transaction is submitted, before consensus, and
+	// does not decide the block's result, so it may measure the expiration
+	// from the node's clock
+	if lock := tx.Transaction.Header.HashLock; lock != nil {
+		return nil, checkHashLockExpiration(lock, time.Now())
+	}
+	return nil, nil
 }
 
 func (SendTokens) check(st *StateManager, tx *Delivery) (*protocol.SendTokens, error) {
@@ -62,23 +72,50 @@ func (SendTokens) check(st *StateManager, tx *Delivery) (*protocol.SendTokens, e
 		if lock.Expiration == nil {
 			return nil, errors.BadRequest.With("hashlock expiration is required")
 		}
-		// Minimum 10 minutes in the future
-		if time.Until(*lock.Expiration) < 10*time.Minute {
-			return nil, errors.BadRequest.With("hashlock expiration must be at least 10 minutes in the future")
-		}
-		// Maximum 30 days
-		if time.Until(*lock.Expiration) > 30*24*time.Hour {
-			return nil, errors.BadRequest.With("hashlock expiration cannot exceed 30 days")
-		}
 	}
 
 	return body, nil
+}
+
+// checkHashLockExpiration checks that the expiration is at least 10 minutes and
+// at most 30 days after now.
+func checkHashLockExpiration(lock *protocol.HashLockOptions, now time.Time) error {
+	until := lock.Expiration.Sub(now)
+	if until < 10*time.Minute {
+		return errors.BadRequest.With("hashlock expiration must be at least 10 minutes in the future")
+	}
+	if until > 30*24*time.Hour {
+		return errors.BadRequest.With("hashlock expiration cannot exceed 30 days")
+	}
+	return nil
 }
 
 func (x SendTokens) Execute(st *StateManager, tx *Delivery) (protocol.TransactionResult, error) {
 	body, err := x.check(st, tx)
 	if err != nil {
 		return nil, err
+	}
+
+	if lock := tx.Transaction.Header.HashLock; lock != nil {
+		// Execution is a function of the block and the state, so the
+		// expiration is measured from the block's time, which is the ledger's
+		// timestamp, and every node and every replay reaches the same answer.
+		// Before Tanegashima it was measured from the node's clock (#4612).
+		var now time.Time
+		if st.Globals.ExecutorVersion.V2TanegashimaEnabled() {
+			var ledger *protocol.SystemLedger
+			err = st.LoadUrlAs(st.NodeUrl(protocol.Ledger), &ledger)
+			if err != nil {
+				return nil, errors.UnknownError.WithFormat("load system ledger: %w", err)
+			}
+			now = ledger.Timestamp
+		} else {
+			now = time.Now()
+		}
+		err = checkHashLockExpiration(lock, now)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var account protocol.AccountWithTokens
