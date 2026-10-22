@@ -174,10 +174,13 @@ Who may say what:
   else.
 - **One peer, one validator.** Two entries naming the same peer ID are
   refused.
-- **Every active validator has one.** From v2-kourou an entry active on any
-  partition without a `Peer` that verifies is refused. The DAG-BFT
-  integration is unreleased, so there is no network with unbound validators
-  to carry: genesis writes every validator bound.
+- **Every active validator has one.** From the executor version that
+  activates the DAG-BFT rules — the first after v2-kourou, which is active on
+  Kermit already and so cannot be the gate; the version is not yet defined
+  (DIFFERENCES C16) — an entry active on any partition without a `Peer` that
+  verifies is refused. The DAG-BFT integration is unreleased, so there is no
+  network with unbound validators to carry: genesis writes every validator
+  bound.
 
 These are checked where the definition is parsed, `GlobalValues.ParseNetwork`
 (`pkg/types/network/globals.go`), which the executor runs on every write to
