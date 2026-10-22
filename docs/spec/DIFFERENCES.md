@@ -2118,6 +2118,126 @@ and the HEAL path has none, which is the actual hole.
 path, and assembly at the destination. Build it when a run shows a proof-length
 rejection, which names the real trigger rather than a supposed one.
 
+### C17. Voters lock per header digest, in memory
+
+*[#4590](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4590)*
+
+consensus.md, "The vote rule": a validator votes for at most one header per
+(author, round), records (author, round) → digest durably before the vote
+leaves, and refuses a second digest for the pair. The code records the
+headers it voted for by digest alone (`primary/vote_handler.go:361-377`,
+`:471-476`) and only in memory (`primary.go:351`): two headers from one
+author for one round, differing only in timestamp, both get the same honest
+validators' votes and both reach a quorum, and a restarted validator holds
+no record at all. Each node then keeps whichever certificate reached it
+first and refuses the other as equivocation for good ("DAG insertion"), so
+nodes holding different versions cannot insert each other's later
+certificates. With n = 4, no round r+1 header reaches three votes once the
+author stops. Review tests `TestDefect_HonestVotersCertifyTwoHeadersForOneAuthorRound`
+and `TestIntended_EquivocatingAuthorGetsTwoVotes` (#4601) show it.
+
+### C18. Parents are checked for presence, not for round, distinctness or stake quorum
+
+*[#4591](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4591); #4162 item 17*
+
+consensus.md, "Header validity" and "Certificate validity": a header's
+strong parents are distinct certificates of round r−1 whose authors' stake
+is a quorum of that round's committee, weak links are allowed and not
+counted, and the voter, the certificate check and the builder all apply
+the rule. The code:
+
+- a voter checks only that each named parent is in its DAG
+  (`primary/vote_handler.go:391-409`), so a header with no parents passes;
+- `Certificate.Verify` checks no parent (`types/certificate.go:147-230`);
+- `DAG.Insert` skips the parent check when the list is empty
+  (`dag/dag.go:154`, `len(cert.Parents()) > 0`);
+- the builder's minimum is a count, `QuorumCount` (7 of 12), not stake
+  (`primary/header_builder.go:158-164`; `types/committee.go:207-216`), and
+  with the validity threshold (5 of 12) the two sum to n, so they do not
+  guarantee an intersection; a round set by `Restore`, `RestoreAuthored` or
+  `Rejoin` skips the stake check the round advance makes.
+
+A leader certificate with no path to an earlier committed leader breaks the
+linked-leader walk: two nodes that receive the same certificates in a
+different order commit different leader sequences
+(`TestDefect_ZeroParentLeaderSplitsCommitSequence`, #4601).
+
+### C19. A committee change applies when the node executes the block
+
+*[#4593](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4593); #4162 items 9 and 13*
+
+consensus.md, "Epochs": a committee change takes effect at `A = L + 256`,
+`L` the leader round that committed the block carrying it; every round is
+verified and ordered with its own committee; a node does not go above the
+newest state it holds plus 256; a node down across two changes rejoins
+fresh. The code applies a new committee to the primary, Bullshark and the
+gossip layer the moment the node executes the block that carries it
+(`internal/node/dagbft/service.go:1164-1207`; `consensus.go:1154-1179`),
+and execution lags ordering by a different amount on every node, so the
+rounds between are ordered with the old committee on some nodes and the
+new on others; leader election reads whatever committee Bullshark holds
+(`bullshark/leader.go:31`); a header of any epoch but the node's current
+one is refused (`primary/vote_handler.go:309-315`) and a certificate
+verifies only against the current committee (`types/certificate.go:158-161`),
+so in-flight headers of the old epoch can never certify and their author
+cannot re-author the round (#4162 item 13); a restarted node replays its
+tail with the committee its state names now. The checkpoint carries an
+epoch, not a schedule (`persist/persist.go:51-52`).
+
+### C20. The commit rule is evaluated only when an odd-round certificate is inserted
+
+*[#4162](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4162) item 6*
+
+consensus.md, "The commit rule": the rule for leader round `L` is
+evaluated when a certificate of round `L + 1` enters the DAG and when the
+leader's own certificate enters after its supporters have. The code runs
+ordering once per inserted certificate (`Node.order`, `restart.go:27-83`)
+and `Bullshark.ProcessCertificate` returns at once for an even-round
+certificate (`bullshark/bullshark.go:140-155`), so a leader certificate
+that arrives after every certificate of `L + 1` is committed only when a
+later leader's linked walk reaches it, one or more leader rounds later;
+a certificate dropped by the full `newCerts` channel (`primary.go:809-824`)
+triggers nothing at all. Safety is unaffected, since the walk is the same
+on every node; the latency of that leader's group is what differs. There
+is no timer or sweep that re-evaluates a leader whose support arrived
+before it.
+
+### C21. Review fixes in merge requests not yet merged at 7d9458e10
+
+Each line is the code at `7d9458e10` against the rule the spec states, and
+the merge request that brings the code into line. **Remove a line when its
+merge request is merged**; remove the entry when the list is empty.
+
+- **#4592** (!1258): the last authored header is read back only when a
+  checkpoint is resumed, so a start that resumes none (no checkpoint for
+  the executor's last block, or a store at genesis) signs a second header
+  for a round it already signed ("Persistence and restart").
+- **#4594** (!1261): Bullshark prunes its committed-digest set against its
+  own last commit, so when the executor lags ordering by more than the
+  rescue window the set `CheckpointAt` copies is already empty, and a node
+  restored from that checkpoint re-commits the window's history
+  ("Persistence and restart", "Restart").
+- **#4595** (!1259): `DAG.Insert` skips the parent check for any
+  certificate at or below the commit floor plus one (`dag/dag.go:153`),
+  not only at a seed, so in normal running a late certificate enters
+  without a parent the node never received and the ordering walk differs
+  between nodes; the persisted tail is written from four rounds below each
+  authored header (`restart.go:217-222`) and can miss a straggler named only
+  as a weak link; an ordering walk proceeds over a collected round
+  ("DAG insertion", "Sub-DAG order", "Retention").
+- **#4596** (!1266): the router relays a consensus message before any
+  handler checks its author; the check is in the handlers only ("Who may
+  send consensus messages"). What the merge request leaves open is C16.
+- **#4597** (!1257): a node that has seen any response to a sync request
+  answers it no more, so one forged response silences every honest answer
+  ("Certificate catch-up").
+- **#4598** (!1264): the active store's eviction does not protect a batch a
+  certified, uncommitted header names, so batches from any peer can evict
+  a voter's copy of what its vote attested (invariant 3).
+- **#4599** (!1256): `UnmarshalBatch` allocates from a count field before
+  checking it against the bytes that remain ("Decoding is bounded by the
+  message").
+
 ## Durability: the seal is still on the block path; the committed log is not on disk
 
 The spec (database.md invariant 5, consensus.md "The committed log") makes the
