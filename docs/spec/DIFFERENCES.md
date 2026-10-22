@@ -1905,13 +1905,53 @@ So a peer outside the committee can still:
   IDs: each copy passes validation and is relayed, and is recognised as a
   copy only by the handlers.
 
-**What must be decided** is whether the consensus topics are limited to
-committee peers and, if they are, how the router learns which peers those
-are: a validator's p2p identity bound to its validator key (a signed record,
-or the relay challenge run at connection), and what non-members — followers
-and joining nodes, which take certificates and batches from these topics —
-receive instead. #4587 (committee members are not guaranteed to be connected
-to one another) is the same decision seen from the other side.
+**Decided** (network.md, "A validator's network identity"; consensus.md,
+"Which peers may send them"; #4596 part 2, with #4587): each validator's
+libp2p peer ID is recorded in its `ValidatorInfo` of `dn.acme/network`,
+signed by its validator key over a tagged attestation, written by the same
+operator-authorized `WriteData` that changes the definition today, and
+required of every active validator from v2-kourou. The admitted peers of a
+partition are the peer IDs of every committee in its schedule (the one
+before, the one now, the one scheduled by #4593's activation round), so a
+change is never a cut. Every topic validator refuses, before decoding, a
+message whose signed origin (`msg.GetFrom()`) is not admitted, with the one
+exception of certificate-sync requests; and committee members keep a
+protected connection to every other admitted peer, which with flood
+publishing is what makes a restarted member's minute outside the meshes
+cost nothing. Followers keep taking certificates and batches from the same
+topics; they cannot originate on them.
+
+**What remains** until it is built:
+
+- `protocol/general.yml`: `ValidatorPeer` (`ID`, `Signature`) on
+  `ValidatorInfo`; the attestation (`"acc-validator-peer-id-v1" ‖ network
+  name ‖ key hash ‖ peer ID`) made and verified in one place; `ParseNetwork`
+  refusing an entry whose attestation does not verify, two entries naming
+  one peer, and an active entry without one (gated on v2-kourou);
+  `UpdateValidatorKey`'s callers re-attesting.
+- Genesis (`BuildGenesisDocs`, which holds every node's keys) and the
+  simulator's network writing every validator bound; `init network` and
+  `netsim` checked to produce definitions the executor accepts.
+- The node computing its attestation at start, serving it in
+  `ConsensusStatus.Peer`, and `accumulated` printing it for the operator
+  who writes the definition.
+- `types.ValidatorInfo.PeerID`, carried through `adapter.ValidatorInfo`,
+  the executor bridge and `onValidatorSetChange`; the admitted set derived
+  from #4593's committee schedule and held by the gossip layer, for
+  followers too.
+- The gossip layer: the origin gate first in every validator but the sync
+  request path, with its own `outcome`; the connection keeper (dial via
+  peerstore then DHT, `Protect`, backoff, `Unprotect` on leaving the set).
+- Tests: a peer outside the committee publishes a batch and a sync
+  response and neither is delivered or relayed (the review patch's
+  `TestDefect_StrangerHeaderRelayedToValidators` must fail); a definition
+  with a bad, duplicate or missing attestation is refused; in the simulator
+  a member restarted under the same peer ID receives every batch of the
+  minute after, which is #4587's measurement.
+- Follow-ups, not this entry: retiring the relay challenge once every
+  candidate is a recorded peer; the vote limiter keyed on the origin
+  (#4162 item 18); the unused `acc/%s/dispatch` and `acc/%s/anchors`
+  topics in `pkg/consensus/dispatcher`, which register no validator.
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
