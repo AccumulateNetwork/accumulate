@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	errors2 "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
@@ -665,12 +666,14 @@ func TestHTLC_LiteAccountRecipient(t *testing.T) {
 // block every minute and caps pending events at one major block, so the
 // expiry event for the lock fires long before the lock's expiration.
 type expiringLock struct {
-	sim        *Sim
-	alice, bob *url.URL
-	bobKey     []byte
-	preimage   []byte
-	expiration time.Time
-	lockedTxID *url.TxID
+	sim               *Sim
+	alice, bob, carol *url.URL
+	aliceKey, bobKey  []byte
+	carolKey          []byte
+	preimage          []byte
+	expiration        time.Time
+	sendTxID          *url.TxID
+	lockedTxID        *url.TxID
 }
 
 func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
@@ -678,8 +681,11 @@ func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
 	x := new(expiringLock)
 	x.alice = url.MustParse("alice")
 	x.bob = url.MustParse("bob")
+	x.carol = url.MustParse("carol")
 	aliceKey := acctesting.GenerateKey(x.alice)
+	x.aliceKey = aliceKey
 	x.bobKey = acctesting.GenerateKey(x.bob)
+	x.carolKey = acctesting.GenerateKey(x.carol)
 
 	g := new(network.GlobalValues)
 	g.ExecutorVersion = version
@@ -705,6 +711,10 @@ func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
 	CreditCredits(t, x.sim.DatabaseFor(x.bob), x.bob.JoinPath("book", "1"), 1e9)
 	MakeAccount(t, x.sim.DatabaseFor(x.bob), &TokenAccount{Url: x.bob.JoinPath("tokens"), TokenUrl: AcmeUrl()})
 
+	// Carol has credits and nothing to do with the lock
+	MakeIdentity(t, x.sim.DatabaseFor(x.carol), x.carol, x.carolKey[32:])
+	CreditCredits(t, x.sim.DatabaseFor(x.carol), x.carol.JoinPath("book", "1"), 1e9)
+
 	x.preimage = []byte("expiring-lock-preimage-32-bytes!")
 	hash := sha256.Sum256(x.preimage)
 	x.expiration = now.Add(11 * time.Minute)
@@ -719,9 +729,62 @@ func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
 		Txn(st.TxID).Succeeds(),
 		Txn(st.TxID).Produced().Succeeds())
 
+	x.sendTxID = st.TxID
 	x.lockedTxID = findLockedDeposit(t, x.sim, st.TxID)
 	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
 	return x
+}
+
+// newLockExpiredBeforeKourou is a lock whose expiry event fired, and was
+// erased, while the network was on Jiuquan, and which has since expired on a
+// network that has activated Kourou. No event will ever refund it (#4613).
+func newLockExpiredBeforeKourou(t *testing.T) *expiringLock {
+	t.Helper()
+	x := newExpiringLock(t, ExecutorVersionV2Jiuquan)
+
+	// The expiry event fires at the first major block and is erased without
+	// refunding, as it was before Kourou
+	x.stepTo(t, x.expiration.Add(2*time.Minute))
+	x.sim.StepN(10)
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+
+	// Activating Kourou does not revisit the lock: nothing schedules another
+	// event for it
+	x.activateKourou(t)
+	x.stepTo(t, x.blockTime(t).Add(3*time.Minute))
+	x.sim.StepN(10)
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+	require.Equal(t, int64(0), x.balance(t, x.bob))
+	return x
+}
+
+// activateKourou activates v2-kourou on the DN and waits for the BVN to pick
+// it up.
+func (x *expiringLock) activateKourou(t *testing.T) {
+	t.Helper()
+	st := x.sim.SubmitTxnSuccessfully(MustBuild(t,
+		build.Transaction().For(DnUrl()).
+			ActivateProtocolVersion(ExecutorVersionV2Kourou).
+			SignWith(DnUrl(), Operators, "1").Version(1).Timestamp(1).Signer(x.sim.SignWithNode(Directory, 0))))
+	x.sim.StepUntil(Txn(st.TxID).Succeeds())
+	x.sim.StepN(10)
+	ledger := GetAccount[*SystemLedger](t, x.sim.DatabaseFor(x.alice), PartitionUrl("BVN0").JoinPath(Ledger))
+	require.Equal(t, ExecutorVersionV2Kourou, ledger.ExecutorVersion)
+}
+
+// reclaim submits a reclaim of the lock with the given principal, signed by
+// the given identity's key page.
+func (x *expiringLock) reclaim(principal, signer *url.URL, key []byte, timestamp uint64) *url.TxID {
+	return x.sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(principal).
+			ReclaimLockedDeposit(x.lockedTxID).
+			SignWith(signer, "book", "1").Version(1).Timestamp(timestamp).PrivateKey(key)).TxID
+}
+
+func (x *expiringLock) errorOf(txid *url.TxID) string {
+	return x.sim.QueryTransaction(txid, nil).Error.Message
 }
 
 func (x *expiringLock) blockTime(t *testing.T) time.Time {
@@ -810,6 +873,178 @@ func TestHTLC_ExpiredLockBeforeKourou(t *testing.T) {
 	x.sim.StepN(10)
 	require.Equal(t, errors2.Delivered, x.lockStatus())
 	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+}
+
+// TestHTLC_ReclaimLockExpiredBeforeKourou verifies that a lock whose expiry
+// event fired before Kourou can be reclaimed by anyone once Kourou is active:
+// the sender is refunded once, and a second reclaim and a release are refused.
+func TestHTLC_ReclaimLockExpiredBeforeKourou(t *testing.T) {
+	x := newLockExpiredBeforeKourou(t)
+
+	// Carol, who has nothing to do with the lock, reclaims it; Alice is
+	// refunded
+	reclaim := x.reclaim(x.bob.JoinPath("tokens"), x.carol, x.carolKey, 1)
+	x.sim.StepUntil(
+		Txn(reclaim).Succeeds(),
+		Txn(reclaim).Produced().Succeeds())
+	require.Equal(t, errors2.Expired, x.lockStatus())
+	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
+	require.Equal(t, int64(0), x.balance(t, x.bob))
+
+	// A second reclaim is refused
+	reclaim2 := x.reclaim(x.bob.JoinPath("tokens"), x.carol, x.carolKey, 2)
+	x.sim.StepUntil(Txn(reclaim2).Fails())
+	require.Contains(t, x.errorOf(reclaim2), "refunded")
+
+	// A release after the reclaim is refused
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Fails())
+	require.Contains(t, x.errorOf(release), "refunded")
+
+	x.sim.StepN(10)
+	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
+	require.Equal(t, int64(0), x.balance(t, x.bob))
+}
+
+// TestHTLC_ReclaimBySender verifies that the sender's own key is enough to
+// reclaim, although the sender is no authority of the recipient's account.
+func TestHTLC_ReclaimBySender(t *testing.T) {
+	x := newLockExpiredBeforeKourou(t)
+
+	reclaim := x.reclaim(x.bob.JoinPath("tokens"), x.alice, x.aliceKey, 2)
+	x.sim.StepUntil(
+		Txn(reclaim).Succeeds(),
+		Txn(reclaim).Produced().Succeeds())
+	require.Equal(t, errors2.Expired, x.lockStatus())
+	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
+	require.Equal(t, int64(0), x.balance(t, x.bob))
+}
+
+// TestHTLC_ReclaimPrincipalMustBeRecipient verifies that a reclaim whose
+// principal is not the lock's recipient is refused, so a reclaim cannot be
+// steered to a partition that does not hold the lock, and that a reclaim
+// naming a transaction that is not a locked deposit is refused.
+func TestHTLC_ReclaimPrincipalMustBeRecipient(t *testing.T) {
+	x := newLockExpiredBeforeKourou(t)
+
+	// The sender's account is not the recipient
+	reclaim := x.reclaim(x.alice.JoinPath("tokens"), x.alice, x.aliceKey, 2)
+	x.sim.StepUntil(Txn(reclaim).Fails())
+	require.Contains(t, x.errorOf(reclaim), "recipient")
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+
+	// The send is not a locked deposit
+	notALock := x.sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(x.alice, "tokens").
+			ReclaimLockedDeposit(x.sendTxID).
+			SignWith(x.alice, "book", "1").Version(1).Timestamp(3).PrivateKey(x.aliceKey)).TxID
+	x.sim.StepUntil(Txn(notALock).Fails())
+	require.Contains(t, x.errorOf(notALock), "not a locked deposit")
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+}
+
+// TestHTLC_ReclaimBeforeExpiration verifies that a lock cannot be reclaimed
+// before it expires, even after its expiry event has fired early, and that
+// the recipient can still release it.
+func TestHTLC_ReclaimBeforeExpiration(t *testing.T) {
+	x := newExpiringLock(t, ExecutorVersionLatest)
+
+	// Let the capped expiry event fire, then try to reclaim before the
+	// expiration
+	x.stepTo(t, x.blockTime(t).Add(3*time.Minute))
+	require.True(t, x.blockTime(t).Before(x.expiration))
+	reclaim := x.reclaim(x.bob.JoinPath("tokens"), x.carol, x.carolKey, 1)
+	x.sim.StepUntil(Txn(reclaim).Fails())
+	require.Contains(t, x.errorOf(reclaim), "not expired")
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+
+	// Bob can still release it
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Succeeds())
+	require.Equal(t, int64(10*AcmePrecision), x.balance(t, x.bob))
+}
+
+// TestHTLC_ReclaimReleasedLock verifies that a released lock cannot be
+// reclaimed, however long after its expiration.
+func TestHTLC_ReclaimReleasedLock(t *testing.T) {
+	x := newExpiringLock(t, ExecutorVersionLatest)
+
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Succeeds())
+	require.Equal(t, int64(10*AcmePrecision), x.balance(t, x.bob))
+
+	x.stepTo(t, x.expiration.Add(2*time.Minute))
+	x.sim.StepN(10)
+	reclaim := x.reclaim(x.bob.JoinPath("tokens"), x.carol, x.carolKey, 1)
+	x.sim.StepUntil(Txn(reclaim).Fails())
+	require.Contains(t, x.errorOf(reclaim), "released")
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+	require.Equal(t, int64(10*AcmePrecision), x.balance(t, x.bob))
+}
+
+// TestHTLC_ReclaimBeforeKourou verifies that a network that has not activated
+// v2-kourou refuses the reclaim as an unknown transaction type.
+func TestHTLC_ReclaimBeforeKourou(t *testing.T) {
+	x := newExpiringLock(t, ExecutorVersionV2Jiuquan)
+	x.stepTo(t, x.expiration.Add(2*time.Minute))
+	x.sim.StepN(10)
+
+	st := x.sim.BuildAndSubmitTxn(
+		build.Transaction().For(x.bob, "tokens").
+			ReclaimLockedDeposit(x.lockedTxID).
+			SignWith(x.carol, "book", "1").Version(1).Timestamp(1).PrivateKey(x.carolKey))
+	require.True(t, st.Failed(), "reclaim should be refused before Kourou")
+	require.Contains(t, st.Error.Message, "unknown transaction type")
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+}
+
+// TestHTLC_ReclaimLiteRecipient verifies that a lock to a lite token account
+// that was never created can be reclaimed.
+func TestHTLC_ReclaimLiteRecipient(t *testing.T) {
+	x := newExpiringLock(t, ExecutorVersionV2Jiuquan)
+	bobKey := acctesting.GenerateKey("bob-lite")
+	bobLiteId := LiteAuthorityForKey(bobKey[32:], SignatureTypeED25519)
+	bobLiteTokenUrl := bobLiteId.JoinPath(AcmeUrl().ShortString())
+
+	hash := sha256.Sum256(x.preimage)
+	st := x.sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(x.alice, "tokens").
+			HashLockSHA256(hash, x.expiration).
+			SendTokens(10, AcmePrecisionPower).To(bobLiteTokenUrl).
+			SignWith(x.alice, "book", "1").Version(1).Timestamp(2).PrivateKey(x.aliceKey))
+	x.sim.StepUntil(
+		Txn(st.TxID).Succeeds(),
+		Txn(st.TxID).Produced().Succeeds())
+	lockedTxID := findLockedDeposit(t, x.sim, st.TxID)
+	require.Equal(t, int64(80*AcmePrecision), x.balance(t, x.alice))
+
+	// The event fires before Kourou and is erased; Kourou is activated; the
+	// lock expires
+	x.stepTo(t, x.expiration.Add(2*time.Minute))
+	x.sim.StepN(10)
+	x.activateKourou(t)
+	x.stepTo(t, x.blockTime(t).Add(3*time.Minute))
+	x.sim.StepN(10)
+	require.Equal(t, errors2.Delivered, x.sim.QueryTransaction(lockedTxID, nil).Status)
+	require.Equal(t, int64(80*AcmePrecision), x.balance(t, x.alice))
+
+	reclaim := x.sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(bobLiteTokenUrl).
+			ReclaimLockedDeposit(lockedTxID).
+			SignWith(x.carol, "book", "1").Version(1).Timestamp(1).PrivateKey(x.carolKey)).TxID
+	x.sim.StepUntil(
+		Txn(reclaim).Succeeds(),
+		Txn(reclaim).Produced().Succeeds())
+	require.Equal(t, errors2.Expired, x.sim.QueryTransaction(lockedTxID, nil).Status)
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+	View(t, x.sim.DatabaseFor(bobLiteTokenUrl), func(batch *database.Batch) {
+		_, err := batch.Account(bobLiteTokenUrl).Main().Get()
+		require.ErrorIs(t, err, errors2.NotFound, "the lite token account is not created by a reclaim")
+	})
 }
 
 // TestHTLC_ExpirationRegistration verifies that locked deposits are registered

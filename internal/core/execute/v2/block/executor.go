@@ -67,6 +67,7 @@ func NewExecutor(opts ExecutorOptions) (*Executor, error) {
 		chain.WriteData{},
 		chain.WriteDataTo{},
 		chain.ReleaseLockedOperation{},
+		chain.ReclaimLockedDeposit{},
 
 		// Synthetic
 		chain.SyntheticBurnTokens{},

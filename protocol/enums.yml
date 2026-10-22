@@ -259,6 +259,9 @@ TransactionType:
   ReleaseLockedOperation:
     value: 0x18
     description: releases a locked deposit by revealing the hash preimage
+  ReclaimLockedDeposit:
+    value: 0x19
+    description: refunds an expired, unreleased locked deposit to its sender
   NetworkMaintenance:
     value: 0x2E
     description: executes network maintenance operations

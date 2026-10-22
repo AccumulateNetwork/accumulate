@@ -154,6 +154,11 @@ type (
 		bldTxn
 		body *protocol.ReleaseLockedOperation
 	}
+
+	bldReclaimLockedDeposit struct {
+		bldTxn
+		body *protocol.ReclaimLockedDeposit
+	}
 )
 
 func (b bldTxn) CreateIdentity(url Urlish) bldCreateIdentity {
@@ -468,4 +473,12 @@ func (b bldTxn) ReleaseLockedOperation(lockedTxID *url.TxID) bldReleaseLockedOpe
 func (b bldReleaseLockedOperation) WithPreimage(preimage []byte) bldReleaseLockedOperation {
 	b.body.Preimage = preimage
 	return b
+}
+
+func (b bldTxn) ReclaimLockedDeposit(lockedTxID *url.TxID) bldReclaimLockedDeposit {
+	var c bldReclaimLockedDeposit
+	c.body = new(protocol.ReclaimLockedDeposit)
+	c.bldTxn = b.WithBody(c.body)
+	c.body.LockedTxID = lockedTxID
+	return c
 }

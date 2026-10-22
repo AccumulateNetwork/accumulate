@@ -768,68 +768,64 @@ func (x ExpiredTransaction) expireLockedDeposit(batch *database.Batch, ctx *Mess
 	}
 
 	if ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
-		// Only a delivered deposit holds the funds, and a released or
-		// refunded one no longer does
-		if status == nil || status.Code != errors.Delivered {
-			return nil
-		}
-		if result, ok := status.Result.(*protocol.SyntheticLockedDepositResult); ok && result.ReleaseTxID != nil {
-			return nil
-		}
-
-		// The expiry event can fire before the expiration because the wait is
-		// capped at PendingMajorBlocks major blocks. Until the deposit has
-		// expired it can still be released, so check again at the next major
-		// block.
-		if !ctx.Block.Time.After(*body.Expiration) {
-			major, err := getMajorHeight(ctx.Executor.Describe, batch)
-			if err != nil {
-				return errors.UnknownError.Wrap(err)
-			}
-			err = batch.Account(ctx.Executor.Describe.Ledger()).Events().Major().Pending(major + 1).Add(msg.TxID)
-			if err != nil {
-				return errors.UnknownError.WithFormat("requeue locked deposit expiration: %w", err)
-			}
-			return nil
-		}
-
-		// Mark the locked deposit as refunded, which prevents a release
-		status.Code = errors.Expired
-
-	} else if status != nil && status.Code == errors.Delivered {
-		// Before Kourou, every locked deposit that landed is delivered, so
-		// none is ever refunded (#4578)
-		return nil
-
-	} else {
-		status = &protocol.TransactionStatus{TxID: msg.TxID}
-		status.Code = errors.Expired
+		return x.refundLockedDeposit(batch, ctx, msg, txn, body, status)
 	}
 
+	// Before Kourou, every locked deposit that landed is delivered, so none is
+	// ever refunded (#4578)
+	if status != nil && status.Code == errors.Delivered {
+		return nil
+	}
+
+	status = &protocol.TransactionStatus{TxID: msg.TxID}
+	status.Code = errors.Expired
 	err = batch.Transaction(txHash[:]).Status().Put(status)
 	if err != nil {
 		return errors.UnknownError.WithFormat("update locked deposit status: %w", err)
 	}
 
-	// Produce refund synthetic transaction back to sender
+	// Produce the refund, which is built but never sent (#4578)
 	state := new(chain.ProcessTransactionState)
-	if body.IsIssuer {
-		refund := new(protocol.SyntheticBurnTokens)
-		refund.Amount = body.Amount
-		refund.IsRefund = true
-		state.DidProduceTxn(body.Sender, refund)
-	} else {
-		refund := new(protocol.SyntheticDepositTokens)
-		refund.Token = body.Token
-		refund.Amount = body.Amount
-		refund.IsRefund = true
-		state.DidProduceTxn(body.Sender, refund)
+	chain.ProduceLockedDepositRefund(state, body)
+	ctx.State.MergeTransaction(state)
+	return nil
+}
+
+// refundLockedDeposit applies the refund rule, chain.RefundLockedDeposit, to
+// a locked deposit whose expiry event has fired, and sends the refund. The
+// same rule serves ReclaimLockedDeposit (#4613).
+func (x ExpiredTransaction) refundLockedDeposit(batch *database.Batch, ctx *MessageContext, msg *internal.ExpiredTransaction, txn *messaging.TransactionMessage, body *protocol.SyntheticLockedDeposit, status *protocol.TransactionStatus) error {
+	state := new(chain.ProcessTransactionState)
+	err := chain.RefundLockedDeposit(batch, ctx.Block.Time, msg.TxID, body, status, state)
+	switch {
+	case err == nil:
+		// Refunded
+
+	case errors.Code(err) == errors.NotReady:
+		// The expiry event can fire before the expiration because the wait is
+		// capped at PendingMajorBlocks major blocks. Until the deposit has
+		// expired it can still be released, so check again at the next major
+		// block.
+		major, err := getMajorHeight(ctx.Executor.Describe, batch)
+		if err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+		err = batch.Account(ctx.Executor.Describe.Ledger()).Events().Major().Pending(major + 1).Add(msg.TxID)
+		if err != nil {
+			return errors.UnknownError.WithFormat("requeue locked deposit expiration: %w", err)
+		}
+		return nil
+
+	case errors.Code(err).IsKnownError():
+		// Nothing to refund: the deposit was released, was already refunded,
+		// or never held the funds
+		return nil
+
+	default:
+		return errors.UnknownError.Wrap(err)
 	}
 
 	ctx.State.MergeTransaction(state)
-	if !ctx.GetActiveGlobals().ExecutorVersion.V2KourouEnabled() {
-		return nil
-	}
 
 	// Send the refund
 	err = TransactionMessage{}.postProcess(batch, ctx.txnWith(txn.Transaction), state, false)
