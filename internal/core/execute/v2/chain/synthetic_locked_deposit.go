@@ -159,19 +159,7 @@ func (x SyntheticLockedDeposit) DidFail(state *ProcessTransactionState, transact
 	}
 
 	// Send tokens back to sender on failure
-	if body.IsIssuer {
-		refund := new(protocol.SyntheticBurnTokens)
-		refund.Amount = body.Amount
-		refund.IsRefund = true
-		state.DidProduceTxn(body.Sender, refund)
-	} else {
-		refund := new(protocol.SyntheticDepositTokens)
-		refund.Token = body.Token
-		refund.Amount = body.Amount
-		refund.IsRefund = true
-		state.DidProduceTxn(body.Sender, refund)
-	}
-
+	ProduceLockedDepositRefund(state, body)
 	return nil
 }
 

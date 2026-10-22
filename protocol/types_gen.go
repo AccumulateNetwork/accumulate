@@ -757,6 +757,14 @@ type ReceiptSignature struct {
 	extraData       []byte
 }
 
+// ReclaimLockedDeposit refunds an expired, unreleased locked deposit to its sender.
+type ReclaimLockedDeposit struct {
+	fieldsSet []bool
+	// LockedTxID the transaction ID of the SyntheticLockedDeposit to reclaim.
+	LockedTxID *url.TxID `json:"lockedTxID,omitempty" form:"lockedTxID" query:"lockedTxID" validate:"required"`
+	extraData  []byte
+}
+
 // ReleaseLockedOperation releases a locked deposit by revealing the hash preimage.
 type ReleaseLockedOperation struct {
 	fieldsSet []bool
@@ -1334,6 +1342,8 @@ func (*PendingTransactionGCOperation) Type() NetworkMaintenanceOperationType {
 func (*RCD1Signature) Type() SignatureType { return SignatureTypeRCD1 }
 
 func (*ReceiptSignature) Type() SignatureType { return SignatureTypeReceipt }
+
+func (*ReclaimLockedDeposit) Type() TransactionType { return TransactionTypeReclaimLockedDeposit }
 
 func (*ReleaseLockedOperation) Type() TransactionType { return TransactionTypeReleaseLockedOperation }
 
@@ -2961,6 +2971,22 @@ func (v *ReceiptSignature) Copy() *ReceiptSignature {
 }
 
 func (v *ReceiptSignature) CopyAsInterface() interface{} { return v.Copy() }
+
+func (v *ReclaimLockedDeposit) Copy() *ReclaimLockedDeposit {
+	u := new(ReclaimLockedDeposit)
+
+	if v.LockedTxID != nil {
+		u.LockedTxID = v.LockedTxID
+	}
+	if len(v.extraData) > 0 {
+		u.extraData = make([]byte, len(v.extraData))
+		copy(u.extraData, v.extraData)
+	}
+
+	return u
+}
+
+func (v *ReclaimLockedDeposit) CopyAsInterface() interface{} { return v.Copy() }
 
 func (v *ReleaseLockedOperation) Copy() *ReleaseLockedOperation {
 	u := new(ReleaseLockedOperation)
@@ -5606,6 +5632,19 @@ func (v *ReceiptSignature) Equal(u *ReceiptSignature) bool {
 		return false
 	}
 	if !(v.TransactionHash == u.TransactionHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ReclaimLockedDeposit) Equal(u *ReclaimLockedDeposit) bool {
+	switch {
+	case v.LockedTxID == u.LockedTxID:
+		// equal
+	case v.LockedTxID == nil || u.LockedTxID == nil:
+		return false
+	case !((v.LockedTxID).Equal(u.LockedTxID)):
 		return false
 	}
 
@@ -12010,6 +12049,60 @@ func (v *ReceiptSignature) IsValid() error {
 		errs = append(errs, "field Proof is missing")
 	} else if (v.Proof).Equal(new(merkle.Receipt)) {
 		errs = append(errs, "field Proof is not set")
+	}
+
+	switch len(errs) {
+	case 0:
+		return nil
+	case 1:
+		return errors.New(errs[0])
+	default:
+		return errors.New(strings.Join(errs, "; "))
+	}
+}
+
+var fieldNames_ReclaimLockedDeposit = []string{
+	1: "Type",
+	2: "LockedTxID",
+}
+
+func (v *ReclaimLockedDeposit) MarshalBinary() ([]byte, error) {
+	if v == nil {
+		return []byte{encoding.EmptyObject}, nil
+	}
+
+	buffer := encoding.GetBuffer()
+	defer encoding.PutBuffer(buffer)
+
+	writer := encoding.NewWriter(buffer)
+
+	writer.WriteEnum(1, v.Type())
+	if !(v.LockedTxID == nil) {
+		writer.WriteTxid(2, v.LockedTxID)
+	}
+
+	_, _, err := writer.Reset(fieldNames_ReclaimLockedDeposit)
+	if err != nil {
+		return nil, encoding.Error{E: err}
+	}
+	buffer.Write(v.extraData)
+
+	// Return a copy since the buffer will be reused
+	result := make([]byte, buffer.Len())
+	copy(result, buffer.Bytes())
+	return result, nil
+}
+
+func (v *ReclaimLockedDeposit) IsValid() error {
+	var errs []string
+
+	if len(v.fieldsSet) > 0 && !v.fieldsSet[0] {
+		errs = append(errs, "field Type is missing")
+	}
+	if len(v.fieldsSet) > 1 && !v.fieldsSet[1] {
+		errs = append(errs, "field LockedTxID is missing")
+	} else if v.LockedTxID == nil {
+		errs = append(errs, "field LockedTxID is not set")
 	}
 
 	switch len(errs) {
@@ -18550,6 +18643,41 @@ func (v *ReceiptSignature) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	return nil
 }
 
+func (v *ReclaimLockedDeposit) UnmarshalBinary(data []byte) error {
+	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
+}
+
+func (v *ReclaimLockedDeposit) UnmarshalBinaryFrom(rd io.Reader) error {
+	reader := encoding.NewReader(rd)
+
+	var vType TransactionType
+	if x := new(TransactionType); reader.ReadEnum(1, x) {
+		vType = *x
+	}
+	if !(v.Type() == vType) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), vType)
+	}
+
+	return v.UnmarshalFieldsFrom(reader)
+}
+
+func (v *ReclaimLockedDeposit) UnmarshalFieldsFrom(reader *encoding.Reader) error {
+	if x, ok := reader.ReadTxid(2); ok {
+		v.LockedTxID = x
+	}
+
+	seen, err := reader.Reset(fieldNames_ReclaimLockedDeposit)
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	v.fieldsSet = seen
+	v.extraData, err = reader.ReadAll()
+	if err != nil {
+		return encoding.Error{E: err}
+	}
+	return nil
+}
+
 func (v *ReleaseLockedOperation) UnmarshalBinary(data []byte) error {
 	return v.UnmarshalBinaryFrom(bytes.NewReader(data))
 }
@@ -21223,6 +21351,11 @@ func init() {
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
 		encoding.NewTypeField("type", "string"),
 		encoding.NewTypeField("lockedTxID", "string"),
+	}, "ReclaimLockedDeposit", "reclaimLockedDeposit")
+
+	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
+		encoding.NewTypeField("type", "string"),
+		encoding.NewTypeField("lockedTxID", "string"),
 		encoding.NewTypeField("preimage", "bytes"),
 	}, "ReleaseLockedOperation", "releaseLockedOperation")
 
@@ -23157,6 +23290,20 @@ func (v *ReceiptSignature) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.TransactionHash == ([32]byte{})) {
 		u.TransactionHash = encoding.ChainToJSON(&v.TransactionHash)
+	}
+	u.ExtraData = encoding.BytesToJSON(v.extraData)
+	return json.Marshal(&u)
+}
+
+func (v *ReclaimLockedDeposit) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		LockedTxID *url.TxID       `json:"lockedTxID,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	if !(v.LockedTxID == nil) {
+		u.LockedTxID = v.LockedTxID
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -26511,6 +26658,29 @@ func (v *ReceiptSignature) UnmarshalJSON(data []byte) error {
 	} else {
 		v.TransactionHash = *x
 	}
+	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *ReclaimLockedDeposit) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       TransactionType `json:"type"`
+		LockedTxID *url.TxID       `json:"lockedTxID,omitempty"`
+		ExtraData  *string         `json:"$epilogue,omitempty"`
+	}{}
+	u.Type = v.Type()
+	u.LockedTxID = v.LockedTxID
+	err := json.Unmarshal(data, &u)
+	if err != nil {
+		return err
+	}
+	if !(v.Type() == u.Type) {
+		return fmt.Errorf("field Type: not equal: want %v, got %v", v.Type(), u.Type)
+	}
+	v.LockedTxID = u.LockedTxID
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err

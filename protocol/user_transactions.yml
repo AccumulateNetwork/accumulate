@@ -295,3 +295,12 @@ ReleaseLockedOperation:
     - name: Preimage
       description: the secret value that SHA-256 hashes to the locked hash
       type: bytes
+
+ReclaimLockedDeposit:
+  union: { type: transaction }
+  description: refunds an expired, unreleased locked deposit to its sender
+  fields:
+    - name: LockedTxID
+      description: the transaction ID of the SyntheticLockedDeposit to reclaim
+      type: txid
+      pointer: true

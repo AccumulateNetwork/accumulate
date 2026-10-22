@@ -400,6 +400,8 @@ func NewTransactionBody(typ TransactionType) (TransactionBody, error) {
 		return new(LockAccount), nil
 	case TransactionTypeNetworkMaintenance:
 		return new(NetworkMaintenance), nil
+	case TransactionTypeReclaimLockedDeposit:
+		return new(ReclaimLockedDeposit), nil
 	case TransactionTypeReleaseLockedOperation:
 		return new(ReleaseLockedOperation), nil
 	case TransactionTypeRemote:
@@ -549,6 +551,12 @@ func EqualTransactionBody(a, b TransactionBody) bool {
 			return b == nil
 		}
 		b, ok := b.(*NetworkMaintenance)
+		return ok && a.Equal(b)
+	case *ReclaimLockedDeposit:
+		if a == nil {
+			return b == nil
+		}
+		b, ok := b.(*ReclaimLockedDeposit)
 		return ok && a.Equal(b)
 	case *ReleaseLockedOperation:
 		if a == nil {
@@ -704,6 +712,8 @@ func CopyTransactionBody(v TransactionBody) TransactionBody {
 	case *LockAccount:
 		return v.Copy()
 	case *NetworkMaintenance:
+		return v.Copy()
+	case *ReclaimLockedDeposit:
 		return v.Copy()
 	case *ReleaseLockedOperation:
 		return v.Copy()

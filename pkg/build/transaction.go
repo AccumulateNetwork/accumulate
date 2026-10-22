@@ -839,3 +839,28 @@ func (b ReleaseLockedOperationBuilder) Done() (*protocol.Transaction, error) {
 func (b ReleaseLockedOperationBuilder) SignWith(signer any, path ...string) SignatureBuilder {
 	return b.FinishTransaction().SignWith(signer, path...)
 }
+
+type ReclaimLockedDepositBuilder struct {
+	t    TransactionBuilder
+	body protocol.ReclaimLockedDeposit
+}
+
+// ReclaimLockedDeposit refunds an expired, unreleased locked deposit to its
+// sender. The principal must be the locked deposit's recipient.
+func (b TransactionBuilder) ReclaimLockedDeposit(lockedTxID *url.TxID) ReclaimLockedDepositBuilder {
+	c := ReclaimLockedDepositBuilder{t: b}
+	c.body.LockedTxID = lockedTxID
+	return c
+}
+
+func (b ReclaimLockedDepositBuilder) FinishTransaction() TransactionBuilder {
+	return b.t.Body(&b.body)
+}
+
+func (b ReclaimLockedDepositBuilder) Done() (*protocol.Transaction, error) {
+	return b.FinishTransaction().Done()
+}
+
+func (b ReclaimLockedDepositBuilder) SignWith(signer any, path ...string) SignatureBuilder {
+	return b.FinishTransaction().SignWith(signer, path...)
+}

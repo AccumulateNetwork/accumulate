@@ -341,6 +341,9 @@ const TransactionTypeSetLiteAccountDelegate TransactionType = 23
 // TransactionTypeReleaseLockedOperation releases a locked deposit by revealing the hash preimage.
 const TransactionTypeReleaseLockedOperation TransactionType = 24
 
+// TransactionTypeReclaimLockedDeposit refunds an expired, unreleased locked deposit to its sender.
+const TransactionTypeReclaimLockedDeposit TransactionType = 25
+
 // TransactionTypeNetworkMaintenance executes network maintenance operations.
 const TransactionTypeNetworkMaintenance TransactionType = 46
 
@@ -1456,7 +1459,7 @@ func (v TransactionType) GetEnumValue() uint64 { return uint64(v) }
 func (v *TransactionType) SetEnumValue(id uint64) bool {
 	u := TransactionType(id)
 	switch u {
-	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSetLiteAccountDelegate, TransactionTypeReleaseLockedOperation, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticLockedDeposit, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
+	case TransactionTypeUnknown, TransactionTypeCreateIdentity, TransactionTypeCreateTokenAccount, TransactionTypeSendTokens, TransactionTypeCreateDataAccount, TransactionTypeWriteData, TransactionTypeWriteDataTo, TransactionTypeAcmeFaucet, TransactionTypeCreateToken, TransactionTypeIssueTokens, TransactionTypeBurnTokens, TransactionTypeCreateLiteTokenAccount, TransactionTypeCreateKeyPage, TransactionTypeCreateKeyBook, TransactionTypeAddCredits, TransactionTypeUpdateKeyPage, TransactionTypeLockAccount, TransactionTypeBurnCredits, TransactionTypeTransferCredits, TransactionTypeUpdateAccountAuth, TransactionTypeUpdateKey, TransactionTypeSetLiteAccountDelegate, TransactionTypeReleaseLockedOperation, TransactionTypeReclaimLockedDeposit, TransactionTypeNetworkMaintenance, TransactionTypeActivateProtocolVersion, TransactionTypeRemote, TransactionTypeSyntheticCreateIdentity, TransactionTypeSyntheticWriteData, TransactionTypeSyntheticDepositTokens, TransactionTypeSyntheticDepositCredits, TransactionTypeSyntheticBurnTokens, TransactionTypeSyntheticForwardTransaction, TransactionTypeSyntheticLockedDeposit, TransactionTypeSystemGenesis, TransactionTypeDirectoryAnchor, TransactionTypeBlockValidatorAnchor, TransactionTypeSystemWriteData:
 		*v = u
 		return true
 	}
@@ -1512,6 +1515,8 @@ func (v TransactionType) String() string {
 		return "setLiteAccountDelegate"
 	case TransactionTypeReleaseLockedOperation:
 		return "releaseLockedOperation"
+	case TransactionTypeReclaimLockedDeposit:
+		return "reclaimLockedDeposit"
 	case TransactionTypeNetworkMaintenance:
 		return "networkMaintenance"
 	case TransactionTypeActivateProtocolVersion:
@@ -1593,6 +1598,8 @@ func TransactionTypeByName(name string) (TransactionType, bool) {
 		return TransactionTypeSetLiteAccountDelegate, true
 	case "releaselockedoperation":
 		return TransactionTypeReleaseLockedOperation, true
+	case "reclaimlockeddeposit":
+		return TransactionTypeReclaimLockedDeposit, true
 	case "networkmaintenance":
 		return TransactionTypeNetworkMaintenance, true
 	case "activateprotocolversion":
