@@ -454,7 +454,8 @@ def render_prompt(plan, task, extra=""):
 def spawn(plan, task, extra="", resume=False):
     wt = ensure_worktree(plan, task)
     st = task_state(task["id"])
-    sid = st.get("session") or str(uuid.uuid4())
+    # A fresh start needs a fresh id: claude refuses a session id it has seen
+    sid = st.get("session") if resume and st.get("session") else str(uuid.uuid4())
     pf = task_dir(task["id"]) / "prompt.md"
     pf.parent.mkdir(parents=True, exist_ok=True)
     claude = ["claude", "--dangerously-skip-permissions", "--model", task.get("model", "opus"),
