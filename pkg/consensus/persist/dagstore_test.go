@@ -7,6 +7,10 @@
 package persist
 
 import (
+	"crypto/ed25519"
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
@@ -55,5 +59,78 @@ func TestDAGStoreRetainSparesLaterWrites(t *testing.T) {
 	}
 	if b, err := s.Batch(BatchName(late.Digest())); err != nil || b.Digest() != late.Digest() {
 		t.Fatalf("reading back: %v", err)
+	}
+}
+
+// TestDAGStoreVotedSurvivesReopen: the headers this node voted for, one per
+// author and round, are on disk before the vote is signed and come back when
+// the store is reopened (#4590); a checkpoint's retention drops the rounds
+// below its floor, and a record cut short by a crash is ignored.
+func TestDAGStoreVotedSurvivesReopen(t *testing.T) {
+	dir := t.TempDir()
+	s, err := OpenDAGStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	author := make(ed25519.PublicKey, ed25519.PublicKeySize)
+	author[0] = 1
+	records := []VoteRecord{
+		{Author: author, Round: 5, Header: types.HeaderDigest{5}},
+		{Author: author, Round: 6, Header: types.HeaderDigest{6}},
+		{Author: author, Round: 7, Header: types.HeaderDigest{7}},
+	}
+	for _, r := range records {
+		if err := s.PutVoted(r.Author, r.Round, r.Header); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The same record again, as a rebroadcast after a failed vote sends it,
+	// is not written twice.
+	if err := s.PutVoted(author, 7, types.HeaderDigest{7}); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = OpenDAGStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Voted(); !reflect.DeepEqual(got, records) {
+		t.Fatalf("reopened store holds %v, want %v", got, records)
+	}
+
+	s.RetainVoted(6)
+	s, err = OpenDAGStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Voted(); !reflect.DeepEqual(got, records[1:]) {
+		t.Fatalf("after retaining from round 6 the store holds %v, want %v", got, records[1:])
+	}
+
+	// A crash in the middle of a write leaves a partial last line.
+	f, err := os.OpenFile(filepath.Join(dir, votedFile), os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("8 0101"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	s, err = OpenDAGStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Voted(); !reflect.DeepEqual(got, records[1:]) {
+		t.Fatalf("with a partial last record the store holds %v, want %v", got, records[1:])
+	}
+	if err := s.PutVoted(author, 8, types.HeaderDigest{8}); err != nil {
+		t.Fatal(err)
+	}
+	s, err = OpenDAGStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Voted(); len(got) != 3 || got[2].Round != 8 {
+		t.Fatalf("a record written after a partial one is lost: %v", got)
 	}
 }

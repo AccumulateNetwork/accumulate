@@ -161,7 +161,9 @@ func (n *Node) writeTail(lastCommit types.Round) []string {
 		retain[name] = true
 	}
 	n.dagStore.Retain(retain, mark)
+	n.dagStore.RetainVoted(min(floor, n.prevFloor))
 	n.prevTail = names
+	n.prevFloor = floor
 	return tail
 }
 

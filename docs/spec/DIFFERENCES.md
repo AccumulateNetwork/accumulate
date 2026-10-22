@@ -1832,6 +1832,9 @@ batches and its last authored header (#4448). What differs:
   operator decision, not a code path this change adds (#4448 notes).
 - **Nothing is fsynced**, as the checkpoint itself is not: the files survive
   a process or container restart (the page cache survives), not a power loss.
+  That includes the vote records (#4590): after a power loss a validator can
+  sign a second header for an (author, round) it voted in during the
+  filesystem's journal window before the loss.
 - **The authored-round sweep is four rounds deep.** A certificate that
   reaches the DAG more than four rounds below the node's current round after
   the node authored there is on disk only from the next block's checkpoint.

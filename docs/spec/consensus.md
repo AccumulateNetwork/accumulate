@@ -309,6 +309,21 @@ they are, these are the facts the executor and healing parts depend on:
   history. A certificate no header ever references is never executed and its
   batches are lost; the weak-link window is what makes that impossible in
   practice, and the count of orphaned certificates is a metric.
+- **One vote per author and round** (#4590). A validator votes for one header
+  from each author at each round: the first it votes for (Narwhal, sec. 4.1).
+  A second header from the same author for the same round is refused, and
+  nothing is asked for on its behalf; the recorded header is voted for again
+  whenever its author rebroadcasts it. The rule is what makes a certificate
+  unique per author and round, which the commit rule assumes: without it two
+  headers that differ only in their timestamp both reach a quorum, each node
+  keeps whichever certificate reaches it first and refuses the other as
+  equivocation, and the partition splits on which one is real. The record of
+  which header the validator voted for at an (author, round) is made before
+  the vote is signed, **on disk before the vote exists** ("Restart", below),
+  and a record that cannot be written is not voted; the author's rebroadcast
+  tries it again. The record is kept for ten rounds in memory, which covers
+  every round a header can still be voted in, and a rescue window below the
+  checkpoint's commit on disk.
 
 ### DAG retention
 
@@ -591,9 +606,17 @@ authors that round or a lower one again, its round is raised to that
 header's if it had got further than the checkpoint, and if the header's
 certificate is not in the DAG the header rejoins vote collection so the
 ordinary rebroadcast sends **the same header** again — a second header for a
-round is self-equivocation (#4159 stall 3). A checkpoint written before #4448
-has no tail and no authored header, and restores the position alone
-(DIFFERENCES, C9).
+round is self-equivocation (#4159 stall 3). The headers this node **voted
+for**, one per author and round ("The DAG facts", above), are written to the
+same store before each vote is signed (`DAGStore.PutVoted`, one line of the
+`voted` file) and read back on every start, checkpoint or not
+(`Primary.RestoreVoted`): a restarted validator otherwise had no record of
+its votes and could sign a second header from an author for a round it had
+voted in (#4590). Each checkpoint drops the records below the lower of its
+tail floor and the previous checkpoint's, since either checkpoint may be the
+one resumed and the restored round is never below its commit. A checkpoint
+written before #4448 has no tail and no authored header, and restores the
+position alone (DIFFERENCES, C9).
 
 **A joining node with no checkpoint orders nothing until the join names a
 round** (#4405). Round zero is not a position: a network past `DAGGCDepth`

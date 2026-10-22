@@ -7,11 +7,15 @@
 package persist
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/ed25519"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -20,10 +24,10 @@ import (
 
 // DAGStore keeps, beside the checkpoint, what a restarted node needs to
 // continue consensus from the round it stopped at (#4448): the certificates
-// of the DAG's tail, the batches they name, and the header this node last
-// authored. The DAG itself is memory-only; without these a partition that
-// restarts as a whole holds no parent certificate anywhere and no node can
-// author a header again.
+// of the DAG's tail, the batches they name, the header this node last
+// authored, and the headers it voted for (#4590). The DAG itself is
+// memory-only; without these a partition that restarts as a whole holds no
+// parent certificate anywhere and no node can author a header again.
 //
 // Certificates and batches are immutable and named by their digest, so each
 // is written once, as its own file, and removed when no checkpoint kept
@@ -33,13 +37,23 @@ type DAGStore struct {
 	dir   string
 	known map[string]uint64 // file names present in dir, by write sequence
 	seq   uint64
+	voted []VoteRecord
 }
 
 const (
 	certPrefix   = "c-"
 	batchPrefix  = "b-"
 	authoredFile = "authored"
+	votedFile    = "voted"
 )
+
+// VoteRecord is a header this node voted for: the only one it votes for
+// from that author at that round (#4590).
+type VoteRecord struct {
+	Author ed25519.PublicKey
+	Round  types.Round
+	Header types.HeaderDigest
+}
 
 // OpenDAGStore opens (creating if needed) the store in dir.
 func OpenDAGStore(dir string) (*DAGStore, error) {
@@ -62,6 +76,9 @@ func OpenDAGStore(dir string) (*DAGStore, error) {
 		}
 	}
 	s.seq = 1
+	if err := s.readVoted(); err != nil {
+		return nil, fmt.Errorf("read vote records: %w", err)
+	}
 	return s, nil
 }
 
@@ -180,6 +197,108 @@ func (s *DAGStore) Authored() (*types.Header, error) {
 		return nil, err
 	}
 	return types.UnmarshalHeader(data)
+}
+
+// PutVoted records, before the vote is signed, that this node votes for the
+// header from author at round (#4590): one line appended to the voted file.
+// Not synced, as nothing here is (DIFFERENCES, C9).
+func (s *DAGStore) PutVoted(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) error {
+	r := VoteRecord{Author: author, Round: round, Header: digest}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, have := range s.voted {
+		if have.Round == r.Round && have.Author.Equal(r.Author) && have.Header == r.Header {
+			return nil
+		}
+	}
+	f, err := os.OpenFile(filepath.Join(s.dir, votedFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(r.line())
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	s.voted = append(s.voted, r)
+	return nil
+}
+
+// Voted returns the headers this node voted for, oldest first.
+func (s *DAGStore) Voted() []VoteRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]VoteRecord(nil), s.voted...)
+}
+
+// RetainVoted drops the vote records of rounds below floor.
+func (s *DAGStore) RetainVoted(floor types.Round) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.voted[:0]
+	var data []byte
+	for _, r := range s.voted {
+		if r.Round < floor {
+			continue
+		}
+		kept = append(kept, r)
+		data = append(data, r.line()...)
+	}
+	if len(kept) == len(s.voted) {
+		return
+	}
+	if err := s.writeFile(votedFile, data); err != nil {
+		return
+	}
+	s.voted = kept
+}
+
+// line is the record as the voted file holds it: round, author and header
+// digest in hex, one record per line.
+func (r VoteRecord) line() []byte {
+	return []byte(fmt.Sprintf("%d %x %x\n", r.Round, []byte(r.Author), r.Header[:]))
+}
+
+// readVoted loads the voted file. A line cut short by a crash is dropped,
+// and the file rewritten without it so the next record starts a line.
+func (s *DAGStore) readVoted() error {
+	data, err := os.ReadFile(filepath.Join(s.dir, votedFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var kept []byte
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	for sc.Scan() {
+		f := strings.Fields(sc.Text())
+		if len(f) != 3 {
+			continue
+		}
+		round, err := strconv.ParseUint(f[0], 10, 64)
+		if err != nil {
+			continue
+		}
+		author, err := hex.DecodeString(f[1])
+		if err != nil || len(author) != ed25519.PublicKeySize {
+			continue
+		}
+		digest, err := hex.DecodeString(f[2])
+		if err != nil || len(digest) != len(types.HeaderDigest{}) {
+			continue
+		}
+		r := VoteRecord{Author: author, Round: types.Round(round)}
+		copy(r.Header[:], digest)
+		s.voted = append(s.voted, r)
+		kept = append(kept, r.line()...)
+	}
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		return s.writeFile(votedFile, kept)
+	}
+	return nil
 }
 
 // Mark is a point in the store's write sequence: Retain spares everything

@@ -21,6 +21,24 @@ func (p *Primary) SetOnAuthored(fn func(*types.Header) error) {
 	p.onAuthored = fn
 }
 
+// SetOnVoted installs the hook that persists, before a vote is signed, which
+// header this primary votes for at an author's round (#4590). The vote is
+// not signed if the hook fails. Call before Start.
+func (p *Primary) SetOnVoted(fn func(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) error) {
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	p.onVoted = fn
+}
+
+// RestoreVoted tells a restarted primary a header it voted for before it
+// stopped (#4590): it votes for no other header from that author for that
+// round. Call before Start.
+func (p *Primary) RestoreVoted(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) {
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	p.votedRounds[authorRound{string(author), round}] = digest
+}
+
 // RestoreAuthored tells a restarted primary the last header it authored
 // before it stopped (#4448). It never authors that round, or any below it,
 // again (#4159 stall 3). If that header's certificate is not in the DAG and
