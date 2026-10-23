@@ -2499,17 +2499,23 @@ not serving. Not built.
 ## Anchoring: nothing anchors to Bitcoin (#4562)
 
 [anchoring.md](anchoring.md) (Paul, 2026-10-12) has the Directory's root chain
-anchor committed to Bitcoin at every due height from an address on a published
-list, the validators signing at the network's threshold through a coordination
-data account, a proof builder keeping each listed account's entries' receipts
+anchor committed to Bitcoin at every interval (the latest stored Directory
+block the proposer chooses) from an address on a published list, the
+validators signing at a count threshold through per-signer coordination data
+accounts, a proof builder keeping each listed account's entries' receipts
 to the next anchored root, and a verifier that checks a package with Bitcoin
 and one pinned transaction. None of it exists:
 
-- **B1. No accounts, no types.** `dn.acme/bitcoin/addresses` and
-  `dn.acme/bitcoin/anchors` are not created by genesis or by any transaction;
+- **B1. No accounts, no types.** `dn.acme/bitcoin` (an ADI),
+  `dn.acme/bitcoin/addresses` and the per-signer coordination accounts and
+  books are not created by genesis or by any transaction;
   `pkg/anchoring` and its payload, list and record types do not exist.
+  On an existing network the accounts and the book are created by
+  operator-signed `CreateIdentity`/`CreateKeyBook`/`CreateDataAccount`
+  transactions, not by an
+  executor change; there is no version gate.
 - **B2. No coordination.** No validator proposes, signs or broadcasts an anchor
-  (anchoring.md §2.4).
+  (anchoring.md §2.4), on the Bitcoin-height slot rule.
 - **B3. The proof builder is built, not deployed.** `internal/anchoring/proofs`
   (#4563) reads a partition's block ledgers for a configured set of accounts
   and keeps each entry's receipt to the Directory root that committed it, as
@@ -2520,6 +2526,8 @@ and one pinned transaction. None of it exists:
   extension to the next *anchored* height, which waits on B2.
 - **B4. No verifier.** Nothing checks a package, and no alarm watches the
   anchors (§2.6).
+
+**Size**: large across B1–B4; B3 is medium and is in flight as #4563.
 
 Order: B3 first — receipts to the Directory root are useful against today's
 spine before any anchor exists — then B1 with B2, then B4. Issues are the
