@@ -198,12 +198,14 @@ them or intervene. Work, in order:
    joiner must be able to as well.
 2. **Halt and say why** when the partition's own committee lacks a quorum.
    Done: the stall line carries how many of the committee were heard
-   producing at the round in the last 10 s, the committee and the quorum,
+   producing at the round in the last 5 s, the committee and the quorum,
    and below the quorum says "This partition has lost its quorum ... it holds
    its state until enough of them return", with
    `accumulate_dagbft_partition_below_quorum` (consim
    `TestAPartitionThatLostItsQuorumSaysSo`: two of four lost, the survivors
-   report 2 of 4, quorum 3).
+   report 2 of 4, quorum 3). The 5 s is inside the 10 s stall: at 10 s, a
+   validator that stopped after authoring the round the partition stalls at
+   was still counted at the first stall line (#4610).
 3. Rewrite `TestAPartitionThatLostAQuorumIsRevivedByACommitteeChange` as:
    lose two of four (the partition halts and says so; the others run on),
    restore the two with their keys, the partition resumes. Done:

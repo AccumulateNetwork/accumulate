@@ -406,7 +406,8 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		if p.requestParents != nil {
 			p.requestParents(missingParents)
 		}
-		return // missing parents — asked for them; vote on a later rebroadcast
+		p.deferVote(header, missingParents, nil)
+		return // missing parents — asked for them; vote when they land (#4611)
 	}
 
 	// Data availability: only vote once we hold every batch this header names
@@ -455,11 +456,13 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		for _, d := range missingBatches {
 			p.requestMissingBatch(d)
 		}
-		return // missing batches — do not certify data we do not have
+		p.deferVote(header, nil, missingBatches)
+		return // missing batches — do not certify data we do not have; vote when they land (#4611)
 	}
 
 	// Every batch is here, so nothing is waiting on them any more.
 	p.releasePins(headerDigest)
+	p.deferred.drop(headerDigest)
 
 	// Create and send vote
 	vote := types.NewVote(headerDigest, header.Round, header.Epoch, pubKey)

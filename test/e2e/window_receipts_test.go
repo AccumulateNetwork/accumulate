@@ -47,7 +47,7 @@ func TestDirectoryReceiptsPastTheWindow(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 2, 1),
 		simulator.GenesisWith(GenesisTime, globals),
-		simulator.WithDatabase(simulator.BcdbDbOpener(t.TempDir(), func(err error) { require.NoError(t, err) })),
+		BcdbDatabase(t),
 	)
 
 	alice := acctesting.GenerateKey("Alice")

@@ -1879,7 +1879,27 @@ Catch-up is built if PLAN R8-1's Docker run shows restart catch-up still slow
 or bursty. Otherwise this entry records a design that is decided and not yet
 needed.
 
-### C16. Any peer can publish on the consensus topics, and validated messages are relayed for it
+### C16. A gossip stream that fails to open is never opened again
+
+*No issue yet; found under #4610*
+
+consensus.md, invariant 11: anything sent once and never re-sent leaves a
+condition that cannot become true on its own. GossipSub (go-libp2p-pubsub
+v0.10.0) opens its stream to a peer once, when it first sees the connection.
+If that open fails, the peer is dropped from GossipSub with no retry
+(`comm.go` handleNewPeer → `newPeerError`); only a stream that dies after
+opening is re-opened. The connection stays up, so nothing reconnects, and the
+node neither sends to that peer nor is counted by it on any topic. consim hit
+it on CI's loaded runners because it connected hosts before creating their
+GossipSubs: validator 0 ran a whole test with `hostPeers=3`,
+`headerTopicPeers=0` (job 17290112116). consim now creates each GossipSub with
+its host, as `p2p.NewHost` does, and refuses to load a sim whose mesh is short
+(`ErrMeshIncomplete`). Production creates GossipSub before it connects, so the
+start-up race does not arise there; whether any other first-open failure (a
+timeout, a resource-manager refusal) can isolate a production validator until
+it reconnects is not verified.
+
+### C17. Any peer can publish on the consensus topics, and validated messages are relayed for it
 
 *[#4596](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4596) — a design decision*
 

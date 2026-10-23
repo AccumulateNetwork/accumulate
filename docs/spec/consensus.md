@@ -131,10 +131,22 @@ So a validator holds batches in four places, for four reasons:
     wait, and it asks for everything it lacks at once: a header authored
     after a restart names every batch its node accumulated while it was
     down, hundreds of them, and a voter that asked for one per rebroadcast
-    took minutes to certify it (#4503). The author rebroadcasts its header about once a second and each
-    rebroadcast re-tests the same condition, so anything broadcast once and
-    never re-sent — a certificate, a batch — leaves a condition that cannot
-    become true on its own. The cost of getting this wrong is a whole
+    took minutes to certify it (#4503). **A deferred vote is re-tested when
+    what it asked for lands**, not when the author next sends the header:
+    the voter records, per deferred header, the batches and parent
+    certificates it lacks, and the moment the last of them is stored or
+    inserted it tests the header again (#4611). Waiting for the author cost
+    every such header at least one rebroadcast after its batches had
+    arrived, and the headers after a restart carry the backlog a header at
+    a time: a partition went 7–20 s without a block after
+    `TestRestartAfterTwoNodesStopFirst`'s restart, unloaded included — and
+    what remained of those seconds once the vote was re-tested on arrival
+    was the simulator's gossip, not the vote (Restart, below). The
+    author still rebroadcasts its header about once a second, and each
+    rebroadcast re-tests the same condition: that is the backstop for a
+    re-test that never fires (a batch evicted again, a notification dropped),
+    and it is why anything broadcast once and never re-sent — a certificate,
+    a batch — leaves a condition that cannot become true on its own. The cost of getting this wrong is a whole
     partition: every validator sits on the round's headers refusing to vote,
     no header reaches the quorum the round needs, the round never advances,
     and the partition stops while its peers run on. Both halves have now cost
@@ -151,7 +163,7 @@ So a validator holds batches in four places, for four reasons:
     The check is made by the router before relay, cheapest part first, so a
     message from outside the committee costs each receiver a decode and a
     lookup and goes no further (#4596). Which peers a validator exchanges
-    these topics with is not yet decided (DIFFERENCES C16).
+    these topics with is not yet decided (DIFFERENCES C17).
 
 ## 2. Specification — how it is implemented
 
@@ -396,6 +408,22 @@ named a request of every node at once, and a peer that had seen node A's
 request *k* answered skipped node B's request *k*. A node numbers its
 requests from a random starting point, so one restarted under the same key
 does not reuse the IDs its peers saw answered before it stopped (#4470).
+
+**A node handles one complete answer to a request.** Suppression works
+only if the first answer reaches a peer before that peer's own delay runs
+out, and under load it does not. On a loaded runner, a joining follower's
+requests were each answered by 8 of its 12 peers at the median. Every node
+receives every answer and handles them one at a time. So the follower's
+own answers waited 24 s at the median behind copies of answers it already
+had, the response queue (500, below) overflowed and dropped the next ones,
+and in CI its Directory sat at its seed round + 2 for the whole of
+`TestFollowerJoinCatchesUp` (#4610). Now a request (its requester's key
+and its ID, as for suppression) that is answered with nothing reported
+missing is done. Later answers to it, whoever asked, are dropped before
+their certificates are read. A partial answer leaves the request open for
+the next one. The `Certificate catch-up` line counts the dropped copies as
+`repeatedAnswers`.
+
 What arrives is verified against the committee and inserted. A
 certificate whose parents are missing is held (up to `2 × 10 × committee`
 certificates) until they arrive, and its parents are asked for.
@@ -514,6 +542,24 @@ about to be produced and the one before it). On restart the node restores the
 checkpoint whose block is the executor's last block
 (`Service.seedFromCheckpoint`, `Node.Restore`), so it participates in
 consensus from that round rather than from zero.
+
+**A restarted partition resumes in seconds, and the simulator's gossip is the
+node's** (#4610). consim restarts a node in place: the same host and gossipsub
+router leave every topic and join it again, and gossipsub answers an
+unsubscribe with a 10 s backoff on both sides, so no mesh forms for a while
+(22 s in a loaded run). The node publishes with flood publish
+(`p2p.startServiceDiscovery`), to every peer on the topic, mesh or none; a
+bare router publishes to its mesh alone, and with none it sends each header,
+vote and certificate to nobody — they reached the peers by IHAVE/IWANT at the
+heartbeat, one second a hop, a round every 4–8 s, a block every 10–16 s, and
+`TestRestartAfterTwoNodesStopFirst` stalled at the 20 s mark on a 2-vCPU
+runner (2 of 8 runs; 0 of 24 on a fast machine, where the block fell inside
+the window). consim now builds its pubsub as the node does, a restarted
+partition never goes more than about a second without a block once its
+nodes return (`Result.ResumeGap`, the longest such gap in the 30 s after),
+and the restart tests refuse a gap over 5 s. A node
+restarts as a new process whose peers drop its connection with no backoff;
+production never saw that mesh.
 
 **The executor keeps no empty block**, so its last block is the last one that
 carried anything, and a partition whose last blocks were empty restarts with

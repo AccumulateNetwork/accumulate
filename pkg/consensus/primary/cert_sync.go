@@ -542,8 +542,26 @@ func (s *CertSyncer) handleSyncResponses() {
 		return
 	}
 
-	responses := s.gossip.SubscribeSyncResponses()
+	s.readSyncResponses(s.gossip.SubscribeSyncResponses())
+}
 
+// readSyncResponses handles the responses as they arrive, one complete
+// answer to each request: a request answered with nothing reported missing
+// is done, and later answers to it are dropped unread, whoever asked. A
+// partial answer leaves the request open for the next.
+//
+// Responses are broadcast, so every node receives the answers to every
+// node's requests, and handles them one at a time. Suppression keeps a peer
+// from answering a request it has seen answered, but under load it has not
+// seen the first answer yet when its own delay runs out. A joining
+// follower's requests were answered by 8 of its 12 peers at the median,
+// each answer up to 100 certificates. At the rate a loaded CI runner
+// handled responses (3 to 29 a second), its own answers waited 24 s at the
+// median behind copies of answers it already had, its queue overflowed and
+// dropped the next ones, and it climbed toward the frontier more slowly than
+// the frontier moved (#4610).
+func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse) {
+	complete := map[requestKey]struct{}{}
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -552,6 +570,20 @@ func (s *CertSyncer) handleSyncResponses() {
 		case resp, ok := <-responses:
 			if !ok {
 				return
+			}
+			if resp == nil || len(resp.Certificates) == 0 {
+				continue
+			}
+			key := keyOf(resp.Requester, resp.RequestID)
+			if _, done := complete[key]; done {
+				s.window.repeatedAnswer()
+				continue
+			}
+			if len(resp.Missing) == 0 {
+				if len(complete) > 4096 {
+					complete = map[requestKey]struct{}{}
+				}
+				complete[key] = struct{}{}
 			}
 			s.handleSyncResponse(resp)
 		}
@@ -786,6 +818,9 @@ func (s *CertSyncer) logSummary() {
 		args = append(args, "digestRequests", w.digestRequests, "digestsAsked", w.digestsAsked)
 	}
 	args = append(args, "responses", w.responses, "certificates", w.certificates)
+	if w.repeated > 0 {
+		args = append(args, "repeatedAnswers", w.repeated)
+	}
 	for _, o := range certOutcomes {
 		if n := w.outcomes[o]; n > 0 {
 			args = append(args, string(o), n)
@@ -833,6 +868,9 @@ type syncWindowCounts struct {
 	lastRefusal           string
 	answered, suppressed  int
 	empty                 int
+	// repeated counts answers dropped unread because their request had
+	// already been answered in full (#4610).
+	repeated int
 	// verifications counts received certificates verified against the
 	// committee, from gossip as well as sync. It is reported with the rest
 	// but does not by itself make the line worth writing (#4469).
@@ -841,7 +879,7 @@ type syncWindowCounts struct {
 
 func (c syncWindowCounts) isEmpty() bool {
 	return c.roundRequests == 0 && c.digestRequests == 0 && c.responses == 0 &&
-		c.answered == 0 && c.suppressed == 0 && c.empty == 0
+		c.answered == 0 && c.suppressed == 0 && c.empty == 0 && c.repeated == 0
 }
 
 func (w *syncWindow) take() syncWindowCounts {
@@ -869,6 +907,12 @@ func (w *syncWindow) digestRequest(n int) {
 	defer w.mu.Unlock()
 	w.digestRequests++
 	w.digestsAsked += n
+}
+
+func (w *syncWindow) repeatedAnswer() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.repeated++
 }
 
 func (w *syncWindow) response() {

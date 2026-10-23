@@ -153,16 +153,20 @@ func TestGossipLayer_BroadcastAndReceiveSyncRequest(t *testing.T) {
 	h2 := bhost.NewBlankHost(netw2)
 	t.Cleanup(func() { h2.Close() })
 
-	// Connect them
-	h1.Peerstore().AddAddrs(h2.ID(), h2.Addrs(), time.Hour)
-	err := h1.Connect(ctx, h2.Peerstore().PeerInfo(h2.ID()))
-	require.NoError(t, err)
-
-	// Create pubsub
+	// The routers before the connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
 	ps1, err := pubsub.NewGossipSub(ctx, h1)
 	require.NoError(t, err)
 
 	ps2, err := pubsub.NewGossipSub(ctx, h2)
+	require.NoError(t, err)
+
+	// Connect them
+	h1.Peerstore().AddAddrs(h2.ID(), h2.Addrs(), time.Hour)
+	err = h1.Connect(ctx, h2.Peerstore().PeerInfo(h2.ID()))
 	require.NoError(t, err)
 
 	// Create gossip layers
@@ -222,14 +226,19 @@ func TestGossipLayer_BroadcastAndReceiveSyncResponse(t *testing.T) {
 	h2 := bhost.NewBlankHost(netw2)
 	t.Cleanup(func() { h2.Close() })
 
-	h1.Peerstore().AddAddrs(h2.ID(), h2.Addrs(), time.Hour)
-	err := h1.Connect(ctx, h2.Peerstore().PeerInfo(h2.ID()))
-	require.NoError(t, err)
-
+	// The routers before the connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
 	ps1, err := pubsub.NewGossipSub(ctx, h1)
 	require.NoError(t, err)
 
 	ps2, err := pubsub.NewGossipSub(ctx, h2)
+	require.NoError(t, err)
+
+	h1.Peerstore().AddAddrs(h2.ID(), h2.Addrs(), time.Hour)
+	err = h1.Connect(ctx, h2.Peerstore().PeerInfo(h2.ID()))
 	require.NoError(t, err)
 
 	gl1, err := gossip.NewGossipLayer(h1, ps1, "test")
