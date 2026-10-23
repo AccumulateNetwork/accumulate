@@ -32,7 +32,7 @@ H3 #4192                                              when measurement says proo
 Phase 1 (Paul, 2026-09-19): #4365 (PASSED 2026-09-19, run 20260919T191634Z) ─▶ #4367 (MERGED 775ce23a6) ─▶ { #4366 (MERGED a09ff3e0a; the F1 channel binding a follow-up) ∥ #4301 (MERGED 1ea77143d; statement (c) at step 3) ∥ #4361 (MERGED b0ec6e0fd) } ─▶ gate-0 rerun (RAN 20260919T231856Z: heals 0 → 0, stranded 0, roots 679/679 — run-analyst #4365 note_3876639043; historian's gate review pending) ─▶ #4368 (what "fully synced" is — gates reads, not the relay; spec at ce4f9e8cf, code is #4295) ─▶ #4362 ─▶ serve-last ─▶ #4363 ─▶ #4364 ─▶ the 12 h / 100 tps acceptance with followers added and removed   the one order (Paul, 2026-09-19: "Why are we not assigning work to do for our goal for bootstrapping?" — the join runs in parallel with the relay from 21:57Z, not behind it); E11's second pass below is its text
 ```
 
-Bitcoin anchoring (Paul, 2026-10-12, #4562; DIFFERENCES "Anchoring"): B3 proof builder ─▶ { B1 accounts and types ─▶ B2 coordination } ─▶ B4 verifier — read-side only, parallel to everything above.
+Bitcoin anchoring (Paul, 2026-10-12, #4562; DIFFERENCES "Anchoring"): B3 proof builder ─▶ { B1 accounts and types ─▶ B2 coordination } ─▶ B4 verifier — no consensus rule depends on it, parallel to everything above.
 
 Restart, torn stores and quorum loss (2026-10-02): R0 ─▶ R1 ─▶ R2 ─▶ R3 ─▶ R4 (Paul: B/C) ─▶ R5; R6 and R7 parallel — see the section of that name below.
 

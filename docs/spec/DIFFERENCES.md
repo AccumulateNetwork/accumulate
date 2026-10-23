@@ -2508,6 +2508,9 @@ and one pinned transaction. None of it exists:
 - **B1. No accounts, no types.** `dn.acme/bitcoin/addresses` and
   `dn.acme/bitcoin/anchors` are not created by genesis or by any transaction;
   `pkg/anchoring` and its payload, list and record types do not exist.
+  On an existing network the accounts and the book are created by
+  operator-signed `CreateKeyBook`/`CreateDataAccount` transactions, not by an
+  executor change; there is no version gate.
 - **B2. No coordination.** No validator proposes, signs or broadcasts an anchor
   (anchoring.md §2.4).
 - **B3. No proof builder.** Nothing reads the block ledgers for a configured
@@ -2516,6 +2519,8 @@ and one pinned transaction. None of it exists:
   the major-block spine, which does not cross a restart (§2.5).
 - **B4. No verifier.** Nothing checks a package, and no alarm watches the
   anchors (§2.6).
+
+**Size**: large across B1–B4; B3 is medium and is in flight as #4563.
 
 Order: B3 first — receipts to the Directory root are useful against today's
 spine before any anchor exists — then B1 with B2, then B4. Issues are the
