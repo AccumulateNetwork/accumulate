@@ -241,6 +241,21 @@ func ReceiptForChainIndex(partition config.NetworkUrl, batch *database.Batch, c 
 	return finishChainReceipt(partition, batch, c, index, entry, rootIndexIndex, rootEntry)
 }
 
+// ReceiptForStoredChainIndex is [ReceiptForChainIndex] for the entry's own
+// anchor, by the stored positions only: it returns an error where
+// [ReceiptForChainIndex] would fall back to searching the index chains
+// (database.md, "Proofs are read, not searched").
+func ReceiptForStoredChainIndex(partition config.NetworkUrl, batch *database.Batch, c *database.Chain2, index int64) (*protocol.IndexEntry, uint64, *merkle.Receipt, error) {
+	if c.Type() == merkle.ChainTypeIndex {
+		return nil, 0, nil, errors.BadRequest.WithFormat("cannot get a receipt for %s: index chains are not anchored", c.Name())
+	}
+	entry, rootIndexIndex, rootEntry, ok := storedAnchorPositions(partition, batch, c, index, nil)
+	if !ok {
+		return nil, 0, nil, errors.NotFound.WithFormat("%v %s entry %d has no stored anchor positions", c.Account(), c.Name(), index)
+	}
+	return finishChainReceipt(partition, batch, c, index, entry, rootIndexIndex, rootEntry)
+}
+
 // storedAnchorPositions returns the index entries a receipt needs, read from
 // the transaction's chains index instead of searched for. The second return is
 // the root index entry's position, which the caller reports as

@@ -11,6 +11,9 @@
 package anchoring
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
@@ -29,15 +32,15 @@ type Package struct {
 
 // Entry names the chain entry the package proves.
 type Entry struct {
-	Chain string `json:"chain"`
-	Index uint64 `json:"index"`
-	Hash  []byte `json:"hash"`
+	Chain string   `json:"chain"`
+	Index uint64   `json:"index"`
+	Hash  HexBytes `json:"hash"`
 }
 
 // Directory is the root the receipt terminates at.
 type Directory struct {
-	Height uint64 `json:"height"`
-	Root   []byte `json:"root"`
+	Height uint64   `json:"height"`
+	Root   HexBytes `json:"root"`
 }
 
 // Anchor is the Bitcoin transaction that committed the Directory root, with
@@ -46,4 +49,21 @@ type Anchor struct {
 	TxID        string `json:"txid"`
 	Block       string `json:"block"`
 	BlockHeight uint64 `json:"blockHeight"`
+}
+
+// HexBytes is a byte string that encodes as a hex string in JSON (anchoring.md
+// §2.5: every byte string in the package is hex).
+type HexBytes []byte
+
+func (h HexBytes) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(h)), nil
+}
+
+func (h *HexBytes) UnmarshalText(text []byte) error {
+	b, err := hex.DecodeString(string(text))
+	if err != nil {
+		return fmt.Errorf("invalid hex: %w", err)
+	}
+	*h = b
+	return nil
 }

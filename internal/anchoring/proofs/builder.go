@@ -12,6 +12,7 @@
 package proofs
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -121,6 +122,10 @@ func (b *Builder) run(batch, dn *database.Batch) (int, error) {
 			return 0, errors.UnknownError.WithFormat("load block ledger %d: %w", block, err)
 		}
 		for _, e := range bl.Entries {
+			// An account changed without a chain append has nothing to prove
+			if e.Chain == "" {
+				continue
+			}
 			if b.wants(e.Account) {
 				todo = append(todo, pending{e.Account, e.Chain, e.Index})
 			}
@@ -194,9 +199,12 @@ func (b *Builder) prove(batch, dn *database.Batch, p pending) (*anchoring.Packag
 
 	// Entry to the partition's root chain anchor, by the stored positions
 	// (database.md, "Proofs are read, not searched").
-	rootEntry, _, extend, err := indexing.ReceiptForChainIndex(b.url(), batch, chain, int64(p.Index), nil)
+	rootEntry, _, extend, err := indexing.ReceiptForStoredChainIndex(b.url(), batch, chain, int64(p.Index))
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("%v %s entry %d to the root: %w", p.Account, p.Chain, p.Index, err)
+	}
+	if !bytes.Equal(extend.Start, hash) {
+		return nil, errors.InternalError.WithFormat("%v %s entry %d: the receipt starts at %x, not at the entry %x", p.Account, p.Chain, p.Index, extend.Start, hash)
 	}
 
 	pkg := &anchoring.Package{
@@ -222,7 +230,7 @@ func (b *Builder) prove(batch, dn *database.Batch, p pending) (*anchoring.Packag
 	default:
 		return nil, errors.UnknownError.WithFormat("search anchor(%s)-root: %w", b.Partition, err)
 	}
-	dnEntry, _, bind, err := indexing.ReceiptForChainIndex(config.NetworkUrl{URL: protocol.DnUrl()}, dn, received, at, nil)
+	dnEntry, _, bind, err := indexing.ReceiptForStoredChainIndex(config.NetworkUrl{URL: protocol.DnUrl()}, dn, received, at)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("bind to a directory root: %w", err)
 	}

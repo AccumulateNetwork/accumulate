@@ -2519,11 +2519,15 @@ and one pinned transaction. None of it exists:
 - **B3. The proof builder is built, not deployed.** `internal/anchoring/proofs`
   (#4563) reads a partition's block ledgers for a configured set of accounts
   and keeps each entry's receipt to the Directory root that committed it, as
-  a package without the anchor. The package's `entry` is `{chain, index, hash}`
-  with `hash` the chain entry, and it has no `list`; both follow §2.5's
-  revision under #4562, not its present shape. Not yet: a node service that
-  runs it beside a follower's API, the HTTP face that serves packages, and the
-  extension to the next *anchored* height, which waits on B2.
+  a package without the anchor. The package's `entry` is `{chain, index,
+  hash}` with `hash` the chain entry, in hex; it has no `transaction`,
+  `signatures`, `anchor`, `bitcoin` or `list`. Block-ledger entries that name
+  no chain are skipped; every chain of a configured account is proven, signature
+  chains included; the builder reads the stored anchor positions and never
+  searches. Not yet: a node service that runs it beside a follower's API, the
+  HTTP face that serves packages, and the extension to the next *anchored*
+  height, which waits on B2. The package format follows §2.5's revision under
+  #4562.
 - **B4. No verifier.** Nothing checks a package, and no alarm watches the
   anchors (§2.6).
 

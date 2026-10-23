@@ -9,6 +9,7 @@ package indexing
 import (
 	stderrors "errors"
 	"fmt"
+	"sync/atomic"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -57,6 +58,12 @@ const (
 )
 
 // IndexChainSearchFunction determines the direction an index chain search should proceed.
+var searches atomic.Uint64
+
+// IndexChainSearches is the number of calls to [SearchIndexChain] so far in
+// this process, for tests that assert a read path does not search.
+func IndexChainSearches() uint64 { return searches.Load() }
+
 type IndexChainSearchFunction func(*protocol.IndexEntry) SearchDirection
 
 // SearchIndexChain2 is a wrapper for [SearchIndexChain] that accepts
@@ -76,6 +83,7 @@ func SearchIndexChain2(chain *database.Chain2, index uint64, mode MatchMode, fin
 // returned (for range search functions) and the boundary-condition errors,
 // preserving the semantics of the original linear walk.
 func SearchIndexChain(chain *database.Chain, start uint64, mode MatchMode, find IndexChainSearchFunction) (uint64, *protocol.IndexEntry, error) {
+	searches.Add(1)
 	height := uint64(chain.Height())
 	read := func(i uint64) (*protocol.IndexEntry, error) {
 		entry := new(protocol.IndexEntry)
