@@ -235,13 +235,22 @@ func (n *Node) persistAuthored(h *types.Header) error {
 // ordering, and hands the last authored header to the primary. It reports
 // how many certificates and batches it loaded.
 //
-// The batches this node authored — named by its own certificates in the
-// tail or by the header it last authored — come back as its own: the tail
-// is a whole rescue window and can be larger than the active store, and the
-// first eviction after a restart took the batch of the restored header with
-// the rest, leaving no node to serve it and the round one vote short for
-// ever (run 20261006T220257Z, #4545). The others are peer copies, as they
-// were.
+// A batch named by a certificate in the checkpoint's committed set executed
+// before the checkpoint, and goes into retention, with the certificate
+// marked executed in the DAG: in the active store it would be certified and
+// never pruned, and the tail would hold the store over its budget for as
+// long as the DAG kept the certificate (#4598). That holds for this node's
+// own batches too — held as own, the stale-own re-proposal would propose an
+// executed batch again (invariant 7). Of the rest, the batches this node
+// authored — named by its own certificates in the tail or by the header it
+// last authored — come back as its own: the tail is a whole rescue window
+// and can be larger than the active store, and the first eviction after a
+// restart took the batch of the restored header with the rest, leaving no
+// node to serve it and the round one vote short for ever (run
+// 20261006T220257Z, #4545). The others are peer copies, as they were: a
+// batch whose certificates are all absent from the set stays in the active
+// store on the certificate's account (invariant 3), bounded by the DAG's
+// retention.
 func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
 	if n.dagStore == nil {
 		return 0, 0
@@ -260,22 +269,51 @@ func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
 		batchNames = append(batchNames, name)
 	}
 	ours := n.ownPayloads(certs, authored)
+	// The tail certificates in the checkpoint's committed set, and for each
+	// batch one such certificate naming it.
+	committed := make(map[types.CertificateDigest]bool, len(cp.Committed))
+	for h := range cp.Committed {
+		raw, err := hex.DecodeString(h)
+		if err != nil || len(raw) != len(types.CertificateDigest{}) {
+			continue
+		}
+		var d types.CertificateDigest
+		copy(d[:], raw)
+		committed[d] = true
+	}
+	executed := make(map[types.BatchDigest]*types.Certificate)
+	for _, c := range certs {
+		if c.Header == nil || !committed[c.Digest()] {
+			continue
+		}
+		for _, e := range c.Header.Payload {
+			executed[e.Digest] = c
+		}
+	}
 	batches := 0
 	for _, name := range batchNames {
 		b, err := n.dagStore.Batch(name)
 		if err != nil {
 			continue
 		}
-		if ours[b.Digest()] {
-			d := b.Digest()
+		d := b.Digest()
+		switch c := executed[d]; {
+		case c != nil:
+			n.workers[workerFor(d[:], len(n.workers))].RestoreRetained(b, c.Digest().String())
+		case ours[d]:
 			n.workers[workerFor(d[:], len(n.workers))].RestoreOwn(b)
-		} else {
+		default:
 			_ = multiWorkerBatchStore{n.workers}.StoreBatch(b)
 		}
 		batches++
 	}
 	if err := n.dag.Restore(certs); err != nil {
 		slog.Error("Restoring the DAG tail", "partition", n.config.Partition, "error", err)
+	}
+	for _, c := range certs {
+		if committed[c.Digest()] {
+			n.dag.MarkExecuted(c)
+		}
 	}
 	n.prevTail = map[string]bool{}
 	for _, name := range cp.Tail {

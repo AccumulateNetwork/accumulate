@@ -992,6 +992,24 @@ func (n *Node) Restore(cp *persist.Checkpoint) {
 		"certificates", certs, "batches", batches)
 }
 
+// PruneCommitted retires the batches a certificate names once this node has
+// executed them: they leave every worker's active store for retention, and
+// the DAG stops protecting them (invariant 3). Both, in that order, so a copy
+// arriving later is cache and not stored as certified again (#4598).
+func (n *Node) PruneCommitted(cert *types.Certificate, info worker.CommitInfo) {
+	if cert == nil || cert.Header == nil {
+		return
+	}
+	n.dag.MarkExecuted(cert)
+	digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+	for _, e := range cert.Header.Payload {
+		digests = append(digests, e.Digest)
+	}
+	for _, w := range n.workers {
+		w.PruneCommitted(digests, info)
+	}
+}
+
 // Metrics returns node metrics.
 func (n *Node) Metrics() (txSubmitted, certsCommitted uint64) {
 	return n.transactionsSubmitted.Load(), n.certificatesCommitted.Load()

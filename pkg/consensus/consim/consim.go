@@ -569,10 +569,6 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				}
 				executedAny = true
 				executed = append(executed, cert.Digest().String())
-				digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-				for _, e := range cert.Header.Payload {
-					digests = append(digests, e.Digest)
-				}
 				n := 0
 				for _, b := range batches {
 					n += len(b.Transactions)
@@ -598,9 +594,7 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 					case <-t.C:
 					}
 				}
-				for _, w := range node.Workers() {
-					w.PruneCommitted(digests, worker.CommitInfo{Detail: fmt.Sprintf("block %d", sn.height.Load()+1), Cert: cert.Digest().String()})
-				}
+				node.PruneCommitted(cert, worker.CommitInfo{Detail: fmt.Sprintf("block %d", sn.height.Load()+1), Cert: cert.Digest().String()})
 			}
 			if executedAny {
 				// seq holds one entry per block index. A node restored from

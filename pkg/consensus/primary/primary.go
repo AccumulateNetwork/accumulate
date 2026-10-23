@@ -809,6 +809,36 @@ func (p *Primary) pinHeaderBatches(headerDigest types.HeaderDigest, header *type
 	}
 }
 
+// nameHeaderBatches marks the batches a header names on every worker, so
+// eviction takes batches no header names first, and returns the batches no
+// worker holds, in the header's order. A gossiped batch is routed to one
+// local worker by digest, not by the worker id the payload entry carries, so
+// a batch is missing only if every worker says so (#4159).
+func (p *Primary) nameHeaderBatches(header *types.Header) (missing []types.BatchDigest) {
+	digests := make([]types.BatchDigest, 0, len(header.Payload))
+	for _, entry := range header.Payload {
+		digests = append(digests, entry.Digest)
+	}
+	held := make(map[types.BatchDigest]bool, len(digests))
+	for _, w := range p.workers {
+		notHere := make(map[types.BatchDigest]bool, len(digests))
+		for _, d := range w.NameBatches(digests) {
+			notHere[d] = true
+		}
+		for _, d := range digests {
+			if !notHere[d] {
+				held[d] = true
+			}
+		}
+	}
+	for _, d := range digests {
+		if !held[d] {
+			missing = append(missing, d)
+		}
+	}
+	return missing
+}
+
 // releasePins drops the pins a header took: it was voted on, or it aged out.
 func (p *Primary) releasePins(headerDigest types.HeaderDigest) {
 	p.pendingMu.Lock()
