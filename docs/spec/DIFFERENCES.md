@@ -1938,8 +1938,15 @@ So a peer outside the committee can still:
 - publish batches, which carry no author: they are bounded by the inbound
   queue and the batch store (#4598), not refused;
 - publish sync requests, which are unsigned, and sync responses whose
-  certificates name members but do not verify: the receiver verifies each
-  before it is used (#4597), but every node receives and relays them;
+  certificates name members but do not verify: every node receives and
+  relays them. The receiver verifies each certificate before it is used,
+  and since #4597 a response is an answer only once every certificate in
+  it checks, so a junk response no longer silences the honest answers to
+  its request. What remains: a certificate the receiver already holds is
+  recognised by its digest, the header's, before it is verified (#4057),
+  so a copy of a genuine header with junk signatures still counts as an
+  answer at the peers that hold it, and they keep their own; the
+  requester, which does not hold it, finds it invalid and asks again;
 - republish genuine headers, votes and certificates under its own message
   IDs: each copy passes validation and is relayed, and is recognised as a
   copy only by the handlers.

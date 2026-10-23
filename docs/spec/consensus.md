@@ -162,8 +162,13 @@ So a validator holds batches in four places, for four reasons:
     signatures are that member's (for a certificate, a quorum of members').
     The check is made by the router before relay, cheapest part first, so a
     message from outside the committee costs each receiver a decode and a
-    lookup and goes no further (#4596). Which peers a validator exchanges
-    these topics with is not yet decided (DIFFERENCES C17).
+    lookup and goes no further (#4596). Certificate-sync responses are the
+    one carve-out: a response carries up to 100 certificates and every node
+    receives every response, so the router relays one once each
+    certificate's author is a member, and the receiver verifies each
+    certificate before it is used or the response counts as an answer
+    (#4597, "Certificate catch-up"). Which peers a validator exchanges these
+    topics with is not yet decided (DIFFERENCES C17).
 
 ## 2. Specification — how it is implemented
 
@@ -338,7 +343,7 @@ the author's membership of that committee; signatures.
 | `votes` | it decodes, and its author is a member of its epoch's committee and signed it |
 | `certs` | it decodes, and it verifies against its epoch's committee: the author is a member and signed the header, and distinct members' vote signatures make a quorum |
 | `cert-sync`, request | it decodes. Requests are unsigned, and the nodes that send them, joining nodes among them, need not be in the committee |
-| `cert-sync`, response | it decodes, and every certificate in it is authored by a member of its epoch's committee. The certificates' signatures are verified by the receiver before any is used or counts as an answer ("Certificate catch-up"), not before relay: a response carries up to 100 and every node receives every response |
+| `cert-sync`, response | it decodes, and every certificate in it is authored by a member of its epoch's committee. This is the carve-out of invariant 12: the certificates' signatures are not verified before relay, since a response carries up to 100 and every node receives every response. The receiver verifies each certificate before it is used, and the response is an answer only once every certificate in it checks ("Certificate catch-up", #4597) |
 | `batches` | it decodes and holds at least one transaction. A batch names no author and carries no signature, so nothing ties it to a member; what batches can cost a validator is bounded by the inbound queue and the store (invariants 1 and 3) |
 
 A message that fails a check is **rejected**. A message naming an epoch the
@@ -402,6 +407,18 @@ broadcast:
 
 A peer answers after a random delay of up to 200 ms with at most 100
 certificates, and does not answer a request it has already seen answered.
+**A response is an answer only once every certificate it carries
+checks.** Responses are unsigned and anyone can send one, and the topic
+validator checks only that each certificate's author is a member
+(invariant 12). A certificate checks when it is verified and inserted, held
+for its parents, or already in the DAG, where it is recognised before it
+is verified. A response with a certificate that does not verify, or that
+cannot be inserted, is not recorded as an answer, does not complete its
+request, and leaves the digests it carried in flight to be retried. Before
+this, one junk certificate sent under the requester's key and request ID
+was recorded as the answer by every peer, which then kept its own, and the
+requester dropped the digest from its in-flight set for good (#4597,
+`TestForgedSyncResponseIsNotAnAnswer`).
 A request is named by its requester's key and its ID together, and a
 response carries both: every node numbers its own requests, so an ID alone
 named a request of every node at once, and a peer that had seen node A's

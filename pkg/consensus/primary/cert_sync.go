@@ -579,21 +579,60 @@ func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse
 				s.window.repeatedAnswer()
 				continue
 			}
-			if len(resp.Missing) == 0 {
+			if s.handleSyncResponse(resp) && len(resp.Missing) == 0 {
 				if len(complete) > 4096 {
 					complete = map[requestKey]struct{}{}
 				}
 				complete[key] = struct{}{}
 			}
-			s.handleSyncResponse(resp)
 		}
 	}
 }
 
-// handleSyncResponse processes a single sync response.
-func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
+// handleSyncResponse processes a single sync response. It reports whether
+// every certificate in it was good: verified and inserted, held for its
+// parents, or already held. A response is unsigned and anyone can send
+// one, so it is an answer only once its certificates check (#4597): a
+// response with a certificate that is invalid, or that could not be
+// inserted, is not recorded as an answer, does not count, and leaves
+// the digests it carried in flight to be retried. A certificate already
+// in the DAG is recognised before it is verified (receiveCertificate),
+// and counts: the node has it.
+func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 	if resp == nil || len(resp.Certificates) == 0 {
-		return
+		return false
+	}
+
+	good := true
+	for _, cert := range resp.Certificates {
+		if cert == nil {
+			continue
+		}
+
+		// Invoke callback if set
+		if s.onCertReceived != nil {
+			outcome := s.onCertReceived(cert)
+			metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
+			s.window.certificate(outcome)
+			if outcome == CertInvalid || outcome == CertFailed {
+				good = false
+				continue
+			}
+		}
+
+		// Remove from in-flight
+		s.inFlightMu.Lock()
+		delete(s.inFlight, cert.Digest())
+		s.inFlightMu.Unlock()
+
+		s.certificatesRecv.Add(1)
+	}
+
+	if !good {
+		slog.Debug("Sync response with certificates that do not check",
+			"certificates", len(resp.Certificates),
+			"requestID", resp.RequestID)
+		return false
 	}
 
 	// Note the response so we do not also answer this request (suppression)
@@ -608,31 +647,10 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
 	s.window.response()
 
-	for _, cert := range resp.Certificates {
-		if cert == nil {
-			continue
-		}
-
-		digest := cert.Digest()
-
-		// Remove from in-flight
-		s.inFlightMu.Lock()
-		delete(s.inFlight, digest)
-		s.inFlightMu.Unlock()
-
-		// Invoke callback if set
-		if s.onCertReceived != nil {
-			outcome := s.onCertReceived(cert)
-			metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
-			s.window.certificate(outcome)
-		}
-
-		s.certificatesRecv.Add(1)
-	}
-
 	slog.Debug("Received sync response",
 		"certificates", len(resp.Certificates),
 		"requestID", resp.RequestID)
+	return true
 }
 
 // retryLoop periodically checks for timed-out requests and retries them.
