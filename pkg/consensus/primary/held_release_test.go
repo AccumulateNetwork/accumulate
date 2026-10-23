@@ -46,8 +46,17 @@ func TestOwnCertificateReleasesTheCertificatesHeldForIt(t *testing.T) {
 	own := buildCert(t, validators, 0, 2, round1)
 	digest := own.Header.Digest()
 
+	// Two peers' round-2 certificates are in; with this node's own they are
+	// the quorum of parents a round-3 header needs (#4591).
+	round2 := []types.CertificateDigest{own.Digest()}
+	for i := 2; i < 4; i++ {
+		c := buildCert(t, validators, i, 2, round1)
+		require.NoError(t, d.Insert(c))
+		round2 = append(round2, c.Digest())
+	}
+
 	// A peer's round-3 certificate naming it arrives first, and is held.
-	h := types.NewHeader(validators[1].pub, 3, 1, nil, []types.CertificateDigest{own.Digest()})
+	h := types.NewHeader(validators[1].pub, 3, 1, nil, round2)
 	require.NoError(t, h.Sign(validators[1].priv))
 	sigs := make([][]byte, len(validators))
 	idx := make([]uint16, len(validators))
