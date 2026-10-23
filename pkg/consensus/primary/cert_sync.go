@@ -126,9 +126,18 @@ type CertSyncer struct {
 	nextReqID atomic.Uint64
 
 	// Response suppression (#4057): requests are broadcast, so peers skip
-	// answering when another peer's response has already been observed
-	answered   map[requestKey]struct{}
-	answeredMu sync.Mutex
+	// answering what another peer's response has already answered. Per
+	// request, whether a response completed it, by the rule the requester
+	// stops reading answers by (completes), and otherwise the digests of
+	// the certificates the responses carried that checked (#4597): a
+	// response that carried junk, or part of the answer, suppresses
+	// nothing it did not deliver. An entry holds at most what one response
+	// carries, and the requests are kept in two generations, the current
+	// and the previous, so forgetting is a generation at a time and never
+	// everything at once.
+	answered     map[requestKey]*answeredRequest
+	answeredPrev map[requestKey]*answeredRequest
+	answeredMu   sync.Mutex
 
 	// Callback for received certificates; returns what inserting it did
 	onCertReceived func(*types.Certificate) CertOutcome
@@ -165,7 +174,7 @@ func NewCertSyncer(
 	config.applyDefaults()
 
 	s := &CertSyncer{
-		answered: map[requestKey]struct{}{},
+		answered: map[requestKey]*answeredRequest{},
 		config:   config,
 		dag:      d,
 		gossip:   g,
@@ -189,6 +198,100 @@ type requestKey struct {
 
 func keyOf(requester []byte, id uint64) requestKey {
 	return requestKey{string(requester), id}
+}
+
+// maxAnsweredRequests is how many requests one generation of suppression
+// remembers; past it the previous generation is forgotten.
+const maxAnsweredRequests = 4096
+
+// answeredRequest is what the responses seen to one request did: completed
+// it, or delivered these certificates.
+type answeredRequest struct {
+	whole   bool
+	digests map[types.CertificateDigest]struct{}
+}
+
+// completes reports whether a response completes its request: every
+// certificate in it checked (good) and it reports nothing missing. The
+// requester stops reading answers to the request on such a response
+// (readSyncResponses), so a peer answers it no more (noteDelivered): the
+// one rule on both sides, so they cannot drift apart (#4597).
+func completes(good bool, resp *gossip.CertSyncResponse) bool {
+	return good && len(resp.Missing) == 0
+}
+
+// noteDelivered records that a response to the request named by key
+// completed it (whole), or delivered these certificates, at most
+// MaxSyncCertificates per request: one requester and ID cannot be filled
+// with the whole DAG. A request completed stays completed.
+func (s *CertSyncer) noteDelivered(key requestKey, digests []types.CertificateDigest, whole bool) {
+	if !whole && len(digests) == 0 {
+		return
+	}
+	s.answeredMu.Lock()
+	defer s.answeredMu.Unlock()
+	have := s.answered[key]
+	if have == nil {
+		if len(s.answered) > maxAnsweredRequests {
+			s.answeredPrev, s.answered = s.answered, map[requestKey]*answeredRequest{}
+		}
+		// A request still being answered moves to the current generation.
+		if have = s.answeredPrev[key]; have == nil {
+			have = &answeredRequest{}
+		} else {
+			delete(s.answeredPrev, key)
+		}
+		s.answered[key] = have
+	}
+	if whole || have.whole {
+		have.whole, have.digests = true, nil
+		return
+	}
+	if have.digests == nil {
+		have.digests = map[types.CertificateDigest]struct{}{}
+	}
+	for _, d := range digests {
+		if len(have.digests) >= gossip.MaxSyncCertificates {
+			break
+		}
+		have.digests[d] = struct{}{}
+	}
+}
+
+// withoutDelivered is certs less those a response to the request named by
+// key has delivered, and nothing once a response completed the request.
+func (s *CertSyncer) withoutDelivered(key requestKey, certs []*types.Certificate) []*types.Certificate {
+	s.answeredMu.Lock()
+	defer s.answeredMu.Unlock()
+	var current, previous map[types.CertificateDigest]struct{}
+	for _, have := range []*answeredRequest{s.answered[key], s.answeredPrev[key]} {
+		if have == nil {
+			continue
+		}
+		if have.whole {
+			return nil
+		}
+		if current == nil {
+			current = have.digests
+		} else {
+			previous = have.digests
+		}
+	}
+	if len(current) == 0 && len(previous) == 0 {
+		return certs
+	}
+	kept := make([]*types.Certificate, 0, len(certs))
+	for _, cert := range certs {
+		d := cert.Digest()
+		if _, done := current[d]; done {
+			continue
+		}
+		if _, done := previous[d]; done {
+			continue
+		}
+		kept = append(kept, cert)
+	}
+	return kept
 }
 
 // SetCertReceivedCallback sets the callback to invoke when a certificate is
@@ -442,8 +545,8 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 
 	// Requests and responses are broadcast, so without suppression every
 	// peer answers every request — an N-fold amplification that floods the
-	// requester with duplicates (#4057). Delay a beat, then skip if another
-	// peer's response for this request has already been observed.
+	// requester with duplicates (#4057). Delay a beat, then answer with what
+	// another peer's response has not already delivered.
 	jitter := time.Duration(rand.Int64N(int64(200 * time.Millisecond)))
 	if s.ctx != nil {
 		select {
@@ -454,43 +557,84 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 	} else {
 		time.Sleep(jitter)
 	}
-	s.answeredMu.Lock()
-	_, answered := s.answered[keyOf(req.Requester, req.RequestID)]
-	s.answeredMu.Unlock()
-	if answered {
-		s.served("suppressed")
+
+	resp := s.answer(req)
+	if resp == nil {
 		return
 	}
 
-	// Build response
+	// Skip if no gossip layer
+	if s.gossip == nil {
+		return
+	}
+
+	if err := s.gossip.BroadcastSyncResponse(s.ctx, resp); err != nil {
+		slog.Warn("Failed to send sync response",
+			"partition", s.config.Partition,
+			"error", err, "certificates", len(resp.Certificates))
+		return
+	}
+	s.served("answered")
+
+	slog.Debug("Sent sync response",
+		"certificates", len(resp.Certificates),
+		"missing", len(resp.Missing),
+		"rounds", len(req.Rounds),
+		"requestID", req.RequestID)
+}
+
+// answer builds the response to req from what this node holds, less what a
+// response to the same request has already delivered. It is nil, and the
+// request counted empty or suppressed, when nothing is left to send.
+//
+// A request this node has seen completed, by a response in which every
+// certificate checked and nothing was missing (completes), is not
+// answered: the requester reads no more answers to it, so the answer
+// would be a broadcast every node relays and the requester drops, the
+// flood #4057 added suppression against. A request seen only partly or
+// badly answered is answered with what no response delivered (#4597): a
+// response counts only for the certificates in it that checked
+// (handleSyncResponse), so a forged response suppresses nothing and a
+// partial one suppresses only what it carried.
+func (s *CertSyncer) answer(req *gossip.CertSyncRequest) *gossip.CertSyncResponse {
+	key := keyOf(req.Requester, req.RequestID)
 	var certs []*types.Certificate
 	var missing []types.CertificateDigest
+	held := 0
 
-	for _, digest := range req.Digests {
-		cert := s.dag.GetByDigest(digest)
-		if cert != nil {
-			certs = append(certs, cert)
-			// Limit response size
+	// add keeps what no response has delivered, up to what one response
+	// carries. What was delivered is taken out before the cap, or the
+	// certificates past the cap would never be served (#4597).
+	add := func(found []*types.Certificate) {
+		held += len(found)
+		for _, cert := range s.withoutDelivered(key, found) {
 			if len(certs) >= gossip.MaxSyncCertificates {
-				break
+				return
 			}
+			certs = append(certs, cert)
+		}
+	}
+
+	var found []*types.Certificate
+	for _, digest := range req.Digests {
+		if cert := s.dag.GetByDigest(digest); cert != nil {
+			found = append(found, cert)
 		} else {
 			missing = append(missing, digest)
 		}
 	}
+	add(found)
 
 	// Serve whole rounds for round catch-up (#4057)
 	for _, round := range req.Rounds {
-		for _, cert := range s.dag.GetRound(round) {
-			if len(certs) >= gossip.MaxSyncCertificates {
-				break
-			}
-			certs = append(certs, cert)
+		if len(certs) >= gossip.MaxSyncCertificates {
+			break
 		}
+		add(s.dag.GetRound(round))
 	}
 
 	// Only respond if we have certificates to send
-	if len(certs) == 0 {
+	if held == 0 {
 		s.served("empty")
 		if len(req.Rounds) > 0 {
 			// A round request that matches nothing means the requester is
@@ -502,34 +646,19 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 				"lastRound", req.Rounds[len(req.Rounds)-1],
 				"requestID", req.RequestID)
 		}
-		return
+		return nil
+	}
+	if len(certs) == 0 {
+		s.served("suppressed")
+		return nil
 	}
 
-	resp := &gossip.CertSyncResponse{
+	return &gossip.CertSyncResponse{
 		Certificates: certs,
 		RequestID:    req.RequestID,
 		Requester:    req.Requester,
 		Missing:      missing,
 	}
-
-	// Skip if no gossip layer
-	if s.gossip == nil {
-		return
-	}
-
-	if err := s.gossip.BroadcastSyncResponse(s.ctx, resp); err != nil {
-		slog.Warn("Failed to send sync response",
-			"partition", s.config.Partition,
-			"error", err, "certificates", len(certs))
-		return
-	}
-	s.served("answered")
-
-	slog.Debug("Sent sync response",
-		"certificates", len(certs),
-		"missing", len(missing),
-		"rounds", len(req.Rounds),
-		"requestID", req.RequestID)
 }
 
 // handleSyncResponses processes incoming sync responses from peers.
@@ -579,7 +708,7 @@ func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse
 				s.window.repeatedAnswer()
 				continue
 			}
-			if s.handleSyncResponse(resp) && len(resp.Missing) == 0 {
+			if completes(s.handleSyncResponse(resp), resp) {
 				if len(complete) > 4096 {
 					complete = map[requestKey]struct{}{}
 				}
@@ -591,12 +720,15 @@ func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse
 
 // handleSyncResponse processes a single sync response. It reports whether
 // every certificate in it checked. A response is unsigned and anyone can
-// send one, so it is an answer only once its certificates check (#4597):
-// a response with a certificate that does not is not recorded as an
-// answer and leaves the digests it carried in flight to be retried. Nor
-// is one that reports part of the request missing: it leaves the request
-// open for the next answer, and this peer may give it. Only a verified
-// answer that covers the request counts.
+// send one, so it completes a request only once every certificate in it
+// checks and it reports nothing missing (completes): a response with a
+// certificate that does not check leaves the digests it carried in flight
+// to be retried. A response that completes the request is recorded as
+// answering it whole, and this peer answers it no more. One that does not
+// is recorded as having delivered the certificates in it that checked, and
+// only those (#4597), so a forged response suppresses nothing, and a
+// partial one only what it carried, leaving the rest to this peer's own
+// answer.
 func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 	if resp == nil || len(resp.Certificates) == 0 {
 		return false
@@ -606,7 +738,10 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
 	s.window.response()
 
+	// What this response delivered: the certificates in it that checked.
+	// Only these suppress this node's own answer to the request (#4597).
 	good := true
+	var delivered []types.CertificateDigest
 	for _, cert := range resp.Certificates {
 		if cert == nil {
 			continue
@@ -617,13 +752,18 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 			continue
 		}
 
+		digest := cert.Digest()
+
 		// Remove from in-flight
 		s.inFlightMu.Lock()
-		delete(s.inFlight, cert.Digest())
+		delete(s.inFlight, digest)
 		s.inFlightMu.Unlock()
 
+		delivered = append(delivered, digest)
 		s.certificatesRecv.Add(1)
 	}
+
+	s.noteDelivered(keyOf(resp.Requester, resp.RequestID), delivered, completes(good, resp))
 
 	if !good {
 		slog.Debug("Sync response with certificates that do not check",
@@ -631,17 +771,6 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 			"requestID", resp.RequestID)
 		return false
 	}
-	if len(resp.Missing) > 0 {
-		return true
-	}
-
-	// Note the response so we do not also answer this request (suppression)
-	s.answeredMu.Lock()
-	if len(s.answered) > 4096 {
-		s.answered = make(map[requestKey]struct{})
-	}
-	s.answered[keyOf(resp.Requester, resp.RequestID)] = struct{}{}
-	s.answeredMu.Unlock()
 
 	slog.Debug("Received sync response",
 		"certificates", len(resp.Certificates),

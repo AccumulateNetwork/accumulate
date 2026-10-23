@@ -1089,38 +1089,55 @@ broadcast:
   does not fit unanswered, and it would wait out the 30 s retry (#4469).
 
 A peer answers after a random delay of up to 200 ms with at most 100
-certificates, and does not answer a request it has already seen answered.
-**A response is an answer only once every certificate it carries
-checks.** Responses are unsigned and anyone can send one, and the topic
-validator checks only that each certificate's author is a member
-(invariant 12). A certificate checks when it is verified and inserted, or
-when it is a duplicate. A node reports a certificate whose digest is in
-its DAG without verifying it (below), and the digest covers only the
-header, and not its signature, so a copy is a duplicate only if it is the
-held certificate as encoded on the wire: the header with its signature,
-the vote signatures and the signers, compared as encodings so that no
-field added later reopens this. The state hash is left out: a node sets
-it on the certificate it holds after executing it, and a fresh copy of an
-executed certificate is the same certificate. A genuine header, which is
-public, with other signatures, its own included, is invalid. That rule is
-the primary's
-(`receiveCertificate`), one rule for every path a certificate arrives by
+certificates, and does not answer a request it has seen completed. **A
+response completes a request once every certificate in it checks and it
+reports nothing missing**, the rule by which the requester stops reading
+answers to the request, so that the two sides cannot drift apart: an
+answer to a completed request is a broadcast every node relays and the
+requester drops (#4057, `TestACompleteRoundAnswerSuppressesTheLaterPeers`).
+A response that does not complete the request, because it carried junk or
+reported part of the request missing, suppresses only the certificates in
+it that checked, and the peer answers with the rest (#4597). A round
+request names no digests, so a capped honest answer to it completes it,
+and the next second's round request pulls the next hundred
+(`requestRoundCatchUp`). Responses are unsigned
+and anyone can send one, and the topic validator checks only that each
+certificate's author is a member (invariant 12). A certificate checks when
+it is verified and inserted, or when it is a duplicate. A node reports a
+certificate whose digest is in its DAG without verifying it (below), and
+the digest covers only the header, and not its signature, so a copy is a
+duplicate only if it is the held certificate as encoded on the wire: the
+header with its signature, the vote signatures and the signers, compared
+as encodings so that no field added later reopens this. The state hash is
+left out: a node sets it on the certificate it holds after executing it,
+and a fresh copy of an executed certificate is the same certificate. A
+genuine header, which is public, with other signatures, its own included,
+is invalid. That rule is the primary's (`receiveCertificate`), one rule
+for every path a certificate arrives by
 (`TestACopyIsADuplicateOnlyByteForByte`), and the router's certificate
 validator applies it before verifying a copy
-(`TestACopyOfAHeldCertificateIsNotVerifiedAgain`). A certificate held waiting for
-its parents is reported held before it is verified, and does not check.
-A response with a certificate that does not check, or that reports part
-of the request missing, is not recorded as an answer and does not complete
-its request: only a verified answer that covers the request counts
-(`TestAPartialAnswerSuppressesNothing`). The certificates that checked
-are kept all the same, and the digests of those that did not stay in
-flight: they are retried after the retry timeout if they are still not in
-the DAG, and dropped from the set if they are. Before this, one junk
-certificate sent under the requester's key and request ID was recorded as
-the answer by every peer, which then kept its own, and the requester
-dropped the digest from its in-flight set for good (#4597,
-`TestForgedSyncResponseIsNotAnAnswer`, through the primary's own receive
-path).
+(`TestACopyOfAHeldCertificateIsNotVerifiedAgain`). A certificate held
+waiting for its parents is reported held before it is verified, and does
+not check. A response with a certificate that does not check, or that
+reports part of the request missing, does not complete its request: only
+an answer every certificate of which checked, with nothing missing, does,
+and a partial answer leaves the rest to the peers, each of which answers
+with what it holds that no response has delivered
+(`TestAPartialAnswerLeavesTheRestToThisPeer`). The certificates that
+checked are kept all the same, and suppress the peers' answers for them,
+and the digests of those that did not stay in flight: they are retried
+after the retry timeout if they are still not in the DAG, and dropped from
+the set if they are. Before this, one junk certificate sent under the
+requester's key and request ID was recorded as the answer by every peer,
+which then kept its own, and the requester dropped the digest from its
+in-flight set for good (#4597, `TestForgedSyncResponseIsNotAnAnswer`,
+through the primary's own receive path). A peer remembers, per request,
+whether it was completed and otherwise at most 100 delivered
+certificates, and the requests in two generations of 4,096, forgetting
+the older generation whole, so neither can grow without bound. Neither
+requests nor responses are signed, and any peer can publish on the topic
+(#4596): what one message can do to the catch-up path must therefore be
+nothing beyond delivering certificates.
 A request is named by its requester's key and its ID together, and a
 response carries both: every node numbers its own requests, so an ID alone
 named a request of every node at once, and a peer that had seen node A's

@@ -197,11 +197,12 @@ func TestACopyIsADuplicateOnlyByteForByte(t *testing.T) {
 	require.Equal(t, CertDuplicate, p.receiveCertificate(copied, false), "a copy without the state hash set after execution")
 }
 
-// TestAPartialAnswerSuppressesNothing: a response that reports some of the
-// request missing leaves the request open for the next answer, and does
-// not stop this peer from answering it either. Only a verified answer that
-// covers the request counts (#4597).
-func TestAPartialAnswerSuppressesNothing(t *testing.T) {
+// TestAPartialAnswerLeavesTheRestToThisPeer: a response that carries part
+// of the request and reports the rest missing suppresses only what it
+// carried. This peer answers with the rest, and the request stays open for
+// that answer: only a verified answer that covers the request completes it
+// (#4597).
+func TestAPartialAnswerLeavesTheRestToThisPeer(t *testing.T) {
 	v := newTestValidator(t)
 	committee := newTestCommittee([]*testValidator{v}, 0)
 	p := New(Config{Partition: "t4597e", KeyPair: v.priv}, committee, nil, newTestDAG(), nil)
@@ -217,20 +218,29 @@ func TestAPartialAnswerSuppressesNothing(t *testing.T) {
 	genuine := types.NewCertificate(h, [][]byte{vote.Signature}, []uint16{0})
 	require.NoError(t, p.dag.InsertGenesis(genuine))
 
+	// A second certificate this peer holds, by a key outside the committee.
+	pub, priv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	oh := types.NewHeader(pub, 0, 0, nil, nil)
+	require.NoError(t, oh.Sign(priv))
+	other := types.NewCertificate(oh, [][]byte{oh.Signature}, []uint16{0})
+	require.NoError(t, p.dag.InsertGenesis(other))
+
 	requester := []byte("the requester's key")
 	const k = 12
-	other := types.CertificateDigest{9}
 	peer.handleSyncResponse(&gossip.CertSyncResponse{
 		Certificates: []*types.Certificate{genuine},
-		Missing:      []types.CertificateDigest{other},
+		Missing:      []types.CertificateDigest{other.Digest()},
 		RequestID:    k,
 		Requester:    requester,
 	})
 	peer.window.take()
-	peer.handleSyncRequest(&gossip.CertSyncRequest{
-		Digests:   []types.CertificateDigest{genuine.Digest(), other},
+	resp := peer.answer(&gossip.CertSyncRequest{
+		Digests:   []types.CertificateDigest{genuine.Digest(), other.Digest()},
 		Requester: requester,
 		RequestID: k,
 	})
+	require.NotNil(t, resp, "a partial answer suppressed the request")
+	require.Equal(t, []types.CertificateDigest{other.Digest()}, digestsOf(resp.Certificates), "the peer did not answer with just what the partial answer left out")
 	require.Equal(t, 0, peer.window.take().suppressed, "a partial answer suppressed the request")
 }
