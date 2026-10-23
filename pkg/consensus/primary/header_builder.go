@@ -137,30 +137,23 @@ func (p *Primary) getParentCertsLocked() ([]types.CertificateDigest, error) {
 	return p.getParentCertsForRound(round)
 }
 
-// getParentCertsForRound retrieves 2f+1 parent certificates from round-1.
-// Does not require any lock to be held (uses committeeMu internally for committee access).
+// getParentCertsForRound retrieves the parent certificates from round-1,
+// which must carry a stake quorum: the rule a voter applies to the header
+// (#4591). Does not require any lock to be held (uses committeeMu internally
+// for committee access).
 func (p *Primary) getParentCertsForRound(round types.Round) ([]types.CertificateDigest, error) {
 	if round == 0 {
 		return nil, nil // genesis round has no parents
 	}
 
 	certs := p.dag.GetRound(round - 1)
-
-	// Special case for round 1 in multi-validator mode:
-	// If round 0 has no certificates (no genesis), allow round 1 to proceed with empty parents.
-	// This enables multi-validator networks to bootstrap without pre-computed genesis certificates.
-	if round == 1 && len(certs) == 0 {
-		return nil, nil // round 1 can start with empty parents in multi-validator mode
+	authors := make([]ed25519.PublicKey, len(certs))
+	for i, cert := range certs {
+		authors[i] = cert.Author()
 	}
-
-	// Get quorum count (needs committeeMu for reading committee)
-	p.committeeMu.RLock()
-	quorumCount := p.committee.QuorumCount()
-	p.committeeMu.RUnlock()
-
-	if len(certs) < quorumCount {
-		return nil, fmt.Errorf("%w: have %d, need %d",
-			ErrNotEnoughParents, len(certs), quorumCount)
+	if !p.parentQuorum(round-1, authors) {
+		return nil, fmt.Errorf("%w: %d certificates at round %d carry no quorum",
+			ErrNotEnoughParents, len(certs), round-1)
 	}
 
 	// Collect digests from ALL available certificates

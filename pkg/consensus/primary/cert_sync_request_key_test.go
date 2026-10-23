@@ -25,6 +25,7 @@ func TestSuppressionNamesTheRequester(t *testing.T) {
 	config := CertSyncerConfig{PublicKey: make([]byte, 32), Partition: "t4470"}
 	config.applyDefaults()
 	peer := NewCertSyncer(config, dag.NewDAG(10), nil, NewPendingCertificates(100))
+	peer.SetCertReceivedCallback(func(*types.Certificate) CertOutcome { return CertInserted })
 
 	nodeA, nodeB := []byte("node A's key"), []byte("node B's key")
 	const k = 7

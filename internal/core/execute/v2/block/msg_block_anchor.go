@@ -10,12 +10,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
-	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -119,17 +118,14 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 	}
 	ctx.markTransactionRecorded(txnHash)
 
-	// Count the signature (proof-authorized anchors may not have one). A
-	// second copy from the same validator is no second signature.
-	newSigner := ctx.blockAnchor.Signature == nil
-	if ctx.blockAnchor.Signature != nil {
-		newSigner = sigs.add(ctx.blockAnchor.Signature)
-		if ctx.blockAnchor.Proof == nil {
-			// The copy's word on what its sender has delivered of our anchors
-			// releases the anchor cache (#4232); the signer was verified by
-			// check
-			noteAnchorDelivered(ctx.MessageContext, ctx.sequenced, ctx.blockAnchor.Delivered)
-		}
+	// Count the signature; check required one. A second copy from the same
+	// validator is no second signature.
+	newSigner := sigs.add(ctx.blockAnchor.Signature)
+	if ctx.blockAnchor.Proof == nil {
+		// The copy's word on what its sender has delivered of our anchors
+		// releases the anchor cache (#4232); the signer was verified by
+		// check
+		noteAnchorDelivered(ctx.MessageContext, ctx.sequenced, ctx.blockAnchor.Delivered)
 	}
 
 	// One signature-chain entry per distinct signer: that is the chain's
@@ -148,11 +144,7 @@ func (x BlockAnchor) process(batch *database.Batch, ctx *blockAnchorContext) err
 		return errors.UnknownError.Wrap(err)
 	}
 	if ctx.Executor.logger.Enabled(ctx.Context, slog.LevelDebug) {
-		var signer []byte
-		if ctx.blockAnchor.Signature != nil {
-			signer = ctx.blockAnchor.Signature.GetPublicKey()
-		}
-		ctx.Executor.logger.Debug("Anchor signature", "module", "anchoring", "block", ctx.Block.Index, "source", ctx.sequenced.Source, "seq", ctx.sequenced.Number, "signatures", len(sigs.sigs), "ready", ready, "signer", logging.AsHex(signer).Slice(0, 4), "txid", ctx.transaction.ID())
+		ctx.Executor.logger.Debug("Anchor signature", "module", "anchoring", "block", ctx.Block.Index, "source", ctx.sequenced.Source, "seq", ctx.sequenced.Number, "signatures", len(sigs.sigs), "ready", ready, "signer", logging.AsHex(ctx.blockAnchor.Signature.GetPublicKey()).Slice(0, 4), "txid", ctx.transaction.ID())
 	}
 	if !ready {
 		// Below its quorum: an entry in the anchor stream's stage at its
@@ -191,7 +183,16 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 		return nil, errors.InternalError.WithFormat("invalid message type: expected %v, got %v", messaging.MessageTypeBlockAnchor, ctx.message.Type())
 	}
 
-	// A block anchor is authorized either by a validator signature (counted
+	// The signature is required whatever else the anchor carries: it names
+	// the anchor (BlockAnchor.ID) and the anchor pool records the copy under
+	// its signer. Without one a proven anchor would execute and be recorded
+	// under acc://unknown (#4572). Whether the signature also authorizes the
+	// anchor is decided below.
+	if anchor.Signature == nil {
+		return nil, errors.BadRequest.With("missing signature")
+	}
+
+	// A block anchor is authorized either by its validator signature (counted
 	// towards the quorum) or by a collection proof under a known directory
 	// root (#4056). Proofs authorize healed anchors without re-gathering a
 	// signature quorum — historical quorums may be impossible to re-gather
@@ -215,13 +216,10 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 		}
 	}
 
-	if anchor.Signature == nil && anchor.Proof == nil {
-		return nil, errors.BadRequest.With("missing signature")
-	}
 	if anchor.Anchor == nil {
 		return nil, errors.BadRequest.With("missing anchor")
 	}
-	if anchor.Signature != nil && anchor.Signature.GetTransactionHash() == ([32]byte{}) {
+	if anchor.Signature.GetTransactionHash() == ([32]byte{}) {
 		return nil, errors.BadRequest.With("missing transaction hash")
 	}
 
@@ -279,11 +277,9 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 	// height or something.
 
 	signer := core.AnchorSigner(&ctx.Executor.globals().Active, partition)
-	if anchor.Signature != nil {
-		_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
-		if !ok {
-			return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
-		}
+	_, _, ok = signer.EntryByKeyHash(anchor.Signature.GetPublicKeyHash())
+	if !ok {
+		return nil, errors.Unauthorized.WithFormat("key is not an active validator for %s", partition)
 	}
 
 	// A collection proof must include the anchor transaction in its canonical
@@ -306,11 +302,12 @@ func (x BlockAnchor) check(ctx *MessageContext, batch *database.Batch) (*blockAn
 		signer:             signer,
 	}
 	// With a collection proof the proof is the authorization; the signature
-	// rides along only because BlockAnchor.ID() derives identity from it. A
+	// rides along for identity and recording and is not verified. A
 	// signature that no longer verifies (a rotated key, a historical quorum)
 	// must not reject a proven anchor — once we have a collection proof no
-	// other signature is required.
-	if anchor.Signature != nil && anchor.Proof == nil {
+	// other signature is required. Without a proof the signature is the
+	// authorization and must verify.
+	if anchor.Proof == nil {
 		err := x.checkSignature(ctx2)
 		if err != nil {
 			return nil, err

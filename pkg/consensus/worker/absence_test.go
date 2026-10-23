@@ -176,7 +176,9 @@ func TestTombstoneRingIsBounded(t *testing.T) {
 // consuming another ring slot — otherwise one churning batch would evict the
 // record of every other.
 func TestRepeatedRemovalRefreshesRatherThanGrows(t *testing.T) {
-	w := worker.New(worker.Config{ID: 0, Partition: "test", MaxTombstones: 4}, nil)
+	// Retention off: a pruned batch stored again is otherwise left in
+	// retention and never churns (#4598). The ring is what this tests.
+	w := worker.New(worker.Config{ID: 0, Partition: "test", MaxTombstones: 4, MaxRetainedBatches: -1}, nil)
 
 	b := batchOf("churn")
 	other := batchOf("other")

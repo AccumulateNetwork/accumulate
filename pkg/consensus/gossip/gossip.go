@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -57,6 +58,14 @@ type GossipLayer struct {
 
 	// Rate limiting
 	rateLimiter *PeerRateLimiter
+
+	// committees is what the topic validators judge messages by; committeeMu
+	// serialises SetCommittee. See topic-validators.go.
+	committees  atomic.Pointer[committees]
+	committeeMu sync.Mutex
+	validated   []string // topics whose validators this layer registered
+	// held, if set, finds the certificate the node holds for a digest.
+	held atomic.Pointer[func(types.CertificateDigest) *types.Certificate]
 
 	// Lifecycle management
 	ctx    context.Context
@@ -171,8 +180,14 @@ func (g *GossipLayer) Start(ctx context.Context) error {
 	g.ctx, g.cancel = context.WithCancel(ctx)
 	g.mu.Unlock()
 
+	// Validators first, so that no message is delivered or relayed unchecked.
+	if err := g.registerValidators(); err != nil {
+		return err
+	}
+
 	// Join all topics
 	if err := g.topics.JoinAll(g.ctx); err != nil {
+		g.unregisterValidators()
 		return fmt.Errorf("join topics: %w", err)
 	}
 
@@ -227,7 +242,9 @@ func (g *GossipLayer) Close() error {
 	close(g.syncResponses)
 
 	// Close topics
-	return g.topics.Close()
+	err := g.topics.Close()
+	g.unregisterValidators()
+	return err
 }
 
 // Partition returns the partition this GossipLayer is for.
@@ -311,7 +328,9 @@ func (g *GossipLayer) publish(ctx context.Context, pattern string, data []byte) 
 }
 
 // handleSubscription reads messages from a subscription and dispatches them.
-func (g *GossipLayer) handleSubscription(pattern string, handler func([]byte)) {
+// Every message delivered has been accepted by its topic's validator, which
+// left the decoded message in ValidatorData.
+func (g *GossipLayer) handleSubscription(pattern string, handler func(any)) {
 	defer g.wg.Done()
 
 	sub := g.topics.GetSubscription(pattern)
@@ -339,17 +358,14 @@ func (g *GossipLayer) handleSubscription(pattern string, handler func([]byte)) {
 			continue
 		}
 
-		handler(msg.Data)
+		handler(msg.ValidatorData)
 	}
 }
 
-// handleBatchMessage deserializes and queues a batch message.
-func (g *GossipLayer) handleBatchMessage(data []byte) {
-	batch, err := types.UnmarshalBatch(data)
-	if err != nil {
-		slog.Debug("Invalid batch message",
-			"error", err,
-			"partition", g.partition)
+// handleBatchMessage queues a batch message.
+func (g *GossipLayer) handleBatchMessage(data any) {
+	batch, ok := data.(*types.Batch)
+	if !ok {
 		return
 	}
 
@@ -379,13 +395,10 @@ func (g *GossipLayer) pumpBatches() {
 	}
 }
 
-// handleHeaderMessage deserializes and queues a header message.
-func (g *GossipLayer) handleHeaderMessage(data []byte) {
-	header, err := types.UnmarshalHeader(data)
-	if err != nil {
-		slog.Debug("Invalid header message",
-			"error", err,
-			"partition", g.partition)
+// handleHeaderMessage queues a header message.
+func (g *GossipLayer) handleHeaderMessage(data any) {
+	header, ok := data.(*types.Header)
+	if !ok {
 		return
 	}
 	if debugEnabled() {
@@ -409,13 +422,10 @@ func debugEnabled() bool {
 	return slog.Default().Enabled(context.Background(), slog.LevelDebug)
 }
 
-// handleVoteMessage deserializes and queues a vote message.
-func (g *GossipLayer) handleVoteMessage(data []byte) {
-	vote, err := types.UnmarshalVote(data)
-	if err != nil {
-		slog.Debug("Invalid vote message",
-			"error", err,
-			"partition", g.partition)
+// handleVoteMessage queues a vote message.
+func (g *GossipLayer) handleVoteMessage(data any) {
+	vote, ok := data.(*types.Vote)
+	if !ok {
 		return
 	}
 	if debugEnabled() {
@@ -433,15 +443,10 @@ func (g *GossipLayer) handleVoteMessage(data []byte) {
 	}
 }
 
-// handleCertMessage deserializes and queues a certificate message.
-func (g *GossipLayer) handleCertMessage(data []byte) {
-	cert, err := types.UnmarshalCertificate(data)
-	if err != nil {
-		// Info, not Debug: an undecodable certificate (e.g. wire-format skew
-		// between builds) stalls consensus with no visible cause (#4054).
-		slog.Info("Invalid certificate message",
-			"error", err,
-			"partition", g.partition)
+// handleCertMessage queues a certificate message.
+func (g *GossipLayer) handleCertMessage(data any) {
+	cert, ok := data.(*types.Certificate)
+	if !ok {
 		return
 	}
 
@@ -453,56 +458,26 @@ func (g *GossipLayer) handleCertMessage(data []byte) {
 	}
 }
 
-// handleCertSyncMessage deserializes and routes cert sync messages.
-// Cert sync messages can be either requests or responses, distinguished by
-// the first byte: 0x01 = request, 0x02 = response.
-func (g *GossipLayer) handleCertSyncMessage(data []byte) {
-	if len(data) < 1 {
-		slog.Debug("Empty cert sync message",
-			"partition", g.partition)
-		return
-	}
-
-	msgType := data[0]
-	payload := data[1:]
-
-	switch msgType {
-	case 0x01: // Request
-		req, err := UnmarshalCertSyncRequest(payload)
-		if err != nil {
-			slog.Debug("Invalid cert sync request",
-				"error", err,
-				"partition", g.partition)
-			return
-		}
-
+// handleCertSyncMessage routes cert sync messages. Cert sync messages can be
+// either requests or responses, distinguished by the first byte: 0x01 =
+// request, 0x02 = response; the topic's validator decoded them.
+func (g *GossipLayer) handleCertSyncMessage(data any) {
+	switch msg := data.(type) {
+	case *CertSyncRequest:
 		select {
-		case g.syncRequests <- req:
+		case g.syncRequests <- msg:
 		default:
 			slog.Warn("Cert sync request channel full, dropping message",
 				"partition", g.partition)
 		}
 
-	case 0x02: // Response
-		resp, err := UnmarshalCertSyncResponse(payload)
-		if err != nil {
-			slog.Debug("Invalid cert sync response",
-				"error", err,
-				"partition", g.partition)
-			return
-		}
-
+	case *CertSyncResponse:
 		select {
-		case g.syncResponses <- resp:
+		case g.syncResponses <- msg:
 		default:
 			slog.Warn("Cert sync response channel full, dropping message",
 				"partition", g.partition)
 		}
-
-	default:
-		slog.Debug("Unknown cert sync message type",
-			"type", msgType,
-			"partition", g.partition)
 	}
 }
 
@@ -597,7 +572,7 @@ func (g *GossipLayer) handleVoteSubscription() {
 		}
 
 		// Process the vote
-		g.handleVoteMessage(msg.Data)
+		g.handleVoteMessage(msg.ValidatorData)
 	}
 }
 

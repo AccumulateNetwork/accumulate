@@ -784,19 +784,12 @@ func (s *Service) pruneCommitted(certs []*types.Certificate, blockIndex uint64) 
 		if len(cert.Header.Payload) == 0 {
 			continue
 		}
-		digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
-		for _, entry := range cert.Header.Payload {
-			digests = append(digests, entry.Digest)
-		}
 		where := fmt.Sprintf("block %d", blockIndex)
 		if blockIndex == 0 {
 			where = "collected while joining"
 		}
 		prunedBy := fmt.Sprintf("%s round %d cert %s author %x",
 			where, cert.Header.Round, cert.Digest().String()[:16], cert.Header.Author[:4])
-		commit := worker.CommitInfo{Cert: cert.Digest().String(), Detail: prunedBy}
-		for _, w := range s.node.Workers() {
-			w.PruneCommitted(digests, commit)
-		}
+		s.node.PruneCommitted(cert, worker.CommitInfo{Cert: cert.Digest().String(), Detail: prunedBy})
 	}
 }
