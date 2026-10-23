@@ -70,6 +70,13 @@ type DAG struct {
 	// invariant 7). Pruned with the rounds, by certifiedByRound.
 	certifiedBatches map[types.BatchDigest]types.Round
 	certifiedByRound map[types.Round][]types.BatchDigest
+	// executed holds the certified batches this node has executed
+	// (MarkExecuted). HasCertifiedBatch says no for them: the certificate
+	// protected the batch in the active store only until it executed, and a
+	// copy that arrives after that is cache (consensus spec, invariant 3;
+	// #4598). A mark goes when the batch's certifiedBatches entry does, and
+	// a later certificate naming the batch does not clear it.
+	executed map[types.BatchDigest]struct{}
 	// gcCutoff is the round below which everything has been collected, so a
 	// collection walks only the rounds the cutoff moved over.
 	gcCutoff types.Round
@@ -95,6 +102,7 @@ func NewDAG(gcDepth types.Round) *DAG {
 
 		certifiedBatches: make(map[types.BatchDigest]types.Round),
 		certifiedByRound: make(map[types.Round][]types.BatchDigest),
+		executed:         make(map[types.BatchDigest]struct{}),
 		gcDepth:          gcDepth,
 	}
 }
@@ -260,14 +268,40 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 }
 
 // HasCertifiedBatch reports whether a certified header in the DAG names the
-// batch. Once it does, the batch's author must not propose it again
-// (consensus spec, invariant 7): the executor will need it when that
-// certificate's block is produced, and again is a duplicate.
+// batch and this node has not executed it. Once a certified header names
+// it, the batch's author must not propose it again (consensus spec,
+// invariant 7): the executor will need it when that certificate's block is
+// produced, and again is a duplicate. Until it executes, the active store
+// must not evict it (invariant 3); after, a copy is cache, so an executed
+// batch is reported as not certified (MarkExecuted). An executed own batch
+// is already out of the active store, retired by PruneCommitted, so the
+// re-proposal check never sees one.
 func (d *DAG) HasCertifiedBatch(digest types.BatchDigest) bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	_, ok := d.certifiedBatches[digest]
-	return ok
+	if _, ok := d.certifiedBatches[digest]; !ok {
+		return false
+	}
+	_, done := d.executed[digest]
+	return !done
+}
+
+// MarkExecuted records that this node executed the batches a certificate
+// names, so HasCertifiedBatch stops protecting them in the active store
+// (#4598). Only batches a certified header in the DAG names are marked; the
+// mark stays until the DAG collects the batch's entry, and a later
+// certificate naming the batch does not clear it.
+func (d *DAG) MarkExecuted(cert *types.Certificate) {
+	if cert == nil || cert.Header == nil {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, e := range cert.Header.Payload {
+		if _, ok := d.certifiedBatches[e.Digest]; ok {
+			d.executed[e.Digest] = struct{}{}
+		}
+	}
 }
 
 // InsertGenesis inserts a genesis certificate (round 0) without parent validation.
@@ -441,6 +475,7 @@ func (d *DAG) collectLocked(cutoff types.Round) {
 		for _, digest := range d.certifiedByRound[round] {
 			if d.certifiedBatches[digest] == round {
 				delete(d.certifiedBatches, digest)
+				delete(d.executed, digest)
 			}
 		}
 		delete(d.certifiedByRound, round)
