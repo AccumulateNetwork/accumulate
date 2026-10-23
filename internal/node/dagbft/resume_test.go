@@ -43,7 +43,9 @@ func TestResume_ProducesFromTheCheckpointAndNeverSeeds(t *testing.T) {
 	restarted.config.DataDir = dir
 	ca.last = 2
 	require.NoError(t, restarted.initializeGenesis())
-	require.True(t, restarted.seedFromCheckpoint(), "precondition: the checkpoint for block 2 is restored")
+	seeded, err := restarted.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.True(t, seeded, "precondition: the checkpoint for block 2 is restored")
 	restarted.StartCollecting()
 	ctx, cancel := context.WithCancel(context.Background())
 	restarted.ctx = ctx
@@ -73,7 +75,9 @@ func TestResume_ProducesFromTheCheckpointAndNeverSeeds(t *testing.T) {
 	unseeded.config.DataDir = t.TempDir()
 	ca2.last = 2
 	require.NoError(t, unseeded.initializeGenesis())
-	require.False(t, unseeded.seedFromCheckpoint())
+	seeded, err = unseeded.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.False(t, seeded)
 	unseeded.awaitingSeed = true
 	pullState(t, unseeded, 2, 6) // the node's own ledger, which records the round
 	unseeded.StartCollecting()
@@ -83,7 +87,7 @@ func TestResume_ProducesFromTheCheckpointAndNeverSeeds(t *testing.T) {
 	go unseeded.blockProductionLoop()
 	defer func() { cancel2(); unseeded.wg.Wait() }()
 
-	err := unseeded.Resume()
+	err = unseeded.Resume()
 	require.ErrorIs(t, err, errors.NotReady)
 	require.True(t, unseeded.Collecting())
 	require.True(t, unseeded.awaitingSeed, "Resume seeded consensus from the node's ledger")

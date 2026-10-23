@@ -304,6 +304,22 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 			return nil, err
 		}
 		p.SetOnAuthored(n.persistAuthored)
+		// The round of the header this node last authored is read back as
+		// soon as the node exists, checkpoint or not (#4592): a start that
+		// resumes no checkpoint — none for the executor's last block, or a
+		// store at genesis — otherwise knew nothing of that round and signed
+		// a second header for it. Only the round: the DAG is empty here, so
+		// whether the header certified cannot be told, and a header put back
+		// into vote collection now stays there after Restore finds its
+		// certificate in the tail, to be rebroadcast and its batches
+		// proposed again. Restore rejoins vote collection once the DAG is
+		// back (restoreTail); a start without a checkpoint deliberately does
+		// not: the round is burnt, not resumed.
+		authored, err := n.dagStore.Authored()
+		if err != nil {
+			return nil, fmt.Errorf("reading the last authored header: %w", err)
+		}
+		p.RestoreAuthoredRound(authored)
 	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
@@ -978,8 +994,9 @@ func (n *Node) Checkpoint() *persist.Checkpoint {
 // collection (#4448): a partition restarted as a whole has its parents in
 // memory again and continues from the round it stopped at. Certificate
 // catch-up covers the rounds between the checkpoint and the live frontier,
-// up to DAGGCDepth.
-func (n *Node) Restore(cp *persist.Checkpoint) {
+// up to DAGGCDepth. It fails, and the node must not start, if the header
+// this node last authored is there but cannot be read (#4592).
+func (n *Node) Restore(cp *persist.Checkpoint) error {
 	n.primary.SetRound(cp.CurrentRound)
 	n.primary.SetEpoch(cp.CurrentEpoch)
 	n.bullshark.SetLastCommitRound(cp.LastCommitRound)
@@ -988,10 +1005,14 @@ func (n *Node) Restore(cp *persist.Checkpoint) {
 	}
 	n.bullshark.SetCommitted(cp.Committed)
 	n.dag.SetLastCommitRound(cp.LastCommitRound)
-	certs, batches := n.restoreTail(cp)
+	certs, batches, err := n.restoreTail(cp)
+	if err != nil {
+		return err
+	}
 	slog.Info("Restored consensus position", "partition", n.config.Partition,
 		"round", n.primary.CurrentRound(), "lastCommit", cp.LastCommitRound, "block", cp.BlockIndex,
 		"certificates", certs, "batches", batches)
+	return nil
 }
 
 // PruneCommitted retires the batches a certificate names once this node has

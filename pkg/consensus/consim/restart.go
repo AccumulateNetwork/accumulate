@@ -177,7 +177,9 @@ func (s *Sim) restartStaggered(nodes, first []*simNode, gap, executorFirst time.
 		if cp == nil {
 			return fmt.Errorf("restart %s/%d: no checkpoint to resume executor block %d from", sn.part, sn.val, last)
 		}
-		node.Restore(cp)
+		if err := node.Restore(cp); err != nil {
+			return fmt.Errorf("restart %s/%d: %w", sn.part, sn.val, err)
+		}
 		sn.lastSaved = cp
 		sn.height.Store(cp.BlockIndex)
 		sn.resumedAt, sn.keptAtRestart = cp.BlockIndex, sn.kept.Load()

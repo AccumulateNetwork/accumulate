@@ -9,6 +9,7 @@ package consensus
 import (
 	"crypto/ed25519"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"sort"
 
@@ -233,7 +234,9 @@ func (n *Node) persistAuthored(h *types.Header) error {
 // restoreTail loads every persisted certificate into the DAG and every
 // persisted batch into the batch store, queues the certificates for
 // ordering, and hands the last authored header to the primary. It reports
-// how many certificates and batches it loaded.
+// how many certificates and batches it loaded. An authored header that is
+// there but cannot be read is an error, not a warning: the node would not
+// know which round never to author again (#4592).
 //
 // A batch named by a certificate in the checkpoint's committed set executed
 // before the checkpoint, and goes into retention, with the certificate
@@ -251,13 +254,13 @@ func (n *Node) persistAuthored(h *types.Header) error {
 // batch whose certificates are all absent from the set stays in the active
 // store on the certificate's account (invariant 3), bounded by the DAG's
 // retention.
-func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
+func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int, error) {
 	if n.dagStore == nil {
-		return 0, 0
+		return 0, 0, nil
 	}
 	authored, err := n.dagStore.Authored()
 	if err != nil {
-		slog.Error("Reading the last authored header", "partition", n.config.Partition, "error", err)
+		return 0, 0, fmt.Errorf("reading the last authored header: %w", err)
 	}
 	var certs []*types.Certificate
 	var batchNames []string
@@ -330,7 +333,7 @@ func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
 	n.orderMu.Unlock()
 
 	n.primary.RestoreAuthored(authored)
-	return len(certs), batches
+	return len(certs), batches, nil
 }
 
 // ownPayloads is the set of batch digests the given certificates and header

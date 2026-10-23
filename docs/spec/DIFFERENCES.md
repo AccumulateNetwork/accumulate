@@ -1830,8 +1830,22 @@ batches and its last authored header (#4448). What differs:
   stalled at block 40060 (round 80129, last commit 80128) is in this state.
   Nothing on disk lets it resume under the protocol; it needs a one-time
   operator decision, not a code path this change adds (#4448 notes).
-- **Nothing is fsynced**, as the checkpoint itself is not: the files survive
-  a process or container restart (the page cache survives), not a power loss.
+- **Nothing is fsynced but the authored header**, as the checkpoint itself
+  is not: the files survive a process or container restart (the page cache
+  survives), not a power loss. The authored header is the one file whose
+  loss is an equivocation rather than a fetch (#4592): a power loss inside
+  the filesystem's journal window (5 s on ext4 by default) after the
+  broadcast would bring the previous header back, and the node author that
+  round again. So its file and then its directory are synced before the
+  broadcast, with no primary lock held (consensus.md, "Restart"). The sync
+  under the primary's lock, as first tried, cost a restarted validator its
+  catch-up in `consim` `TestRestartOneNode` — 110–150 blocks against a floor
+  of 160, from 164–166 without it, eight simulated nodes sharing one NVMe —
+  because every vote, certificate and round advance waited on the two
+  device flushes. Off the lock, five runs on the same machine reached
+  170–177 blocks, against 163–185 in five runs of the merge base, every run
+  over the floor. The cost on a validator with a disk of its own is
+  unmeasured.
 - **The authored-round sweep is four rounds deep.** A certificate that
   reaches the DAG more than four rounds below the node's current round after
   the node authored there is on disk only from the next block's checkpoint.

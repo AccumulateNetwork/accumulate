@@ -1377,9 +1377,37 @@ authors that round or a lower one again, its round is raised to that
 header's if it had got further than the checkpoint, and if the header's
 certificate is not in the DAG the header rejoins vote collection so the
 ordinary rebroadcast sends **the same header** again — a second header for a
-round is self-equivocation (#4159 stall 3). A checkpoint written before #4448
-has no tail and no authored header, and restores the position alone
-(DIFFERENCES, C9).
+round is self-equivocation (#4159 stall 3). The authored header's **round**
+is read back on **every** start, checkpoint or not (`NewNode`,
+`Primary.RestoreAuthoredRound`): a start that resumes no checkpoint — none
+for the executor's last block, or a store at genesis — otherwise knew nothing
+of the round and signed a second header for it (#4592). The round alone, at
+that point: the DAG is empty until `Restore` reloads the tail, so whether the
+header certified cannot be told, and a header put back into vote collection
+before the DAG was restored stayed there once its certificate was found —
+rebroadcast, its batches proposed again. Vote collection is rejoined only by
+`Restore`, after the DAG is back; a start that restores no checkpoint burns
+the round and does not resume it. A node whose authored file is there but
+cannot be read — zero-length or torn — does **not start**: `NewNode` and
+`Restore` fail, naming the file, since the node would not know which round
+never to author again.
+
+**The authored header's write is synced before the broadcast** (#4592): the
+new file's bytes, then the directory that holds the rename that makes it the
+authored file (`DAGStore.PutAuthored`). It is the one synced write in the
+store (DIFFERENCES, C9): a certificate or batch lost to a power loss costs a
+fetch, this file an equivocation, since the previous header would come back
+and the node author the round again. The primary holds no lock while the
+write runs: it claims the round first — the authored watermark, under its
+lock — releases the lock, persists, and only then puts the header into vote
+collection and broadcasts it (`Primary.tryCreateAndBroadcastHeader`). So the
+broadcast and the rebroadcast, which reads vote collection, can send only a
+durable header; a second attempt at the round while the write runs meets the
+watermark and authors nothing; and a write that fails leaves the round burnt
+and the header unsent, its batches requeued. Measured in consim with eight
+nodes on one shared NVMe, the restart test's catch-up is unchanged (C9). A
+checkpoint written before #4448 has no tail and no authored header, and
+restores the position alone (DIFFERENCES, C9).
 
 **A joining node with no checkpoint orders nothing until the join names a
 round** (#4405). Round zero is not a position: a network past `DAGGCDepth`
