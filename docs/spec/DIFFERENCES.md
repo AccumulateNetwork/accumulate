@@ -552,6 +552,25 @@ follower that was removed may outlive it in its peers' peer stores; a page
 such a peer cannot be dialed for passes to the next (#4533).
 `TestAJoiningNodeAdvertisesItsServicesOnlyOnceActive`.
 
+### E31. The records' states, the fill and the look-ahead bound their queries across the peers, not at each peer
+
+*[#4604](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4604)*
+
+**Spec** (executor.md, "Sync", "The algorithm", and §3, step 1): a round's
+stale accounts are asked four calls at a time against each peer, and the fill
+loads four sections at a time against each peer the same way.
+
+**Code**: the opened-section load holds `statesInFlight` at each peer
+(`loadOpened`, #4604). The others hold `statesInFlight` times the number of
+peers in all: `askStates`, as `takeAccounts` calls it for the records'
+accounts, runs that many workers and picks a chunk's first peer by its index,
+and the fill and the look-ahead (`internal/node/join/sections.go`) take that
+many slots for the section loads together. A slower peer can be asked for more
+than four at once. In production the node's gate to each peer (`pull.Gated`)
+holds the background to `PeerInFlight`-1 at the peer and asks a busy peer
+again, so the peer does not see it; a test whose sources have no such gate
+does.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
@@ -1878,6 +1897,26 @@ The burst remains: 197 dropped votes in a restored node's first second.
 Catch-up is built if PLAN R8-1's Docker run shows restart catch-up still slow
 or bursty. Otherwise this entry records a design that is decided and not yet
 needed.
+
+### C16. A gossip stream that fails to open is never opened again
+
+*No issue yet; found under #4610*
+
+consensus.md, invariant 11: anything sent once and never re-sent leaves a
+condition that cannot become true on its own. GossipSub (go-libp2p-pubsub
+v0.10.0) opens its stream to a peer once, when it first sees the connection.
+If that open fails, the peer is dropped from GossipSub with no retry
+(`comm.go` handleNewPeer → `newPeerError`); only a stream that dies after
+opening is re-opened. The connection stays up, so nothing reconnects, and the
+node neither sends to that peer nor is counted by it on any topic. consim hit
+it on CI's loaded runners because it connected hosts before creating their
+GossipSubs: validator 0 ran a whole test with `hostPeers=3`,
+`headerTopicPeers=0` (job 17290112116). consim now creates each GossipSub with
+its host, as `p2p.NewHost` does, and refuses to load a sim whose mesh is short
+(`ErrMeshIncomplete`). Production creates GossipSub before it connects, so the
+start-up race does not arise there; whether any other first-open failure (a
+timeout, a resource-manager refusal) can isolate a production validator until
+it reconnects is not verified.
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 

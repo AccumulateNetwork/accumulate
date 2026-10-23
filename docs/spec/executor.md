@@ -611,7 +611,16 @@ behind them (#4537): a node just started has its bootstrap peers connected
 within a second and its routing table warm only later, and two followers of run
 `20261006T031201Z` found no validator in the DHT for twenty seconds while
 connected to every one of them
-(`TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt`). **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
+(`TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt`). **What identify
+reported of a connected peer's services never regresses** (#4610): a node
+registers its services after it has connected, so its peers learn them from
+identify pushes, which carry no order and each replace the peer's whole
+protocol set; under load a stale one lands last and takes a service away
+(8 of 40 four-node meshes on two loaded cores, !1274). A node never withdraws
+a service while it runs, so a service a peer announced on a connection it
+still has: the node's peerstore writes it back into every later set of the
+peer's protocols, in the write itself, and forgets it when the peer's last
+connection closes (`serviceMemory`). **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
 supersedes 2026-10-02, "no as-of-H load"). A block `h+1` that reads a section
 not loaded takes it as the peers held it at `h`, their BPT history serving the
 leaves (`BptPage.ForHeight`) and the accounts (`AccountStates.ForHeight`); the
@@ -1092,8 +1101,20 @@ Each round, in this order:
    at a time used 1.4 of the 16 queries four validators admit, 2.6 s and
    ~100 accounts a page, so a BVN of 96k leaves was 40 minutes of pulling
    against a 30-minute deadline (run 20261007T141334Z;
-   `TestTheSectionsARoundOpenedAreLoadedInParallel`). The round logs what it
-   loaded: sections, pages, accounts, and accounts per second.
+   `TestTheSectionsARoundOpenedAreLoadedInParallel`). **The bound holds
+   per peer** (#4604): each peer has `statesInFlight` workers that take the
+   next span and ask it of that peer first, and every page and
+   `AccountStates` call of the load to a peer, a span's stale leaves asked
+   of the other peers included, holds one of that peer's `statesInFlight`
+   slots, waiting for one. A span's peer picked by its index, and its stale
+   leaves asked across the peers at once, had sixteen in flight to the
+   slower of two peers
+   (`TestTheOpenedSectionsLoadHoldsStatesInFlightPerPeer`). Under it, the
+   node's gate to each peer (§3a, "A block's queries go first") holds this
+   load, as all the background, to `PeerInFlight`-1 (3) at the peer and
+   asks a busy peer again: what a peer sees of it is at most 3 at once. The
+   round logs what it loaded: sections, pages, accounts, and accounts per
+   second.
 
 **The state is complete** when the top is taken, every section opened is
 loaded, nothing is owed, and `L` is at or above the highest `B` any reply was

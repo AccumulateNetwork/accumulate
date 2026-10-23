@@ -17,10 +17,9 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
-
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulated/run"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/address"
 	"golang.org/x/exp/slices"
 )
 

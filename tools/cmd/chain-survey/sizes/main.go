@@ -25,7 +25,10 @@ func main() {
 		var acct, chain string
 		var start uint64
 		var expand bool
-		fmt.Sscanf(a, "%s %s %d %t", &acct, &chain, &start, &expand)
+		if _, err := fmt.Sscanf(a, "%s %s %d %t", &acct, &chain, &start, &expand); err != nil {
+			fmt.Fprintf(os.Stderr, "bad argument %q: want \"<account> <chain> <start> <expand>\": %v\n", a, err)
+			os.Exit(1)
+		}
 		u := url.MustParse(acct)
 		count := uint64(100)
 		t := time.Now()

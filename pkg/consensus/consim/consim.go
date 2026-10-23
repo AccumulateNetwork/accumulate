@@ -39,6 +39,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
@@ -150,6 +151,10 @@ type Config struct {
 	// LoadUntilHeight stops the load to a partition once it has executed
 	// this height, so its blocks from there on are empty.
 	LoadUntilHeight map[string]uint64
+
+	// pubsubStagger pauses New after each host's pubsub is created, as a
+	// setup goroutine descheduled on a loaded runner pauses (#4610).
+	pubsubStagger time.Duration
 }
 
 // Restart names nodes of one partition to restart, by their index in the
@@ -257,6 +262,7 @@ type simNode struct {
 	lastSaved     *persist.Checkpoint
 	seqMu         sync.Mutex
 	seq           []string
+	reproduced    []string // blocks produced again after a restore that differ from the first time
 
 	stopConsume  context.CancelFunc
 	consumeDone  chan struct{}
@@ -289,6 +295,8 @@ type Sim struct {
 	parts  []string // stable order: Directory, BVN1..N
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	resumeGap map[string]time.Duration // see Result.ResumeGap
 
 	// submitted and refused count what the load offered and what the network
 	// turned away.  A refusal is a stage of the pipeline like any other, and
@@ -339,10 +347,23 @@ type Result struct {
 	// (consensus spec, invariant 9).
 	MaxBlockTxs map[string]uint64
 	MaxLag      map[string]int
+
+	// ResumeGap is, per restarted partition, the longest it went without an
+	// executed block in the 30 s after its nodes returned. A partition is
+	// back to a block a second within that time; one whose gossip has no
+	// mesh crawls a heartbeat at a time and goes 10-20 s without a block
+	// (#4610, New).
+	ResumeGap map[string]time.Duration
 }
 
 // ErrStalled is returned (wrapped) when a partition stops executing.
 var ErrStalled = errors.New("partition stalled")
+
+// ErrMeshIncomplete is returned (wrapped) when a node's gossip never reaches
+// every other validator of its partition before the load starts: the run
+// would test a partition short of a validator, and its stall would read as
+// a consensus fault.
+var ErrMeshIncomplete = errors.New("gossip mesh incomplete")
 
 // New builds the network: one libp2p host per validator, a Directory node on
 // every host, and a BVN node on each host for its validator's BVN — the
@@ -374,7 +395,28 @@ func New(cfg Config) (*Sim, error) {
 	// Hosts: real libp2p on loopback, fully connected. Real GossipSub is the
 	// point — mesh formation, scoring, and per-topic behaviour are part of
 	// the system under study.
+	//
+	// One GossipSub per host, shared by that validator's Directory and BVN
+	// nodes, and created with its host before any peer connects — as in
+	// production (p2p.NewHost). A pubsub opens its stream to every peer it
+	// is connected to when it starts, and drops a peer that has no pubsub
+	// yet until they reconnect: with the hosts connected first, every pubsub
+	// that started before a peer's lost that peer for the whole run (#4610).
+	//
+	// And with the node's options (p2p.startServiceDiscovery): flood
+	// publish, so a publish goes to every peer on the topic and not only
+	// to the mesh. A restart here leaves every topic and joins it again on
+	// the same host, which gossipsub answers with a 10 s unsubscribe
+	// backoff on both sides: no mesh can form for that long, a bare router
+	// then sends each publish to nobody, and headers, votes and
+	// certificates crawled to the peers one heartbeat (1 s) at a time by
+	// IHAVE/IWANT gossip — a round every 4-8 s, a block every 10-16 s,
+	// and the 20 s stall of TestRestartAfterTwoNodesStopFirst on a slow
+	// runner (#4610). A node restarts as a new process whose peers drop
+	// its connection, with no backoff, so production never sees that mesh.
+	ctx := context.Background()
 	s.hosts = make([]host.Host, nVals)
+	pss := make([]*pubsub.PubSub, nVals)
 	for i := range s.hosts {
 		h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/127.0.0.1/tcp/0"))
 		if err != nil {
@@ -382,8 +424,14 @@ func New(cfg Config) (*Sim, error) {
 			return nil, fmt.Errorf("host %d: %w", i, err)
 		}
 		s.hosts[i] = h
+		ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithPeerExchange(true), pubsub.WithFloodPublish(true))
+		if err != nil {
+			s.Close()
+			return nil, fmt.Errorf("pubsub %d: %w", i, err)
+		}
+		pss[i] = ps
+		time.Sleep(cfg.pubsubStagger)
 	}
-	ctx := context.Background()
 	for i := range s.hosts {
 		for j := i + 1; j < len(s.hosts); j++ {
 			err := s.hosts[i].Connect(ctx, peer.AddrInfo{ID: s.hosts[j].ID(), Addrs: s.hosts[j].Addrs()})
@@ -392,18 +440,6 @@ func New(cfg Config) (*Sim, error) {
 				return nil, fmt.Errorf("connect %d<->%d: %w", i, j, err)
 			}
 		}
-	}
-
-	// One GossipSub per host, shared by that validator's Directory and BVN
-	// nodes — as in production.
-	pss := make([]*pubsub.PubSub, nVals)
-	for i, h := range s.hosts {
-		ps, err := pubsub.NewGossipSub(ctx, h)
-		if err != nil {
-			s.Close()
-			return nil, fmt.Errorf("pubsub %d: %w", i, err)
-		}
-		pss[i] = ps
 	}
 
 	mkNode := func(part string, committee *types.Committee, val int) (*simNode, error) {
@@ -567,8 +603,19 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				}
 			}
 			if executedAny {
+				// seq holds one entry per block index. A node restored from
+				// its older checkpoint produces the blocks after it again
+				// (#4448): each must be the block it recorded, not another
+				// entry that shifts its sequence against its peers'.
+				entry := fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ","))
 				sn.seqMu.Lock()
-				sn.seq = append(sn.seq, fmt.Sprintf("%d:%s", group[len(group)-1].Round(), strings.Join(executed, ",")))
+				if i := int(sn.height.Load()); i < len(sn.seq) {
+					if sn.seq[i] != entry {
+						sn.reproduced = append(sn.reproduced, fmt.Sprintf("block %d produced again differs:\n  %s\n  %s", i+1, sn.seq[i], entry))
+					}
+				} else {
+					sn.seq = append(sn.seq, entry)
+				}
 				sn.seqMu.Unlock()
 				h := sn.height.Add(1)
 				if blockTxs > 0 {
@@ -799,6 +846,9 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 	}
 	// Let the gossip mesh form before load; production waits too.
 	time.Sleep(2 * time.Second)
+	if err := s.awaitMesh(ctx, 10*time.Second); err != nil {
+		return s.finish(start, false, err.Error()), err
+	}
 	for _, part := range s.parts {
 		s.wg.Add(1)
 		go s.load(ctx, part)
@@ -822,6 +872,8 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 	}
 	lastProgress := map[string]time.Time{}
 	lastHeight := map[string]uint64{}
+	watchUntil := map[string]time.Time{} // ResumeGap is measured until then
+	s.resumeGap = map[string]time.Duration{}
 	for _, p := range s.parts {
 		lastProgress[p] = time.Now()
 	}
@@ -856,6 +908,14 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 				}
 				if r := sn.n().CurrentRound(); r > maxR {
 					maxR = r
+				}
+			}
+			if until, ok := watchUntil[part]; ok {
+				if gap := time.Since(lastProgress[part]); gap > s.resumeGap[part] {
+					s.resumeGap[part] = gap
+				}
+				if time.Now().After(until) {
+					delete(watchUntil, part)
 				}
 			}
 			if maxH > lastHeight[part] {
@@ -895,6 +955,7 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 		}
 		for _, p := range restarted {
 			lastProgress[p] = time.Now()
+			watchUntil[p] = time.Now().Add(30 * time.Second)
 		}
 		logf("%8s  %s | refused=%d/%d", time.Since(start).Truncate(time.Second), strings.Join(line, " | "), s.refused.Load(), s.submitted.Load())
 
@@ -907,6 +968,40 @@ func (s *Sim) Run(parent context.Context) (*Result, error) {
 
 		if allAtTarget {
 			return s.finish(start, true, "target height"), nil
+		}
+	}
+}
+
+// awaitMesh waits until every node sees, on each of its partition's topics,
+// every other validator of the partition, and reports the first node that
+// does not by the deadline.
+func (s *Sim) awaitMesh(ctx context.Context, within time.Duration) error {
+	deadline := time.Now().Add(within)
+	for {
+		short := ""
+		for _, sn := range s.nodes {
+			want := len(s.byPart[sn.part]) - 1
+			for _, pattern := range []string{gossip.TopicBatches, gossip.TopicHeaders, gossip.TopicVotes, gossip.TopicCerts, gossip.TopicCertSync} {
+				topic := fmt.Sprintf(pattern, sn.part)
+				if got := len(sn.ps.ListPeers(topic)); got < want {
+					short = fmt.Sprintf("%s/%d sees %d of %d peers on %s", sn.part, sn.val, got, want, topic)
+					break
+				}
+			}
+			if short != "" {
+				break
+			}
+		}
+		if short == "" {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%w after %s: %s", ErrMeshIncomplete, within, short)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
 		}
 	}
 }
@@ -950,7 +1045,7 @@ func (s *Sim) diagnose(logf func(string, ...any), prev map[*simNode]snapshot, mo
 func (s *Sim) finish(start time.Time, ok bool, reason string) *Result {
 	r := &Result{Ok: ok, Reason: reason, Heights: map[string]uint64{}, Elapsed: time.Since(start),
 		Submitted: s.submitted.Load(), Refused: s.refused.Load(),
-		MaxBlockTxs: map[string]uint64{}, MaxLag: map[string]int{}}
+		MaxBlockTxs: map[string]uint64{}, MaxLag: map[string]int{}, ResumeGap: s.resumeGap}
 	for _, part := range s.parts {
 		for _, sn := range s.byPart[part] {
 			if h := sn.height.Load(); h > r.Heights[part] {
