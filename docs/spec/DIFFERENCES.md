@@ -2499,20 +2499,23 @@ not serving. Not built.
 ## Anchoring: nothing anchors to Bitcoin (#4562)
 
 [anchoring.md](anchoring.md) (Paul, 2026-10-12) has the Directory's root chain
-anchor committed to Bitcoin at every due height from an address on a published
-list, the validators signing at the network's threshold through a coordination
-data account, a proof builder keeping each listed account's entries' receipts
+anchor committed to Bitcoin at every interval (the latest stored Directory
+block the proposer chooses) from an address on a published list, the
+validators signing at a count threshold through per-signer coordination data
+accounts, a proof builder keeping each listed account's entries' receipts
 to the next anchored root, and a verifier that checks a package with Bitcoin
 and one pinned transaction. None of it exists:
 
-- **B1. No accounts, no types.** `dn.acme/bitcoin/addresses` and
-  `dn.acme/bitcoin/anchors` are not created by genesis or by any transaction;
+- **B1. No accounts, no types.** `dn.acme/bitcoin` (an ADI),
+  `dn.acme/bitcoin/addresses` and the per-signer coordination accounts and
+  books are not created by genesis or by any transaction;
   `pkg/anchoring` and its payload, list and record types do not exist.
   On an existing network the accounts and the book are created by
-  operator-signed `CreateKeyBook`/`CreateDataAccount` transactions, not by an
+  operator-signed `CreateIdentity`/`CreateKeyBook`/`CreateDataAccount`
+  transactions, not by an
   executor change; there is no version gate.
 - **B2. No coordination.** No validator proposes, signs or broadcasts an anchor
-  (anchoring.md §2.4).
+  (anchoring.md §2.4), on the Bitcoin-height slot rule.
 - **B3. No proof builder.** Nothing reads the block ledgers for a configured
   set of accounts and keeps receipts to an anchored root; the only account
   proofs are `ProofService`'s, built on request against the current BPT and
