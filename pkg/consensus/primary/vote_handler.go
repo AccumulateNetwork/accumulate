@@ -421,12 +421,13 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// batches arrive via gossip and the author rebroadcasts the header until
 	// it reaches quorum, so we vote on a later rebroadcast once we have them —
 	// the same defer-until-available shape as the missing-parent gate above.
-	var missingBatches []types.BatchDigest
-	for _, entry := range header.Payload {
-		if !p.haveBatch(entry.Digest) {
-			missingBatches = append(missingBatches, entry.Digest)
-		}
-	}
+	//
+	// One call checks and marks: the batches held are marked as named by a
+	// header this node votes on, so batches no header names are evicted
+	// before them until the certificate protects them (#4598). Checked first
+	// and marked after, eviction could take a batch between the two under a
+	// flood, and the vote went out for a batch this node no longer held.
+	missingBatches := p.nameHeaderBatches(header)
 	if len(missingBatches) > 0 {
 		// Pin every batch this header names -- including the ones we
 		// already hold. Those are the ones eviction takes while we wait
@@ -459,10 +460,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return // missing batches — do not certify data we do not have; vote when they land (#4611)
 	}
 
-	// Every batch is here, so nothing is waiting on them any more. They are
-	// named by a header this node votes on, so batches no header names are
-	// evicted before them until the certificate protects them (#4598).
-	p.nameHeaderBatches(header)
+	// Every batch is here, so nothing is waiting on them any more.
 	p.releasePins(headerDigest)
 	p.deferred.drop(headerDigest)
 

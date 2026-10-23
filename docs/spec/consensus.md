@@ -194,7 +194,10 @@ of transactions a few times a second.
 
 ### The active store and eviction
 
-`StoreBatch` adds a batch and, when the peer cache exceeds its byte budget,
+`StoreBatch` adds a batch — unless it is already in retention: it executed,
+it is servable from there, and in the active store it would stay for as long
+as the DAG kept the certificate that named it — and, when the peer cache
+exceeds its byte budget,
 runs an LRU eviction over peers' batches that skips pinned ones (those a
 pending vote needs), those a certified header in the DAG names
 (`Config.Certified`, the DAG's `HasCertifiedBatch`), and those named by a
@@ -214,12 +217,26 @@ and `MaxRetainedBatches` are zero, and only a test sets them. A negative
 A certified batch leaves the active store when `PruneCommitted` retires it
 after execution, or becomes evictable when the DAG collects the round of the
 certificate that named it, if that certificate never committed (DAG
-retention); either way the protected set is bounded by the DAG's.
-Eviction runs in two passes. When the primary votes on a header it marks
-the batches the header names (`NameBatches`); the first pass evicts only
+retention). The protected set is therefore bounded by the DAG's retention,
+not by the peer cache's byte budget: at most committee size ×
+`DefaultDAGGCDepth` (2,000 rounds) × the payload bytes one header names.
+The payload one header names is capped only by its author's `headerBudget`
+(`MaxHeaderBytes`, invariant 9); a voter does not enforce that budget on
+receipt, and the header decoder caps the entry count at 100,000, so a
+Byzantine author can name any number of batches of `MaxBatchBytes` each.
+Enforcing the budget at the vote gate, or capping what the certified mark
+protects, is #4618.
+Eviction runs in two passes. When the primary votes on a header it checks
+and marks the batches the header names in one step under the store's lock
+(`NameBatches`: a batch in the active store is marked, a batch in retention
+is present, and the rest are reported missing — checked first and marked
+after, eviction could take a batch between the two and the vote went out for
+a batch the voter no longer held); the first pass evicts only
 unmarked batches — those no header this node voted on names, which is what
 an arbitrary peer can send — and the second pass evicts marked ones, oldest
-first, only if the first did not bring the cache within its target. Batches
+first, only if the first left marked batches behind and did not bring the
+cache within its target. Each pass asks the DAG once per batch per run;
+the answer is not kept across runs. Batches
 normally arrive before the header that names them, so an unmarked batch is
 stored, not refused; the cost of a stream of unnamed batches falls on other
 unnamed batches, which a vote fetches again if it needs them (invariant 11).
@@ -606,6 +623,14 @@ named under this node's key, by its certificates in the tail or by its last
 authored header, as its **own** (invariant 4: never evicted; the tail is a
 whole rescue window and can be larger than the active store, and only the
 author can serve what its header names, #4545), the rest as peer copies —
+except that a peer batch named only by certificates at or below the
+checkpoint's commit floor (`LastCommitRound`) executed before the checkpoint
+and goes into retention (`Worker.RestoreRetained`): in the active store it
+would be certified and never pruned, and a tail larger than the budget
+would hold the store over it for as long as the DAG kept those certificates
+(#4598). This is conservative: a certificate at or below the floor that no
+committed leader's history reaches has not committed, and its batch is then
+servable from retention for the window rather than held in the store —
 and runs the certificates through Bullshark lowest round first. The last authored header
 goes back to the primary (`Primary.RestoreAuthored`): the primary never
 authors that round or a lower one again, its round is raised to that

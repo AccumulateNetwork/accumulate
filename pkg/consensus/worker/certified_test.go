@@ -126,3 +126,63 @@ func TestNamed_VotedBatchSurvivesUnnamedPeerBatches(t *testing.T) {
 	require.False(t, w.HasBatch(vd), "named batches beyond the budget are evicted, oldest first")
 	require.LessOrEqual(t, w.peerBytes(), 64<<10)
 }
+
+// A batch that arrives again after it executed is already in retention and
+// servable from there. Storing it in the active store again would hold it
+// there for as long as the DAG keeps the certificate that named it, which is
+// thousands of rounds after it executed, and the active store's bound would
+// no longer be what the spec says.
+func TestCertified_ExecutedBatchStoredAgainStaysRetained(t *testing.T) {
+	executed := types.NewBatch([][]byte{[]byte("a batch that executed, then arrived again")})
+	ed := executed.Digest()
+	cs := &certifiedSet{m: map[types.BatchDigest]bool{ed: true}}
+	w := New(Config{
+		Partition:           "t",
+		MaxBatchBytes:       1 << 10,
+		MaxStoredBatchBytes: 64 << 10,
+		Certified:           cs.has,
+	}, nil)
+
+	require.NoError(t, w.StoreBatch(executed))
+	w.AwaitExecution([]types.BatchDigest{ed})
+	w.PruneCommitted([]types.BatchDigest{ed}, CommitInfo{Detail: "executed"})
+
+	// Gossip delivers it late, while the certificate is still in the DAG.
+	require.NoError(t, w.StoreBatch(executed))
+	require.False(t, w.HasBatch(ed), "an executed batch is retained, not active, however often it arrives")
+	require.True(t, w.CanServeBatch(ed))
+
+	storeUnnamed(t, w, "unnamed", 200)
+	require.LessOrEqual(t, w.peerBytes(), 64<<10, "the active store stays within its budget")
+}
+
+// NameBatches is the vote gate's one look at the store: it marks what the
+// header names and reports what this worker holds in neither store. Checking
+// and marking in two steps let eviction take a batch between them, and the
+// vote went out for a batch the voter no longer held.
+func TestNameBatches_ReportsMissingAndMarksActive(t *testing.T) {
+	w := New(Config{
+		Partition:           "t",
+		MaxBatchBytes:       1 << 10,
+		MaxStoredBatchBytes: 64 << 10,
+	}, nil)
+
+	active := types.NewBatch([][]byte{[]byte("held in the active store")})
+	retained := types.NewBatch([][]byte{[]byte("executed and retained")})
+	unstored := types.NewBatch([][]byte{[]byte("never seen")})
+	ad, rd, ud := active.Digest(), retained.Digest(), unstored.Digest()
+
+	require.NoError(t, w.StoreBatch(active))
+	require.NoError(t, w.StoreBatch(retained))
+	w.PruneCommitted([]types.BatchDigest{rd}, CommitInfo{Detail: "executed"})
+	require.True(t, w.CanServeBatch(rd))
+
+	missing := w.NameBatches([]types.BatchDigest{ad, rd, ud})
+	require.Equal(t, []types.BatchDigest{ud}, missing, "only the batch held nowhere is missing")
+
+	w.batchMu.RLock()
+	defer w.batchMu.RUnlock()
+	require.True(t, w.batches[ad].named, "the active batch is marked as named")
+	_, inActive := w.batches[rd]
+	require.False(t, inActive, "naming a retained batch does not move it to the active store")
+}

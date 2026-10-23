@@ -29,7 +29,72 @@ import (
 // BVNs restored round 269626 one certificate short and stayed there; val2
 // evicted 126 of its 176 restored batches three seconds after restoring
 // them, its own header's batch among them (#4545).
+//
+// The checkpoint is at round 0: none of the twenty certificates has
+// committed, so each still proves this node holds its batch and the store
+// keeps all twenty over a budget of four. That is what invariant 3 asks for:
+// a certified, unexecuted batch is held until it executes or the DAG
+// collects its round, and it is the certificates, not the budget, that bound
+// the store then.
 func TestRestoredAuthoredBatchesSurviveEviction(t *testing.T) {
+	n2, certs, own := restoredTailFixture(t, 0)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for n2.workers[0].BatchCount() > 21 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the store did not evict the batches nothing names: %d batches", n2.workers[0].BatchCount())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for _, c := range certs {
+		if !n2.workers[0].HasBatch(c.Header.Payload[0].Digest) {
+			t.Fatal("eviction took a batch a restored certificate names")
+		}
+	}
+	if !n2.workers[0].CanServeBatch(own.Digest()) {
+		t.Fatal("eviction took the batch of the header this node authored: no peer can vote for it now")
+	}
+}
+
+// TestRestoredExecutedBatchesAreRetained: the checkpoint's commit floor is at
+// the tail's last round, so every certificate in the tail committed and its
+// batches executed before the checkpoint. Loaded into the active store, they
+// would sit there, certified and never pruned, for the 2,000 rounds the DAG
+// keeps the certificate — twenty batches over a budget of four. They are
+// what retention is for: servable to a peer that fell behind, owed to no
+// vote (#4598).
+func TestRestoredExecutedBatchesAreRetained(t *testing.T) {
+	n2, certs, own := restoredTailFixture(t, 20)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for n2.workers[0].BatchCount() > 4 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the store did not evict down to its budget: %d batches", n2.workers[0].BatchCount())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for _, c := range certs {
+		d := c.Header.Payload[0].Digest
+		if n2.workers[0].HasBatch(d) {
+			t.Fatal("an executed batch was restored into the active store")
+		}
+		if !n2.workers[0].CanServeBatch(d) {
+			t.Fatal("an executed batch was not restored into retention")
+		}
+	}
+	if !n2.workers[0].CanServeBatch(own.Digest()) {
+		t.Fatal("eviction took the batch of the header this node authored: no peer can vote for it now")
+	}
+}
+
+// restoredTailFixture writes a checkpoint whose tail is twenty peer
+// certificates at rounds 1 to 20, each naming one batch of about 1 KiB this
+// node holds, and the header this node authored with its batch; restores it
+// into a node whose store holds four peer batches, with the eviction loop
+// running; and sends eight batches no header names. lastCommit is the
+// checkpoint's commit floor: 0 leaves every certificate uncommitted.
+func restoredTailFixture(t *testing.T, lastCommit types.Round) (*Node, []*types.Certificate, *types.Batch) {
+	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -77,14 +142,21 @@ func TestRestoredAuthoredBatchesSurviveEviction(t *testing.T) {
 	if err := n.workers[0].StoreBatch(own); err != nil {
 		t.Fatal(err)
 	}
-	h := types.NewHeader(pub, 7, 1, []types.PayloadEntry{{Digest: own.Digest()}}, nil)
+	h := types.NewHeader(pub, lastCommit+7, 1, []types.PayloadEntry{{Digest: own.Digest()}}, nil)
 	if err := h.Sign(priv); err != nil {
 		t.Fatal(err)
 	}
 	if err := n.persistAuthored(h); err != nil {
 		t.Fatal(err)
 	}
+	if lastCommit > 0 {
+		n.bullshark.SetLastCommitRound(lastCommit)
+		n.primary.SetRound(lastCommit + 1)
+	}
 	cp := n.CheckpointAt(0)
+	if cp.LastCommitRound != lastCommit {
+		t.Fatalf("the checkpoint's commit floor is %d, not %d", cp.LastCommitRound, lastCommit)
+	}
 	if got := len(cp.Tail); got != 41 {
 		t.Fatalf("the checkpoint's tail names %d files, not 20 certificates and 21 batches", got)
 	}
@@ -96,7 +168,7 @@ func TestRestoredAuthoredBatchesSurviveEviction(t *testing.T) {
 	}
 	n2.Restore(cp)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Cleanup(cancel)
 	go func() { _ = n2.workers[0].Start(ctx) }() // blocks until ctx ends
 
 	// Peer batches no header names arrive; they are what the store evicts.
@@ -107,19 +179,5 @@ func TestRestoredAuthoredBatchesSurviveEviction(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for n2.workers[0].BatchCount() > 21 {
-		if time.Now().After(deadline) {
-			t.Fatalf("the store did not evict the batches nothing names: %d batches", n2.workers[0].BatchCount())
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	for _, c := range certs {
-		if !n2.workers[0].HasBatch(c.Header.Payload[0].Digest) {
-			t.Fatal("eviction took a batch a restored certificate names")
-		}
-	}
-	if !n2.workers[0].CanServeBatch(own.Digest()) {
-		t.Fatal("eviction took the batch of the header this node authored: no peer can vote for it now")
-	}
+	return n2, certs, own
 }

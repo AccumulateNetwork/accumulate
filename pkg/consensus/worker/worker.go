@@ -695,6 +695,12 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 		w.lruList.MoveToFront(entry.element)
 		return nil
 	}
+	// Executed and retained: it is servable from retention until the window
+	// closes, and the active store would otherwise hold it for as long as
+	// the DAG keeps the certificate that named it (#4598).
+	if _, retained := w.retained[digest]; retained {
+		return nil
+	}
 
 	// Trigger eviction if we're approaching the limit (non-blocking)
 	// Eviction is handled by dedicated goroutine to minimize lock contention
@@ -826,6 +832,26 @@ func (w *Worker) RestoreOwn(batch *types.Batch) {
 	if !ok {
 		w.storeOwn(batch)
 	}
+}
+
+// RestoreRetained puts a batch a restart loaded into retention rather than
+// the active store: a certificate at or below the checkpoint's commit floor
+// names it, so it executed before the checkpoint and is owed to no vote. In
+// the active store it would stay, certified and never pruned, for as long as
+// the DAG keeps that certificate (#4598). cert is the certificate, for the
+// tombstone retention writes when the window closes. A batch already in the
+// active store is left there.
+func (w *Worker) RestoreRetained(batch *types.Batch, cert string) {
+	if batch == nil {
+		return
+	}
+	digest := batch.Digest()
+	w.batchMu.Lock()
+	defer w.batchMu.Unlock()
+	if _, active := w.batches[digest]; active {
+		return
+	}
+	w.retain(digest, batch, "restored tail, committed before the checkpoint", cert)
 }
 
 // AvailableBatches returns all batch digests that are available for header creation.
@@ -1404,8 +1430,34 @@ func (w *Worker) performEviction() {
 	// names. The first pass evicts only those; batches a header this node
 	// voted on names are evicted in the second pass, and only if the first
 	// was not enough. Batches nobody names can then only evict each other.
+	//
+	// The second pass runs only if the first left named batches behind, and
+	// the DAG's answer for each batch is asked once per run: with the cache
+	// stuck over budget behind protected batches, a store of thousands walked
+	// twice per stored batch, taking the DAG's read lock for each entry while
+	// holding batchMu. The answer is not kept across runs, because a
+	// certificate can arrive or be collected between them.
 	evicted, skippedOwn, skippedPinned, skippedCertified := 0, 0, 0, 0
+	deferredNamed := 0
+	var certified map[types.BatchDigest]bool
+	isCertified := func(d types.BatchDigest) bool {
+		if w.config.Certified == nil {
+			return false
+		}
+		if v, ok := certified[d]; ok {
+			return v
+		}
+		if certified == nil {
+			certified = make(map[types.BatchDigest]bool)
+		}
+		v := w.config.Certified(d)
+		certified[d] = v
+		return v
+	}
 	for pass := 0; pass < 2 && overTarget(); pass++ {
+		if pass == 1 && deferredNamed == 0 {
+			break // only protected batches are left; a second walk finds the same
+		}
 		for e := w.lruList.Back(); e != nil && overTarget(); {
 			prev := e.Prev()
 			lruDigest := e.Value.(types.BatchDigest)
@@ -1423,12 +1475,12 @@ func (w *Worker) performEviction() {
 				if pass == 0 {
 					skippedPinned++
 				}
-			case w.config.Certified != nil && w.config.Certified(lruDigest):
+			case isCertified(lruDigest):
 				if pass == 0 {
 					skippedCertified++
 				}
 			case pass == 0 && ok && entry.named:
-				// Left for the second pass.
+				deferredNamed++ // left for the second pass
 			default:
 				w.lruList.Remove(e)
 				delete(w.batches, lruDigest)
@@ -1514,17 +1566,28 @@ func (w *Worker) PinBatches(digests []types.BatchDigest) {
 }
 
 // NameBatches marks stored batches as named by a header this node voted on,
-// so eviction takes the batches no header names before them. The mark stays
-// until the batch leaves the store; it orders eviction and protects nothing
-// once only named batches are left over the budget.
-func (w *Worker) NameBatches(digests []types.BatchDigest) {
+// so eviction takes the batches no header names before them, and reports the
+// digests this worker holds in neither the active store nor retention. The
+// check and the mark are one step under the lock: checked first and marked
+// after, eviction could take the batch between them and the vote went out
+// for a batch the voter no longer held (#4598). The mark stays until the
+// batch leaves the store; it orders eviction and protects nothing once only
+// named batches are left over the budget. A retained batch is executed and
+// servable, so it is present and nothing is marked.
+func (w *Worker) NameBatches(digests []types.BatchDigest) (missing []types.BatchDigest) {
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 	for _, d := range digests {
 		if e, ok := w.batches[d]; ok {
 			e.named = true
+			continue
 		}
+		if _, ok := w.retained[d]; ok {
+			continue
+		}
+		missing = append(missing, d)
 	}
+	return missing
 }
 
 // AwaitExecution marks batches named by a certificate consensus has committed,

@@ -241,7 +241,14 @@ func (n *Node) persistAuthored(h *types.Header) error {
 // first eviction after a restart took the batch of the restored header with
 // the rest, leaving no node to serve it and the round one vote short for
 // ever (run 20261006T220257Z, #4545). The others are peer copies, as they
-// were.
+// were — except that a peer batch named only by certificates at or below
+// the checkpoint's commit floor executed before the checkpoint, and goes
+// into retention: in the active store it would be certified and never
+// pruned, and the tail would hold the store over its budget for as long as
+// the DAG kept those certificates (#4598). This is conservative: a
+// certificate at or below the floor that is not in a committed leader's
+// history has not committed, and its batch is then servable from retention
+// for the window rather than held in the store.
 func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
 	if n.dagStore == nil {
 		return 0, 0
@@ -260,16 +267,31 @@ func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int) {
 		batchNames = append(batchNames, name)
 	}
 	ours := n.ownPayloads(certs, authored)
+	// The highest-round certificate naming each batch in the tail.
+	named := make(map[types.BatchDigest]*types.Certificate)
+	for _, c := range certs {
+		if c.Header == nil {
+			continue
+		}
+		for _, e := range c.Header.Payload {
+			if prev, ok := named[e.Digest]; !ok || c.Round() > prev.Round() {
+				named[e.Digest] = c
+			}
+		}
+	}
 	batches := 0
 	for _, name := range batchNames {
 		b, err := n.dagStore.Batch(name)
 		if err != nil {
 			continue
 		}
-		if ours[b.Digest()] {
-			d := b.Digest()
+		d := b.Digest()
+		switch c := named[d]; {
+		case ours[d]:
 			n.workers[workerFor(d[:], len(n.workers))].RestoreOwn(b)
-		} else {
+		case c != nil && c.Round() <= cp.LastCommitRound:
+			n.workers[workerFor(d[:], len(n.workers))].RestoreRetained(b, c.Digest().String())
+		default:
 			_ = multiWorkerBatchStore{n.workers}.StoreBatch(b)
 		}
 		batches++
