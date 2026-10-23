@@ -177,6 +177,18 @@ per-worker share must include the wire buffer a stored batch aliases
 (`types.UnmarshalBatch` takes ownership of the pubsub message), because that
 is the memory actually resident.
 
+**Decoding is bounded by the message.** A batch or header from any peer is
+decoded by every validator that receives it, before anything about the peer
+is known. Every count-prefixed decoder — batch, header, certificate, the
+fetch response's certificate list, and the cert-sync and BPT-sync requests
+and responses — checks a count field against the bytes that remain, at one
+element's minimum wire size, before a slice is allocated for it, so what a
+message can make a node allocate is bounded by the message's own size, not
+by the caps on the counts. The caps bound a well-formed message; the
+remaining-bytes check bounds a malformed one. A stream message's length
+prefix (`readMessage` in `gossip/protocols.go`) is bounded by the protocol
+maximum, up to 100 MB, not by the bytes received; that is follow-up #4619.
+
 ### Sealing
 
 `Worker.Submit` appends to pending and signals a seal when pending reaches

@@ -345,6 +345,12 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 		return nil, errors.New("too many signatures")
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// a signature costs at least its 4-byte length.
+	if int(numSigs)*4 > len(data)-offset {
+		return nil, errors.New("certificate data truncated: fewer bytes than signatures")
+	}
+
 	signatures := make([][]byte, numSigs)
 	for i := uint32(0); i < numSigs; i++ {
 		if offset+4 > len(data) {
@@ -377,6 +383,11 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 
 	if numAuth > 10_000 {
 		return nil, errors.New("too many authorities")
+	}
+
+	// As for the signatures: 2 bytes per authority index must remain.
+	if int(numAuth)*2 > len(data)-offset {
+		return nil, errors.New("certificate data truncated: fewer bytes than authorities")
 	}
 
 	if int(numAuth) != len(signatures) {
