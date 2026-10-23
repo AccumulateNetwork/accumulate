@@ -11,13 +11,16 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -475,10 +478,13 @@ func TestAKeyPageInASectionNotLoadedIsLoadedForTheSignatureAndTheBlockIsUnchange
 // fill runs the node's fill beside the network until every section is
 // loaded, stepping the network and checking the roots agree at every step,
 // or until stop says to stop.
-func (j *sectionsJoin) fill(stop func(left int) bool) {
+func (j *sectionsJoin) fill(stop func(left int) bool) { j.fillFrom(context.Background(), stop) }
+
+// fillFrom is fill, with the fill's context derived from parent.
+func (j *sectionsJoin) fillFrom(parent context.Context, stop func(left int) bool) {
 	t := j.t
 	state := j.part.NodeJoinState(j.fresh)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parent)
 	done := make(chan struct{})
 	go func() { defer close(done); state.Fill(ctx) }()
 	defer func() { cancel(); <-done }()
@@ -533,11 +539,19 @@ func TestTheFillLoadsEverySectionAndTheRootMatchesThroughout(t *testing.T) {
 // tree loaded. The sections it had not loaded are still not loaded after the
 // restart -- the markers are in its tree -- and once it has joined again the
 // fill loads the rest.
+//
+// The fill is held after its first span. A block writes every section the
+// fill has ready, and the fill's spans run in parallel, so left alone it can
+// have the whole tree ready for one block: 563 sections not loaded went to 0
+// in one block in 1 run of 60 here, and stopping below half failed 9 of 60.
 func TestARestartMidFillResumes(t *testing.T) {
 	j := joinWithSectionsNotLoaded(t)
 	start := j.notLoadedAtHandoff
 	require.Positive(t, start)
-	j.fill(func(left int) bool { return left < start/2 })
+	hold := &firstSpanOnly{}
+	j.part.SetSourceWrap(j.fresh, hold.wrap)
+	j.fillFrom(context.WithValue(context.Background(), heldFill{}, true), func(left int) bool { return left < start })
+	j.part.SetSourceWrap(j.fresh, nil)
 	before := j.part.NodeJoinState(j.fresh).SectionsNotLoaded()
 	require.Positive(t, before, "precondition: the fill finished before the restart")
 	require.Less(t, before, start, "precondition: the fill loaded nothing before the restart")
@@ -550,6 +564,47 @@ func TestARestartMidFillResumes(t *testing.T) {
 	j.fill(func(int) bool { return false })
 	j.agree("after the restart's fill")
 	j.holdsAll()
+}
+
+// heldFill marks the context of a fill that firstSpanOnly holds.
+type heldFill struct{}
+
+// firstSpanOnly serves a held fill the page of the first span it asks for,
+// as often as it asks, and holds every other page until the fill ends. What
+// else asks a page -- a block's load -- is served.
+type firstSpanOnly struct {
+	mu    sync.Mutex
+	first *[32]byte
+}
+
+func (h *firstSpanOnly) wrap(srcs []pull.Source) []pull.Source {
+	out := make([]pull.Source, len(srcs))
+	for i, s := range srcs {
+		out[i] = heldSource{s, h}
+	}
+	return out
+}
+
+type heldSource struct {
+	pull.Source
+	hold *firstSpanOnly
+}
+
+func (s heldSource) QueryBptPage(ctx context.Context, scope *url.URL, q *api.BptPageQuery) (*api.BptPageRecord, error) {
+	if ctx.Value(heldFill{}) != nil {
+		s.hold.mu.Lock()
+		if s.hold.first == nil {
+			first := q.StartHash
+			s.hold.first = &first
+		}
+		served := *s.hold.first == q.StartHash
+		s.hold.mu.Unlock()
+		if !served {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+	}
+	return s.Source.QueryBptPage(ctx, scope, q)
 }
 
 // TestATrulyFreshJoinerTakesTheNetworksOracleAndHandsOff — #4485 review,

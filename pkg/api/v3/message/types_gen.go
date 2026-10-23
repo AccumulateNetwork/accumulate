@@ -5263,6 +5263,7 @@ func init() {
 		encoding.NewTypeField("end", "uint64"),
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
 		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+		encoding.NewTypeField("relayed", "bool"),
 	}, "PrivateMajorHeaderRangeRequest", "privateMajorHeaderRangeRequest")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -5277,6 +5278,7 @@ func init() {
 		encoding.NewTypeField("until", "uint64"),
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
 		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+		encoding.NewTypeField("relayed", "bool"),
 	}, "PrivateMinorRootRangeRequest", "privateMinorRootRangeRequest")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -5292,6 +5294,7 @@ func init() {
 		encoding.NewTypeField("end", "uint64"),
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
 		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+		encoding.NewTypeField("relayed", "bool"),
 	}, "PrivateSequenceRangeRequest", "privateSequenceRangeRequest")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -5306,6 +5309,7 @@ func init() {
 		encoding.NewTypeField("sequenceNumber", "uint64"),
 		encoding.NewTypeField("nodeID", "p2p.PeerID"),
 		encoding.NewTypeField("proveAgainstAnchor", "uint64"),
+		encoding.NewTypeField("relayed", "bool"),
 	}, "PrivateSequenceRequest", "privateSequenceRequest")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -5753,6 +5757,7 @@ func (v *PrivateMajorHeaderRangeRequest) MarshalJSON() ([]byte, error) {
 		End                uint64                                  `json:"end,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -5770,6 +5775,9 @@ func (v *PrivateMajorHeaderRangeRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
 		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	if !(!v.SequenceOptions.Relayed) {
+		u.Relayed = v.SequenceOptions.Relayed
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -5797,6 +5805,7 @@ func (v *PrivateMinorRootRangeRequest) MarshalJSON() ([]byte, error) {
 		Until              uint64                                  `json:"until,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -5814,6 +5823,9 @@ func (v *PrivateMinorRootRangeRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
 		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	if !(!v.SequenceOptions.Relayed) {
+		u.Relayed = v.SequenceOptions.Relayed
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -5842,6 +5854,7 @@ func (v *PrivateSequenceRangeRequest) MarshalJSON() ([]byte, error) {
 		End                uint64                                  `json:"end,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -5862,6 +5875,9 @@ func (v *PrivateSequenceRangeRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
 		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	if !(!v.SequenceOptions.Relayed) {
+		u.Relayed = v.SequenceOptions.Relayed
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -5889,6 +5905,7 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 		SequenceNumber     uint64                                  `json:"sequenceNumber,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -5906,6 +5923,9 @@ func (v *PrivateSequenceRequest) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.SequenceOptions.ProveAgainstAnchor == 0) {
 		u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	}
+	if !(!v.SequenceOptions.Relayed) {
+		u.Relayed = v.SequenceOptions.Relayed
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -6667,6 +6687,7 @@ func (v *PrivateMajorHeaderRangeRequest) UnmarshalJSON(data []byte) error {
 		End                uint64                                  `json:"end,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -6675,6 +6696,7 @@ func (v *PrivateMajorHeaderRangeRequest) UnmarshalJSON(data []byte) error {
 	u.End = v.End
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	u.Relayed = v.SequenceOptions.Relayed
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -6690,6 +6712,7 @@ func (v *PrivateMajorHeaderRangeRequest) UnmarshalJSON(data []byte) error {
 	}
 
 	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.SequenceOptions.Relayed = u.Relayed
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -6728,6 +6751,7 @@ func (v *PrivateMinorRootRangeRequest) UnmarshalJSON(data []byte) error {
 		Until              uint64                                  `json:"until,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -6736,6 +6760,7 @@ func (v *PrivateMinorRootRangeRequest) UnmarshalJSON(data []byte) error {
 	u.Until = v.Until
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	u.Relayed = v.SequenceOptions.Relayed
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -6751,6 +6776,7 @@ func (v *PrivateMinorRootRangeRequest) UnmarshalJSON(data []byte) error {
 	}
 
 	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.SequenceOptions.Relayed = u.Relayed
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -6790,6 +6816,7 @@ func (v *PrivateSequenceRangeRequest) UnmarshalJSON(data []byte) error {
 		End                uint64                                  `json:"end,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -6799,6 +6826,7 @@ func (v *PrivateSequenceRangeRequest) UnmarshalJSON(data []byte) error {
 	u.End = v.End
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	u.Relayed = v.SequenceOptions.Relayed
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -6815,6 +6843,7 @@ func (v *PrivateSequenceRangeRequest) UnmarshalJSON(data []byte) error {
 	}
 
 	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.SequenceOptions.Relayed = u.Relayed
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
@@ -6853,6 +6882,7 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 		SequenceNumber     uint64                                  `json:"sequenceNumber,omitempty"`
 		NodeID             *encoding.JsonUnmarshalWith[p2p.PeerID] `json:"nodeID,omitempty"`
 		ProveAgainstAnchor uint64                                  `json:"proveAgainstAnchor,omitempty"`
+		Relayed            bool                                    `json:"relayed,omitempty"`
 		ExtraData          *string                                 `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
@@ -6861,6 +6891,7 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 	u.SequenceNumber = v.SequenceNumber
 	u.NodeID = &encoding.JsonUnmarshalWith[p2p.PeerID]{Value: v.SequenceOptions.NodeID, Func: p2p.UnmarshalPeerIDJSON}
 	u.ProveAgainstAnchor = v.SequenceOptions.ProveAgainstAnchor
+	u.Relayed = v.SequenceOptions.Relayed
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -6876,6 +6907,7 @@ func (v *PrivateSequenceRequest) UnmarshalJSON(data []byte) error {
 	}
 
 	v.SequenceOptions.ProveAgainstAnchor = u.ProveAgainstAnchor
+	v.SequenceOptions.Relayed = u.Relayed
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
