@@ -2736,6 +2736,14 @@ so it is where "lost in consensus" and "lost in execution" separate.
 `exec_validate.go`, `Executor.Validate`: begins a read-only batch, normalizes
 the envelope, rejects unsigned transactions, and calls each message's validator
 through a bundle whose block is a shell. The batch is discarded unconditionally.
+A refused message still gets a status, and the status carries the message's
+ID, so **a message's ID must not depend on a field a peer can leave out**: a
+`BlockAnchor` without a signature is named under `acc://unknown`, where it
+used to be dereferenced and take the node down (#4572). Validation is reached
+from the worker and the API, with no recover between. The name is for the
+refusal only: an anchor without a signature is refused whatever its proof
+says (`BlockAnchor.check`, "Anchor signatures are not that path"), so nothing
+is ever executed or recorded under it.
 
 ### Execution
 
@@ -3401,7 +3409,12 @@ and never reaches `signatureExecutors`. It is authorized in one of two ways:
 
 The proof is checked the same way a synthetic's is — receipt list only, never
 both forms, bounded by `MaxReceiptListElements`, and `Validate`d — and the same
-bound applies. An anchor with neither a signature nor a proof is `BadRequest`.
+bound applies. **The signature is required either way** and its signer must be
+an active validator of the source: it names the anchor (`BlockAnchor.ID`) and
+the anchor pool records the copy under its signer. Under a proof the signature
+is not verified — a rotated key or a historical quorum must not reject a
+proven anchor — but an anchor without one is `BadRequest`, whatever its proof,
+before the proof is looked at (#4572).
 
 The anchor itself must be a sequenced anchor transaction whose destination's
 root identity matches the transaction's principal, and a remote placeholder is
