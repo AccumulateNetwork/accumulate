@@ -350,10 +350,13 @@ broadcast:
 
 A peer answers after a random delay of up to 200 ms with at most 100
 certificates, less those a response to the same request has already
-delivered. A response counts for a certificate only once that certificate
-has verified against the committee, so a response carrying junk suppresses
-nothing, one carrying part of the answer suppresses only that part, and a
-complete honest one suppresses the whole request (#4597). Neither requests
+delivered. A response counts for a certificate only once it verified, or is
+an identical copy of one the peer holds, so a response carrying junk
+suppresses nothing, one carrying part of the answer suppresses only that
+part, and a complete honest one suppresses the whole request (#4597). A
+peer remembers at most 100 delivered certificates per request, and the
+requests in two generations of 4,096, forgetting the older generation
+whole, so neither can grow without bound. Neither requests
 nor responses are signed, and any peer can publish on the topic (#4596):
 what one message can do to the catch-up path must therefore be nothing
 beyond delivering certificates.

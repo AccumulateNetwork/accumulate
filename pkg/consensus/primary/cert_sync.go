@@ -7,10 +7,12 @@
 package primary
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"log/slog"
 	"math/rand/v2"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -129,9 +131,13 @@ type CertSyncer struct {
 	// answering what another peer's response has already delivered. Per
 	// request, the digests of the certificates a response carried that
 	// verified against the committee (#4597): a response that carried junk,
-	// or part of the answer, suppresses nothing it did not deliver.
-	answered   map[requestKey]map[types.CertificateDigest]struct{}
-	answeredMu sync.Mutex
+	// or part of the answer, suppresses nothing it did not deliver. An
+	// entry holds at most what one response carries, and the requests are
+	// kept in two generations, the current and the previous, so forgetting
+	// is a generation at a time and never everything at once.
+	answered     map[requestKey]map[types.CertificateDigest]struct{}
+	answeredPrev map[requestKey]map[types.CertificateDigest]struct{}
+	answeredMu   sync.Mutex
 
 	// Callback for received certificates; returns what inserting it did
 	onCertReceived func(*types.Certificate) CertOutcome
@@ -192,6 +198,63 @@ type requestKey struct {
 
 func keyOf(requester []byte, id uint64) requestKey {
 	return requestKey{string(requester), id}
+}
+
+// maxAnsweredRequests is how many requests one generation of suppression
+// remembers; past it the previous generation is forgotten.
+const maxAnsweredRequests = 4096
+
+// noteDelivered records that a response to the request named by key
+// delivered these certificates, at most MaxSyncCertificates per request:
+// one requester and ID cannot be filled with the whole DAG.
+func (s *CertSyncer) noteDelivered(key requestKey, digests []types.CertificateDigest) {
+	if len(digests) == 0 {
+		return
+	}
+	s.answeredMu.Lock()
+	defer s.answeredMu.Unlock()
+	have := s.answered[key]
+	if have == nil {
+		if len(s.answered) > maxAnsweredRequests {
+			s.answeredPrev, s.answered = s.answered, map[requestKey]map[types.CertificateDigest]struct{}{}
+		}
+		// A request still being answered moves to the current generation.
+		if have = s.answeredPrev[key]; have == nil {
+			have = map[types.CertificateDigest]struct{}{}
+		} else {
+			delete(s.answeredPrev, key)
+		}
+		s.answered[key] = have
+	}
+	for _, d := range digests {
+		if len(have) >= gossip.MaxSyncCertificates {
+			break
+		}
+		have[d] = struct{}{}
+	}
+}
+
+// withoutDelivered is certs less those a response to the request named by
+// key has delivered.
+func (s *CertSyncer) withoutDelivered(key requestKey, certs []*types.Certificate) []*types.Certificate {
+	s.answeredMu.Lock()
+	defer s.answeredMu.Unlock()
+	current, previous := s.answered[key], s.answeredPrev[key]
+	if len(current) == 0 && len(previous) == 0 {
+		return certs
+	}
+	kept := make([]*types.Certificate, 0, len(certs))
+	for _, cert := range certs {
+		d := cert.Digest()
+		if _, done := current[d]; done {
+			continue
+		}
+		if _, done := previous[d]; done {
+			continue
+		}
+		kept = append(kept, cert)
+	}
+	return kept
 }
 
 // SetCertReceivedCallback sets the callback to invoke when a certificate is
@@ -494,34 +557,44 @@ func (s *CertSyncer) handleSyncRequest(req *gossip.CertSyncRequest) {
 // response still suppresses the whole request, which is what the
 // suppression was added for.
 func (s *CertSyncer) answer(req *gossip.CertSyncRequest) *gossip.CertSyncResponse {
+	key := keyOf(req.Requester, req.RequestID)
 	var certs []*types.Certificate
 	var missing []types.CertificateDigest
+	held := 0
 
-	for _, digest := range req.Digests {
-		cert := s.dag.GetByDigest(digest)
-		if cert != nil {
-			certs = append(certs, cert)
-			// Limit response size
+	// add keeps what no response has delivered, up to what one response
+	// carries. What was delivered is taken out before the cap, or the
+	// certificates past the cap would never be served (#4597).
+	add := func(found []*types.Certificate) {
+		held += len(found)
+		for _, cert := range s.withoutDelivered(key, found) {
 			if len(certs) >= gossip.MaxSyncCertificates {
-				break
+				return
 			}
+			certs = append(certs, cert)
+		}
+	}
+
+	var found []*types.Certificate
+	for _, digest := range req.Digests {
+		if cert := s.dag.GetByDigest(digest); cert != nil {
+			found = append(found, cert)
 		} else {
 			missing = append(missing, digest)
 		}
 	}
+	add(found)
 
 	// Serve whole rounds for round catch-up (#4057)
 	for _, round := range req.Rounds {
-		for _, cert := range s.dag.GetRound(round) {
-			if len(certs) >= gossip.MaxSyncCertificates {
-				break
-			}
-			certs = append(certs, cert)
+		if len(certs) >= gossip.MaxSyncCertificates {
+			break
 		}
+		add(s.dag.GetRound(round))
 	}
 
 	// Only respond if we have certificates to send
-	if len(certs) == 0 {
+	if held == 0 {
 		s.served("empty")
 		if len(req.Rounds) > 0 {
 			// A round request that matches nothing means the requester is
@@ -534,19 +607,6 @@ func (s *CertSyncer) answer(req *gossip.CertSyncRequest) *gossip.CertSyncRespons
 				"requestID", req.RequestID)
 		}
 		return nil
-	}
-
-	s.answeredMu.Lock()
-	delivered := s.answered[keyOf(req.Requester, req.RequestID)]
-	s.answeredMu.Unlock()
-	if len(delivered) > 0 {
-		kept := certs[:0]
-		for _, cert := range certs {
-			if _, done := delivered[cert.Digest()]; !done {
-				kept = append(kept, cert)
-			}
-		}
-		certs = kept
 	}
 	if len(certs) == 0 {
 		s.served("suppressed")
@@ -619,6 +679,34 @@ func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse
 	}
 }
 
+// verifiedDelivery reports whether a response's certificate, received with
+// this outcome, counts as delivered: inserted, or a duplicate identical to
+// the certificate this node holds. receiveCertificate reports a duplicate
+// on the digest alone, before verifying, and the digest covers only the
+// header, so a genuine header with no signatures is a duplicate too; a
+// buffered certificate may or may not have verified. Counting either let one
+// forged response silence every honest answer (#4597). This goes away when
+// receiveCertificate returns CertDuplicate only for an identical copy
+// (!1266).
+func (s *CertSyncer) verifiedDelivery(cert *types.Certificate, outcome CertOutcome) bool {
+	switch outcome {
+	case CertInserted:
+		return true
+	case CertDuplicate:
+		have := s.dag.GetByDigest(cert.Digest())
+		if have == nil || len(have.Signatures) != len(cert.Signatures) {
+			return false
+		}
+		for i := range have.Signatures {
+			if !bytes.Equal(have.Signatures[i], cert.Signatures[i]) {
+				return false
+			}
+		}
+		return slices.Equal(have.SignedAuthorities, cert.SignedAuthorities)
+	}
+	return false
+}
+
 // handleSyncResponse processes a single sync response.
 func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 	if resp == nil || len(resp.Certificates) == 0 {
@@ -630,9 +718,9 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 	s.window.response()
 
 	// What this response delivered: the certificates that verified against
-	// the committee, whether inserted, already held, or already in the DAG.
-	// Only these suppress this node's own answer to the request (#4597).
-	var delivered map[types.CertificateDigest]struct{}
+	// the committee. Only these suppress this node's own answer to the
+	// request (#4597).
+	var delivered []types.CertificateDigest
 	for _, cert := range resp.Certificates {
 		if cert == nil {
 			continue
@@ -650,35 +738,15 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 			outcome := s.onCertReceived(cert)
 			metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
 			s.window.certificate(outcome)
-			switch outcome {
-			case CertInserted, CertDuplicate, CertBuffered:
-				if delivered == nil {
-					delivered = map[types.CertificateDigest]struct{}{}
-				}
-				delivered[digest] = struct{}{}
+			if s.verifiedDelivery(cert, outcome) {
+				delivered = append(delivered, digest)
 			}
 		}
 
 		s.certificatesRecv.Add(1)
 	}
 
-	if len(delivered) > 0 {
-		s.answeredMu.Lock()
-		if len(s.answered) > 4096 {
-			s.answered = make(map[requestKey]map[types.CertificateDigest]struct{})
-		}
-		key := keyOf(resp.Requester, resp.RequestID)
-		have := s.answered[key]
-		if have == nil {
-			have = delivered
-		} else {
-			for d := range delivered {
-				have[d] = struct{}{}
-			}
-		}
-		s.answered[key] = have
-		s.answeredMu.Unlock()
-	}
+	s.noteDelivered(keyOf(resp.Requester, resp.RequestID), delivered)
 
 	slog.Debug("Received sync response",
 		"certificates", len(resp.Certificates),

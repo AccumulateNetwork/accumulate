@@ -7,14 +7,11 @@
 package primary
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 // TestSuppressionNamesTheRequester is #4470: a peer that saw node A's
@@ -22,29 +19,17 @@ import (
 // numbers its own requests, so the two IDs collide; suppression keyed on the
 // ID alone skipped B's request.
 func TestSuppressionNamesTheRequester(t *testing.T) {
-	config := CertSyncerConfig{PublicKey: make([]byte, 32), Partition: "t4470"}
-	config.applyDefaults()
-	d := dag.NewDAG(10)
-	peer := NewCertSyncer(config, d, nil, NewPendingCertificates(100))
-	// The answer this peer saw verified (#4597): what did not verify
-	// suppresses nothing.
-	peer.SetCertReceivedCallback(func(*types.Certificate) CertOutcome { return CertDuplicate })
+	// This peer holds the certificate both nodes ask for; its responses
+	// go through the real receive path (#4597).
+	peer, certs := newSuppressionPeer(t, 1)
+	want := digestsOf(certs)
 
 	nodeA, nodeB := []byte("node A's key"), []byte("node B's key")
 	const k = 7
 
-	// This peer holds the certificate both nodes ask for.
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-	h := types.NewHeader(pub, 0, 0, nil, nil)
-	require.NoError(t, h.Sign(priv))
-	cert := types.NewCertificate(h, [][]byte{h.Signature}, []uint16{0})
-	require.NoError(t, d.InsertGenesis(cert))
-	want := []types.CertificateDigest{cert.Digest()}
-
 	// Another peer answered node A's request k, and this peer saw it.
 	peer.handleSyncResponse(&gossip.CertSyncResponse{
-		Certificates: []*types.Certificate{cert},
+		Certificates: certs,
 		RequestID:    k,
 		Requester:    nodeA,
 	})
