@@ -323,7 +323,10 @@ they are, these are the facts the executor and healing parts depend on:
   and a record that cannot be written is not voted; the author's rebroadcast
   tries it again. The record is kept for ten rounds in memory, which covers
   every round a header can still be voted in, and a rescue window below the
-  checkpoint's commit on disk.
+  checkpoint's commit on disk. Once a round's records are pruned from
+  memory, no header below the prune floor is voted: a rejoin that lowers the
+  round ("Sync", executor spec) cannot reopen a round the validator no longer
+  has the record of.
 
 ### DAG retention
 
@@ -612,9 +615,11 @@ same store before each vote is signed (`DAGStore.PutVoted`, one line of the
 `voted` file) and read back on every start, checkpoint or not
 (`Primary.RestoreVoted`): a restarted validator otherwise had no record of
 its votes and could sign a second header from an author for a round it had
-voted in (#4590). Each checkpoint drops the records below the lower of its
-tail floor and the previous checkpoint's, since either checkpoint may be the
-one resumed and the restored round is never below its commit. A checkpoint
+voted in (#4590). Each checkpoint, once saved, drops the records below the
+lower of its tail floor and the previous checkpoint saved, since either
+checkpoint may be the one resumed and the restored round is never below its
+commit; a checkpoint whose save failed drops nothing, as the one on disk
+still needs its records. A checkpoint
 written before #4448 has no tail and no authored header, and restores the
 position alone (DIFFERENCES, C9).
 

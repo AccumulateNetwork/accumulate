@@ -507,11 +507,22 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 }
 
 // votedOther reports whether this primary voted for a header other than
-// digest from the header's author for its round (#4590).
+// digest from the header's author for its round, or can no longer tell
+// because the round's records were pruned (#4590).
 func (p *Primary) votedOther(header *types.Header, digest types.HeaderDigest) bool {
 	p.pendingMu.Lock()
 	voted, ok := p.votedRounds[authorRound{string(header.Author), header.Round}]
+	floor := p.votedFloor
 	p.pendingMu.Unlock()
+	if header.Round < floor {
+		slog.Warn("Header for a round whose vote records were pruned; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"floor", floor,
+			"header", digest.String())
+		return true
+	}
 	if !ok || voted == digest {
 		return false
 	}

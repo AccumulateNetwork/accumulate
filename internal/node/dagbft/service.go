@@ -494,6 +494,7 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 		s.logger.Error("Saving consensus checkpoint", "error", err, "block", blockIndex)
 		return
 	}
+	s.node.CheckpointSaved(cp)
 	s.lastSaved = cp
 }
 

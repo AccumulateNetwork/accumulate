@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -38,6 +39,15 @@ type DAGStore struct {
 	known map[string]uint64 // file names present in dir, by write sequence
 	seq   uint64
 	voted []VoteRecord
+	// votedBy indexes voted by author and round: PutVoted otherwise scanned
+	// every record on every vote.
+	votedBy map[authorRoundKey]types.HeaderDigest
+}
+
+// authorRoundKey keys votedBy.
+type authorRoundKey struct {
+	author string
+	round  types.Round
 }
 
 const (
@@ -206,10 +216,8 @@ func (s *DAGStore) PutVoted(author ed25519.PublicKey, round types.Round, digest 
 	r := VoteRecord{Author: author, Round: round, Header: digest}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, have := range s.voted {
-		if have.Round == r.Round && have.Author.Equal(r.Author) && have.Header == r.Header {
-			return nil
-		}
+	if have, ok := s.votedBy[r.key()]; ok && have == r.Header {
+		return nil
 	}
 	f, err := os.OpenFile(filepath.Join(s.dir, votedFile), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -222,8 +230,21 @@ func (s *DAGStore) PutVoted(author ed25519.PublicKey, round types.Round, digest 
 	if err != nil {
 		return err
 	}
-	s.voted = append(s.voted, r)
+	s.addVoted(r)
 	return nil
+}
+
+// addVoted appends r to the records and indexes it.
+func (s *DAGStore) addVoted(r VoteRecord) {
+	if s.votedBy == nil {
+		s.votedBy = make(map[authorRoundKey]types.HeaderDigest)
+	}
+	s.voted = append(s.voted, r)
+	s.votedBy[r.key()] = r.Header
+}
+
+func (r VoteRecord) key() authorRoundKey {
+	return authorRoundKey{string(r.Author), r.Round}
 }
 
 // Voted returns the headers this node voted for, oldest first.
@@ -233,11 +254,13 @@ func (s *DAGStore) Voted() []VoteRecord {
 	return append([]VoteRecord(nil), s.voted...)
 }
 
-// RetainVoted drops the vote records of rounds below floor.
+// RetainVoted drops the vote records of rounds below floor. If the file
+// cannot be rewritten the records are all kept, in memory and on disk, and
+// the next checkpoint tries again.
 func (s *DAGStore) RetainVoted(floor types.Round) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	kept := s.voted[:0]
+	var kept []VoteRecord
 	var data []byte
 	for _, r := range s.voted {
 		if r.Round < floor {
@@ -250,9 +273,14 @@ func (s *DAGStore) RetainVoted(floor types.Round) {
 		return
 	}
 	if err := s.writeFile(votedFile, data); err != nil {
+		slog.Error("Cannot rewrite the vote records; keeping them all",
+			"dir", s.dir, "floor", floor, "error", err)
 		return
 	}
-	s.voted = kept
+	s.voted, s.votedBy = nil, nil
+	for _, r := range kept {
+		s.addVoted(r)
+	}
 }
 
 // line is the record as the voted file holds it: round, author and header
@@ -292,7 +320,7 @@ func (s *DAGStore) readVoted() error {
 		}
 		r := VoteRecord{Author: author, Round: types.Round(round)}
 		copy(r.Header[:], digest)
-		s.voted = append(s.voted, r)
+		s.addVoted(r)
 		kept = append(kept, r.line()...)
 	}
 	if len(data) > 0 && data[len(data)-1] != '\n' {

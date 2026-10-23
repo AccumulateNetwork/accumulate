@@ -213,6 +213,11 @@ type Primary struct {
 	// nothing.
 	votedRounds map[authorRound]types.HeaderDigest
 	onVoted     func(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) error
+	// votedFloor is the round below which votedRounds has been pruned: no
+	// header below it is voted, as the record of what was voted there is
+	// gone. A rejoin that lowers the round (Node.Rejoin) otherwise reopened
+	// pruned rounds with no record in memory. It only rises.
+	votedFloor types.Round
 
 	// deferredPins records, per header whose vote is deferred, the batches
 	// pinned in the workers on its behalf, and the round it was for so the
@@ -756,6 +761,9 @@ func (p *Primary) cleanupOldHeadersLocked() (expired []types.HeaderDigest) {
 		if key.round < certCutoff {
 			delete(p.votedRounds, key)
 		}
+	}
+	if certCutoff > p.votedFloor {
+		p.votedFloor = certCutoff
 	}
 
 	// A header old enough to be dropped is never going to be voted on, so

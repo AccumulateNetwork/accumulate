@@ -181,9 +181,9 @@ type Node struct {
 	handed   []handedGroup // groups handed to the executor not yet checkpointed
 	prevTail map[string]bool
 	restored []*types.Certificate // replayed through Bullshark at start
-	// prevFloor is the previous checkpoint's tail floor: the vote records
-	// (#4590) are kept from there, as the previous checkpoint may be the one
-	// resumed.
+	// prevFloor is the tail floor of the last checkpoint saved: the vote
+	// records (#4590) are kept from there, as that checkpoint may be the one
+	// resumed. A checkpoint computed and not saved does not move it.
 	prevFloor types.Round
 
 	// Committed certificates channel

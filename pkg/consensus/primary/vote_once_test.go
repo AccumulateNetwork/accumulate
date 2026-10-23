@@ -124,3 +124,39 @@ func TestRestoredVoteRecordRefusesTheOtherHeader(t *testing.T) {
 	p.OnHeaderReceived(recorded)
 	require.True(t, votedFor(p, recorded), "the recorded header is voted for again")
 }
+
+// TestPrunedRoundIsNeverVotedAgain: a round whose vote records were pruned
+// from memory is never voted in again, even when a rejoin lowers the round
+// below it (#4590). Before the fix the pruned round came back with no record
+// of what had been voted there, and a second header from an author for it
+// was voted.
+func TestPrunedRoundIsNeverVotedAgain(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, newTestDAG(), nil)
+
+	p.SetRound(20)
+	first := signedHeader(t, validators[1], 19, 1)
+	second := signedHeader(t, validators[1], 19, 2)
+	p.OnHeaderReceived(first)
+	require.True(t, votedFor(p, first))
+
+	// The round moves on until the record of round 19 is pruned.
+	p.SetRound(30)
+	p.cleanupOldHeaders()
+	p.pendingMu.Lock()
+	_, kept := p.votedRounds[authorRound{string(validators[1].pub), 19}]
+	p.pendingMu.Unlock()
+	require.False(t, kept, "round 19 should have been pruned from memory")
+
+	// A rejoin lowers the round, and round 19 is votable again.
+	p.SetRound(19)
+	p.OnHeaderReceived(second)
+	require.False(t, votedFor(p, second), "a header for a round whose record was pruned must not be voted")
+	p.OnHeaderReceived(first)
+	_, _, _, sent := p.Metrics()
+	require.Equal(t, uint64(1), sent, "the header voted before the prune is not voted a second time")
+}
