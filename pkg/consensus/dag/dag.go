@@ -29,6 +29,14 @@ import (
 // duplicate-Debug and never fired (#4159 review).
 var ErrEquivocation = errors.New("equivocation: a different certificate already exists for this author and round")
 
+// ErrParentQuorum reports a header or certificate whose distinct parents of
+// the round before it do not carry a quorum (#4591).
+var ErrParentQuorum = errors.New("parents of the previous round do not carry a quorum")
+
+// errParentNotFound reports a parent the DAG does not hold. The caller holds
+// the certificate and asks for the parent; the text is what it matches.
+var errParentNotFound = errors.New("parent certificate not found in DAG")
+
 // authorKey is a fixed-size array for author public key map keys.
 // Using [32]byte instead of string saves 32 bytes per entry.
 type authorKey [32]byte
@@ -71,6 +79,10 @@ type DAG struct {
 	uncommittedDropped types.Round
 	// equivocations counts conflicting certificates refused (Equivocations).
 	equivocations atomic.Uint64
+	// parentQuorum reports whether authors carry a stake quorum of round's
+	// committee (SetParentQuorum). Nil counts any one parent of the round
+	// before as enough.
+	parentQuorum func(round types.Round, authors []ed25519.PublicKey) bool
 }
 
 // NewDAG creates a new DAG with the specified garbage collection depth.
@@ -93,6 +105,62 @@ func NewDAG(gcDepth types.Round) *DAG {
 // author and round already exists.
 func (d *DAG) Insert(cert *types.Certificate) error {
 	return d.insert(cert, true)
+}
+
+// SetParentQuorum installs the stake rule a header's parents must meet
+// (#4591): quorum reports whether authors carry a stake quorum of round's
+// committee. The primary installs the committee it votes with. Without it
+// one parent of the round before is enough, which only a test relies on.
+func (d *DAG) SetParentQuorum(quorum func(round types.Round, authors []ed25519.PublicKey) bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.parentQuorum = quorum
+}
+
+// CheckParents reports whether parents are what a header at round may name
+// (Narwhal 4.1, #4591): each is in the DAG and below round, and the distinct
+// ones of the round before carry a quorum. Older parents are weak links,
+// allowed and not counted. Round 0 names none.
+func (d *DAG) CheckParents(round types.Round, parents []types.CertificateDigest) error {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.checkParentsLocked(round, parents)
+}
+
+func (d *DAG) checkParentsLocked(round types.Round, parents []types.CertificateDigest) error {
+	if round == 0 {
+		if len(parents) > 0 {
+			return errors.New("a genesis certificate names parents")
+		}
+		return nil
+	}
+	seen := make(map[types.CertificateDigest]bool, len(parents))
+	var authors []ed25519.PublicKey
+	for _, digest := range parents {
+		if seen[digest] {
+			// Refused, not counted once: Certificate.Verify refuses the
+			// repeat, so a vote for the header would be for a certificate
+			// that can never exist. Not ErrParentQuorum and not "parent
+			// certificate not found": the caller drops it rather than
+			// holding it.
+			return fmt.Errorf("parent %s named twice", digest)
+		}
+		seen[digest] = true
+		parent, found := d.digestIndex[digest]
+		if !found {
+			return errParentNotFound
+		}
+		switch {
+		case parent.Round() >= round:
+			return fmt.Errorf("parent at round %d is not below round %d", parent.Round(), round)
+		case parent.Round() == round-1:
+			authors = append(authors, parent.Author())
+		}
+	}
+	if len(authors) == 0 || (d.parentQuorum != nil && !d.parentQuorum(round-1, authors)) {
+		return fmt.Errorf("%w: %d distinct parents at round %d", ErrParentQuorum, len(authors), round-1)
+	}
+	return nil
 }
 
 // Restore inserts certificates a restarted node persisted with its
@@ -142,21 +210,19 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 		}
 	}
 
-	// Validate parents exist (skip for round 0 which has no parents).
-	// Once there is a commit floor, parents at or below it may be
-	// legitimately absent: garbage collection prunes them, and a node
-	// rejoining after a fast sync (#4058) starts with an EMPTY DAG whose
-	// history is embodied in its restored state — requiring parents there
-	// recurses into pruned history and wedges the rejoin. The certificate
-	// itself is quorum-verified before insertion, so accepting it without
-	// its pruned parents does not weaken trust.
+	// The parents must be here, and the distinct ones of the round before
+	// must carry a quorum (checkParentsLocked, #4591). Once there is a
+	// commit floor, parents at or below it may be legitimately absent:
+	// garbage collection prunes them, and a node rejoining after a fast
+	// sync (#4058) starts with an EMPTY DAG whose history is embodied in
+	// its restored state — requiring parents there recurses into pruned
+	// history and wedges the rejoin. The certificate itself is
+	// quorum-verified before insertion, so accepting it without its pruned
+	// parents does not weaken trust.
 	pruned := d.lastCommitRound > 0 && round <= d.lastCommitRound+1
-	if checkParents && round > 0 && !pruned && len(cert.Parents()) > 0 {
-		for _, parentDigest := range cert.Parents() {
-			// Use digest index for O(1) lookup
-			if _, found := d.digestIndex[parentDigest]; !found {
-				return errors.New("parent certificate not found in DAG")
-			}
+	if checkParents && !pruned {
+		if err := d.checkParentsLocked(round, cert.Parents()); err != nil {
+			return err
 		}
 	}
 

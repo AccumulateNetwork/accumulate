@@ -409,6 +409,19 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return // missing parents — asked for them; vote when they land (#4611)
 	}
 
+	// The parents are here. The distinct ones of the round before must
+	// carry a stake quorum (Narwhal 4.1, #4591); presence alone let a header
+	// with no parents through, and a certificate without a path to an
+	// earlier leader splits the commit sequence between nodes.
+	if err := p.dag.CheckParents(header.Round, header.Parents); err != nil {
+		slog.Info("Header's parents do not certify it; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"error", err)
+		return
+	}
+
 	// Data availability: only vote once we hold every batch this header names
 	// (#4159). A certificate must be a proof that 2f+1 validators HAVE the
 	// data — that is the premise the whole commit path relies on ("the

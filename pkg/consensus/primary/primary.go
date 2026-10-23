@@ -295,6 +295,21 @@ type Primary struct {
 	votesSent           atomic.Uint64
 }
 
+// parentQuorum reports whether authors carry a stake quorum of the committee
+// (#4591): the rule a header's parents of the round before must meet, for
+// the headers this primary votes for, the certificates its DAG takes in and
+// the headers it builds. round is the parents' round; the committee is the
+// current one until #4593 routes it by round.
+func (p *Primary) parentQuorum(round types.Round, authors []ed25519.PublicKey) bool {
+	p.committeeMu.RLock()
+	defer p.committeeMu.RUnlock()
+	var stake uint64
+	for _, a := range authors {
+		stake += p.committee.StakeOf(a)
+	}
+	return p.committee.HasQuorum(stake)
+}
+
 // DefaultPendingCertsGCDepth is the gc_depth for sizing the pending certificates buffer.
 const DefaultPendingCertsGCDepth = 10
 
@@ -366,6 +381,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 	for _, w := range workers {
 		w.SetOnStored(p.BatchStored)
 	}
+	d.SetParentQuorum(p.parentQuorum)
 
 	// Initialize CertSyncer if gossip is available
 	if g != nil {

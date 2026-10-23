@@ -170,6 +170,20 @@ func (c *Certificate) Verify(committee *Committee) error {
 		return errors.New("header author is not in committee")
 	}
 
+	// A header above round 0 names parents, none twice (#4591). Whether
+	// they are the round before's and carry a quorum is checked against
+	// the DAG when the certificate is inserted.
+	if c.Header.Round > 0 && len(c.Header.Parents) == 0 {
+		return errors.New("certificate above round 0 names no parents")
+	}
+	parents := make(map[CertificateDigest]bool, len(c.Header.Parents))
+	for _, p := range c.Header.Parents {
+		if parents[p] {
+			return errors.New("certificate names a parent twice")
+		}
+		parents[p] = true
+	}
+
 	// Check we have matching signatures and authorities
 	if len(c.Signatures) != len(c.SignedAuthorities) {
 		return errors.New("signatures and signed authorities count mismatch")

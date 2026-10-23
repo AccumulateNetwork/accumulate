@@ -309,6 +309,31 @@ they are, these are the facts the executor and healing parts depend on:
   history. A certificate no header ever references is never executed and its
   batches are lost; the weak-link window is what makes that impossible in
   practice, and the count of orphaned certificates is a metric.
+- **A header's parents certify it** (#4591). A header above round 0 names
+  parents, none twice, each a certificate the node holds and below the
+  header's round, and the distinct ones of the round before carry a **stake
+  quorum** of that round's committee (Narwhal, sec. 4.1: "at least 2f+1
+  certificates of round r-1"). Weak links to older rounds are allowed and
+  not counted. The same rule is applied three times, by one check
+  (`DAG.CheckParents`, with the stake rule the primary installs): a voter
+  signs a header only when its parents pass, after they are all present
+  (invariant 11 asks for the missing ones first); a certificate enters the
+  DAG only when its parents pass (`Certificate.Verify` refuses a parentless
+  or duplicate-parent header before the DAG is consulted, and
+  `DAG.CheckParents` refuses the repeated parent too: the voter has no
+  certificate to verify, so the DAG check is what protects the vote); and the header
+  builder names the previous round's certificates only once they carry the
+  quorum, by stake rather than by a count of validators, which with unequal
+  stake can be short of two thirds. The rule is what gives every committed
+  leader a path to the one before it (Bullshark, sec. 4): a leader
+  certificate with no path to an earlier committed leader otherwise let two
+  honest nodes that received the same certificates in a different order
+  commit different sequences. The exceptions are where the parents cannot
+  be present: genesis certificates (round 0, no parents); the restored tail
+  (`DAG.Restore`, each checked when first taken in); and the certificates
+  the DAG takes in without their parents at all — at a seed, and today at
+  or below the last commit plus one ("Certificate catch-up"; #4595 narrows
+  this to the seed and the weak-link window above the collection floor).
 
 ### DAG retention
 
@@ -372,9 +397,13 @@ their certificates are read. A partial answer leaves the request open for
 the next one. The `Certificate catch-up` line counts the dropped copies as
 `repeatedAnswers`.
 
-What arrives is verified against the committee and inserted. A
-certificate whose parents are missing is held (up to `2 × 10 × committee`
-certificates) until they arrive, and its parents are asked for.
+What arrives is verified against the committee and inserted, and the
+insert applies the parent rule ("The DAG facts", above): the certificate's
+distinct parents of the round before must be in the DAG and carry a stake
+quorum, or it is refused (#4591). A certificate whose parents are missing
+is held (up to `2 × 10 × committee` certificates) until they arrive, and
+its parents are asked for; one released whose parents do not certify it is
+dropped.
 
 **A held certificate is released whenever its parents are in the DAG,
 whoever inserted them** (#4515). A copy of a held certificate is reported
