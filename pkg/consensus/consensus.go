@@ -1175,16 +1175,18 @@ func (n *Node) UpdateCommittee(committee *types.Committee) {
 		"oldValidators", oldCommittee.Len(),
 		"newValidators", committee.Len())
 
+	// Gossip first: the router refuses the primary's own headers for an
+	// epoch it holds no committee for, so it learns the committee before
+	// the primary makes a header for it.
+	if n.gossip != nil {
+		n.gossip.SetCommittee(committee)
+	}
+
 	// Update Primary's committee
 	n.primary.UpdateCommittee(committee)
 
 	// Update Bullshark's committee
 	n.bullshark.UpdateCommittee(committee)
-
-	// And the committee gossip judges consensus messages by
-	if n.gossip != nil {
-		n.gossip.SetCommittee(committee)
-	}
 }
 
 // perWorkerBytes splits a per-partition byte budget across workers.

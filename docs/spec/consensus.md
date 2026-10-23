@@ -353,8 +353,14 @@ committee change cannot tell a future epoch from a false one. The node holds the
 current committee and the one before it, so around a switch messages of the
 previous epoch are still judged by their own committee; a node that has been
 given no committee ignores every message that needs one. When the committee
-changes, `Node.UpdateCommittee` passes it to gossip with the primary and
-Bullshark. What is refused is counted in
+changes, `Node.UpdateCommittee` passes it to gossip before the primary and
+Bullshark: the router runs the validator on the node's own messages too, and
+a header the node's own router refuses is never sent, so gossip holds the
+new committee before the primary makes a header for it
+(`TestCommitteeSwitchReachesGossip`: after the switch, a new member's header
+is relayed and delivered, a removed member's is rejected, and the switching
+node's own first header of the new epoch reaches its peer). What is refused
+is counted in
 `accumulate_dagbft_gossip_refused_total{topic,outcome}` and logged at Debug,
 since anyone can send messages that are refused (invariant 5); ignored
 messages rising on one node while its peers accept them is that node behind
