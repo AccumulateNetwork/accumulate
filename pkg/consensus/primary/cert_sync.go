@@ -7,6 +7,7 @@
 package primary
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"log/slog"
@@ -590,18 +591,18 @@ func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse
 }
 
 // handleSyncResponse processes a single sync response. It reports whether
-// every certificate in it was good: verified and inserted, held for its
-// parents, or already held. A response is unsigned and anyone can send
-// one, so it is an answer only once its certificates check (#4597): a
-// response with a certificate that is invalid, or that could not be
-// inserted, is not recorded as an answer, does not count, and leaves
-// the digests it carried in flight to be retried. A certificate already
-// in the DAG is recognised before it is verified (receiveCertificate),
-// and counts: the node has it.
+// every certificate in it checked. A response is unsigned and anyone can
+// send one, so it is an answer only once its certificates check (#4597):
+// a response with a certificate that does not is not recorded as an
+// answer and leaves the digests it carried in flight to be retried.
 func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 	if resp == nil || len(resp.Certificates) == 0 {
 		return false
 	}
+
+	s.responsesRecv.Add(1)
+	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
+	s.window.response()
 
 	good := true
 	for _, cert := range resp.Certificates {
@@ -609,15 +610,9 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 			continue
 		}
 
-		// Invoke callback if set
-		if s.onCertReceived != nil {
-			outcome := s.onCertReceived(cert)
-			metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
-			s.window.certificate(outcome)
-			if outcome == CertInvalid || outcome == CertFailed {
-				good = false
-				continue
-			}
+		if !s.checks(cert) {
+			good = false
+			continue
 		}
 
 		// Remove from in-flight
@@ -643,13 +638,51 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 	s.answered[keyOf(resp.Requester, resp.RequestID)] = struct{}{}
 	s.answeredMu.Unlock()
 
-	s.responsesRecv.Add(1)
-	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
-	s.window.response()
-
 	slog.Debug("Received sync response",
 		"certificates", len(resp.Certificates),
 		"requestID", resp.RequestID)
+	return true
+}
+
+// checks hands a received certificate to the receiver and reports whether
+// it checked: it was verified and inserted, or it is a copy, signatures
+// and signers byte for byte, of one in the DAG. Nothing else counts. The
+// receiver reports a certificate it holds, in the DAG or waiting for its
+// parents, before verifying it, and a certificate's digest covers only
+// its header, so a genuine header with junk signatures comes back as a
+// duplicate or as held (#4597). Without a receiver nothing checks.
+func (s *CertSyncer) checks(cert *types.Certificate) bool {
+	if s.onCertReceived == nil {
+		return false
+	}
+	outcome := s.onCertReceived(cert)
+	metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
+	s.window.certificate(outcome)
+	switch outcome {
+	case CertInserted:
+		return true
+	case CertDuplicate:
+		return sameSignatures(s.dag.GetByDigest(cert.Digest()), cert)
+	}
+	return false
+}
+
+// sameSignatures reports whether b carries a's signatures and signers,
+// byte for byte.
+func sameSignatures(a, b *types.Certificate) bool {
+	if a == nil || b == nil || len(a.Signatures) != len(b.Signatures) || len(a.SignedAuthorities) != len(b.SignedAuthorities) {
+		return false
+	}
+	for i := range a.Signatures {
+		if !bytes.Equal(a.Signatures[i], b.Signatures[i]) {
+			return false
+		}
+	}
+	for i := range a.SignedAuthorities {
+		if a.SignedAuthorities[i] != b.SignedAuthorities[i] {
+			return false
+		}
+	}
 	return true
 }
 

@@ -416,15 +416,21 @@ certificates, and does not answer a request it has already seen answered.
 **A response is an answer only once every certificate it carries
 checks.** Responses are unsigned and anyone can send one, and the topic
 validator checks only that each certificate's author is a member
-(invariant 12). A certificate checks when it is verified and inserted, held
-for its parents, or already in the DAG, where it is recognised before it
-is verified. A response with a certificate that does not verify, or that
-cannot be inserted, is not recorded as an answer, does not complete its
-request, and leaves the digests it carried in flight to be retried. Before
-this, one junk certificate sent under the requester's key and request ID
-was recorded as the answer by every peer, which then kept its own, and the
-requester dropped the digest from its in-flight set for good (#4597,
-`TestForgedSyncResponseIsNotAnAnswer`).
+(invariant 12). A certificate checks when it is verified and inserted, or
+when it is a copy, signatures and signers byte for byte, of one in the
+DAG. Nothing else does: a node reports a certificate it holds, in the DAG
+or waiting for its parents, before verifying it (below), and a
+certificate's digest covers only its header, so a genuine header, which is
+public, with junk signatures comes back as a duplicate or as held. A
+response with a certificate that does not check is not recorded as an
+answer, does not complete its request, and leaves the digests it carried
+in flight: they are retried after the retry timeout if they are still not
+in the DAG, and dropped from the set if they are. Before this, one junk
+certificate sent under the requester's key and request ID was recorded as
+the answer by every peer, which then kept its own, and the requester
+dropped the digest from its in-flight set for good (#4597,
+`TestForgedSyncResponseIsNotAnAnswer`, through the primary's own receive
+path).
 A request is named by its requester's key and its ID together, and a
 response carries both: every node numbers its own requests, so an ID alone
 named a request of every node at once, and a peer that had seen node A's

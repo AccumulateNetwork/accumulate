@@ -9,94 +9,93 @@ package primary
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/rand"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 // TestForgedSyncResponseIsNotAnAnswer is #4597: sync responses are unsigned
 // and anyone can send one, so a response counts as an answer only once the
-// certificates it carries verify. Before this, a response carrying one junk
+// certificates it carries check. Before this, a response carrying one junk
 // certificate under the requester's key and request ID was recorded as an
 // answer by every peer, which then suppressed its own, and the requester
 // dropped the digest from its in-flight set, never to retry it.
+//
+// The forgery is a genuine header, which is public, with junk signatures:
+// a certificate's digest covers only its header, and the primary reports a
+// certificate it holds before verifying it, so the forgery comes back as a
+// duplicate at a peer that holds the certificate and as invalid at one that
+// does not. The certificates go through the primary's receiveCertificate,
+// as in production.
 func TestForgedSyncResponseIsNotAnAnswer(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-	committee := types.NewCommittee([]types.ValidatorInfo{{PublicKey: pub, Stake: 1}}, 0)
+	v := newTestValidator(t)
+	committee := newTestCommittee([]*testValidator{v}, 0)
 
-	// The genuine certificate: the member's header, signed, with the
-	// member's vote.
-	h := types.NewHeader(pub, 0, 0, nil, nil)
-	require.NoError(t, h.Sign(priv))
-	v := types.NewVote(h.Digest(), h.Round, h.Epoch, pub)
-	require.NoError(t, v.Sign(priv))
-	genuine := types.NewCertificate(h, [][]byte{v.Signature}, []uint16{0})
+	h := types.NewHeader(v.pub, 0, 0, nil, nil)
+	require.NoError(t, h.Sign(v.priv))
+	vote := types.NewVote(h.Digest(), h.Round, h.Epoch, v.pub)
+	require.NoError(t, vote.Sign(v.priv))
+	genuine := types.NewCertificate(h, [][]byte{vote.Signature}, []uint16{0})
 	require.NoError(t, genuine.Verify(committee))
-
-	// The forgeries name the member as author and carry no signature worth
-	// the name. Their author is in the committee, so the topic validator
-	// relays them (consensus.md, "Who may send consensus messages"). One
-	// invents a header; the other copies the genuine header, which is
-	// public, so its digest is the one requested.
-	forgedHeader := types.NewHeader(pub, 5, 0, nil, nil)
-	forgedHeader.Signature = make([]byte, ed25519.SignatureSize)
-	forged := types.NewCertificate(forgedHeader, [][]byte{make([]byte, ed25519.SignatureSize)}, []uint16{0})
+	forged := types.NewCertificate(h, [][]byte{make([]byte, ed25519.SignatureSize)}, []uint16{0})
 	require.Error(t, forged.Verify(committee))
-	copied := types.NewCertificate(h, [][]byte{make([]byte, ed25519.SignatureSize)}, []uint16{0})
-	require.Error(t, copied.Verify(committee))
-	require.Equal(t, genuine.Digest(), copied.Digest())
+	require.Equal(t, genuine.Digest(), forged.Digest())
 
-	// What the primary does with a received certificate, reduced to the
-	// verification (receiveCertificate).
-	verify := func(c *types.Certificate) CertOutcome {
-		if err := c.Verify(committee); err != nil {
-			return CertInvalid
-		}
-		return CertInserted
+	// A primary and its syncer, wired as New wires them when gossip is set.
+	newSyncer := func(partition string, key ed25519.PrivateKey) (*Primary, *CertSyncer) {
+		p := New(Config{Partition: partition, KeyPair: key}, committee, nil, newTestDAG(), nil)
+		config := CertSyncerConfig{PublicKey: key.Public().(ed25519.PublicKey), Partition: partition, RetryTimeout: time.Millisecond, DeduplicationInterval: time.Millisecond}
+		config.applyDefaults()
+		s := NewCertSyncer(config, p.dag, nil, p.pendingCerts)
+		s.SetCertReceivedCallback(p.receiveCertificate)
+		return p, s
 	}
-
-	requester := []byte("the requester's key")
+	requester := newTestValidator(t)
 	const k = 11
 
 	t.Run("a peer still answers the request", func(t *testing.T) {
-		config := CertSyncerConfig{PublicKey: make([]byte, 32), Partition: "t4597a"}
-		config.applyDefaults()
-		d := dag.NewDAG(10)
-		require.NoError(t, d.InsertGenesis(genuine))
-		peer := NewCertSyncer(config, d, nil, NewPendingCertificates(100))
-		peer.SetCertReceivedCallback(verify)
+		p, peer := newSyncer("t4597a", v.priv)
+		require.NoError(t, p.dag.InsertGenesis(genuine))
 
 		// The forgery arrives first, under the requester's key and ID.
 		peer.handleSyncResponse(&gossip.CertSyncResponse{
 			Certificates: []*types.Certificate{forged},
 			RequestID:    k,
-			Requester:    requester,
+			Requester:    requester.pub,
 		})
 		peer.window.take()
 
 		// Then the genuine request, for a certificate this peer holds.
 		peer.handleSyncRequest(&gossip.CertSyncRequest{
 			Digests:   []types.CertificateDigest{genuine.Digest()},
-			Requester: requester,
+			Requester: requester.pub,
 			RequestID: k,
 		})
 		require.Equal(t, 0, peer.window.take().suppressed, "the request was suppressed by the forged response")
 		peer.answeredMu.Lock()
-		_, answered := peer.answered[keyOf(requester, k)]
+		_, answered := peer.answered[keyOf(requester.pub, k)]
 		peer.answeredMu.Unlock()
 		require.False(t, answered, "the forged response was recorded as an answer")
+
+		// A genuine copy is an answer.
+		peer.handleSyncResponse(&gossip.CertSyncResponse{
+			Certificates: []*types.Certificate{genuine},
+			RequestID:    k,
+			Requester:    requester.pub,
+		})
+		peer.handleSyncRequest(&gossip.CertSyncRequest{
+			Digests:   []types.CertificateDigest{genuine.Digest()},
+			Requester: requester.pub,
+			RequestID: k,
+		})
+		require.Equal(t, 1, peer.window.take().suppressed, "a genuine answer did not suppress the request")
 	})
 
 	t.Run("the requester keeps asking", func(t *testing.T) {
-		config := CertSyncerConfig{PublicKey: requester, Partition: "t4597b", RetryTimeout: time.Millisecond, DeduplicationInterval: time.Millisecond}
-		config.applyDefaults()
-		s := NewCertSyncer(config, dag.NewDAG(10), nil, NewPendingCertificates(100))
+		_, s := newSyncer("t4597b", requester.priv)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		s.ctx = ctx
@@ -106,18 +105,19 @@ func TestForgedSyncResponseIsNotAnAnswer(t *testing.T) {
 		s.inFlight[genuine.Digest()] = &inFlightRequest{digest: genuine.Digest(), requestID: k, sentAt: time.Now().Add(-time.Second)}
 		s.inFlightMu.Unlock()
 
-		outcomes := make(chan CertOutcome, 4)
-		s.SetCertReceivedCallback(func(c *types.Certificate) CertOutcome {
-			o := verify(c)
-			outcomes <- o
-			return o
-		})
+		handled := make(chan types.CertificateDigest, 4)
 		responses := make(chan *gossip.CertSyncResponse, 4)
-		go s.readSyncResponses(responses)
+		go func() {
+			for resp := range responses {
+				s.handleSyncResponse(resp)
+				handled <- resp.Certificates[0].Digest()
+			}
+		}()
 
-		// The copy answers request k with the digest asked for.
-		responses <- &gossip.CertSyncResponse{Certificates: []*types.Certificate{copied}, RequestID: k, Requester: requester}
-		require.Equal(t, CertInvalid, <-outcomes)
+		// The forgery answers request k with the digest asked for.
+		responses <- &gossip.CertSyncResponse{Certificates: []*types.Certificate{forged}, RequestID: k, Requester: requester.pub}
+		<-handled
+		require.False(t, s.dag.Contains(genuine.Digest()), "the forgery was inserted")
 
 		s.inFlightMu.Lock()
 		_, inFlight := s.inFlight[genuine.Digest()]
@@ -130,14 +130,20 @@ func TestForgedSyncResponseIsNotAnAnswer(t *testing.T) {
 		queued := append([]types.CertificateDigest(nil), s.batchQueue...)
 		s.batchQueueMu.Unlock()
 		require.Contains(t, queued, genuine.Digest(), "the digest was not retried")
+		close(responses)
+	})
 
-		// And the genuine answer to request k is still read.
-		responses <- &gossip.CertSyncResponse{Certificates: []*types.Certificate{genuine}, RequestID: k, Requester: requester}
-		select {
-		case o := <-outcomes:
-			require.Equal(t, CertInserted, o)
-		case <-time.After(5 * time.Second):
-			t.Fatal("the genuine answer was dropped: the forged response completed the request")
-		}
+	t.Run("the request stays open for the genuine answer", func(t *testing.T) {
+		_, s := newSyncer("t4597c", requester.priv)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		s.ctx = ctx
+
+		responses := make(chan *gossip.CertSyncResponse, 4)
+		go s.readSyncResponses(responses)
+		responses <- &gossip.CertSyncResponse{Certificates: []*types.Certificate{forged}, RequestID: k, Requester: requester.pub}
+		responses <- &gossip.CertSyncResponse{Certificates: []*types.Certificate{genuine}, RequestID: k, Requester: requester.pub}
+		require.Eventually(t, func() bool { return s.dag.Contains(genuine.Digest()) }, 5*time.Second, 10*time.Millisecond,
+			"the genuine answer was dropped: the forged response completed the request")
 	})
 }
