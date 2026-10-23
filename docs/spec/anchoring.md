@@ -116,9 +116,8 @@ time; its history fixes the record.
   2025 reorganization (`docs/incidents/2025-07-13-reorg-history-loss.md`).
   Promises of preserved proof begin at the first anchor.
 - Finality takes the anchor interval plus Bitcoin confirmations (six). The
-  interval is a cost: at $0.12–$1 a transaction, one Bitcoin block (about ten
-  minutes) is about
-  $6,300–$52,600 a year, hourly $1,050–$8,800, daily $44–$365.
+  interval is a cost: at $0.12–$1 a transaction, an anchor every Bitcoin
+  block (about ten minutes) is about $6,300–$52,600 a year, hourly $1,050–$8,800, daily $44–$365.
 - A verifier that wishes to re-derive, rather than trust the quorum for, *who*
   was entitled to approve must also hold the key pages' history at the signing
   height. The proof builder can be configured to keep those accounts too; the
