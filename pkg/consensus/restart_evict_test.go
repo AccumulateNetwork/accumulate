@@ -215,7 +215,9 @@ func restoredTailFixture(t *testing.T, lastCommit types.Round, committed int) (*
 	if err != nil {
 		t.Fatal(err)
 	}
-	n2.Restore(cp)
+	if err := n2.Restore(cp); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go func() { _ = n2.workers[0].Start(ctx) }() // blocks until ctx ends

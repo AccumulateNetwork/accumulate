@@ -21,13 +21,41 @@ func (p *Primary) SetOnAuthored(fn func(*types.Header) error) {
 	p.onAuthored = fn
 }
 
+// RestoreAuthoredRound tells a restarted primary the round of the last
+// header it authored before it stopped, and nothing else: it never authors
+// that round, or any below it, again (#4159 stall 3). A header by another
+// key is ignored. It is what a start that restores no checkpoint knows
+// (#4592): the DAG is empty, so whether the header certified cannot be
+// told, and the header deliberately does not rejoin vote collection — the
+// round is burnt, not resumed. Call before Start; RestoreAuthored, after the
+// DAG is restored, does the rest.
+func (p *Primary) RestoreAuthoredRound(h *types.Header) {
+	if h == nil || !h.Author.Equal(p.config.KeyPair.Public()) {
+		return
+	}
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	p.restoreAuthoredRoundLocked(h.Round)
+}
+
+// restoreAuthoredRoundLocked raises the authored watermark to round. The
+// caller holds pendingMu.
+func (p *Primary) restoreAuthoredRoundLocked(round types.Round) {
+	if !p.hasAuthored || round > p.lastAuthoredRound {
+		p.hasAuthored = true
+		p.lastAuthoredRound = round
+	}
+}
+
 // RestoreAuthored tells a restarted primary the last header it authored
 // before it stopped (#4448). It never authors that round, or any below it,
 // again (#4159 stall 3). If that header's certificate is not in the DAG and
 // the round is still current, the header goes back into vote collection, so
 // the ordinary rebroadcast sends the same header again; the primary's round
 // is raised to it, since the node had reached it. Call before Start, after
-// the DAG has been restored.
+// the DAG has been restored: called before, it cannot see that the header
+// certified, puts it back into vote collection, and the certified header is
+// rebroadcast and its batches proposed again (!1258 review).
 func (p *Primary) RestoreAuthored(h *types.Header) {
 	if h == nil || !h.Author.Equal(p.config.KeyPair.Public()) {
 		return
@@ -41,10 +69,7 @@ func (p *Primary) RestoreAuthored(h *types.Header) {
 
 	p.pendingMu.Lock()
 	defer p.pendingMu.Unlock()
-	if !p.hasAuthored || h.Round > p.lastAuthoredRound {
-		p.hasAuthored = true
-		p.lastAuthoredRound = h.Round
-	}
+	p.restoreAuthoredRoundLocked(h.Round)
 	digest := h.Digest()
 	if h.Round+1 < current || p.dag.Contains(types.CertificateDigest(digest)) {
 		return

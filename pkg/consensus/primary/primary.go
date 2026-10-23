@@ -169,8 +169,11 @@ type Primary struct {
 	lagging atomic.Bool
 	config  Config
 	gossip  *gossip.GossipLayer
-	dag     *dag.DAG
-	workers []*worker.Worker
+	// broadcastHeader sends a header this primary authored to the network:
+	// gossip's BroadcastHeader, or a test's. Nil without gossip.
+	broadcastHeader func(context.Context, *types.Header) error
+	dag             *dag.DAG
+	workers         []*worker.Worker
 
 	// Committee (protected by committeeMu - read-heavy, writes rare during epoch transitions)
 	committeeMu sync.RWMutex
@@ -385,6 +388,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 
 	// Initialize CertSyncer if gossip is available
 	if g != nil {
+		p.broadcastHeader = g.BroadcastHeader
 		syncerConfig := CertSyncerConfig{
 			PublicKey: config.KeyPair.Public().(ed25519.PublicKey),
 			Partition: config.Partition,
@@ -617,10 +621,25 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 		return
 	}
 
+	// The round is claimed here, before the header is persisted: the
+	// watermark is what a second attempt at the round sees while the
+	// persist runs below with no lock held. It stays claimed if the persist
+	// fails — the round is burnt, never authored again.
+	p.hasAuthored = true
+	p.lastAuthoredRound = currentRound
+	p.headersCreated.Add(1)
+	p.pendingMu.Unlock()
+
 	// Durable before anyone can see it: a crash after the broadcast must
-	// not let the restarted node author this round again (#4448).
+	// not let the restarted node author this round again (#4448), so the
+	// header is persisted and synced before it is broadcast (#4592). No
+	// primary lock is held meanwhile — the sync is two device flushes, and
+	// votes, certificates and the round go on — and the header is not yet
+	// in ourHeaders, so the rebroadcast path cannot send it before it is
+	// durable.
 	if p.onAuthored != nil {
 		if err := p.onAuthored(header); err != nil {
+			p.pendingMu.Lock()
 			p.requeueHeaderBatches(header)
 			p.pendingMu.Unlock()
 			slog.Error("Cannot persist authored header; not broadcasting it",
@@ -631,12 +650,9 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 
 	// Store for vote collection
 	digest := header.Digest()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.hasAuthored = true
-	p.lastAuthoredRound = currentRound
-
-	p.headersCreated.Add(1)
 
 	if debugEnabled() {
 		slog.Debug("Created header",
@@ -674,10 +690,10 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 			default:
 			}
 		}
-		if p.gossip == nil {
+		if p.broadcastHeader == nil {
 			return
 		}
-		if err := p.gossip.BroadcastHeader(p.ctx, header); err != nil {
+		if err := p.broadcastHeader(p.ctx, header); err != nil {
 			slog.Warn("Failed to broadcast header",
 				"error", err,
 				"digest", digest.String())
@@ -895,7 +911,7 @@ func (p *Primary) signalNewCertificate(cert *types.Certificate) {
 // rebroadcastPendingHeaders re-broadcasts headers that haven't achieved quorum.
 // This helps with mesh formation issues where initial broadcasts may be lost.
 func (p *Primary) rebroadcastPendingHeaders() {
-	if p.gossip == nil {
+	if p.broadcastHeader == nil {
 		return
 	}
 
@@ -942,7 +958,7 @@ func (p *Primary) rebroadcastPendingHeaders() {
 				default:
 				}
 			}
-			if err := p.gossip.BroadcastHeader(p.ctx, h); err != nil {
+			if err := p.broadcastHeader(p.ctx, h); err != nil {
 				slog.Debug("Failed to rebroadcast header",
 					"error", err,
 					"digest", h.Digest().String())

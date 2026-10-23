@@ -248,7 +248,11 @@ func (s *Service) Start(ctx context.Context) error {
 	// A joining node with none orders nothing until the join names a round
 	// the network committed (#4405): from round zero it would order history
 	// whose batches every peer has retired, and wait for them for ever.
-	if !s.seedFromCheckpoint() && s.Collecting() {
+	seeded, err := s.seedFromCheckpoint()
+	if err != nil {
+		return errors.UnknownError.WithFormat("resume consensus position: %w", err)
+	}
+	if !seeded && s.Collecting() {
 		s.node.HoldOrdering()
 		s.mu.Lock()
 		s.awaitingSeed = true
@@ -507,15 +511,15 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 // the checkpoint is a replaced store's and nothing is restored (#4484). A
 // node with state but no such checkpoint
 // starts at round zero and cannot catch a live network (DIFFERENCES E11).
-func (s *Service) seedFromCheckpoint() bool {
+func (s *Service) seedFromCheckpoint() (bool, error) {
 	if s.config.DataDir == "" || s.lastBlockIndex == 0 {
-		return false
+		return false, nil
 	}
 	cp := persist.LoadResume(s.config.DataDir, s.config.Partition.ID, s.lastBlockIndex)
 	if cp == nil {
 		slog.Warn("No consensus checkpoint matches the executor's last block; starting at round zero",
 			"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex)
-		return false
+		return false, nil
 	}
 	if cp.BlockIndex != s.lastBlockIndex && s.lastBlockIndex <= protocol.GenesisBlock {
 		// A store at genesis has executed no block of its own, so the blocks
@@ -528,13 +532,15 @@ func (s *Service) seedFromCheckpoint() bool {
 		// node orders nothing until its join names a round (#4405).
 		slog.Info("This node's store has executed no block of its own; its consensus checkpoint is of a store it no longer has, and is not resumed",
 			"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex, "checkpointBlock", cp.BlockIndex)
-		return false
+		return false, nil
 	}
 	if cp.BlockIndex != s.lastBlockIndex {
 		slog.Info("The executor's last blocks were empty; resuming after the checkpointed block",
 			"partition", s.config.Partition.ID, "lastBlock", s.lastBlockIndex, "resumeAfter", cp.BlockIndex)
 	}
-	s.node.Restore(cp)
+	if err := s.node.Restore(cp); err != nil {
+		return false, err
+	}
 	s.lastSaved = cp
 	// The blocks the executor discarded as empty were produced: the next
 	// block is numbered after the checkpoint's, as every peer that did not
@@ -544,7 +550,7 @@ func (s *Service) seedFromCheckpoint() bool {
 	// here are the ones after it; a join's handoff at a state below it
 	// would need groups this node will not be delivered (#4362).
 	s.lastLeaderRound = cp.LastCommitRound
-	return true
+	return true, nil
 }
 
 // initializeGenesis initializes the DAG with genesis certificates.
