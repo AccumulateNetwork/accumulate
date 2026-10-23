@@ -1,12 +1,14 @@
 # Consensus — Specification
 
-**Scope of this part, for now.** The consensus part of the specification is
-not yet written in full: rounds, headers, votes, certificates and the DAG are
-still a gap (see [SPEC.md](SPEC.md)). This document covers one thing that
-could not wait for the rest — **the memory the batch plane may hold, and what
-happens when it is full** — because three soaks in one day ended on it. It is
-written in the same two sections as the other parts and will be folded into
-the full consensus part when that is written.
+**Scope of this part.** Section 1 is the batch plane: the memory it may
+hold and what happens when it is full, written first because three soaks in
+one day ended on it. Section 2 adds, under "The protocol", the DAG-BFT rules
+themselves — rounds, headers, votes, certificates, insertion, leader
+election, commit, order, epochs, retention, persistence and who may send —
+each citing the code that implements it and the paper section it follows
+or departs from (#4600). The parts of section 2 written earlier (catch-up,
+retention, the committed log, restart) are the mechanisms those rules run
+on.
 
 ## 1. Architecture — what we are doing
 
@@ -283,10 +285,582 @@ System traffic is bounded by what the other partitions produce, not by
 users, so the bound on how far consensus outruns execution still holds for
 the work it exists to hold back.
 
+### The protocol: rounds, headers, votes, certificates, commit
+
+This section is the DAG-BFT protocol as this network runs it: Narwhal's
+mempool (arXiv 2105.11827) for availability and Bullshark's partially
+synchronous commit rule (arXiv 2201.05677) for order, with the departures
+this network makes from each and why. Every rule names the code that
+implements it at `7d9458e10` (paths under `pkg/consensus/`, line numbers of
+that commit) or the issue that will, and the paper section it follows or
+departs from. `7d9458e10` is the one pin for every line number in this
+section: the branch sits above it on dagbft-integration, and what the base
+has changed since (#4604, #4610, #4611) is named by issue where it touches a
+rule, never by line. Paper sections are numbered as the review that found
+the gaps numbers them (#4601): Narwhal §3 is the model, §4 the core design (§4.1 the
+mempool protocol, §4.3 garbage collection), §6 reconfiguration; Bullshark §4
+is the DAG construction and its safety argument, §5.2 the ordering of the
+DAG, §6 the eventually synchronous protocol, §7 garbage collection. What
+the code does not yet do is in [DIFFERENCES.md](DIFFERENCES.md), C18 to C23.
+
+**The objects.** A **header** (`types.Header`, `types/header.go:40-73`) is
+one validator's proposal for one round: its author's key, the round, the
+epoch, the author's clock, the batches it proposes (`Payload`), the
+certificates it builds on (`Parents`), and the author's signature over the
+digest of all of that. A **vote** (`types/vote.go:19-30`) is one validator's
+signature over a header's digest, round and epoch. A **certificate**
+(`types/certificate.go:46-62`) is a header with a stake quorum of votes: the
+proof that a quorum of validators hold the header and every batch it names
+(Narwhal §4.1, the certificate of availability). The **DAG** is the
+certificates a node holds, by round and author (`dag/dag.go:45-74`). A
+**committee** is the validators of a partition with their stakes, in a fixed
+order, for one **epoch** (`types/committee.go:26-48`).
+
+**The thresholds.** All thresholds are in **stake**, never in count. The
+**quorum** is at least ⌈2S/3⌉ of the committee's total stake S
+(`Committee.QuorumThreshold`, `types/committee.go:76-85`, `HasQuorum`
+:130-133); the **validity threshold** is more than a third, ⌊S/3⌋+1
+(`ValidityThreshold`, :87-93). Two quorums intersect in at least a third of
+the stake, more than the faulty share can be, so they share an honest
+validator: that is what every rule below rests on. `QuorumCount`
+(:203-216) is a count that assumes equal stakes and is not a threshold of
+the protocol; where the code still uses one, DIFFERENCES C19 says so.
+
+#### Rounds
+
+- **Round 0 is genesis.** Every validator of the genesis committee has a
+  round-0 certificate: a header with no payload, no parents and timestamp
+  zero, signed by its author and voted by every genesis validator
+  (`genesis/genesis.go:39-45`, `:103-137`). Genesis certificates enter the
+  DAG by `InsertGenesis`, which takes no parents and refuses a second
+  certificate for an author (`dag/dag.go:207-241`). A network with no
+  genesis certificates lets round 1 be authored with no parents
+  (`primary/header_builder.go:149-154`); that path is a bootstrap for tests,
+  not a rule a running network uses. The genesis epoch is 1 (`genesis.go:69`).
+- **A node is at round r until its DAG holds a stake quorum of round-r
+  certificates; then it is at r+1** (`Primary.tryAdvanceRound`,
+  `primary/certificate_handler.go:272-341`; the quorum is `DAG.HasQuorum`,
+  `dag/dag.go:286-303`, stake of the committee's members with a certificate
+  in the round). Narwhal §4.1: a validator moves to round r+1 once it has
+  2f+1 certificates of round r. The check runs when a certificate is
+  inserted and on a 50 ms tick (`primary/primary.go:32-33`, `:444-445`).
+- **Pacing.** At the frontier a node advances at most once per
+  `MinRoundInterval`, 100 ms (`primary/primary.go:41-43`,
+  `certificate_handler.go:298-318`), so consensus does not outrun execution
+  (invariant 9 bounds it in blocks; this bounds it in time). Before it
+  authors, a node waits up to 80 ms for the certificates of every validator
+  of the previous round, not only a quorum (`DefaultParentWaitTimeout`,
+  `primary/header_builder.go:18-22`, `:200-245`): a certificate no header
+  names in its round can only be reached by a weak link later, and the
+  commit rate depends on leaders being named promptly.
+- **Catch-up.** When the DAG already holds certificates above the node's
+  round, the node is behind and the pacing does not apply: it advances
+  round by round as far as the quorums already in its DAG go, and authors
+  no header for the rounds it passes through, since a header for a round
+  the network has finished gathers no votes (`certificate_handler.go:298-340`).
+  A header more than one round ahead of the node makes it ask its peers
+  for the missing rounds ("Certificate catch-up"); a header more than
+  `DAGGCDepth` rounds ahead means the node is stranded and needs a join
+  ("Retention" below; `primary/vote_handler.go:339-353`, `:581-602`). A
+  node that restores a checkpoint or is seeded by a join is in a catch-up
+  mode of its own until it is within a round of the frontier ("Restart",
+  "A restored or rejoining node catches up before it takes part";
+  DIFFERENCES C15).
+
+#### Header validity
+
+A header is valid, and a validator may vote for it, when all of these hold.
+Narwhal §4.1 for the first two and Bullshark §4 for the third; the rest
+are this network's.
+
+- **Its author is a member of the committee of its epoch**, and the
+  signature is that member's over the header digest (`Header.Verify`,
+  `types/header.go:227-243`). For a header the signature is checked first
+  and then membership (`primary/vote_handler.go:278`, `:286`); membership
+  comes first only for votes (`:27-47`). !1266 (#4596) moves membership
+  before the signature for headers too, in the topic validator and in the
+  handler (`primary/vote_handler.go` `OnHeaderReceived`; "Sender authority
+  at 7d9458e10"). The epoch a header names is the epoch of the committee
+  that orders its round ("Epochs" below).
+- **Its strong parents are distinct certificates of round r−1 whose
+  authors' stake is a quorum of the committee of round r−1.** The parent
+  list is a flat list of certificate digests (`types/header.go:62-63`); the
+  entries of round r−1 are the strong parents. Narwhal §4.1: a header
+  references at least 2f+1 certificates of the previous round; Bullshark
+  §4: every vertex has 2f+1 strong edges to the round before, which is
+  what gives every later leader a path to a committed one. The builder
+  names **every** round r−1 certificate it holds (`header_builder.go:166-173`),
+  not a bare quorum, so late certificates are named in their own round
+  where they can. The rule is one check, `DAG.CheckParents`, applied by
+  the voter, the insert and the builder (#4591, !1272; "DAG insertion"; the
+  code at `7d9458e10` checks presence only and the builder's minimum is a
+  count — DIFFERENCES C19).
+- **Weak links are allowed and not counted.** After the strong parents, a
+  header of round r ≥ 3 names every certificate of rounds r−2 down to
+  r−8 that it holds (`weakLinkWindow` = 8, `header_builder.go:175-195`).
+  They are parents for the ancestry walks (ordering, support) and nothing
+  else: they count toward no quorum, and a certificate at round r−k is
+  checked only to be a certificate (one the node holds or can fetch, as
+  any parent). *Departure.* Bullshark's weak edges name only vertices the
+  author has no path to (§4, `v.weakEdges`); this network names every
+  certificate of the window whether or not a path exists. The reason is
+  cost: a path check per candidate on every header is a graph search the
+  builder can skip, and naming a certificate twice is harmless, because
+  every walk over the DAG deduplicates by digest (`dag/traversal.go:89-104`,
+  `bullshark/ordering.go:36-46`). The price is header size, at most seven
+  rounds × the committee in 32-byte digests, which the parent cap
+  (`types/header.go:367`) and the gossip message limit bound.
+- **Its payload is in strictly ascending digest order, with no
+  duplicate.** The builder sorts and deduplicates (`types.NewHeader`,
+  `header.go:81-117`); the decoder refuses anything else
+  (`UnmarshalHeader`, `header.go:352-357`), so a header with a repeated or
+  misordered batch is unparseable to every peer and never voted. The order
+  is the execution order ("The DAG facts", canonical payload order).
+- **Size caps.** A header's batches fit `headerBudget`: its share of
+  `MaxBlockBytes` among the committee's headers of one block, capped by
+  `MaxHeaderBytes` (`header_builder.go:105-130`; "Budgets"). The decoder
+  caps the counts, 100,000 payload entries, 10,000 parents, a 1,024-byte
+  signature (`header.go:338`, `:367`, `:387`), and after #4599 checks each
+  count against the bytes that remain before it allocates (the section
+  !1256 adds, "Decoding is bounded by the message").
+- **Timestamp.** The header carries its author's wall clock in Unix
+  nanoseconds, covered by the digest and so by the signature
+  (`header.go:47-54`, set at `header_builder.go:92-95`). No voter checks
+  it: not against its own clock, not against the parents'. It matters
+  once: the **leader's** header timestamp is the block time of the block
+  its group produces, clamped only forward, to be strictly after the
+  previous block's time (`internal/node/dagbft/service.go:1015-1026`), so
+  every validator derives the same block time and a bad clock cannot move
+  time backwards. Block time is executed state: a per-validator clock
+  diverged the state trees on the first block, which is why the leader's
+  timestamp is used at all (#4054). Nothing bounds how far forward it
+  goes: a faulty leader moves block time arbitrarily far ahead, and every
+  later block is clamped above it. The bound is undecided (DIFFERENCES
+  C23). Genesis headers carry zero.
+
+#### The vote rule
+
+- **A validator votes for at most one header per (author, round), and
+  records that choice before the vote is signed** (#4590, !1271). Narwhal
+  §4.1: a validator signs a header only if it is the first it has received
+  from that author for that round. The record is (author, round) → header
+  digest. It is appended to the DAG store's `voted` file before the vote
+  is signed (`DAGStore.PutVoted`), and a record that cannot be written is
+  not voted, the author's rebroadcast tries it again; it is read back on
+  every start, checkpoint or not (`Primary.RestoreVoted`), because a vote
+  the node has forgotten it cast is a vote it can cast again for a
+  different header; it is kept ten rounds in memory, which covers every
+  round a header can still be voted in; each checkpoint drops the records
+  below the lower of its tail floor and the previous checkpoint's, since
+  either checkpoint may be the one resumed; and it is **not fsynced**, as
+  nothing in the store is (DIFFERENCES C9), so a power loss inside the
+  filesystem's journal window can lose a record a process restart would
+  not. A second digest for the same pair is refused, and nothing is asked
+  for on its behalf; the recorded header is voted for again whenever its
+  author rebroadcasts it. This is the rule that makes a certificate unique
+  per author and round, which the commit rule assumes (Bullshark §4). At
+  `7d9458e10` the record is by header digest and in memory
+  (`primary/vote_handler.go:361-377`, `:471-476`; `primary.go:351`):
+  DIFFERENCES C18.
+- **What a voter must hold.** Every parent the header names must be in
+  the voter's DAG, and every batch it names must be in the voter's store
+  (invariant 11). A header missing either is not refused: the vote is
+  deferred, the missing parents are asked for by digest and the missing
+  batches are fetched, and the header is judged again at the author's
+  next rebroadcast (`vote_handler.go:379-458`) and, since #4611, the
+  moment the last of what it lacked lands, the rebroadcast being the
+  backstop (section 1, invariant 11). The batches a deferred
+  header names are pinned meanwhile so eviction cannot take the ones the
+  voter already holds (`primary.go:749-794`; invariant 3). Narwhal §4.1:
+  a validator votes only once it has the batches, which is what a
+  certificate proves.
+- **The accepted window.** A voter at round c votes on headers of rounds
+  c−1 to c+1 (`vote_handler.go:317-326`). A header below the window tells
+  the voter the author is behind, and the voter pushes it the
+  certificates of that round and the next (`:354-357`, `:635-675`); a
+  header above it tells the voter it is itself behind, and it asks for the
+  rounds between (`:339-353`). A validator does not vote for its own
+  header (`:297-301`); it signs a self-vote when it authors
+  (`primary.go:613-620`), which counts toward its certificate as any
+  member's vote does.
+- **Re-sending.** Votes are sent once. The author rebroadcasts a header
+  about once a second until it has a certificate for the round
+  (`primary.go:444-457`, `:826-883`), and a voter that sees a header it has
+  already voted for re-sends the same stored vote (`vote_handler.go:364-376`),
+  because a vote lost in the mesh otherwise stalls the round. An author
+  drops a header that is two or more rounds behind its own round and
+  returns its batches to the workers (`primary.go:840-854`): the window
+  above means no one will vote for it.
+  The author accepts at most 2 × `QuorumCount` votes for one header, so a
+  flood of votes cannot exhaust it (`primary.go:45-49`,
+  `vote_handler.go:93-105`); duplicates from one author are dropped before
+  that count (`:81-91`).
+
+#### Certificate validity
+
+A certificate is valid when all of these hold (`Certificate.Verify`,
+`types/certificate.go:141-230`). Narwhal §4.1.
+
+- **The header is valid as above**, its signature checks, and its author
+  is a member of the committee of the certificate's epoch (`:163-171`).
+- **The signers are distinct members of that same committee, named by
+  index, and their stake is a quorum** (`:173-227`): a repeated index is
+  refused (`:198-202`), an index outside the committee is refused, and the
+  epoch the certificate names must be the committee's (`:158-161`). The
+  committee is the one that orders the certificate's round ("Epochs").
+- **The signed bytes are the header digest, the round and the epoch**, 32 +
+  8 + 8 bytes big-endian (`types/vote.go:42-50`; re-derived at
+  `certificate.go:185-190`), so a vote cannot be replayed for another round
+  or epoch of a header with the same digest.
+- **The parent rule is applied again at insertion.** `Certificate.Verify`
+  refuses only a parentless or duplicate-parent header; the stake-quorum
+  check on the round r−1 parents is `DAG.CheckParents`, the one check the
+  voter, the insert and the builder share (#4591, !1272; "DAG insertion").
+  A certificate is proof that a quorum voted, and a quorum of honest
+  voters would not have voted for a header without one, but a node takes
+  certificates from any peer and must not rely on that. At `7d9458e10`
+  neither `Verify` nor the insert checks it (DIFFERENCES C19).
+- **`StateHash` is carried but not signed.** The wire format ends with a
+  32-byte state hash (`certificate.go:289-291`, `:382-387`) that is not in
+  the header digest and so not under any signature (`:58-61`). Nothing
+  reads it for consensus; it is zero on every certificate the network
+  forms. A node must not treat it as attested.
+
+The author forms the certificate itself, from the votes it collected plus
+its self-vote, as soon as their stake is a quorum (`tryCreateCertificateLocked`,
+`primary/vote_handler.go:121-234`); it inserts the certificate into its own
+DAG, and only then broadcasts it once and hands it to ordering (`:185-228`).
+A receiver recognises a certificate already in its DAG before verifying it,
+verifies the rest (one ed25519 check per signature), and inserts or holds
+them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
+
+#### DAG insertion
+
+- **A certificate enters the DAG only when every parent it names is
+  there and its parents pass `DAG.CheckParents`** (`DAG.Insert`,
+  `dag/dag.go:90-96`, `:145-161`; #4591, !1272; Narwhal §4: a
+  certificate's causal history is available before it is used). A
+  certificate whose parents are missing is held and its parents fetched;
+  it is inserted when they arrive, and dropped if they do not certify it
+  ("Certificate catch-up"). The exact exceptions, each a case where the
+  parents cannot be there and no ordering walk will reach below the
+  certificate:
+  - **genesis**, round 0 (`dag.go:154`, `:207-241`);
+  - **a seed**: a node seeded by a join at `S` takes certificates at `S`
+    and `S + 1` without their parents, since it orders nothing at or
+    below `S` ("Restart"; `consensus.go:936-943`);
+  - **a restored tail**: `DAG.Restore` inserts the certificates a
+    checkpoint persisted, lowest round first, without the check
+    (`dag.go:98-111`); each was verified when the node first took it in,
+    the tail starts a rescue window below the commit floor, and what is
+    below the tail is committed history. The tail must be closed under
+    parents down to that floor, which is #4595's second half.
+  - **a certificate taken in without its parents at all**: at a seed, as
+    above, and at `7d9458e10` any certificate at or below the commit floor
+    plus one once there is a floor (`dag.go:153`), which in normal running
+    lets a late certificate in without a parent the node never received,
+    and the walk below then differs between nodes (#4595, !1259;
+    DIFFERENCES C22). !1259 narrows the waiver to the seed and the
+    weak-link window above the collection floor.
+- **One certificate per (author, round).** A second copy of the same
+  certificate is an idempotent no-op (`dag.go:135-139`). A **different**
+  certificate for an author and round the DAG already holds is refused,
+  the incumbent is kept, the refusal is counted
+  (`accumulate_dagbft_cert_sync_certificates_received_total{outcome="equivocation"}`,
+  `DAG.Equivocations`) and logged
+  at Error (`dag.go:24-30`, `:140-142`; `certificate_handler.go:151-164`).
+  *Departure.* Narwhal has no such case: with one vote per (author,
+  round) and quorum intersection, two certificates for one pair need votes
+  from more than f faulty validators. Keeping whichever arrived first is
+  therefore a tripwire for a fault the protocol's assumptions exclude, not
+  an ordering rule, and nothing downstream depends on which one a node
+  kept. It is safe to keep the incumbent only because of the vote lock
+  (#4590): until that lock is per (author, round), honest voters can
+  certify two headers of one author and nodes do split on arrival order
+  (DIFFERENCES C18).
+- **Insertion is a collection point.** A certificate above every round
+  the DAG has seen moves the frontier, and rounds more than `DAGGCDepth`
+  below it are collected (`dag.go:182-191`; "DAG retention").
+
+#### Leader election
+
+- **Leaders are elected at even rounds from 2** (`bullshark/bullshark.go:142-155`;
+  Bullshark §6, the eventually synchronous protocol, one leader every two
+  rounds). Round 0 has none.
+- **The function** is `sha256` of the round as 8 big-endian bytes; the
+  first 8 bytes of the hash, as a big-endian integer, modulo the
+  committee's total stake, choose a point in the stake line; the leader is
+  the validator whose cumulative stake, in committee order, first exceeds
+  that point (`electLeader`, `selectByStake`, `bullshark/leader.go:16-81`;
+  `ComputeLeaderSeed`, `:115-120`). The leader of a round is a validator;
+  the round has a leader certificate only if that validator's certificate
+  for the round is in the DAG (`:36-44`).
+- **The committee is the committee of the leader's round** ("Epochs";
+  #4593). At `7d9458e10` it is whatever committee Bullshark holds at the
+  moment of the check (`leader.go:31`), which differs between nodes around
+  a change (DIFFERENCES C20).
+- *Departure.* Bullshark §6 names leaders round-robin ("a predetermined
+  leader"). This network weights the choice by stake, so that a
+  validator's share of leadership, and of the latency and the dispatch
+  duty a leader carries ("The DAG facts"), tracks its share of stake. The
+  choice is as predictable in advance as round-robin: both are a function
+  of the round alone, and the protocol's safety does not depend on the
+  leader being unknown, only on honest nodes electing the same one (§5.2).
+  The function changes only with the committee.
+
+#### The commit rule
+
+- **Direct commit.** The leader of round L is committed when the
+  certificates of round L+1 whose causal history includes the leader's
+  certificate carry stake at or above the **validity threshold** of the
+  committee of round L+1, more than a third (`hasSupport`,
+  `bullshark/leader.go:83-102`; `DAG.IsAncestor`, `dag/traversal.go:15-71`).
+  Bullshark §6: f+1 votes in the next round commit the leader, because
+  every round L+2 vertex has 2f+1 strong edges to round L+1 and so a path
+  to one of those f+1, so every later leader has a path to this one.
+- **When it is evaluated.** Every certificate entering the DAG, one
+  released from the held buffer included, triggers the evaluation of the
+  leader round L for which it is a round L+1 certificate, and no trigger
+  may be lost. A leader that arrives after its supporters needs no trigger
+  of its own: a round L+1 certificate names the leader as a parent, so the
+  insert holds it until the leader is in (`dag/dag.go:154-160`; "DAG
+  insertion"), and its release signals as any insertion does
+  (`certificate_handler.go:265`). At `7d9458e10` ordering runs once per
+  signalled certificate (`Node.order`, `restart.go:27-83`;
+  `processBullshark`, `consensus.go:1001-1043`), `ProcessCertificate`
+  returns at once for an even-round certificate (`bullshark.go:140-155`),
+  and two triggers are lost: a notification dropped when `newCerts` is
+  full (`primary.go:818-822`), and a certificate more than a round ahead
+  dropped when the held buffer is full (`certificate_handler.go:59-66`;
+  #4162 item 1). Neither has a timer or sweep behind it (#4162 item 6),
+  so a leader whose last needed supporter's trigger was lost is committed
+  only by a later leader's walk (DIFFERENCES C21); safety is unaffected,
+  the latency of that group is what differs. A leader round at or below
+  the last commit is not evaluated again (`:157-164`).
+- **The linked-leader walk.** Committing leader L also commits, oldest
+  first, every uncommitted leader below it that L has a path to: the walk
+  steps back two rounds at a time from L to the last committed leader
+  round, elects each round's leader, skips a round whose leader
+  certificate is absent or that the current leader has no path to, and
+  continues the walk from each leader it does find
+  (`orderLeaders`, `bullshark/ordering.go:88-123`; Bullshark §5.2, §6). A
+  skipped leader is never committed: the certificates in its history
+  reach the committed order through a later leader that does have a path
+  to them. Each committed leader's sub-DAG is ordered in turn
+  (`commitLeaderChain`, `:16-86`), and the last commit round moves to each
+  leader as it is done (`:63-65`). *Departure.* "Path", here and in the
+  support count above, runs over every parent edge, strong and weak
+  (`DAG.IsAncestor` follows the whole parent list, `dag/traversal.go:62`),
+  while Bullshark's commit rule and its leader walk use strong edges only
+  (§5.2, §6). Following weak links is safe on two conditions, each with
+  its own fix: every certificate is inserted with all its parents (#4595,
+  !1259; "DAG insertion"), so the walk runs over the same edges on every
+  node and is identical everywhere; and the parent quorum is enforced
+  (#4591, !1272), so a path from a certified vertex to an earlier
+  committed leader exists at all. A weak link can only add a path to a leader,
+  never remove one, and the extra paths let a leader that a straggler
+  named be committed rather than skipped.
+
+#### Sub-DAG order
+
+- **Which certificates.** For each committed leader, every certificate
+  reachable from it by parent links, strong or weak, down to
+  **`RescueWindow` = 32 rounds below the last committed leader round**,
+  that is not in the **committed-digest set** (`orderDag`,
+  `bullshark/ordering.go:140-174`; `GetAncestors`, `dag/traversal.go:79-121`).
+  The set records every certificate ever committed and keeps an entry for
+  2 × `RescueWindow` = 64 rounds below the last commit (`:67-74`);
+  the walk never goes below the window, so nothing older can be emitted
+  twice. Bullshark §5.2 orders the leader's whole not-yet-ordered causal
+  history. *Departure.* Bullshark's walk has no floor, because its garbage
+  collection is agreed (§7); here the walk has a floor, and the digest set
+  rather than a per-author watermark says what is already ordered,
+  because a straggler rescued by a weak link reaches the committed
+  history below the frontier and below that author's later certificates
+  (#4111). The window is 32 because a straggler at round x is named by a
+  weak link from a header no further than 8 rounds above it, that header's
+  certificate is in a leader's history within a round or two of that, and
+  the walk from that leader begins at a last commit below the leader; the
+  window must exceed the weak-link window plus that slack ("Retention").
+  The walk is deterministic only if every certificate in it has its
+  parents in the DAG (#4595, above): `GetAncestors` skips a parent it does
+  not find (`traversal.go:111-117`), which is what parent-complete
+  insertion makes harmless.
+- **Sort order.** The certificates of one leader's sub-DAG are sorted by
+  round ascending, then by author key bytes ascending
+  (`ordering.go:165-171`); within a certificate, batches in payload order
+  and transactions in batch order ("The DAG facts", canonical payload
+  order). Two certificates of one round and author cannot both be in the
+  DAG, so the order is total.
+- **One executor block per leader.** The certificates of one committed
+  leader are one group, handed to the executor as one block whatever the
+  call that committed them (`ConsensusOutput.Leader`,
+  `bullshark/bullshark.go:45-60`; `Node.order`, `restart.go:37-58`); a
+  group spans the leader's round and the one before it in the common case
+  (`roundsPerBlock`, `primary/primary.go:111-114`). The block's leader is
+  the group's leader, its time the leader's timestamp ("Header validity"),
+  and its position in the committed sequence is what a checkpoint records
+  ("Restart"). The group is handed over before the next certificate is
+  ordered, blocking rather than dropping (`restart.go:65-81`).
+
+#### Epochs
+
+- **An epoch is the version of the network definition**, and a
+  partition's committee for an epoch is the validators of that definition
+  active on the partition, with their stakes, in a fixed order
+  (`internal/node/dagbft/service.go:223-226`, `:1154-1207`;
+  `types/committee.go:245-311` keeps the order deterministic). Every
+  header, vote and certificate names its epoch, and is checked against
+  that epoch's committee ("Header validity", "Certificate validity").
+- **A committee change takes effect at a DAG round fixed by the committed
+  sequence, not when a node executes the block** (#4593; Narwhal §6,
+  reconfiguration at a point every validator agrees on; Bullshark §5.2,
+  honest parties order the same leaders, which needs the same committee
+  for a round). What #4593 states: the block that activates a new
+  definition is committed at leader round `L`, the change takes effect at
+  a DAG round `A` fixed in the committed sequence, and every round below
+  `A` is ordered and verified with the committee before it, every round
+  from `A` with the new one, on every node and after any restart. So a
+  header, vote or certificate is checked against the committee of its own
+  round, with that committee's epoch, and a round's parent quorum is
+  counted in the committee of the round before; a leader is elected, and
+  its support counted, in the committee of the leader's round. *Proposed
+  under #4593, not decided:* `A = L + 256`; a node does not order, author
+  or vote above the leader round of the newest committed state it holds
+  plus that margin, since a change committed above that state could take
+  effect there; and a node that was down across two changes does not know
+  the committee of the rounds between and rejoins as a node with no
+  checkpoint does. The constant, the restart and join cases are #4593's to
+  decide. At `7d9458e10` a change applies to
+  every component the moment the node executes the block
+  (`consensus.go:1154-1179`; `primary/certificate_handler.go:411-457`),
+  a header of any other epoch than the node's current one is refused
+  (`vote_handler.go:309-315`), and a certificate verifies only against the
+  node's current committee (`certificate.go:158-161`): DIFFERENCES C20.
+
+#### Retention
+
+The protocol's windows, as constants, with the relation they must keep:
+
+| constant | value | what it bounds | where |
+|---|---|---|---|
+| weak-link window | 8 rounds | how far below its round a header names certificates | `primary/header_builder.go:184` |
+| `RescueWindow` | 32 rounds | how far below the last commit an ordering walk reaches; the seed is 34 below the first proven state and no handoff is taken within 32 of a seed ("Restart") | `bullshark/ordering.go:125-138` |
+| committed-digest retention | 64 rounds | how long a committed certificate is remembered as committed | `bullshark/ordering.go:70-74` |
+| held-certificate buffer | 2 × 10 × committee certificates, pruned 10 rounds below the node's round | certificates waiting for parents | `primary/primary.go:292-293`, `:336-338`; `pending_certs.go:138-173` |
+| round request | 64 rounds, 100 certificates per response | one catch-up request | `gossip/cert_sync.go:32-33`, `:326` |
+| `DAGGCDepth` | 2,000 rounds | how many rounds a node keeps below the further of its last commit and its frontier; how far behind a node can be and still catch up from peers | `consensus.go:37-49`; `dag/dag.go:332-392` |
+
+Proposed under #4593 and not decided: a committee activation margin, how far
+consensus may run ahead of the newest state a node holds, 256 rounds in the
+proposal ("Epochs"); it would sit between the seed distance and `DAGGCDepth`.
+
+The relation: **weak-link window < `RescueWindow` ≤ ½ committed-digest
+retention < seed distance (34) < `DAGGCDepth`**, and
+`DAGGCDepth` is also larger than any catch-up a round request spans. The
+weak-link window must be inside the rescue window or a straggler would be
+named and never ordered; the digest set must cover the whole walk or a
+certificate would be ordered twice; the seed must be below the first state
+by more than the walk, or the first leaders after it would take in
+certificates the peers committed before the seed; and the GC depth must
+be above all of them, because collecting a round inside any of these
+windows removes something the protocol still reads. Narwhal §4.3 and
+Bullshark §7 garbage-collect by agreement; this network collects by depth
+behind the frontier, so the relation is what keeps collection out of the
+protocol's way.
+
+**When history a node needs is gone**, the node does not improvise:
+
+- a certificate whose parent is collected everywhere cannot be inserted
+  and stays held until it is pruned; a node more than `DAGGCDepth` behind
+  the frontier is **stranded**, says so once a minute
+  (`primary/vote_handler.go:581-602`), and rejoins from a pulled state
+  ("Restart");
+- an ordering walk that would reach a collected round **stops ordering**
+  rather than order a group its peers did not (#4595, !1259; "DAG
+  retention"), and the node needs a join;
+- a batch outside every peer's retention is not fetched; the node resyncs
+  (invariant 6, E11; "Retention" under the batch plane).
+
+#### Persistence and restart
+
+What is durable, and when, so that a restart cannot make a validator
+contradict itself. The mechanism is in "The committed log" and "Restart";
+these are the rules.
+
+- **Before a header this node authored is broadcast**, the header is on
+  disk (`Primary.onAuthored`, `primary/primary.go:584-594`;
+  `Node.persistAuthored`, `restart.go:211-231`; `persist.DAGStore.PutAuthored`),
+  so that a restarted node rebroadcasts the same header and never authors
+  the round again, a second header being self-equivocation (#4159 stall 3;
+  "Restart"). It is read back on every start, checkpoint or not (#4592,
+  !1258). With it go the certificates and batches the DAG holds, so that
+  the restored DAG has the header's parents: at `7d9458e10` from four
+  rounds below the header (`restart.go:217-222`), after !1259 every
+  certificate as it is inserted (#4595). The write is not synced
+  (DIFFERENCES C9).
+- **Before a vote is signed**, the (author, round) → digest record is
+  appended to the `voted` file, unsynced like the rest of the store
+  (#4590, !1271; "The vote rule"; DIFFERENCES C9). At `7d9458e10` nothing
+  is written (DIFFERENCES C18).
+- **A checkpoint**, written before each block is produced, carries the
+  consensus position of that block: the primary's round and epoch,
+  Bullshark's last committed leader round, its per-author watermarks and
+  its committed-digest set as they were when that block's group was
+  ordered, the block index, and the names of the DAG tail and batches
+  persisted beside it (`persist.Checkpoint`, `persist/persist.go:31-81`;
+  `Node.CheckpointAt`, `restart.go:85-125`; after #4593 the committee
+  schedule too). The two most recent are kept (`persist/resume.go:9-14`)
+  and the one to resume from is chosen by the executor's last block
+  (`ResumeFrom`, `:32-58`; "Restart"). The dedup set is pruned against the
+  oldest group handed to the executor and not yet produced, not against
+  the frontier, so the set the checkpoint copies is still there (#4594,
+  !1261).
+- **Which groups a restored or seeded node orders.** A node restored from
+  a checkpoint orders the certificates of its tail above the checkpoint's
+  commit floor, lowest round first, then goes on live
+  (`processBullshark`, `consensus.go:1001-1017`; `DAG.Restore`): the first
+  leaders it commits are the ones its peers committed after that block. A
+  node seeded by a join at `S` orders nothing at or below `S`
+  (`Node.Rejoin`, `consensus.go:936-943`) and holds ordering until the join
+  names `S` (`HoldOrdering`, `:945-958`); the groups it then commits
+  stand only above `S + RescueWindow` ("Restart"). Neither executes from
+  its own last block: the join decides what is executed, consensus only
+  where the node stands in the DAG ("Restart", "What it does not do").
+
+#### Sender authority at 7d9458e10
+
+The rule, only the committee speaks for consensus, is !1266's (#4596):
+invariant 12 and its section "Who may send consensus messages", with the
+per-topic table, are the one home of what a node delivers and relays;
+what !1266 leaves undecided, which **peers** a validator exchanges the
+topics with, is #4596 part 2 (!1266 records it; !1269 decides it). This
+subsection is only the pinned code. At `7d9458e10` the checks are in the
+handlers, after the router has already relayed the message to the node's
+peers: a vote is dropped unless its author is a member and then unless
+its signature checks, membership first because it is the cheap check
+(`primary/vote_handler.go:27-47`); a header is checked the other way
+round, signature first and then membership (`:278`, `:286`), and !1266
+moves membership before the signature for headers too, in the topic
+validator and in the handler (`primary/vote_handler.go`
+`OnHeaderReceived`); a certificate is verified against the committee
+before it is inserted or held, after the cheap duplicate and held-buffer
+checks (`primary/certificate_handler.go:32-83`); a batch, a sync request
+or a sync response is decoded and queued from any peer
+(`gossip/gossip.go:347-364`, `:456-508`). Votes are rate-limited per
+**relaying** peer, 1,000 a second with a burst of 2,000, a 30 s ban after
+five violations, forgiven after 30 s of good behaviour
+(`gossip/gossip.go:573-600`; `rate-limiter.go:27-44`); the limits sit well
+above a committee's recovery bursts, because banning a committee member
+is a liveness hazard (#4054). A bound keyed on the relaying peer silences
+everyone relayed through it (#4162 item 18); #4596 part 2 is where that is
+decided with the rest.
+
 ### The DAG facts the rest of the specification relies on
 
-The rounds, votes and certificates of DAG-BFT are still to be written. Until
-they are, these are the facts the executor and healing parts depend on:
+These are the facts the executor and healing parts depend on; the rules
+they follow are in "The protocol" above. The subsections of "The protocol"
+are normative, and this list summarizes them:
 
 - **The leader of a block** is the author of the leader certificate whose
   causal history the block executes. Exactly one validator is the leader of a
@@ -304,8 +878,9 @@ they are, these are the facts the executor and healing parts depend on:
   executes once; the second delivery is recognised and skipped, and its
   batches are not pruned a second time.
 - **Weak links.** A header references the certificates of the previous round
-  and, as weak links, recent older certificates it has not yet referenced, so
-  a certificate that arrived late still enters a committed leader's causal
+  and, as weak links, every certificate it holds of the seven rounds below
+  that (r−2 to r−8), whether or not one is already reachable, so a
+  certificate that arrived late still enters a committed leader's causal
   history. A certificate no header ever references is never executed and its
   batches are lost; the weak-link window is what makes that impossible in
   practice, and the count of orphaned certificates is a metric.
