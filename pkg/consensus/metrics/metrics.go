@@ -303,6 +303,18 @@ var (
 		Name:      "cert_verifications_total",
 		Help:      "Received certificates verified against the committee, by partition",
 	}, []string{"partition"})
+
+	// GossipRefusedTotal counts consensus messages the topic validators did
+	// not pass on (#4596): rejected (malformed, an author outside the
+	// committee, a bad signature) or ignored (an epoch this node holds no
+	// committee for). Ignored messages rising on one node while its peers
+	// accept them is a node behind on a committee change.
+	GossipRefusedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "gossip_refused_total",
+		Help:      "Consensus messages refused by the topic validators, by partition, topic and outcome",
+	}, []string{"partition", "topic", "outcome"})
 )
 
 // Rate limiting metrics

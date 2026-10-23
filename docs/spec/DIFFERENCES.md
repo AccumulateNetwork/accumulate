@@ -552,6 +552,25 @@ follower that was removed may outlive it in its peers' peer stores; a page
 such a peer cannot be dialed for passes to the next (#4533).
 `TestAJoiningNodeAdvertisesItsServicesOnlyOnceActive`.
 
+### E31. The records' states, the fill and the look-ahead bound their queries across the peers, not at each peer
+
+*[#4604](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4604)*
+
+**Spec** (executor.md, "Sync", "The algorithm", and §3, step 1): a round's
+stale accounts are asked four calls at a time against each peer, and the fill
+loads four sections at a time against each peer the same way.
+
+**Code**: the opened-section load holds `statesInFlight` at each peer
+(`loadOpened`, #4604). The others hold `statesInFlight` times the number of
+peers in all: `askStates`, as `takeAccounts` calls it for the records'
+accounts, runs that many workers and picks a chunk's first peer by its index,
+and the fill and the look-ahead (`internal/node/join/sections.go`) take that
+many slots for the section loads together. A slower peer can be asked for more
+than four at once. In production the node's gate to each peer (`pull.Gated`)
+holds the background to `PeerInFlight`-1 at the peer and asks a busy peer
+again, so the peer does not see it; a test whose sources have no such gate
+does.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
@@ -1811,8 +1830,22 @@ batches and its last authored header (#4448). What differs:
   stalled at block 40060 (round 80129, last commit 80128) is in this state.
   Nothing on disk lets it resume under the protocol; it needs a one-time
   operator decision, not a code path this change adds (#4448 notes).
-- **Nothing is fsynced**, as the checkpoint itself is not: the files survive
-  a process or container restart (the page cache survives), not a power loss.
+- **Nothing is fsynced but the authored header**, as the checkpoint itself
+  is not: the files survive a process or container restart (the page cache
+  survives), not a power loss. The authored header is the one file whose
+  loss is an equivocation rather than a fetch (#4592): a power loss inside
+  the filesystem's journal window (5 s on ext4 by default) after the
+  broadcast would bring the previous header back, and the node author that
+  round again. So its file and then its directory are synced before the
+  broadcast, with no primary lock held (consensus.md, "Restart"). The sync
+  under the primary's lock, as first tried, cost a restarted validator its
+  catch-up in `consim` `TestRestartOneNode` — 110–150 blocks against a floor
+  of 160, from 164–166 without it, eight simulated nodes sharing one NVMe —
+  because every vote, certificate and round advance waited on the two
+  device flushes. Off the lock, five runs on the same machine reached
+  170–177 blocks, against 163–185 in five runs of the merge base, every run
+  over the floor. The cost on a validator with a disk of its own is
+  unmeasured.
 - **The authored-round sweep is four rounds deep.** A certificate that
   reaches the DAG more than four rounds below the node's current round after
   the node authored there is on disk only from the next block's checkpoint.
@@ -1878,6 +1911,67 @@ The burst remains: 197 dropped votes in a restored node's first second.
 Catch-up is built if PLAN R8-1's Docker run shows restart catch-up still slow
 or bursty. Otherwise this entry records a design that is decided and not yet
 needed.
+
+### C16. A gossip stream that fails to open is never opened again
+
+*No issue yet; found under #4610*
+
+consensus.md, invariant 11: anything sent once and never re-sent leaves a
+condition that cannot become true on its own. GossipSub (go-libp2p-pubsub
+v0.10.0) opens its stream to a peer once, when it first sees the connection.
+If that open fails, the peer is dropped from GossipSub with no retry
+(`comm.go` handleNewPeer → `newPeerError`); only a stream that dies after
+opening is re-opened. The connection stays up, so nothing reconnects, and the
+node neither sends to that peer nor is counted by it on any topic. consim hit
+it on CI's loaded runners because it connected hosts before creating their
+GossipSubs: validator 0 ran a whole test with `hostPeers=3`,
+`headerTopicPeers=0` (job 17290112116). consim now creates each GossipSub with
+its host, as `p2p.NewHost` does, and refuses to load a sim whose mesh is short
+(`ErrMeshIncomplete`). Production creates GossipSub before it connects, so the
+start-up race does not arise there; whether any other first-open failure (a
+timeout, a resource-manager refusal) can isolate a production validator until
+it reconnects is not verified.
+
+### C17. Any peer can publish on the consensus topics, and validated messages are relayed for it
+
+*[#4596](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4596) — a design decision*
+
+consensus.md, invariant 12 and "Who may send consensus messages": only the
+committee speaks for consensus, and Narwhal, which the protocol follows,
+assumes authenticated links among the validators. The topic validators make
+the first half true of messages: what is not authored and signed by a
+member of its epoch's committee is neither delivered nor relayed. The links
+are not authenticated. The router that carries the topics is the API node's
+(`cmd/accumulated/run/instance.go`), which accepts any peer, and nothing maps
+a libp2p peer to a committee key: a node's p2p key is its node key, a
+different key from its validator key, and the one binding of a peer ID to a
+validator key, the relay challenge (`internal/node/dagbft/relay_challenge.go`,
+#4366), is a request made on demand, not a record the router can consult.
+So a peer outside the committee can still:
+
+- publish batches, which carry no author: they are bounded by the inbound
+  queue and the batch store (#4598), not refused;
+- publish sync requests, which are unsigned, and sync responses whose
+  certificates name members but do not verify: every node receives and
+  relays them. The receiver verifies each certificate before it is used,
+  and a response is an answer only once every certificate in it checks
+  (#4597), so a junk response does not silence the honest answers to its
+  request;
+- republish genuine headers, votes and certificates under its own message
+  IDs: each copy passes validation and is relayed. A copy of a certificate
+  the node holds is recognised by the router as the same wire encoding
+  (header with its signature, vote signatures, signers; the state hash
+  aside) and costs it a lookup and a marshal; a copy of a header or vote
+  costs it a signature check, and is recognised as a copy only by the
+  handlers.
+
+**What must be decided** is whether the consensus topics are limited to
+committee peers and, if they are, how the router learns which peers those
+are: a validator's p2p identity bound to its validator key (a signed record,
+or the relay challenge run at connection), and what non-members — followers
+and joining nodes, which take certificates and batches from these topics —
+receive instead. #4587 (committee members are not guaranteed to be connected
+to one another) is the same decision seen from the other side.
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
@@ -2078,6 +2172,153 @@ and the HEAL path has none, which is the actual hole.
 **Size**: medium, and **not urgent until measured**. A message type, a request
 path, and assembly at the destination. Build it when a run shows a proof-length
 rejection, which names the real trigger rather than a supposed one.
+
+### C18. Voters lock per header digest, in memory
+
+*[#4590](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4590); fixed by !1271*
+
+consensus.md, "The vote rule": a validator votes for at most one header per
+(author, round), appends (author, round) → digest to the `voted` file
+before the vote is signed, reads it back on every start, and refuses a
+second digest for the pair. The code records the
+headers it voted for by digest alone (`primary/vote_handler.go:361-377`,
+`:471-476`) and only in memory (`primary.go:351`): two headers from one
+author for one round, differing only in timestamp, both get the same honest
+validators' votes and both reach a quorum, and a restarted validator holds
+no record at all. Each node then keeps whichever certificate reached it
+first and refuses the other as equivocation for good ("DAG insertion"), so
+nodes holding different versions cannot insert each other's later
+certificates. With n = 4, no round r+1 header reaches three votes once the
+author stops. Review tests `TestDefect_HonestVotersCertifyTwoHeadersForOneAuthorRound`
+and `TestIntended_EquivocatingAuthorGetsTwoVotes` (#4601) show it.
+
+### C19. Parents are checked for presence, not for round, distinctness or stake quorum
+
+*[#4591](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4591); #4162 item 17; fixed by !1272*
+
+consensus.md, "Header validity", "Certificate validity" and "DAG
+insertion": a header's strong parents are distinct certificates of round
+r−1 whose authors' stake is a quorum of that round's committee, weak links
+are allowed and not counted, and the voter, the insert and the builder
+apply the rule through one check, `DAG.CheckParents`; `Certificate.Verify`
+refuses only a parentless or duplicate-parent header. The code:
+
+- a voter checks only that each named parent is in its DAG
+  (`primary/vote_handler.go:391-409`), so a header with no parents passes;
+- `Certificate.Verify` checks no parent (`types/certificate.go:147-230`);
+- `DAG.Insert` skips the parent check when the list is empty
+  (`dag/dag.go:154`, `len(cert.Parents()) > 0`);
+- the builder's minimum is a count, `QuorumCount` (7 of 12), not stake
+  (`primary/header_builder.go:158-164`; `types/committee.go:207-216`), and
+  with the validity threshold (5 of 12) the two sum to n, so they do not
+  guarantee an intersection; a round set by `Restore`, `RestoreAuthored` or
+  `Rejoin` skips the stake check the round advance makes.
+
+A leader certificate with no path to an earlier committed leader breaks the
+linked-leader walk: two nodes that receive the same certificates in a
+different order commit different leader sequences
+(`TestDefect_ZeroParentLeaderSplitsCommitSequence`, #4601).
+
+### C20. A committee change applies when the node executes the block
+
+*[#4593](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4593); #4162 items 9 and 13*
+
+consensus.md, "Epochs": a committee change takes effect at a DAG round
+fixed in the committed sequence, and the rounds below it are ordered and
+verified with the previous committee on every node, including after a
+restart. The activation round (`L + 256` in the proposal), the margin a
+node may run ahead of its newest state, and what a node down across two
+changes does are proposed in the spec and #4593's to decide. The code
+applies a new committee to the primary, Bullshark and the
+gossip layer the moment the node executes the block that carries it
+(`internal/node/dagbft/service.go:1164-1207`; `consensus.go:1154-1179`),
+and execution lags ordering by a different amount on every node, so the
+rounds between are ordered with the old committee on some nodes and the
+new on others; leader election reads whatever committee Bullshark holds
+(`bullshark/leader.go:31`); a header of any epoch but the node's current
+one is refused (`primary/vote_handler.go:309-315`) and a certificate
+verifies only against the current committee (`types/certificate.go:158-161`),
+so in-flight headers of the old epoch can never certify and their author
+cannot re-author the round (#4162 item 13); a restarted node replays its
+tail with the committee its state names now. The checkpoint carries an
+epoch, not a schedule (`persist/persist.go:51-52`).
+
+### C21. A lost insertion trigger leaves a committable leader to a later leader's walk
+
+*[#4162](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4162) items 1 and 6*
+
+consensus.md, "The commit rule": every certificate entering the DAG, one
+released from the held buffer included, triggers the evaluation of the
+leader round it supports, and no trigger may be lost. The code runs
+ordering once per signalled certificate (`Node.order`, `restart.go:27-83`;
+`Primary.signalNewCertificate`, `primary/primary.go:809-824`). A leader
+that arrives after its supporters is covered: a round `L + 1` certificate
+names the leader as a parent, `DAG.Insert` holds it until the leader is
+in (`dag/dag.go:154-160`), and each release signals
+(`primary/certificate_handler.go:265`). Two triggers are lost: a
+notification dropped when the `newCerts` channel is full
+(`primary.go:818-822`), and a certificate more than a round ahead dropped
+when the held buffer is full (`certificate_handler.go:59-66`; item 1).
+Neither has a timer or sweep behind it (item 6), so when the lost trigger
+was the one that would have brought leader `L`'s support to the validity
+threshold, `L` is committed only when a later leader's linked walk reaches
+it, one or more leader rounds later. Safety is unaffected, since the walk
+is the same on every node; the latency of that leader's group is what
+differs.
+
+### C22. Review fixes in merge requests not yet merged at 7d9458e10
+
+Each line is the code at `7d9458e10` against the rule the spec states, and
+the merge request that brings the code into line. **Remove a line when its
+merge request is merged**; remove the entry when the list is empty.
+
+- **#4592** (!1258): the last authored header is read back only when a
+  checkpoint is resumed, so a start that resumes none (no checkpoint for
+  the executor's last block, or a store at genesis) signs a second header
+  for a round it already signed ("Persistence and restart").
+- **#4594** (!1261): Bullshark prunes its committed-digest set against its
+  own last commit, so when the executor lags ordering by more than the
+  rescue window the set `CheckpointAt` copies is already empty, and a node
+  restored from that checkpoint re-commits the window's history
+  ("Persistence and restart", "Restart").
+- **#4595** (!1259): `DAG.Insert` skips the parent check for any
+  certificate at or below the commit floor plus one (`dag/dag.go:153`),
+  not only at a seed, so in normal running a late certificate enters
+  without a parent the node never received and the ordering walk differs
+  between nodes; the persisted tail is written from four rounds below each
+  authored header (`restart.go:217-222`) and can miss a straggler named only
+  as a weak link; an ordering walk proceeds over a collected round
+  ("DAG insertion", "Sub-DAG order", "Retention").
+- **#4596** (!1266): the router relays a consensus message before any
+  handler checks its author; the check is in the handlers only ("Who may
+  send consensus messages"). What the merge request leaves open, which
+  peers a validator exchanges the topics with, is #4596 part 2 (!1266
+  records it; !1269 decides it).
+- **#4597** (!1257): a node that has seen any response to a sync request
+  answers it no more, so one forged response silences every honest answer
+  ("Certificate catch-up").
+- **#4598** (!1264): the active store's eviction does not protect a batch a
+  certified, uncommitted header names, so batches from any peer can evict
+  a voter's copy of what its vote attested (invariant 3); the rule is that
+  such a batch is not evicted, and batches no header names evict only each
+  other.
+- **#4599** (!1256): `UnmarshalBatch` allocates from a count field before
+  checking it against the bytes that remain ("Decoding is bounded by the
+  message").
+
+### C23. A leader's timestamp moves block time forward without bound
+
+*No issue yet; #4054 is where block time became the leader's timestamp*
+
+consensus.md, "Header validity", "Timestamp": no voter checks a header's
+timestamp, against its own clock or the parents', and the leader's
+timestamp becomes the block time, clamped only forward, to be strictly
+after the previous block's (`internal/node/dagbft/service.go:1015-1026`).
+A faulty leader, or an honest one with a bad clock, moves block time
+arbitrarily far ahead; every later block is clamped above it, and nothing
+moves it back. Whether to bound it, and against what — the parents'
+timestamps, the voter's clock with a skew limit, or both — is undecided.
+The spec states the facts and no bound.
 
 ## Durability: the seal is still on the block path; the committed log is not on disk
 

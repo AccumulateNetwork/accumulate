@@ -207,8 +207,7 @@ func (m *RecoveryManager) restoreState(checkpoint *persist.Checkpoint) error {
 		"round", checkpoint.CurrentRound,
 		"epoch", checkpoint.CurrentEpoch)
 
-	m.node.Restore(checkpoint)
-	return nil
+	return m.node.Restore(checkpoint)
 }
 
 // catchUp requests and processes missing certificates from peers.

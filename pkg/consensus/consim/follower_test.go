@@ -76,7 +76,16 @@ func TestFollowerJoinCatchesUp(t *testing.T) {
 	const followerPull = 10 * time.Second
 	seeds := map[string]types.Round{}
 	seed := func(part string) types.Round {
-		seeds[part] = sim.Validators(part)[0].LastCommitRound() - behind
+		// A network that has not committed past the seed distance cannot
+		// stage this join. Unchecked, the seed wrapped below zero to a
+		// round near 2^64: the follower then counted as at the frontier,
+		// or its DAG's collection walked 2^64 rounds holding its lock and
+		// the test hung (#4610).
+		last := sim.Validators(part)[0].LastCommitRound()
+		if last <= behind {
+			t.Fatalf("%s had committed only to round %d when the follower joined; the join is seeded %d rounds below the last commit", part, last, behind)
+		}
+		seeds[part] = last - behind
 		return seeds[part]
 	}
 	parts := []string{"Directory", "BVN1"}

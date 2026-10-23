@@ -27,7 +27,12 @@ import (
 // while the others go on; then every validator restarts at once. The node
 // that is behind must not resume on its own, lower block: it takes the
 // state of the peers that hold the highest and ends at their block, root for
-// root. The others resume from their own blocks as before.
+// root. Each of the others resumes from its own block or, when enough of its
+// peers already serve to sign an anchor, joins from them: the exit is a race
+// (executor spec, "A partition that restarts as a whole", 1; #4466), and run
+// 1 of 30 locally had a Directory node find two of its three peers resumed and
+// join from them at block 51 instead of resuming at its own 45. Either way it
+// ends at its partition's block.
 func TestAWholeRestartResumesFromTheHighestState(t *testing.T) {
 	alice := url.MustParse("alice")
 	bob := url.MustParse("bob")
@@ -78,19 +83,36 @@ func TestAWholeRestartResumesFromTheHighestState(t *testing.T) {
 	require.Less(t, lag, high, "precondition: node %d is behind", behind)
 
 	var all []restartTarget
+	var own []uint64
 	for _, name := range []string{Directory, "BVN0"} {
 		p := sim.S.Partition(name)
 		for i := 0; i < 3; i++ {
 			all = append(all, restartTarget{name, p, i})
+			own = append(own, partitionBlock(t, p.NodeDatabase(i), PartitionUrl(name)))
 		}
 	}
 	exits := restartAndJoin(t, sim, all)
+	resumed := map[string]int{}
 	for i, n := range all {
 		if n.name == "BVN0" && n.node == behind {
 			require.False(t, exits[i], "the node at block %d resumed from its own block while its peers held block %d", lag, high)
 			continue
 		}
-		require.True(t, exits[i], "%s node %d did not resume from its own block", n.name, n.node)
+		require.Equal(t, nodestate.StateActive, n.part.NodeJoinState(n.node).Machine().State(), "%s node %d is not ACTIVE", n.name, n.node)
+		if exits[i] {
+			resumed[n.name]++
+			continue
+		}
+		// It found the threshold of its peers serving and joined from them:
+		// from their state, not from one below its own.
+		require.GreaterOrEqual(t, n.part.NodeJoinState(n.node).Overlap().From, own[i],
+			"%s node %d joined from a state before its own block %d", n.name, n.node, own[i])
+	}
+	// Someone must resume: a node joins only from peers that serve, and only
+	// once as many serve as sign an anchor, two of three. In BVN0 the node
+	// behind serves nothing, so both of the others resume.
+	for _, name := range []string{Directory, "BVN0"} {
+		require.GreaterOrEqual(t, resumed[name], 2, "fewer %s validators resumed than sign an anchor", name)
 	}
 
 	// The node that was behind took its peers' state: it is ACTIVE from a
@@ -111,4 +133,11 @@ func TestAWholeRestartResumesFromTheHighestState(t *testing.T) {
 	block, root := partitionBlock(t, bvn0.NodeDatabase(0), part), bptRoot(t, bvn0.NodeDatabase(0))
 	require.Equal(t, block, partitionBlock(t, bvn0.NodeDatabase(1), part), "BVN0 node 1 is at another block")
 	require.Equal(t, root, bptRoot(t, bvn0.NodeDatabase(1)), "BVN0 node 1 has another root")
+
+	// Every node, resumed or joined, is at its partition's block.
+	for _, n := range all {
+		p := PartitionUrl(n.name)
+		require.Equal(t, partitionBlock(t, n.part.NodeDatabase(0), p), partitionBlock(t, n.part.NodeDatabase(n.node), p),
+			"%s node %d is at another block than node 0", n.name, n.node)
+	}
 }

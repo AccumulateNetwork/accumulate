@@ -16,8 +16,16 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
-// OnVoteReceived handles an incoming vote for our header.
+// OnVoteReceived handles an incoming vote for our header, verifying its
+// signature here.
 func (p *Primary) OnVoteReceived(vote *types.Vote) {
+	p.handleVote(vote, false)
+}
+
+// handleVote is OnVoteReceived for a vote the router may have verified:
+// one from the votes topic passed its validator, which checked the author's
+// membership and signature (#4596), and is not verified again.
+func (p *Primary) handleVote(vote *types.Vote, routerVerified bool) {
 	if vote == nil {
 		return
 	}
@@ -38,12 +46,14 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	}
 
 	// EXPENSIVE CHECK SECOND: Signature verification (~29µs)
-	// Only verify signatures from committee members
-	if err := vote.Verify(); err != nil {
-		slog.Debug("Invalid vote signature",
-			"error", err,
-			"author", hexEncode(vote.Author))
-		return
+	// Only verify signatures from committee members, and only once
+	if !routerVerified {
+		if err := vote.Verify(); err != nil {
+			slog.Debug("Invalid vote signature",
+				"error", err,
+				"author", hexEncode(vote.Author))
+			return
+		}
 	}
 	p.noteHeaderSeen(vote.Author, vote.Round)
 
@@ -260,9 +270,16 @@ func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*type
 	return types.NewCertificate(header, sigs, authors)
 }
 
-// OnHeaderReceived handles an incoming header from another validator.
-// If valid, we vote on it.
+// OnHeaderReceived handles an incoming header from another validator,
+// verifying its signature here. If valid, we vote on it.
 func (p *Primary) OnHeaderReceived(header *types.Header) {
+	p.handleHeader(header, false)
+}
+
+// handleHeader is OnHeaderReceived for a header the router may have
+// verified: one from the headers topic passed its validator, which checked
+// the author's membership and signature (#4596), and is not verified again.
+func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 	if header == nil {
 		return
 	}
@@ -274,15 +291,8 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 			"round", header.Round)
 	}
 
-	// Verify header signature
-	if err := header.Verify(); err != nil {
-		slog.Debug("Invalid header signature",
-			"error", err,
-			"author", hexEncode(header.Author))
-		return
-	}
-
-	// Check author is in committee (uses committeeMu)
+	// Check author is in committee (uses committeeMu): the map lookup
+	// before the signature check, as for votes
 	p.committeeMu.RLock()
 	inCommittee := p.committee.ContainsValidator(header.Author)
 	p.committeeMu.RUnlock()
@@ -291,6 +301,16 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		slog.Debug("Header from unknown validator",
 			"author", hexEncode(header.Author))
 		return
+	}
+
+	// Verify header signature, once
+	if !routerVerified {
+		if err := header.Verify(); err != nil {
+			slog.Debug("Invalid header signature",
+				"error", err,
+				"author", hexEncode(header.Author))
+			return
+		}
 	}
 	p.noteHeaderSeen(header.Author, header.Round)
 
@@ -405,7 +425,21 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		if p.requestParents != nil {
 			p.requestParents(missingParents)
 		}
-		return // missing parents — asked for them; vote on a later rebroadcast
+		p.deferVote(header, missingParents, nil)
+		return // missing parents — asked for them; vote when they land (#4611)
+	}
+
+	// The parents are here. The distinct ones of the round before must
+	// carry a stake quorum (Narwhal 4.1, #4591); presence alone let a header
+	// with no parents through, and a certificate without a path to an
+	// earlier leader splits the commit sequence between nodes.
+	if err := p.dag.CheckParents(header.Round, header.Parents); err != nil {
+		slog.Info("Header's parents do not certify it; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"error", err)
+		return
 	}
 
 	// Data availability: only vote once we hold every batch this header names
@@ -420,12 +454,13 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// batches arrive via gossip and the author rebroadcasts the header until
 	// it reaches quorum, so we vote on a later rebroadcast once we have them —
 	// the same defer-until-available shape as the missing-parent gate above.
-	var missingBatches []types.BatchDigest
-	for _, entry := range header.Payload {
-		if !p.haveBatch(entry.Digest) {
-			missingBatches = append(missingBatches, entry.Digest)
-		}
-	}
+	//
+	// One call checks and marks: the batches held are marked as named by a
+	// header this node votes on, so batches no header names are evicted
+	// before them until the certificate protects them (#4598). Checked first
+	// and marked after, eviction could take a batch between the two under a
+	// flood, and the vote went out for a batch this node no longer held.
+	missingBatches := p.nameHeaderBatches(header)
 	if len(missingBatches) > 0 {
 		// Pin every batch this header names -- including the ones we
 		// already hold. Those are the ones eviction takes while we wait
@@ -454,11 +489,13 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		for _, d := range missingBatches {
 			p.requestMissingBatch(d)
 		}
-		return // missing batches — do not certify data we do not have
+		p.deferVote(header, nil, missingBatches)
+		return // missing batches — do not certify data we do not have; vote when they land (#4611)
 	}
 
 	// Every batch is here, so nothing is waiting on them any more.
 	p.releasePins(headerDigest)
+	p.deferred.drop(headerDigest)
 
 	// Create and send vote
 	vote := types.NewVote(headerDigest, header.Round, header.Epoch, pubKey)

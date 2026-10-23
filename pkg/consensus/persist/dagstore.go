@@ -83,6 +83,48 @@ func (s *DAGStore) writeFile(name string, data []byte) error {
 	return nil
 }
 
+// fsync flushes a file, or a directory, to the device. A variable so the
+// test of the authored header's write can see each sync and its order.
+var fsync = func(f *os.File) error { return f.Sync() }
+
+// writeFileSynced is writeFile with the file and then the directory synced
+// before it returns, for a write whose loss is not merely a loss (#4592):
+// the authored header is broadcast once it returns, and a power loss that
+// brought the previous file back would have the node author the round
+// again. The caller holds mu.
+func (s *DAGStore) writeFileSynced(name string, data []byte) error {
+	path := filepath.Join(s.dir, name)
+	tmp := path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := fsync(f); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	d, err := os.Open(s.dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	return fsync(d)
+}
+
 // PutCertificate writes the certificate unless it is already stored.
 func (s *DAGStore) PutCertificate(c *types.Certificate) (string, error) {
 	name := CertName(c.Digest())
@@ -167,19 +209,29 @@ func (s *DAGStore) PutAuthored(h *types.Header) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.writeFile(authoredFile, data)
+	// Synced, alone in this store (DIFFERENCES, C9): a certificate or batch
+	// lost to a power loss costs a fetch, this file an equivocation.
+	return s.writeFileSynced(authoredFile, data)
 }
 
-// Authored returns the header this node last authored, or nil.
+// Authored returns the header this node last authored, or nil if it has
+// authored none. Any other failure names the file: a node that cannot read
+// it does not know which round never to author again, and must not start
+// (#4592).
 func (s *DAGStore) Authored() (*types.Header, error) {
-	data, err := os.ReadFile(filepath.Join(s.dir, authoredFile))
+	path := filepath.Join(s.dir, authoredFile)
+	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return types.UnmarshalHeader(data)
+	h, err := types.UnmarshalHeader(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return h, nil
 }
 
 // Mark is a point in the store's write sequence: Retain spares everything

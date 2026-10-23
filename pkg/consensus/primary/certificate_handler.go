@@ -17,14 +17,20 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
-// OnCertificateReceived handles an incoming certificate from another validator.
+// OnCertificateReceived handles an incoming certificate from another
+// validator, verifying it here.
 func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
-	p.receiveCertificate(cert)
+	p.receiveCertificate(cert, false)
 }
 
 // receiveCertificate is OnCertificateReceived reporting what inserting the
-// certificate did, which the catch-up path counts (#4469).
-func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
+// certificate did, which the catch-up path counts (#4469). routerVerified
+// says the certificate came through the certs topic, whose validator
+// verified it against the committee of its epoch before delivering it
+// (#4596, gossip/topic-validators.go): it is not verified again. What
+// arrives by any other path, a sync response's certificates among them, is
+// verified here.
+func (p *Primary) receiveCertificate(cert *types.Certificate, routerVerified bool) CertOutcome {
 	if cert == nil {
 		return CertFailed
 	}
@@ -34,11 +40,22 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 	// costs a map lookup while Verify costs an ed25519 check per signature.
 	// Observed without this: 281k duplicate verifications in 3 minutes of
 	// catch-up (#4057).
-	if p.dag.Contains(cert.Digest()) {
+	if held := p.dag.GetByDigest(cert.Digest()); held != nil {
 		// Release anything still held waiting for it (#4515): a certificate
 		// that reached the DAG by a path that released nothing is released
 		// by its next copy.
 		p.processPendingForParent(cert.Digest())
+		// The digest covers only the header, not even its signature, so a
+		// copy is a duplicate only if it is the held certificate as encoded
+		// on the wire; a genuine header with other signatures is not
+		// verified and does not pass as the certificate it names (#4597).
+		if !held.SameWire(cert) {
+			slog.Debug("A copy of a held certificate with other signatures",
+				"round", cert.Round(),
+				"author", hexEncode(cert.Author()),
+				"digest", cert.Digest().String())
+			return CertInvalid
+		}
 		return CertDuplicate
 	}
 
@@ -65,7 +82,24 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 		}
 	}
 
-	// Verify certificate
+	// Verify the certificate, unless the router did. Its epoch is still
+	// this primary's to judge: the router verifies a certificate against the
+	// committee of the epoch it names, which may be the previous one, and
+	// Verify's first check refuses any epoch but the committee's.
+	if routerVerified {
+		p.committeeMu.RLock()
+		epoch := p.committee.Epoch
+		p.committeeMu.RUnlock()
+		if cert.Header.Epoch != epoch {
+			slog.Info("Invalid certificate",
+				"error", "certificate epoch does not match committee epoch",
+				"round", cert.Round(),
+				"author", hexEncode(cert.Author()),
+				"digest", cert.Digest().String())
+			return CertInvalid
+		}
+		return p.insertCertificateAndProcessPending(cert)
+	}
 	p.verifications.Add(1)
 	metrics.CertVerificationsTotal.WithLabelValues(p.config.Partition).Inc()
 	if p.certSyncer != nil {

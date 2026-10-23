@@ -175,7 +175,9 @@ func TestHandoffAtLeaderRound_ARestartedNodeStandsAtItsCheckpointsRound(t *testi
 	}))
 	svc.config.DataDir = dir
 	svc.lastBlockIndex = 40
-	svc.seedFromCheckpoint()
+	seeded, err := svc.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.True(t, seeded, "precondition: the checkpoint for block 40 is restored")
 
 	// Round 26 is delivered again; 28 and 30 are not, and 32 is new.
 	svc.StartCollecting()
@@ -187,7 +189,7 @@ func TestHandoffAtLeaderRound_ARestartedNodeStandsAtItsCheckpointsRound(t *testi
 		require.NoError(t, err)
 	}
 
-	err := svc.performHandoffAt(38, 26)
+	err = svc.performHandoffAt(38, 26)
 	require.True(t, errors.Is(err, errors.Conflict), "got %v", err)
 	require.True(t, svc.Collecting())
 	require.Empty(t, ca.blocks, "32 is not block 39: 28 and 30 are in neither the buffer nor the state")

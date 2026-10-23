@@ -288,30 +288,61 @@ func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
 // read from all of history and cannot show a record that the executor needs
 // and the window no longer holds (soak 20260905T032333Z: mark-point states
 // past the window, every Directory anchor rejected).
-func BcdbDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
-	dbs := map[string]keyvalue.Beginner{}
-	var mu sync.Mutex
-	return func(partition *protocol.PartitionInfo, node int, logger logging.Logger) keyvalue.Beginner {
-		mu.Lock()
-		defer mu.Unlock()
-		file := fmt.Sprintf("%s-%d", partition.ID, node)
-		if db, ok := dbs[file]; ok {
-			return db
-		}
-		err := os.MkdirAll(dir, 0700)
-		if err != nil {
-			onErr(err)
-			panic(err)
-		}
-		db, err := bcdb.Open(filepath.Join(dir, file))
-		if err != nil {
-			onErr(err)
-			panic(err)
-		}
-		db.StatsEvery = 0
-		dbs[file] = db
+func BcdbDbOpener(dir string, onErr func(error)) *BcdbStores {
+	return &BcdbStores{dir: dir, onErr: onErr, dbs: map[string]*bcdb.Database{}}
+}
+
+// BcdbStores is what BcdbDbOpener opens: one store per node, closed
+// together. A store runs its maintenance -- compress, merge, pack -- in a
+// goroutine of its own after a commit, and Close waits for the run in
+// flight; a test that leaves its stores open has that run writing segments
+// under its temporary directory while the directory is removed ("TempDir
+// RemoveAll cleanup: ... Shard0006/perm: directory not empty", go test e2e
+// 4/4 of !1274 at f79b1f645, #4610). The harness's BcdbDatabase closes them
+// before the directory goes.
+type BcdbStores struct {
+	dir   string
+	onErr func(error)
+	mu    sync.Mutex
+	dbs   map[string]*bcdb.Database
+}
+
+// Open is the OpenDatabaseFunc.
+func (s *BcdbStores) Open(partition *protocol.PartitionInfo, node int, logger logging.Logger) keyvalue.Beginner {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	file := fmt.Sprintf("%s-%d", partition.ID, node)
+	if db, ok := s.dbs[file]; ok {
 		return db
 	}
+	err := os.MkdirAll(s.dir, 0700)
+	if err != nil {
+		s.onErr(err)
+		panic(err)
+	}
+	db, err := bcdb.Open(filepath.Join(s.dir, file))
+	if err != nil {
+		s.onErr(err)
+		panic(err)
+	}
+	db.StatsEvery = 0
+	s.dbs[file] = db
+	return db
+}
+
+// Close closes every store, waiting for the maintenance each has in
+// flight, and returns the first error.
+func (s *BcdbStores) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var first error
+	for file, db := range s.dbs {
+		if err := db.Close(); err != nil && first == nil {
+			first = fmt.Errorf("close %s: %w", file, err)
+		}
+		delete(s.dbs, file)
+	}
+	return first
 }
 
 func OverlayDatabase(a, b OpenDatabaseFunc) Option {

@@ -7,6 +7,7 @@
 package types
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
 	"errors"
@@ -138,6 +139,38 @@ func (c *Certificate) Parents() []CertificateDigest {
 	return c.Header.Parents
 }
 
+// SameWire reports whether o is c as encoded on the wire: the header with
+// its signature, the vote signatures and the signers, every field but the
+// state hash. The digest covers only the header, and not its signature, so
+// this is what makes a copy of a held certificate a duplicate (#4597):
+// comparing the encoding rather than fields means no field added later
+// reopens it. The state hash is left out because a node sets it on the
+// certificate it holds after executing it, and it is no part of what the
+// signers signed: a fresh copy of an executed certificate lacks it and is
+// the same certificate. It costs a marshal of each.
+func (c *Certificate) SameWire(o *Certificate) bool {
+	if c == nil || o == nil {
+		return false
+	}
+	a, err := c.wireWithoutStateHash()
+	if err != nil {
+		return false
+	}
+	b, err := o.wireWithoutStateHash()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(a, b)
+}
+
+// wireWithoutStateHash is the certificate's wire encoding with the state
+// hash zero. It reads neither certificate's state hash, which execution
+// sets on another goroutine (#4445).
+func (c *Certificate) wireWithoutStateHash() ([]byte, error) {
+	bare := Certificate{Header: c.Header, Signatures: c.Signatures, SignedAuthorities: c.SignedAuthorities}
+	return bare.Marshal()
+}
+
 // Verify verifies the certificate against the given committee.
 // It checks that:
 //  1. The header signature is valid
@@ -168,6 +201,20 @@ func (c *Certificate) Verify(committee *Committee) error {
 	// Check author is in committee
 	if !committee.ContainsValidator(c.Header.Author) {
 		return errors.New("header author is not in committee")
+	}
+
+	// A header above round 0 names parents, none twice (#4591). Whether
+	// they are the round before's and carry a quorum is checked against
+	// the DAG when the certificate is inserted.
+	if c.Header.Round > 0 && len(c.Header.Parents) == 0 {
+		return errors.New("certificate above round 0 names no parents")
+	}
+	parents := make(map[CertificateDigest]bool, len(c.Header.Parents))
+	for _, p := range c.Header.Parents {
+		if parents[p] {
+			return errors.New("certificate names a parent twice")
+		}
+		parents[p] = true
 	}
 
 	// Check we have matching signatures and authorities
@@ -331,6 +378,12 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 		return nil, errors.New("too many signatures")
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// a signature costs at least its 4-byte length.
+	if int(numSigs)*4 > len(data)-offset {
+		return nil, errors.New("certificate data truncated: fewer bytes than signatures")
+	}
+
 	signatures := make([][]byte, numSigs)
 	for i := uint32(0); i < numSigs; i++ {
 		if offset+4 > len(data) {
@@ -363,6 +416,11 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 
 	if numAuth > 10_000 {
 		return nil, errors.New("too many authorities")
+	}
+
+	// As for the signatures: 2 bytes per authority index must remain.
+	if int(numAuth)*2 > len(data)-offset {
+		return nil, errors.New("certificate data truncated: fewer bytes than authorities")
 	}
 
 	if int(numAuth) != len(signatures) {

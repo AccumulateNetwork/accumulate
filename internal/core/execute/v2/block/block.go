@@ -7,16 +7,16 @@
 package block
 
 import (
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"strings"
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 )
 
 // Block implements [execute.Block].

@@ -35,7 +35,12 @@ func makeCommittee(t *testing.T, n int) (*types.Committee, []ed25519.PrivateKey)
 
 func createSignedHeader(t *testing.T, pub ed25519.PublicKey, priv ed25519.PrivateKey, round types.Round, epoch uint64) *types.Header {
 	t.Helper()
-	header := types.NewHeader(pub, round, epoch, nil, nil)
+	// A header above round 0 names a parent (#4591).
+	var parents []types.CertificateDigest
+	if round > 0 {
+		parents = []types.CertificateDigest{{byte(round)}}
+	}
+	header := types.NewHeader(pub, round, epoch, nil, parents)
 	err := header.Sign(priv)
 	require.NoError(t, err)
 	return header

@@ -120,6 +120,12 @@ func UnmarshalBPTSyncRequest(data []byte) (*BPTSyncRequest, error) {
 		return nil, fmt.Errorf("too many keys: %d > %d", numKeys, MaxBPTSyncKeys)
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// a key is 32 bytes on the wire.
+	if int(numKeys)*32 > len(data)-offset {
+		return nil, errors.New("BPT sync request truncated: fewer bytes than keys")
+	}
+
 	r.Keys = make([][32]byte, numKeys)
 	for i := uint32(0); i < numKeys; i++ {
 		if offset+32 > len(data) {
@@ -206,6 +212,12 @@ func UnmarshalBPTSyncResponse(data []byte) (*BPTSyncResponse, error) {
 		return nil, fmt.Errorf("too many entries: %d > %d", numEntries, MaxBPTSyncEntries)
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// an entry costs at least its 32-byte key hash and 4-byte value length.
+	if int(numEntries)*36 > len(data)-offset {
+		return nil, errors.New("BPT sync response truncated: fewer bytes than entries")
+	}
+
 	r.Entries = make([]BPTEntry, numEntries)
 	for i := uint32(0); i < numEntries; i++ {
 		if offset+36 > len(data) { // 32 (keyHash) + 4 (valueLen)
@@ -241,6 +253,11 @@ func UnmarshalBPTSyncResponse(data []byte) (*BPTSyncResponse, error) {
 
 	if numMissing > MaxBPTSyncKeys {
 		return nil, fmt.Errorf("too many missing keys: %d > %d", numMissing, MaxBPTSyncKeys)
+	}
+
+	// As for the entries: 32 bytes per missing key must remain.
+	if int(numMissing)*32 > len(data)-offset {
+		return nil, errors.New("BPT sync response truncated: fewer bytes than missing keys")
 	}
 
 	r.Missing = make([][32]byte, numMissing)

@@ -75,6 +75,19 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 	}
 
 	// Node 1 listens, Node 2 connects to Node 1 (simulates peer discovery)
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances with GossipSub
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+	t.Log("GossipSub instances created for both nodes")
+
 	// This simulates the --peers flag connecting to another node's address
 	t.Log("Establishing peer connection between nodes...")
 	pi := peer.AddrInfo{
@@ -93,14 +106,6 @@ func TestConsensusTestnet_TwoNodeCommunication(t *testing.T) {
 		}
 		t.Logf("Node %d listening on: %s", i+1, strings.Join(addrs, ", "))
 	}
-
-	// Create pubsub instances with GossipSub
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
-	}
-	t.Log("GossipSub instances created for both nodes")
 
 	// Create executors and nodes
 	executors := make([]*Executor, numNodes)
@@ -385,6 +390,18 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 		t.Cleanup(func() { _ = h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+
 	// Connect all hosts
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
@@ -395,13 +412,6 @@ func TestConsensusTestnet_BasicConsensus(t *testing.T) {
 			err := hosts[i].Connect(ctx, pi)
 			require.NoError(t, err)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
 	}
 
 	// Create executors and nodes
@@ -626,6 +636,18 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 		t.Cleanup(func() { _ = h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+
 	// Connect all hosts
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
@@ -636,13 +658,6 @@ func TestConsensusTestnet_Throughput(t *testing.T) {
 			err := hosts[i].Connect(ctx, pi)
 			require.NoError(t, err)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
 	}
 
 	// Create executors and nodes
@@ -863,6 +878,18 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 		t.Cleanup(func() { _ = h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+
 	// Connect all hosts
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
@@ -873,13 +900,6 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 			err := hosts[i].Connect(ctx, pi)
 			require.NoError(t, err)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
 	}
 
 	// Create executors and nodes
@@ -1053,6 +1073,14 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 	newHost := bhost.NewBlankHost(newNetw)
 	t.Cleanup(func() { _ = newHost.Close() })
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	newPS, err := pubsub.NewGossipSub(ctx, newHost)
+	require.NoError(t, err)
+
 	// Connect to other nodes
 	for i := 0; i < numNodes; i++ {
 		if i != nodeToRestart {
@@ -1064,9 +1092,6 @@ func TestConsensusTestnet_NodeRestart(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-
-	newPS, err := pubsub.NewGossipSub(ctx, newHost)
-	require.NoError(t, err)
 
 	// Create new node with same identity
 	newNodeCfg := consensus.NodeConfig{

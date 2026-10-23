@@ -46,7 +46,7 @@ func TestASeedForgetsWhatWasHeldBeforeIt(t *testing.T) {
 	// Before the seed: the frontier's certificates arrive and are held.
 	at, after, above := cert(1, 40), cert(2, 41), cert(3, 42)
 	for _, c := range []*types.Certificate{at, after, above} {
-		require.Equal(t, CertBuffered, p.receiveCertificate(c))
+		require.Equal(t, CertBuffered, p.receiveCertificate(c, false))
 	}
 	require.Equal(t, 3, p.PendingCertsCount())
 
@@ -58,9 +58,9 @@ func TestASeedForgetsWhatWasHeldBeforeIt(t *testing.T) {
 
 	// Delivered again, the ones at the seed and the round after it are
 	// taken; the one above still wants its parents and is held again.
-	require.Equal(t, CertInserted, p.receiveCertificate(at), "a certificate at the seed is still held from before it")
-	require.Equal(t, CertInserted, p.receiveCertificate(after))
-	require.Equal(t, CertBuffered, p.receiveCertificate(above))
+	require.Equal(t, CertInserted, p.receiveCertificate(at, false), "a certificate at the seed is still held from before it")
+	require.Equal(t, CertInserted, p.receiveCertificate(after, false))
+	require.Equal(t, CertBuffered, p.receiveCertificate(above, false))
 	require.True(t, d.Contains(at.Digest()))
 	require.True(t, d.Contains(after.Digest()))
 }
