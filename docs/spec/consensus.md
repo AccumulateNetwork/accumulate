@@ -177,11 +177,16 @@ is the memory actually resident.
 
 **Decoding is bounded by the message.** A batch or header from any peer is
 decoded by every validator that receives it, before anything about the peer
-is known. A count field in the encoding (transactions, payload entries,
-parents) is checked against the bytes that remain before a slice is
-allocated for it, so what a message can make a node allocate is bounded by
-the message's own size, not by the caps on the counts. The caps bound a
-well-formed message; the remaining-bytes check bounds a malformed one.
+is known. Every count-prefixed decoder — batch, header, certificate, the
+fetch response's certificate list, and the cert-sync and BPT-sync requests
+and responses — checks a count field against the bytes that remain, at one
+element's minimum wire size, before a slice is allocated for it, so what a
+message can make a node allocate is bounded by the message's own size, not
+by the caps on the counts. The caps bound a well-formed message; the
+remaining-bytes check bounds a malformed one. A stream message's length
+prefix (`readMessage` in `gossip/protocols.go`) is bounded by the protocol
+maximum, up to 100 MB, not by the bytes received; that is a follow-up issue
+(see `DIFFERENCES.md`).
 
 ### Sealing
 
