@@ -66,7 +66,7 @@ func TestOwnCertificateReleasesTheCertificatesHeldForIt(t *testing.T) {
 		sigs[i], idx[i] = vote.Signature, uint16(i)
 	}
 	peer := types.NewCertificate(h, sigs, idx)
-	require.Equal(t, CertBuffered, p.receiveCertificate(peer))
+	require.Equal(t, CertBuffered, p.receiveCertificate(peer, false))
 
 	// The votes arrive and this node forms and inserts its certificate.
 	p.pendingMu.Lock()

@@ -232,6 +232,8 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		if err != nil {
 			return nil, fmt.Errorf("create gossip layer: %w", err)
 		}
+		g.SetCommittee(committee)
+		g.SetHeldCertificate(d.GetByDigest)
 	}
 
 	// Create workers.
@@ -1121,6 +1123,9 @@ func (n *Node) InitGenesis(validators []genesis.ValidatorInfo) error {
 
 	// Update committee to match genesis committee
 	n.committee = result.Committee
+	if n.gossip != nil {
+		n.gossip.SetCommittee(result.Committee)
+	}
 
 	// Set primary to round 1 since genesis is done
 	n.primary.SetRound(result.InitialRound)
@@ -1188,6 +1193,13 @@ func (n *Node) UpdateCommittee(committee *types.Committee) {
 		"newEpoch", committee.Epoch,
 		"oldValidators", oldCommittee.Len(),
 		"newValidators", committee.Len())
+
+	// Gossip first: the router refuses the primary's own headers for an
+	// epoch it holds no committee for, so it learns the committee before
+	// the primary makes a header for it.
+	if n.gossip != nil {
+		n.gossip.SetCommittee(committee)
+	}
 
 	// Update Primary's committee
 	n.primary.UpdateCommittee(committee)

@@ -62,7 +62,7 @@ func TestRepeatedAnswersAreDroppedUnread(t *testing.T) {
 		if c.Digest() == last.Digest() {
 			close(done)
 		}
-		return CertDuplicate
+		return CertInserted
 	})
 	go s.readSyncResponses(responses)
 
