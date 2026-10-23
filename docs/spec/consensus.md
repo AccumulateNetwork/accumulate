@@ -185,8 +185,7 @@ message can make a node allocate is bounded by the message's own size, not
 by the caps on the counts. The caps bound a well-formed message; the
 remaining-bytes check bounds a malformed one. A stream message's length
 prefix (`readMessage` in `gossip/protocols.go`) is bounded by the protocol
-maximum, up to 100 MB, not by the bytes received; that is a follow-up issue
-(see `DIFFERENCES.md`).
+maximum, up to 100 MB, not by the bytes received; that is follow-up #4619.
 
 ### Sealing
 
