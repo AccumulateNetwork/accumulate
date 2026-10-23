@@ -579,21 +579,60 @@ func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse
 				s.window.repeatedAnswer()
 				continue
 			}
-			if len(resp.Missing) == 0 {
+			if s.handleSyncResponse(resp) && len(resp.Missing) == 0 {
 				if len(complete) > 4096 {
 					complete = map[requestKey]struct{}{}
 				}
 				complete[key] = struct{}{}
 			}
-			s.handleSyncResponse(resp)
 		}
 	}
 }
 
-// handleSyncResponse processes a single sync response.
-func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
+// handleSyncResponse processes a single sync response. It reports whether
+// every certificate in it checked. A response is unsigned and anyone can
+// send one, so it is an answer only once its certificates check (#4597):
+// a response with a certificate that does not is not recorded as an
+// answer and leaves the digests it carried in flight to be retried. Nor
+// is one that reports part of the request missing: it leaves the request
+// open for the next answer, and this peer may give it. Only a verified
+// answer that covers the request counts.
+func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 	if resp == nil || len(resp.Certificates) == 0 {
-		return
+		return false
+	}
+
+	s.responsesRecv.Add(1)
+	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
+	s.window.response()
+
+	good := true
+	for _, cert := range resp.Certificates {
+		if cert == nil {
+			continue
+		}
+
+		if !s.checks(cert) {
+			good = false
+			continue
+		}
+
+		// Remove from in-flight
+		s.inFlightMu.Lock()
+		delete(s.inFlight, cert.Digest())
+		s.inFlightMu.Unlock()
+
+		s.certificatesRecv.Add(1)
+	}
+
+	if !good {
+		slog.Debug("Sync response with certificates that do not check",
+			"certificates", len(resp.Certificates),
+			"requestID", resp.RequestID)
+		return false
+	}
+	if len(resp.Missing) > 0 {
+		return true
 	}
 
 	// Note the response so we do not also answer this request (suppression)
@@ -604,35 +643,26 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) {
 	s.answered[keyOf(resp.Requester, resp.RequestID)] = struct{}{}
 	s.answeredMu.Unlock()
 
-	s.responsesRecv.Add(1)
-	metrics.CertSyncResponsesReceivedTotal.WithLabelValues(s.config.Partition).Inc()
-	s.window.response()
-
-	for _, cert := range resp.Certificates {
-		if cert == nil {
-			continue
-		}
-
-		digest := cert.Digest()
-
-		// Remove from in-flight
-		s.inFlightMu.Lock()
-		delete(s.inFlight, digest)
-		s.inFlightMu.Unlock()
-
-		// Invoke callback if set
-		if s.onCertReceived != nil {
-			outcome := s.onCertReceived(cert)
-			metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
-			s.window.certificate(outcome)
-		}
-
-		s.certificatesRecv.Add(1)
-	}
-
 	slog.Debug("Received sync response",
 		"certificates", len(resp.Certificates),
 		"requestID", resp.RequestID)
+	return true
+}
+
+// checks hands a received certificate to the receiver and reports whether
+// it checked: it was verified and inserted, or the receiver holds it in
+// the DAG and the copy is the held certificate byte for byte (the
+// receiver's duplicate rule, receiveCertificate). Nothing else counts: the
+// receiver reports a certificate waiting for its parents before verifying
+// it (#4597). Without a receiver nothing checks.
+func (s *CertSyncer) checks(cert *types.Certificate) bool {
+	if s.onCertReceived == nil {
+		return false
+	}
+	outcome := s.onCertReceived(cert)
+	metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
+	s.window.certificate(outcome)
+	return outcome == CertInserted || outcome == CertDuplicate
 }
 
 // retryLoop periodically checks for timed-out requests and retries them.

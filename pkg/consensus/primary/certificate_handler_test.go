@@ -613,3 +613,48 @@ func TestCleanupPrunesSentVotes(t *testing.T) {
 		require.GreaterOrEqual(t, round, types.Round(10))
 	}
 }
+
+// A certificate from the gossip channels was verified by the router's topic
+// validator, and the primary does not verify it again (#4596): its only
+// check of such a certificate's signatures is the one the router made. A
+// certificate that reaches the primary by any other path, a sync response's
+// among them, is verified here. The epoch is still the primary's to judge:
+// the router verifies a certificate against the committee of the epoch it
+// names, the primary admits only its current epoch's.
+func TestARouterVerifiedCertificateIsNotVerifiedAgain(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv, NewCertsChannelSize: 10}, committee, nil, d, nil)
+
+	fullyVoted := func(author int, epoch uint64) *types.Certificate {
+		header := types.NewHeader(validators[author].pub, 0, epoch, nil, nil)
+		require.NoError(t, header.Sign(validators[author].priv))
+		sigs := make([][]byte, len(validators))
+		authors := make([]uint16, len(validators))
+		for i, v := range validators {
+			vote := types.NewVote(header.Digest(), 0, epoch, v.pub)
+			require.NoError(t, vote.Sign(v.priv))
+			sigs[i] = vote.Signature
+			authors[i] = uint16(i)
+		}
+		return types.NewCertificate(header, sigs, authors)
+	}
+
+	fromRouter := fullyVoted(1, 1)
+	require.Equal(t, CertInserted, p.receiveCertificate(fromRouter, true))
+	require.NotNil(t, d.GetByDigest(fromRouter.Digest()))
+	require.Zero(t, p.verifications.Load(), "the router's verification is the one")
+
+	fromSync := fullyVoted(2, 1)
+	require.Equal(t, CertInserted, p.receiveCertificate(fromSync, false))
+	require.Equal(t, uint64(1), p.verifications.Load())
+
+	// Verified by the router against another epoch's committee: not this
+	// primary's, which Verify refused before and the epoch check refuses now.
+	require.Equal(t, CertInvalid, p.receiveCertificate(fullyVoted(3, 2), true))
+	require.Equal(t, uint64(1), p.verifications.Load())
+}

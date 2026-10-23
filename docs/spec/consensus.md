@@ -160,6 +160,30 @@ So a validator holds batches in four places, for four reasons:
     and the partition stops while its peers run on. Both halves have now cost
     exactly that — batches in #4159, parent certificates in #4182.
 
+12. **Only the committee speaks for consensus, and a node passes on only
+    what it has checked.** Narwhal assumes authenticated links among the
+    validators; here a partition's consensus topics run on the node's one
+    libp2p router, which any peer can reach. So the authority of a header,
+    vote or certificate is its author's key, not the peer it came from: a
+    node delivers one to consensus, and relays it to its peers, only when
+    its author is a member of the committee of the epoch it names and its
+    signatures are that member's (for a certificate, a quorum of members').
+    The check is made by the router before relay, cheapest part first, so a
+    message from outside the committee costs each receiver a decode and a
+    lookup and goes no further, and it is made once: what the router
+    passed, the handlers judge against the primary's own round and epoch
+    without verifying its signatures again, and a copy of a certificate
+    the node holds, the same as encoded on the wire (the header with its
+    signature, the vote signatures and the signers; the state hash, set
+    after execution, aside), is accepted on the verification that admitted
+    it (#4596). Certificate-sync responses are the
+    one carve-out: a response carries up to 100 certificates and every node
+    receives every response, so the router relays one once each
+    certificate's author is a member, and the receiver verifies each
+    certificate before it is used or the response counts as an answer
+    (#4597, "Certificate catch-up"). Which peers a validator exchanges these
+    topics with is not yet decided (DIFFERENCES C17).
+
 ## 2. Specification — how it is implemented
 
 `pkg/consensus/worker` (the worker, its pending list, active store and
@@ -970,6 +994,62 @@ are normative, and this list summarizes them:
   or below the last commit plus one ("Certificate catch-up"; #4595 narrows
   this to the seed and the weak-link window above the collection floor).
 
+### Who may send consensus messages
+
+Every consensus topic of a partition has a validator registered with the
+router (`pkg/consensus/gossip/topic-validators.go`). The router runs it on
+every message, including the node's own, before the message is delivered or
+relayed. Checks run in this order and stop at the first that fails: decode
+within the encoding's bounds; the committee of the epoch the message names;
+the author's membership of that committee; signatures.
+
+| topic | delivered and relayed only if |
+|---|---|
+| `headers` | it decodes, and its author is a member of its epoch's committee and signed it |
+| `votes` | it decodes, and its author is a member of its epoch's committee and signed it |
+| `certs` | it decodes, and it verifies against its epoch's committee: the author is a member and signed the header, and distinct members' vote signatures make a quorum. A copy of a certificate the node holds, the same as encoded on the wire (the header with its signature, the vote signatures and the signers; the state hash aside), is accepted on the verification that admitted it, the primary's duplicate rule ("Certificate catch-up") applied before the signatures: a stalled node re-shares every certificate of its round and the one before as new messages, and each copy cost every receiver a check per signature before the handler found it a duplicate (#4057) |
+| `cert-sync`, request | it decodes. Requests are unsigned, and the nodes that send them, joining nodes among them, need not be in the committee |
+| `cert-sync`, response | it decodes, and every certificate in it is authored by a member of its epoch's committee. This is the carve-out of invariant 12: the certificates' signatures are not verified before relay, since a response carries up to 100 and every node receives every response. The receiver verifies each certificate before it is used, and the response is an answer only once every certificate in it checks ("Certificate catch-up", #4597) |
+| `batches` | it decodes and holds at least one transaction. A batch names no author and carries no signature, so nothing ties it to a member; what batches can cost a validator is bounded by the inbound queue and the store (invariants 1 and 3) |
+
+A message that fails a check is **rejected**. A message naming an epoch the
+node holds no committee for is **ignored**: neither delivered nor relayed,
+but not counted as invalid against its sender, because a node behind on a
+committee change cannot tell a future epoch from a false one. The node holds the
+current committee and the one before it, so around a switch messages of the
+previous epoch are still judged by their own committee; a node that has been
+given no committee ignores every message that needs one. When the committee
+changes, `Node.UpdateCommittee` passes it to gossip before the primary and
+Bullshark: the router runs the validator on the node's own messages too, and
+a header the node's own router refuses is never sent, so gossip holds the
+new committee before the primary makes a header for it
+(`TestCommitteeSwitchReachesGossip`: after the switch, a new member's header
+is relayed and delivered, a removed member's is rejected, and the switching
+node's own first header of the new epoch reaches its peer). What is refused
+is counted in
+`accumulate_dagbft_gossip_refused_total{topic,outcome}` and logged at Debug,
+since anyone can send messages that are refused (invariant 5); ignored
+messages rising on one node while its peers accept them is that node behind
+on a committee change. An undecodable certificate is still logged at Info
+(#4054).
+
+A validator that accepts hands the decoded message to the handler, so a
+message is decoded once, and its signatures are checked once: the primary
+does not verify again a header, vote or certificate from the gossip
+channels, whose signatures the router checked
+(`TestARouterVerifiedCertificateIsNotVerifiedAgain`). It keeps its other
+checks — membership, the vote rate limiter, and the epoch, since the router
+judges a certificate by the committee of the epoch it names and the primary
+admits only its current epoch's — because they are also what judges a
+message against the primary's own round and epoch, and it verifies what
+reaches it by any other path: a sync response's certificates, which the
+router does not verify. Checking twice cost what the validators were meant
+to save: on the same run of the consensus simulator the node spent 40% more
+CPU, nearly all of it in the validators' second signature checks, and on the
+2-vCPU CI runner `TestRestartOneDirectoryValidatorOfTwelve` went from
+430-615 s to 750-1020 s and once stalled outright after the restart
+(pipeline 2979598992).
+
 ### DAG retention
 
 The DAG keeps `DAGGCDepth` (2,000) rounds of certificates behind **whichever
@@ -1010,6 +1090,37 @@ broadcast:
 
 A peer answers after a random delay of up to 200 ms with at most 100
 certificates, and does not answer a request it has already seen answered.
+**A response is an answer only once every certificate it carries
+checks.** Responses are unsigned and anyone can send one, and the topic
+validator checks only that each certificate's author is a member
+(invariant 12). A certificate checks when it is verified and inserted, or
+when it is a duplicate. A node reports a certificate whose digest is in
+its DAG without verifying it (below), and the digest covers only the
+header, and not its signature, so a copy is a duplicate only if it is the
+held certificate as encoded on the wire: the header with its signature,
+the vote signatures and the signers, compared as encodings so that no
+field added later reopens this. The state hash is left out: a node sets
+it on the certificate it holds after executing it, and a fresh copy of an
+executed certificate is the same certificate. A genuine header, which is
+public, with other signatures, its own included, is invalid. That rule is
+the primary's
+(`receiveCertificate`), one rule for every path a certificate arrives by
+(`TestACopyIsADuplicateOnlyByteForByte`), and the router's certificate
+validator applies it before verifying a copy
+(`TestACopyOfAHeldCertificateIsNotVerifiedAgain`). A certificate held waiting for
+its parents is reported held before it is verified, and does not check.
+A response with a certificate that does not check, or that reports part
+of the request missing, is not recorded as an answer and does not complete
+its request: only a verified answer that covers the request counts
+(`TestAPartialAnswerSuppressesNothing`). The certificates that checked
+are kept all the same, and the digests of those that did not stay in
+flight: they are retried after the retry timeout if they are still not in
+the DAG, and dropped from the set if they are. Before this, one junk
+certificate sent under the requester's key and request ID was recorded as
+the answer by every peer, which then kept its own, and the requester
+dropped the digest from its in-flight set for good (#4597,
+`TestForgedSyncResponseIsNotAnAnswer`, through the primary's own receive
+path).
 A request is named by its requester's key and its ID together, and a
 response carries both: every node numbers its own requests, so an ID alone
 named a request of every node at once, and a peer that had seen node A's

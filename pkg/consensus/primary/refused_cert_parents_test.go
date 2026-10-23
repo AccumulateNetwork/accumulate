@@ -57,13 +57,13 @@ func TestRefusedCertificateStillRequestsItsParents(t *testing.T) {
 
 	// Fill the buffer: one slot, taken by a certificate far ahead.
 	p.pendingCerts = NewPendingCertificates(1)
-	require.Equal(t, CertBuffered, p.receiveCertificate(certWithParent(1, 50, types.CertificateDigest{7})))
+	require.Equal(t, CertBuffered, p.receiveCertificate(certWithParent(1, 50, types.CertificateDigest{7}), false))
 	asked = nil
 
 	// The certificate this node needs next, naming a parent it lacks.
 	absent := types.CertificateDigest{9, 9, 9}
 	next := certWithParent(2, 1, absent)
-	require.Equal(t, CertDropped, p.receiveCertificate(next), "the buffer is full, so it is not held")
+	require.Equal(t, CertDropped, p.receiveCertificate(next, false), "the buffer is full, so it is not held")
 	require.Equal(t, []types.CertificateDigest{absent}, asked,
 		"a refused certificate's missing parents must still be requested, or it is refused on every re-delivery")
 
@@ -71,7 +71,7 @@ func TestRefusedCertificateStillRequestsItsParents(t *testing.T) {
 	// the parents of every frontier certificate would pull the frontier by
 	// digest alongside gossip.
 	asked = nil
-	require.Equal(t, CertDropped, p.receiveCertificate(certWithParent(3, 60, types.CertificateDigest{8})))
+	require.Equal(t, CertDropped, p.receiveCertificate(certWithParent(3, 60, types.CertificateDigest{8}), false))
 	require.Empty(t, asked)
 }
 
@@ -130,15 +130,15 @@ func TestRefusedCertificatesCostNoVerification(t *testing.T) {
 	// Fill the one-slot buffer with a certificate far ahead.
 	p.pendingCerts = NewPendingCertificates(1)
 	held := cert(1, 50, types.CertificateDigest{7})
-	require.Equal(t, CertBuffered, p.receiveCertificate(held))
+	require.Equal(t, CertBuffered, p.receiveCertificate(held, false))
 	require.Equal(t, uint64(1), p.verifications.Load(), "the first delivery is verified")
 	asked = nil
 
 	const n = 20
 	refused := cert(2, 60, types.CertificateDigest{8})
 	for range n {
-		require.Equal(t, CertBuffered, p.receiveCertificate(held), "already held")
-		require.Equal(t, CertDropped, p.receiveCertificate(refused), "the buffer is full and it is ahead of the next round")
+		require.Equal(t, CertBuffered, p.receiveCertificate(held, false), "already held")
+		require.Equal(t, CertDropped, p.receiveCertificate(refused, false), "the buffer is full and it is ahead of the next round")
 	}
 	require.Equal(t, uint64(1), p.verifications.Load(),
 		"%d re-deliveries of a held certificate and %d of a refused one were verified", n, n)
@@ -147,13 +147,13 @@ func TestRefusedCertificatesCostNoVerification(t *testing.T) {
 	// A certificate the node needs next still takes the full path: verified,
 	// refused by the full buffer, and its parents asked for.
 	absent := types.CertificateDigest{9, 9, 9}
-	require.Equal(t, CertDropped, p.receiveCertificate(cert(3, 2, absent)))
+	require.Equal(t, CertDropped, p.receiveCertificate(cert(3, 2, absent), false))
 	require.Equal(t, uint64(2), p.verifications.Load())
 	require.Equal(t, []types.CertificateDigest{absent}, asked)
 
 	// A forged certificate the node needs is still caught by verification.
 	forged := cert(1, 2, absent)
 	forged.Signatures[0] = make([]byte, len(forged.Signatures[0]))
-	require.Equal(t, CertInvalid, p.receiveCertificate(forged))
+	require.Equal(t, CertInvalid, p.receiveCertificate(forged, false))
 	require.Equal(t, uint64(3), p.verifications.Load())
 }

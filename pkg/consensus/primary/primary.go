@@ -391,7 +391,9 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		}
 		p.certSyncer = NewCertSyncer(syncerConfig, d, g, pendingCerts)
 		// Set callback to process received certificates
-		p.certSyncer.SetCertReceivedCallback(p.receiveCertificate)
+		p.certSyncer.SetCertReceivedCallback(func(cert *types.Certificate) CertOutcome {
+			return p.receiveCertificate(cert, false)
+		})
 		p.requestParents = p.certSyncer.RequestMissing
 	}
 
@@ -453,23 +455,26 @@ func (p *Primary) Start(ctx context.Context) error {
 		case <-p.ctx.Done():
 			return p.ctx.Err()
 
+		// The gossip channels carry what the topic validators accepted:
+		// authored and signed by a member of the committee of its epoch
+		// (#4596). The handlers do not verify those signatures again.
 		case header := <-headers:
 			if header != nil {
-				p.OnHeaderReceived(header)
+				p.handleHeader(header, true)
 			}
 
 		case vote := <-votes:
 			if vote != nil {
-				p.OnVoteReceived(vote)
+				p.handleVote(vote, true)
 			}
 
 		case cert := <-certs:
 			if cert != nil {
-				p.OnCertificateReceived(cert)
+				p.receiveCertificate(cert, true)
 			}
 
 		case header := <-p.retests:
-			p.OnHeaderReceived(header)
+			p.handleHeader(header, true)
 
 		case <-ticker.C:
 			p.tryAdvanceRound()
