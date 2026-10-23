@@ -1101,8 +1101,20 @@ Each round, in this order:
    at a time used 1.4 of the 16 queries four validators admit, 2.6 s and
    ~100 accounts a page, so a BVN of 96k leaves was 40 minutes of pulling
    against a 30-minute deadline (run 20261007T141334Z;
-   `TestTheSectionsARoundOpenedAreLoadedInParallel`). The round logs what it
-   loaded: sections, pages, accounts, and accounts per second.
+   `TestTheSectionsARoundOpenedAreLoadedInParallel`). **The bound holds
+   per peer** (#4604): each peer has `statesInFlight` workers that take the
+   next span and ask it of that peer first, and every page and
+   `AccountStates` call of the load to a peer, a span's stale leaves asked
+   of the other peers included, holds one of that peer's `statesInFlight`
+   slots, waiting for one. A span's peer picked by its index, and its stale
+   leaves asked across the peers at once, had sixteen in flight to the
+   slower of two peers
+   (`TestTheOpenedSectionsLoadHoldsStatesInFlightPerPeer`). Under it, the
+   node's gate to each peer (§3a, "A block's queries go first") holds this
+   load, as all the background, to `PeerInFlight`-1 (3) at the peer and
+   asks a busy peer again: what a peer sees of it is at most 3 at once. The
+   round logs what it loaded: sections, pages, accounts, and accounts per
+   second.
 
 **The state is complete** when the top is taken, every section opened is
 loaded, nothing is owed, and `L` is at or above the highest `B` any reply was

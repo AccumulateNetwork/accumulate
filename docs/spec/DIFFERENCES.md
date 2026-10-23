@@ -552,6 +552,25 @@ follower that was removed may outlive it in its peers' peer stores; a page
 such a peer cannot be dialed for passes to the next (#4533).
 `TestAJoiningNodeAdvertisesItsServicesOnlyOnceActive`.
 
+### E31. The records' states, the fill and the look-ahead bound their queries across the peers, not at each peer
+
+*[#4604](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4604)*
+
+**Spec** (executor.md, "Sync", "The algorithm", and §3, step 1): a round's
+stale accounts are asked four calls at a time against each peer, and the fill
+loads four sections at a time against each peer the same way.
+
+**Code**: the opened-section load holds `statesInFlight` at each peer
+(`loadOpened`, #4604). The others hold `statesInFlight` times the number of
+peers in all: `askStates`, as `takeAccounts` calls it for the records'
+accounts, runs that many workers and picks a chunk's first peer by its index,
+and the fill and the look-ahead (`internal/node/join/sections.go`) take that
+many slots for the section loads together. A slower peer can be asked for more
+than four at once. In production the node's gate to each peer (`pull.Gated`)
+holds the background to `PeerInFlight`-1 at the peer and asks a busy peer
+again, so the peer does not see it; a test whose sources have no such gate
+does.
+
 ### E11. A node cannot sync from the running protocol
 
 *[#4205](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4205)*
