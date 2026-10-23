@@ -2296,7 +2296,11 @@ merge request is merged**; remove the entry when the list is empty.
   records it; !1269 decides it).
 - **#4597** (!1257): a node that has seen any response to a sync request
   answers it no more, so one forged response silences every honest answer
-  ("Certificate catch-up").
+  ("Certificate catch-up"); the rule is that a response suppresses only
+  the certificates it delivered that checked, unless it completes the
+  request (every certificate checks, nothing missing), in which case it
+  suppresses the request; junk suppresses nothing and a partial answer
+  leaves the rest to the peers.
 - **#4598** (!1264): the active store's eviction does not protect a batch a
   certified, uncommitted header names, so batches from any peer can evict
   a voter's copy of what its vote attested (invariant 3); the rule is that
