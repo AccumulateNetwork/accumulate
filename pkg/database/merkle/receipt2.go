@@ -8,6 +8,7 @@ package merkle
 
 import (
 	"fmt"
+
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 

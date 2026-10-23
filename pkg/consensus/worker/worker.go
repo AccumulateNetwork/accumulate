@@ -278,6 +278,10 @@ type Worker struct {
 	gossip    *gossip.GossipLayer
 	validator TransactionValidator
 
+	// onStored is told the digest of each batch StoreBatch adds, so a vote
+	// deferred for it is re-tested at once (#4611).
+	onStored atomic.Pointer[func(types.BatchDigest)]
+
 	// Pending transactions
 	mu          sync.Mutex
 	pending     [][]byte
@@ -655,6 +659,12 @@ func (w *Worker) GetBatch(digest types.BatchDigest) (*types.Batch, error) {
 	return entry.batch, nil
 }
 
+// SetOnStored installs the callback StoreBatch calls, outside its lock, with
+// the digest of each batch it adds (#4611).
+func (w *Worker) SetOnStored(fn func(types.BatchDigest)) {
+	w.onStored.Store(&fn)
+}
+
 // StoreBatch stores a batch received from another worker.
 // Implements the BatchStore interface.
 // Uses LRU eviction policy when storage limit is reached.
@@ -665,6 +675,12 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 
 	digest := batch.Digest()
 
+	added := false
+	defer func() {
+		if fn := w.onStored.Load(); added && fn != nil {
+			(*fn)(digest)
+		}
+	}()
 	w.batchMu.Lock()
 	defer w.batchMu.Unlock()
 
@@ -692,6 +708,7 @@ func (w *Worker) StoreBatch(batch *types.Batch) error {
 	}
 	w.storedBytes += batchBytes(batch)
 	w.observeStore()
+	added = true
 
 	return nil
 }

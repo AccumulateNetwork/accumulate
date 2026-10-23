@@ -611,7 +611,16 @@ behind them (#4537): a node just started has its bootstrap peers connected
 within a second and its routing table warm only later, and two followers of run
 `20261006T031201Z` found no validator in the DHT for twenty seconds while
 connected to every one of them
-(`TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt`). **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
+(`TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt`). **What identify
+reported of a connected peer's services never regresses** (#4610): a node
+registers its services after it has connected, so its peers learn them from
+identify pushes, which carry no order and each replace the peer's whole
+protocol set; under load a stale one lands last and takes a service away
+(8 of 40 four-node meshes on two loaded cores, !1274). A node never withdraws
+a service while it runs, so a service a peer announced on a connection it
+still has: the node's peerstore writes it back into every later set of the
+peer's protocols, in the write itself, and forgets it when the peer's last
+connection closes (`serviceMemory`). **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
 supersedes 2026-10-02, "no as-of-H load"). A block `h+1` that reads a section
 not loaded takes it as the peers held it at `h`, their BPT history serving the
 leaves (`BptPage.ForHeight`) and the accounts (`AccountStates.ForHeight`); the

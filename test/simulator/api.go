@@ -8,7 +8,6 @@ package simulator
 
 import (
 	"context"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"net"
 	"net/http"
 	"strings"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiv2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"

@@ -127,7 +127,12 @@ func (p *Primary) RoundStatus() RoundStatus {
 // header about once a second, or re-sends its vote on each rebroadcast it
 // sees. A stopped one's last header stays in the DAG and in memory, and
 // counting it made a partition that lost two of four report three producing.
-const HeardWithin = 10 * time.Second
+//
+// It is well inside the stall a node reports (10 s with no block): a member
+// that stopped after authoring the round the partition then stalls at was
+// heard after the last block, and at 10 s it was still counted when the stall
+// was reported, so the partition said 3 or 4 of 4 producing (#4610).
+const HeardWithin = 5 * time.Second
 
 type seenAt struct {
 	round types.Round

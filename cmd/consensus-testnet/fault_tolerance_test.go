@@ -387,6 +387,14 @@ func TestConsensusTestnet_FaultTolerance_Recovery(t *testing.T) {
 		t.Cleanup(func() { _ = newHost.Close() })
 
 		// Connect to other active nodes
+		// The routers before any connection, as a node starts (#4054): a router
+		// attaches to every peer the host is connected to the moment it is
+		// made, and a peer whose router does not exist yet refuses its stream,
+		// which marks the peer dead for good -- nothing is published to it, and
+		// nothing retries.
+		newPS, err := pubsub.NewGossipSub(ctx, newHost)
+		require.NoError(t, err)
+
 		for i := 0; i < numNodes; i++ {
 			skip := false
 			for _, failedIdx := range nodesToFail {
@@ -403,9 +411,6 @@ func TestConsensusTestnet_FaultTolerance_Recovery(t *testing.T) {
 				_ = newHost.Connect(ctx, pi)
 			}
 		}
-
-		newPS, err := pubsub.NewGossipSub(ctx, newHost)
-		require.NoError(t, err)
 
 		nodeCfg := consensus.NodeConfig{
 			Partition:        "testnet",
@@ -536,6 +541,18 @@ func setupNetwork(t *testing.T, ctx context.Context, numNodes int) ([]host.Host,
 		t.Cleanup(func() { _ = h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+
 	// Connect all hosts
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
@@ -546,13 +563,6 @@ func setupNetwork(t *testing.T, ctx context.Context, numNodes int) ([]host.Host,
 			err := hosts[i].Connect(ctx, pi)
 			require.NoError(t, err)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
 	}
 
 	return hosts, pubsubs

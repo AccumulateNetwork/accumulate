@@ -15,7 +15,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -23,6 +22,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
@@ -212,6 +212,12 @@ type Primary struct {
 	deferredPins   map[types.HeaderDigest][]types.BatchDigest
 	deferredRounds map[types.HeaderDigest]types.Round
 
+	// deferred records what each deferred vote lacks, and retests carries
+	// the headers whose last missing piece has landed back to the loop, so
+	// the vote goes out then and not on the next rebroadcast (#4611).
+	deferred *deferredVotes
+	retests  chan *types.Header
+
 	// Round-sync pacing (#4057)
 	roundSyncMu       sync.Mutex
 	lastRoundPull     time.Time
@@ -354,6 +360,11 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		sentVotes:      make(map[types.HeaderDigest]*types.Vote),
 		pendingCerts:   pendingCerts,
 		newCerts:       make(chan *types.Certificate, config.NewCertsChannelSize),
+		deferred:       newDeferredVotes(),
+		retests:        make(chan *types.Header, 256),
+	}
+	for _, w := range workers {
+		w.SetOnStored(p.BatchStored)
 	}
 
 	// Initialize CertSyncer if gossip is available
@@ -441,6 +452,9 @@ func (p *Primary) Start(ctx context.Context) error {
 				p.OnCertificateReceived(cert)
 			}
 
+		case header := <-p.retests:
+			p.OnHeaderReceived(header)
+
 		case <-ticker.C:
 			p.tryAdvanceRound()
 			// Periodically prune old pending certificates
@@ -454,6 +468,7 @@ func (p *Primary) Start(ctx context.Context) error {
 			if time.Since(lastRebroadcast) >= time.Second {
 				lastRebroadcast = time.Now()
 				p.rebroadcastPendingHeaders()
+				p.pruneDeferredVotes()
 			}
 			// Recover from a silent stall (#4057): after an outage all
 			// validators can end up with their OWN header certified but
@@ -808,6 +823,9 @@ func (p *Primary) requeueHeaderBatches(header *types.Header) {
 
 // signalNewCertificate sends a certificate to the newCerts channel (non-blocking).
 func (p *Primary) signalNewCertificate(cert *types.Certificate) {
+	// A vote deferred for this certificate as a parent can go out now (#4611).
+	p.retest(p.deferred.parentArrived(cert.Digest()))
+
 	p.newCertsMu.Lock()
 	defer p.newCertsMu.Unlock()
 
