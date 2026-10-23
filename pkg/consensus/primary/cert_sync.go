@@ -7,7 +7,6 @@
 package primary
 
 import (
-	"bytes"
 	"context"
 	"crypto/ed25519"
 	"log/slog"
@@ -594,7 +593,10 @@ func (s *CertSyncer) readSyncResponses(responses <-chan *gossip.CertSyncResponse
 // every certificate in it checked. A response is unsigned and anyone can
 // send one, so it is an answer only once its certificates check (#4597):
 // a response with a certificate that does not is not recorded as an
-// answer and leaves the digests it carried in flight to be retried.
+// answer and leaves the digests it carried in flight to be retried. Nor
+// is one that reports part of the request missing: it leaves the request
+// open for the next answer, and this peer may give it. Only a verified
+// answer that covers the request counts.
 func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 	if resp == nil || len(resp.Certificates) == 0 {
 		return false
@@ -629,6 +631,9 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 			"requestID", resp.RequestID)
 		return false
 	}
+	if len(resp.Missing) > 0 {
+		return true
+	}
 
 	// Note the response so we do not also answer this request (suppression)
 	s.answeredMu.Lock()
@@ -645,12 +650,11 @@ func (s *CertSyncer) handleSyncResponse(resp *gossip.CertSyncResponse) bool {
 }
 
 // checks hands a received certificate to the receiver and reports whether
-// it checked: it was verified and inserted, or it is a copy, signatures
-// and signers byte for byte, of one in the DAG. Nothing else counts. The
-// receiver reports a certificate it holds, in the DAG or waiting for its
-// parents, before verifying it, and a certificate's digest covers only
-// its header, so a genuine header with junk signatures comes back as a
-// duplicate or as held (#4597). Without a receiver nothing checks.
+// it checked: it was verified and inserted, or the receiver holds it in
+// the DAG and the copy is the held certificate byte for byte (the
+// receiver's duplicate rule, receiveCertificate). Nothing else counts: the
+// receiver reports a certificate waiting for its parents before verifying
+// it (#4597). Without a receiver nothing checks.
 func (s *CertSyncer) checks(cert *types.Certificate) bool {
 	if s.onCertReceived == nil {
 		return false
@@ -658,32 +662,7 @@ func (s *CertSyncer) checks(cert *types.Certificate) bool {
 	outcome := s.onCertReceived(cert)
 	metrics.CertSyncCertificatesReceivedTotal.WithLabelValues(s.config.Partition, string(outcome)).Inc()
 	s.window.certificate(outcome)
-	switch outcome {
-	case CertInserted:
-		return true
-	case CertDuplicate:
-		return sameSignatures(s.dag.GetByDigest(cert.Digest()), cert)
-	}
-	return false
-}
-
-// sameSignatures reports whether b carries a's signatures and signers,
-// byte for byte.
-func sameSignatures(a, b *types.Certificate) bool {
-	if a == nil || b == nil || len(a.Signatures) != len(b.Signatures) || len(a.SignedAuthorities) != len(b.SignedAuthorities) {
-		return false
-	}
-	for i := range a.Signatures {
-		if !bytes.Equal(a.Signatures[i], b.Signatures[i]) {
-			return false
-		}
-	}
-	for i := range a.SignedAuthorities {
-		if a.SignedAuthorities[i] != b.SignedAuthorities[i] {
-			return false
-		}
-	}
-	return true
+	return outcome == CertInserted || outcome == CertDuplicate
 }
 
 // retryLoop periodically checks for timed-out requests and retries them.

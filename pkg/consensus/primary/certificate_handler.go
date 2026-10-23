@@ -7,6 +7,7 @@
 package primary
 
 import (
+	"bytes"
 	"errors"
 	"log/slog"
 	"strings"
@@ -34,11 +35,22 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 	// costs a map lookup while Verify costs an ed25519 check per signature.
 	// Observed without this: 281k duplicate verifications in 3 minutes of
 	// catch-up (#4057).
-	if p.dag.Contains(cert.Digest()) {
+	if held := p.dag.GetByDigest(cert.Digest()); held != nil {
 		// Release anything still held waiting for it (#4515): a certificate
 		// that reached the DAG by a path that released nothing is released
 		// by its next copy.
 		p.processPendingForParent(cert.Digest())
+		// The digest covers only the header, so a copy is a duplicate only
+		// if its signatures and signers are the held certificate's, byte
+		// for byte; a genuine header with other signatures is not verified
+		// and does not pass as the certificate it names (#4597).
+		if !sameSignatures(held, cert) {
+			slog.Debug("A copy of a held certificate with other signatures",
+				"round", cert.Round(),
+				"author", hexEncode(cert.Author()),
+				"digest", cert.Digest().String())
+			return CertInvalid
+		}
 		return CertDuplicate
 	}
 
@@ -84,6 +96,25 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 
 	// Try to insert and process any newly-unblocked certificates
 	return p.insertCertificateAndProcessPending(cert)
+}
+
+// sameSignatures reports whether b carries a's signatures and signers,
+// byte for byte.
+func sameSignatures(a, b *types.Certificate) bool {
+	if a == nil || b == nil || len(a.Signatures) != len(b.Signatures) || len(a.SignedAuthorities) != len(b.SignedAuthorities) {
+		return false
+	}
+	for i := range a.Signatures {
+		if !bytes.Equal(a.Signatures[i], b.Signatures[i]) {
+			return false
+		}
+	}
+	for i := range a.SignedAuthorities {
+		if a.SignedAuthorities[i] != b.SignedAuthorities[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // insertCertificateAndProcessPending attempts to insert a certificate into the DAG.

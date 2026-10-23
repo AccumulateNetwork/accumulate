@@ -147,3 +147,67 @@ func TestForgedSyncResponseIsNotAnAnswer(t *testing.T) {
 			"the genuine answer was dropped: the forged response completed the request")
 	})
 }
+
+// TestACopyIsADuplicateOnlyByteForByte: the primary reports a certificate
+// whose digest is in the DAG without verifying it, and the digest covers
+// only the header. So a copy is a duplicate only if its signatures and
+// signers are the stored certificate's, byte for byte; any other copy is
+// invalid (#4597). One rule, in the primary, for every receive path.
+func TestACopyIsADuplicateOnlyByteForByte(t *testing.T) {
+	v := newTestValidator(t)
+	committee := newTestCommittee([]*testValidator{v}, 0)
+	p := New(Config{Partition: "t4597d", KeyPair: v.priv}, committee, nil, newTestDAG(), nil)
+
+	h := types.NewHeader(v.pub, 0, 0, nil, nil)
+	require.NoError(t, h.Sign(v.priv))
+	vote := types.NewVote(h.Digest(), h.Round, h.Epoch, v.pub)
+	require.NoError(t, vote.Sign(v.priv))
+	genuine := types.NewCertificate(h, [][]byte{vote.Signature}, []uint16{0})
+	require.NoError(t, p.dag.InsertGenesis(genuine))
+
+	copied := types.NewCertificate(h, [][]byte{append([]byte(nil), vote.Signature...)}, []uint16{0})
+	require.Equal(t, CertDuplicate, p.receiveCertificate(copied), "a byte-for-byte copy")
+
+	junk := types.NewCertificate(h, [][]byte{make([]byte, ed25519.SignatureSize)}, []uint16{0})
+	require.Equal(t, CertInvalid, p.receiveCertificate(junk), "a copy with other signatures")
+	otherSigner := types.NewCertificate(h, [][]byte{vote.Signature}, []uint16{1})
+	require.Equal(t, CertInvalid, p.receiveCertificate(otherSigner), "a copy with other signers")
+}
+
+// TestAPartialAnswerSuppressesNothing: a response that reports some of the
+// request missing leaves the request open for the next answer, and does
+// not stop this peer from answering it either. Only a verified answer that
+// covers the request counts (#4597).
+func TestAPartialAnswerSuppressesNothing(t *testing.T) {
+	v := newTestValidator(t)
+	committee := newTestCommittee([]*testValidator{v}, 0)
+	p := New(Config{Partition: "t4597e", KeyPair: v.priv}, committee, nil, newTestDAG(), nil)
+	config := CertSyncerConfig{PublicKey: v.pub, Partition: "t4597e"}
+	config.applyDefaults()
+	peer := NewCertSyncer(config, p.dag, nil, p.pendingCerts)
+	peer.SetCertReceivedCallback(p.receiveCertificate)
+
+	h := types.NewHeader(v.pub, 0, 0, nil, nil)
+	require.NoError(t, h.Sign(v.priv))
+	vote := types.NewVote(h.Digest(), h.Round, h.Epoch, v.pub)
+	require.NoError(t, vote.Sign(v.priv))
+	genuine := types.NewCertificate(h, [][]byte{vote.Signature}, []uint16{0})
+	require.NoError(t, p.dag.InsertGenesis(genuine))
+
+	requester := []byte("the requester's key")
+	const k = 12
+	other := types.CertificateDigest{9}
+	peer.handleSyncResponse(&gossip.CertSyncResponse{
+		Certificates: []*types.Certificate{genuine},
+		Missing:      []types.CertificateDigest{other},
+		RequestID:    k,
+		Requester:    requester,
+	})
+	peer.window.take()
+	peer.handleSyncRequest(&gossip.CertSyncRequest{
+		Digests:   []types.CertificateDigest{genuine.Digest(), other},
+		Requester: requester,
+		RequestID: k,
+	})
+	require.Equal(t, 0, peer.window.take().suppressed, "a partial answer suppressed the request")
+}

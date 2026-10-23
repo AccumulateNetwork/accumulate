@@ -417,15 +417,21 @@ certificates, and does not answer a request it has already seen answered.
 checks.** Responses are unsigned and anyone can send one, and the topic
 validator checks only that each certificate's author is a member
 (invariant 12). A certificate checks when it is verified and inserted, or
-when it is a copy, signatures and signers byte for byte, of one in the
-DAG. Nothing else does: a node reports a certificate it holds, in the DAG
-or waiting for its parents, before verifying it (below), and a
-certificate's digest covers only its header, so a genuine header, which is
-public, with junk signatures comes back as a duplicate or as held. A
-response with a certificate that does not check is not recorded as an
-answer, does not complete its request, and leaves the digests it carried
-in flight: they are retried after the retry timeout if they are still not
-in the DAG, and dropped from the set if they are. Before this, one junk
+when it is a duplicate. A node reports a certificate whose digest is in
+its DAG without verifying it (below), and the digest covers only the
+header, so a copy is a duplicate only if its signatures and signers are
+the held certificate's byte for byte; a genuine header, which is public,
+with other signatures is invalid. That rule is the primary's
+(`receiveCertificate`), one rule for every path a certificate arrives by
+(`TestACopyIsADuplicateOnlyByteForByte`). A certificate held waiting for
+its parents is reported held before it is verified, and does not check.
+A response with a certificate that does not check, or that reports part
+of the request missing, is not recorded as an answer and does not complete
+its request: only a verified answer that covers the request counts
+(`TestAPartialAnswerSuppressesNothing`). The certificates that checked
+are kept all the same, and the digests of those that did not stay in
+flight: they are retried after the retry timeout if they are still not in
+the DAG, and dropped from the set if they are. Before this, one junk
 certificate sent under the requester's key and request ID was recorded as
 the answer by every peer, which then kept its own, and the requester
 dropped the digest from its in-flight set for good (#4597,
