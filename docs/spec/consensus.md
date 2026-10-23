@@ -378,9 +378,10 @@ are this network's.
   `types/header.go:227-243`). For a header the signature is checked first
   and then membership (`primary/vote_handler.go:278`, `:286`); membership
   comes first only for votes (`:27-47`). !1266 (#4596) moves membership
-  before the signature for headers too, inside the topic validator ("Who
-  may send consensus messages"). The epoch a header names is the epoch of
-  the committee that orders its round ("Epochs" below).
+  before the signature for headers too, in the topic validator and in the
+  handler (`primary/vote_handler.go` `OnHeaderReceived`; "Sender authority
+  at 7d9458e10"). The epoch a header names is the epoch of the committee
+  that orders its round ("Epochs" below).
 - **Its strong parents are distinct certificates of round r−1 whose
   authors' stake is a quorum of the committee of round r−1.** The parent
   list is a flat list of certificate digests (`types/header.go:62-63`); the
@@ -651,10 +652,12 @@ them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
   support count above, runs over every parent edge, strong and weak
   (`DAG.IsAncestor` follows the whole parent list, `dag/traversal.go:62`),
   while Bullshark's commit rule and its leader walk use strong edges only
-  (§5.2, §6). Following weak links is safe once the parent quorum is
-  enforced (#4591, !1272): every path starts from a certified vertex and
-  runs over certificates every node holds with their parents, so the walk
-  is identical on every node; a weak link can only add a path to a leader,
+  (§5.2, §6). Following weak links is safe on two conditions, each with
+  its own fix: every certificate is inserted with all its parents (#4595,
+  !1259; "DAG insertion"), so the walk runs over the same edges on every
+  node and is identical everywhere; and the parent quorum is enforced
+  (#4591, !1272), so a path from a certified vertex to an earlier
+  committed leader exists at all. A weak link can only add a path to a leader,
   never remove one, and the extra paths let a leader that a straggler
   named be committed rather than skipped.
 
@@ -825,28 +828,26 @@ these are the rules.
   its own last block: the join decides what is executed, consensus only
   where the node stands in the DAG ("Restart", "What it does not do").
 
-#### Who may send consensus messages
+#### Sender authority at 7d9458e10
 
-Only the committee speaks for consensus: a header, vote or certificate
-carries its author's signature, and a node acts on it, and passes it on,
-only when its author is a member of the committee of the epoch it names
-and its signatures are that member's, for a certificate a quorum of
-members'. That is #4596 (!1266), which adds invariant 12 and the section
-"Who may send consensus messages" with the per-topic table; what it leaves
-undecided, which **peers** a validator exchanges the topics with, is
-#4596 part 2 (!1266 records it; !1269 decides it; Narwhal §3 assumes
-authenticated links among the validators). At `7d9458e10` the checks are
-in the handlers, after the router has already relayed the message to the
-node's peers: a vote is dropped unless its author is a member and then
-unless its signature checks, membership first because it is the cheap
-check (`primary/vote_handler.go:27-47`); a header is checked the other
-way round, signature first and then membership (`:278`, `:286`), and
-!1266 moves membership before the signature for headers too, inside the
-topic validator; a certificate is verified
-against the committee before it is inserted or held, after the cheap
-duplicate and held-buffer checks (`primary/certificate_handler.go:32-83`);
-a batch, a sync request or a sync response is decoded and queued from any
-peer (`gossip/gossip.go:347-364`, `:456-508`). Votes are rate-limited per
+The rule, only the committee speaks for consensus, is !1266's (#4596):
+invariant 12 and its section "Who may send consensus messages", with the
+per-topic table, are the one home of what a node delivers and relays;
+what !1266 leaves undecided, which **peers** a validator exchanges the
+topics with, is #4596 part 2 (!1266 records it; !1269 decides it). This
+subsection is only the pinned code. At `7d9458e10` the checks are in the
+handlers, after the router has already relayed the message to the node's
+peers: a vote is dropped unless its author is a member and then unless
+its signature checks, membership first because it is the cheap check
+(`primary/vote_handler.go:27-47`); a header is checked the other way
+round, signature first and then membership (`:278`, `:286`), and !1266
+moves membership before the signature for headers too, in the topic
+validator and in the handler (`primary/vote_handler.go`
+`OnHeaderReceived`); a certificate is verified against the committee
+before it is inserted or held, after the cheap duplicate and held-buffer
+checks (`primary/certificate_handler.go:32-83`); a batch, a sync request
+or a sync response is decoded and queued from any peer
+(`gossip/gossip.go:347-364`, `:456-508`). Votes are rate-limited per
 **relaying** peer, 1,000 a second with a burst of 2,000, a 30 s ban after
 five violations, forgiven after 30 s of good behaviour
 (`gossip/gossip.go:573-600`; `rate-limiter.go:27-44`); the limits sit well
@@ -877,8 +878,9 @@ are normative, and this list summarizes them:
   executes once; the second delivery is recognised and skipped, and its
   batches are not pruned a second time.
 - **Weak links.** A header references the certificates of the previous round
-  and, as weak links, recent older certificates it has not yet referenced, so
-  a certificate that arrived late still enters a committed leader's causal
+  and, as weak links, every certificate it holds of the seven rounds below
+  that (r−2 to r−8), whether or not one is already reachable, so a
+  certificate that arrived late still enters a committed leader's causal
   history. A certificate no header ever references is never executed and its
   batches are lost; the weak-link window is what makes that impossible in
   practice, and the count of orphaned certificates is a metric.
