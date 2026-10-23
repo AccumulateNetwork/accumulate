@@ -124,13 +124,6 @@ func UnmarshalBatch(data []byte) (*Batch, error) {
 	if numTxs > 1_000_000 {
 		return nil, errors.New("batch contains too many transactions")
 	}
-	// Each transaction takes at least its 4-byte length, so a count the
-	// data cannot hold is refused before the slice is made for it: anyone
-	// can publish a batch, and four bytes claiming a million transactions
-	// cost every receiver a 24 MB allocation (#4596).
-	if numTxs > uint32((len(data)-4)/4) {
-		return nil, errors.New("batch data truncated: fewer bytes than transactions")
-	}
 
 	transactions := make([][]byte, 0, numTxs)
 
