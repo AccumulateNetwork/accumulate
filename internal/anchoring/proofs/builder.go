@@ -41,12 +41,17 @@ type Builder struct {
 	Store     keyvalue.Beginner
 }
 
-// pending is an entry whose receipt to the partition's root exists but whose
-// Directory root has not been committed yet; it is retried on every run.
+// pending is an entry without a proof yet, retried on every run: either its
+// Directory root has not been committed, or it could not be proven (Error),
+// which a later block or a fix to the read path may resolve. Last is the entry
+// of the same block whose chains-index record holds the entry's positions.
 type pending struct {
 	Account *url.URL `json:"account"`
 	Chain   string   `json:"chain"`
 	Index   uint64   `json:"index"`
+	Last    uint64   `json:"last"`
+	Error   string   `json:"error,omitempty"`
+	Since   uint64   `json:"since,omitempty"` // the block of the run that first failed it
 }
 
 func keyProgress() *record.Key { return record.NewKey("Progress") }
@@ -73,6 +78,12 @@ func (b *Builder) wants(u *url.URL) bool {
 
 // Run processes every block ledger written since the last run, then retries
 // the pending entries. It returns the number of proofs completed.
+//
+// An entry that cannot be proven does not stop the others: it is parked under
+// Pending with its error and retried on every run, and Run returns an error
+// that names how many are parked and the first failure. Such an error does not
+// mean the run did nothing; its progress and proofs are committed. Store and
+// ledger errors, which are not about one entry, return before anything is.
 func (b *Builder) Run() (int, error) {
 	var done int
 	err := b.Database.View(func(batch *database.Batch) error {
@@ -123,12 +134,10 @@ func (b *Builder) run(batch, dn *database.Batch) (int, error) {
 		}
 		for _, e := range bl.Entries {
 			// An account changed without a chain append has nothing to prove
-			if e.Chain == "" {
+			if e.Chain == "" || !b.wants(e.Account) {
 				continue
 			}
-			if b.wants(e.Account) {
-				todo = append(todo, pending{e.Account, e.Chain, e.Index})
-			}
+			todo = append(todo, b.block(batch, e)...)
 		}
 	}
 	err = st.ForEach(func(k *record.Key, v []byte) error {
@@ -146,13 +155,29 @@ func (b *Builder) run(batch, dn *database.Batch) (int, error) {
 		return 0, errors.UnknownError.WithFormat("list pending: %w", err)
 	}
 
+	var failed int
+	var first error
 	for _, p := range todo {
+		pk := keyPending(p.Account, p.Chain, p.Index)
 		pkg, err := b.prove(batch, dn, p)
 		if err != nil {
-			return 0, err
+			// Park the entry; the others go on
+			failed++
+			if first == nil {
+				first = err
+			}
+			p.Error = err.Error()
+			if p.Since == 0 {
+				p.Since = sys.Index
+			}
+			v, _ := json.Marshal(p)
+			if err := st.Put(pk, v); err != nil {
+				return 0, err
+			}
+			continue
 		}
-		pk := keyPending(p.Account, p.Chain, p.Index)
 		if pkg == nil {
+			p.Error = ""
 			v, _ := json.Marshal(p)
 			if err := st.Put(pk, v); err != nil {
 				return 0, err
@@ -182,7 +207,34 @@ func (b *Builder) run(batch, dn *database.Batch) (int, error) {
 	if err := st.Put(keyProgress(), v); err != nil {
 		return 0, err
 	}
-	return done, st.Commit()
+	if err := st.Commit(); err != nil {
+		return 0, err
+	}
+	if failed > 0 {
+		return done, errors.UnknownError.WithFormat("%d entries could not be proven and are parked; first: %w", failed, first)
+	}
+	return done, nil
+}
+
+// block returns the entries a block ledger entry stands for. The ledger names
+// the last entry the block appended to a chain, and the chains index records
+// that one; every entry back to the previous block's last is proven through
+// it. Without the record the entry is queued alone, and proving reports why.
+func (b *Builder) block(batch *database.Batch, e *protocol.BlockEntry) []pending {
+	one := []pending{{Account: e.Account, Chain: e.Chain, Index: e.Index, Last: e.Index}}
+	chain, err := batch.Account(e.Account).ChainByName(e.Chain)
+	if err != nil {
+		return one
+	}
+	pos, err := indexing.StoredAnchorPositions(b.url(), batch, chain, int64(e.Index))
+	if err != nil {
+		return one
+	}
+	var all []pending
+	for i := pos.Prev + 1; i <= int64(e.Index); i++ {
+		all = append(all, pending{Account: e.Account, Chain: e.Chain, Index: uint64(i), Last: e.Index})
+	}
+	return all
 }
 
 // prove builds the entry's receipt to the Directory root, or returns nil when
@@ -199,7 +251,11 @@ func (b *Builder) prove(batch, dn *database.Batch, p pending) (*anchoring.Packag
 
 	// Entry to the partition's root chain anchor, by the stored positions
 	// (database.md, "Proofs are read, not searched").
-	rootEntry, _, extend, err := indexing.ReceiptForStoredChainIndex(b.url(), batch, chain, int64(p.Index))
+	pos, err := indexing.StoredAnchorPositions(b.url(), batch, chain, int64(p.Last))
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("%v %s entry %d to the root: %w", p.Account, p.Chain, p.Index, err)
+	}
+	rootEntry, _, extend, err := indexing.ReceiptForChainIndexWith(b.url(), batch, chain, int64(p.Index), pos)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("%v %s entry %d to the root: %w", p.Account, p.Chain, p.Index, err)
 	}
@@ -230,7 +286,18 @@ func (b *Builder) prove(batch, dn *database.Batch, p pending) (*anchoring.Packag
 	default:
 		return nil, errors.UnknownError.WithFormat("search anchor(%s)-root: %w", b.Partition, err)
 	}
-	dnEntry, _, bind, err := indexing.ReceiptForStoredChainIndex(config.NetworkUrl{URL: protocol.DnUrl()}, dn, received, at)
+	// Anchors that reach the Directory in one block have one record, for the
+	// last of them; read forward to it
+	dnUrl := config.NetworkUrl{URL: protocol.DnUrl()}
+	last, err := indexing.NextStoredAnchor(dn, received, at)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("bind to a directory root: %w", err)
+	}
+	dpos, err := indexing.StoredAnchorPositions(dnUrl, dn, received, last)
+	if err != nil {
+		return nil, errors.UnknownError.WithFormat("bind to a directory root: %w", err)
+	}
+	dnEntry, _, bind, err := indexing.ReceiptForChainIndexWith(dnUrl, dn, received, at, dpos)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("bind to a directory root: %w", err)
 	}

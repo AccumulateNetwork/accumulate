@@ -57,13 +57,13 @@ const (
 	MatchAfter
 )
 
-// IndexChainSearchFunction determines the direction an index chain search should proceed.
 var searches atomic.Uint64
 
 // IndexChainSearches is the number of calls to [SearchIndexChain] so far in
 // this process, for tests that assert a read path does not search.
 func IndexChainSearches() uint64 { return searches.Load() }
 
+// IndexChainSearchFunction determines the direction an index chain search should proceed.
 type IndexChainSearchFunction func(*protocol.IndexEntry) SearchDirection
 
 // SearchIndexChain2 is a wrapper for [SearchIndexChain] that accepts

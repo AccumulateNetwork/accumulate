@@ -2509,7 +2509,8 @@ and one pinned transaction. None of it exists:
 - **B1. No accounts, no types.** `dn.acme/bitcoin` (an ADI),
   `dn.acme/bitcoin/addresses` and the per-signer coordination accounts and
   books are not created by genesis or by any transaction;
-  `pkg/anchoring` and its payload, list and record types do not exist.
+  `pkg/anchoring` holds the package types (#4563); its payload, list and
+  record types do not exist yet.
   On an existing network the accounts and the book are created by
   operator-signed `CreateIdentity`/`CreateKeyBook`/`CreateDataAccount`
   transactions, not by an
@@ -2524,10 +2525,14 @@ and one pinned transaction. None of it exists:
   `signatures`, `anchor`, `bitcoin` or `list`. Block-ledger entries that name
   no chain are skipped; every chain of a configured account is proven, signature
   chains included; the builder reads the stored anchor positions and never
-  searches. Not yet: a node service that runs it beside a follower's API, the
-  HTTP face that serves packages, and the extension to the next *anchored*
-  height, which waits on B2. The package format follows §2.5's revision under
-  #4562.
+  searches. It proves every entry a block appended to a chain, from the one
+  the block ledger names back to the previous block's last, and binds a batch
+  of anchors that reached the Directory in one block through the record of the
+  batch's last entry. An entry it cannot prove is parked and retried, and
+  `Run` reports it. Not yet: a node service that runs it beside a follower's
+  API, the HTTP face that serves packages, and the extension to the next
+  *anchored* height, which waits on B2. The package format follows §2.5's
+  revision under #4562.
 - **B4. No verifier.** Nothing checks a package, and no alarm watches the
   anchors (§2.6).
 
