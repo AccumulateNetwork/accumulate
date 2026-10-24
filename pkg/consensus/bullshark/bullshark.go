@@ -82,11 +82,20 @@ type Bullshark struct {
 	// a per-author round watermark silently discards any straggler
 	// certificate that commits after a higher-round one (#4111).
 	lastCommitted map[authorKey]types.Round
-	// committed is the digest-level commit dedup, pruned as the frontier
-	// advances (see pruneCommitted). After a restart it starts empty; an old
-	// certificate re-emitted once is harmless because execution skips
-	// already-delivered messages.
+	// committed is the digest-level commit dedup. It is pruned a rescue
+	// window below the LOWER of the last commit and dedupFloor (#4594): the
+	// checkpoint of the block being produced copies the set as of that
+	// block's leader, which can be far below the commit frontier when the
+	// executor lags, and a set pruned against the frontier has nothing left
+	// for it. After a restart it is restored from the checkpoint (#4290).
 	committed map[types.CertificateDigest]types.Round
+	// dedupFloor is the oldest leader whose group the executor has not yet
+	// produced a block for, as the node reports it; no checkpoint is taken
+	// below it. The node never reports one more than its DAG GC depth below
+	// the frontier: past that its checkpoint cannot write the tail, and a
+	// node that takes no checkpoints would otherwise never move it. Zero
+	// means none reported and the frontier is the floor.
+	dedupFloor types.Round
 
 	// onCommit is called when certificates are committed.
 	// This callback is used to notify external components (e.g., workers)
@@ -230,6 +239,23 @@ func (b *Bullshark) GetCommitted() map[string]types.Round {
 	return out
 }
 
+// GetCommittedFrom is GetCommitted limited to the entries committed at round
+// floor or above, so a checkpoint copies the window it keeps and not the
+// whole set (#4594).
+func (b *Bullshark) GetCommittedFrom(floor types.Round) map[string]types.Round {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	out := make(map[string]types.Round)
+	for d, r := range b.committed {
+		if r < floor {
+			continue
+		}
+		d := d
+		out[hex.EncodeToString(d[:])] = r
+	}
+	return out
+}
+
 // SetCommitted restores the digest-level commit dedup from a checkpoint.
 func (b *Bullshark) SetCommitted(committed map[string]types.Round) {
 	b.mu.Lock()
@@ -243,6 +269,17 @@ func (b *Bullshark) SetCommitted(committed map[string]types.Round) {
 		copy(d[:], raw)
 		b.committed[d] = r
 	}
+}
+
+// SetDedupFloor records the oldest leader whose group has been handed to
+// the executor and not yet produced, or the leader just checkpointed when
+// none is waiting. No checkpoint is taken below it, so the dedup set is
+// kept a rescue window below it rather than below the commit frontier
+// (#4594).
+func (b *Bullshark) SetDedupFloor(leader types.Round) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.dedupFloor = leader
 }
 
 // SetLastCommitRound sets the last commit round.

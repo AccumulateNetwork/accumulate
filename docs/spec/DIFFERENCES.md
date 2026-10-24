@@ -2276,11 +2276,6 @@ merge request is merged**; remove the entry when the list is empty.
   checkpoint is resumed, so a start that resumes none (no checkpoint for
   the executor's last block, or a store at genesis) signs a second header
   for a round it already signed ("Persistence and restart").
-- **#4594** (!1261): Bullshark prunes its committed-digest set against its
-  own last commit, so when the executor lags ordering by more than the
-  rescue window the set `CheckpointAt` copies is already empty, and a node
-  restored from that checkpoint re-commits the window's history
-  ("Persistence and restart", "Restart").
 - **#4595** (!1259): `DAG.Insert` skips the parent check for any
   certificate at or below the commit floor plus one (`dag/dag.go:153`),
   not only at a seed, so in normal running a late certificate enters

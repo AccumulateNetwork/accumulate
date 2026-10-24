@@ -1004,6 +1004,9 @@ func (n *Node) Restore(cp *persist.Checkpoint) error {
 		n.bullshark.SetLastCommittedForAuthor(author, round)
 	}
 	n.bullshark.SetCommitted(cp.Committed)
+	if n.dagStore != nil { // see CheckpointAt
+		n.bullshark.SetDedupFloor(cp.LastCommitRound)
+	}
 	n.dag.SetLastCommitRound(cp.LastCommitRound)
 	certs, batches, err := n.restoreTail(cp)
 	if err != nil {
