@@ -536,3 +536,92 @@ func TestAnchoringProofBuilderBatchedAnchors(t *testing.T) {
 	}
 	proveAll(t, sim, bld, store, s0, s1)
 }
+
+// #4563: when the Directory takes a large backlog of one partition's anchors
+// in a block, every entry is proven, however far it is from the batch's last
+// record: the forward read is as long as the batch.
+func TestAnchoringProofBuilderBigBatch(t *testing.T) {
+	liteKey := acctesting.GenerateKey(t.Name())
+	lite := acctesting.AcmeLiteAddressStdPriv(liteKey)
+	sim := NewSim(t, simulator.SimpleNetwork(t.Name(), 1, 1), simulator.Genesis(GenesisTime))
+	MakeLiteTokenAccount(t, sim.DatabaseFor(lite), liteKey[32:], AcmeUrl())
+	CreditCredits(t, sim.DatabaseFor(lite), lite.RootIdentity(), 1e12)
+	sim.StepN(10)
+	a, first := liteDataOn(t, sim, "a", "BVN0")
+
+	// The Directory holds BVN0's anchors while the account is written, one
+	// write per block, then takes them all in one block
+	var mu sync.Mutex
+	hold := true
+	var held []*messaging.Envelope
+	maxBatch := 0
+	sim.SetBlockHook(Directory, func(p execute.BlockParams, envs []*messaging.Envelope) ([]*messaging.Envelope, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		if hold {
+			var keep []*messaging.Envelope
+			for _, e := range envs {
+				if isBVN0Anchor(e) {
+					held = append(held, e)
+				} else {
+					keep = append(keep, e)
+				}
+			}
+			return keep, true
+		}
+		maxBatch = max(maxBatch, len(held))
+		out := append(held, envs...)
+		held = nil
+		return out, true
+	})
+
+	var ts uint64
+	var written []*TransactionStatus
+	submit := func(e *DoubleHashDataEntry) {
+		ts++
+		written = append(written, sim.BuildAndSubmitTxnSuccessfully(build.Transaction().For(a).Body(&WriteData{Entry: e}).
+			SignWith(lite).Version(1).Timestamp(ts).PrivateKey(liteKey)))
+	}
+	submit(first)
+	sim.StepUntil(Txn(written[0].TxID).Succeeds())
+	for i := 0; i < 300; i++ {
+		submit(&DoubleHashDataEntry{Data: [][]byte{[]byte(fmt.Sprintf("x%d", i))}})
+		sim.Step()
+	}
+	sim.StepN(3)
+	mu.Lock()
+	hold = false
+	mu.Unlock()
+	sim.StepN(20)
+
+	mu.Lock()
+	batch := maxBatch
+	mu.Unlock()
+	t.Logf("the Directory took %d BVN0 anchors in one block", batch)
+	require.Greater(t, batch, 256, "the batch is large")
+
+	store := memory.New(nil)
+	bld := &proofs.Builder{
+		Network:   t.Name(),
+		Partition: "BVN0",
+		Database:  sim.Database("BVN0"),
+		Directory: func() (database.Viewer, error) { return sim.Database(Directory), nil },
+		Accounts:  []*url.URL{a},
+		Store:     store,
+	}
+	before := indexing.IndexChainSearches()
+	for i := 0; i < 3; i++ {
+		_, err := bld.Run()
+		require.NoError(t, err)
+		sim.Step()
+	}
+	require.Zero(t, indexing.IndexChainSearches()-before, "the builder never searches an index chain")
+	for i, st := range written {
+		_, err := bld.ByHash(st.TxID.HashSlice())
+		require.NoError(t, err, "proof for transaction %d", i)
+	}
+	// The first is the farthest from the batch's last record
+	pkg, err := bld.ByHash(written[0].TxID.HashSlice())
+	require.NoError(t, err)
+	checkPackage(t, sim, written[0].TxID, pkg)
+}
