@@ -311,20 +311,17 @@ func StoredAnchorPositions(partition config.NetworkUrl, batch *database.Batch, c
 	return &AnchorPositions{Last: last, Prev: prev, ChainIndex: rec.ChainIndex, Entry: entry, RootIndex: rec.AnchorIndex, Root: root}, nil
 }
 
-// maxStoredAnchorWalk bounds NextStoredAnchor. Anchors of one partition in one
-// block are a handful (#4279 saw three).
-const maxStoredAnchorWalk = 256
-
 // NextStoredAnchor returns the first entry at or after from that has a stored
 // record for the chain, which is the last entry of the block that appended
-// from. It reads entries at known positions, one after another, and returns
-// NotFound at the chain's head or after maxStoredAnchorWalk entries.
+// from. The walk ends at that entry, which always has a record, so it reads as
+// many entries as the block appended and no more. It reads entries at known
+// positions, one after another, and returns NotFound only at the chain's head.
 func NextStoredAnchor(batch *database.Batch, c *database.Chain2, from int64) (int64, error) {
 	chain, err := c.Get()
 	if err != nil {
 		return 0, err
 	}
-	for i := from; i < chain.Height() && i < from+maxStoredAnchorWalk; i++ {
+	for i := from; i < chain.Height(); i++ {
 		hash, err := chain.Entry(i)
 		if err != nil {
 			return 0, err
