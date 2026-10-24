@@ -57,6 +57,21 @@ func (n *Node) order(cert *types.Certificate) bool {
 		}
 		n.certificatesCommitted.Add(1)
 	}
+	// The oldest group waiting to be produced is where the next checkpoint
+	// is taken; Bullshark keeps its dedup set a rescue window below it,
+	// however far ordering runs ahead of the executor (#4594). Never more
+	// than DAGGCDepth below the frontier: past that the checkpoint's tail
+	// cannot be written, and a node that never checkpoints (collecting,
+	// halted) would otherwise never move the floor.
+	if len(n.handed) > 0 {
+		floor := n.handed[0].leader
+		lc := n.bullshark.LastCommitRound()
+		depth := n.config.DAGGCDepth
+		if lc > depth && floor < lc-depth {
+			floor = lc - depth
+		}
+		n.bullshark.SetDedupFloor(floor)
+	}
 	n.orderMu.Unlock()
 
 	// NOTE: Batch pruning is handled by the executor after reading batches
@@ -99,7 +114,13 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 	if leaderRound == 0 || leaderRound > lastCommit || n.dagStore == nil {
 		leaderRound = lastCommit
 	}
-	committed := n.bullshark.GetCommitted()
+	// Only the window the checkpoint keeps: a restored node prunes below it
+	// on its first commit anyway.
+	var from types.Round
+	if w := types.Round(2 * bullshark.RescueWindow); leaderRound > w {
+		from = leaderRound - w
+	}
+	committed := n.bullshark.GetCommittedFrom(from)
 	lastCommitted := n.bullshark.GetLastCommitted()
 	keep := n.handed[:0]
 	for _, g := range n.handed {
@@ -113,6 +134,12 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 		}
 	}
 	n.handed = keep
+	// Every later checkpoint is at or above this one (#4594). Without a DAG
+	// store no group is recorded as handed, so the floor would never move
+	// again: such a node reports none and prunes at the frontier.
+	if n.dagStore != nil {
+		n.bullshark.SetDedupFloor(leaderRound)
+	}
 	n.orderMu.Unlock()
 
 	cp := persist.NewCheckpoint(n.config.Partition,

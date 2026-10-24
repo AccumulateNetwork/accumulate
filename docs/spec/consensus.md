@@ -753,7 +753,10 @@ them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
   that is not in the **committed-digest set** (`orderDag`,
   `bullshark/ordering.go:140-174`; `GetAncestors`, `dag/traversal.go:79-121`).
   The set records every certificate ever committed and keeps an entry for
-  2 × `RescueWindow` = 64 rounds below the last commit (`:67-74`);
+  2 × `RescueWindow` = 64 rounds below a floor: the lower of the last commit
+  and the oldest group handed to the executor and not yet produced, which is
+  itself never more than `DAGGCDepth` below the last commit ("Restart";
+  #4594; `:77-85`);
   the walk never goes below the window, so nothing older can be emitted
   twice. Bullshark §5.2 orders the leader's whole not-yet-ordered causal
   history. *Departure.* Bullshark's walk has no floor, because its garbage
@@ -830,7 +833,7 @@ The protocol's windows, as constants, with the relation they must keep:
 |---|---|---|---|
 | weak-link window | 8 rounds | how far below its round a header names certificates | `primary/header_builder.go:184` |
 | `RescueWindow` | 32 rounds | how far below the last commit an ordering walk reaches; the seed is 34 below the first proven state and no handoff is taken within 32 of a seed ("Restart") | `bullshark/ordering.go:125-138` |
-| committed-digest retention | 64 rounds | how long a committed certificate is remembered as committed | `bullshark/ordering.go:70-74` |
+| committed-digest retention | 64 rounds below the floor: the lower of the last commit and the oldest unproduced group, itself at most `DAGGCDepth` below the last commit (#4594) | how long a committed certificate is remembered as committed | `bullshark/ordering.go:77-85` |
 | held-certificate buffer | 2 × 10 × committee certificates, pruned 10 rounds below the node's round | certificates waiting for parents | `primary/primary.go:292-293`, `:336-338`; `pending_certs.go:138-173` |
 | round request | 64 rounds, 100 certificates per response | one catch-up request | `gossip/cert_sync.go:32-33`, `:326` |
 | `DAGGCDepth` | 2,000 rounds | how many rounds a node keeps below the further of its last commit and its frontier; how far behind a node can be and still catch up from peers | `consensus.go:37-49`; `dag/dag.go:332-392` |
@@ -893,13 +896,11 @@ these are the rules.
   its committed-digest set as they were when that block's group was
   ordered, the block index, and the names of the DAG tail and batches
   persisted beside it (`persist.Checkpoint`, `persist/persist.go:31-81`;
-  `Node.CheckpointAt`, `restart.go:85-125`; after #4593 the committee
+  `Node.CheckpointAt`, `restart.go:111-153`; after #4593 the committee
   schedule too). The two most recent are kept (`persist/resume.go:9-14`)
   and the one to resume from is chosen by the executor's last block
-  (`ResumeFrom`, `:32-58`; "Restart"). The dedup set is pruned against the
-  oldest group handed to the executor and not yet produced, not against
-  the frontier, so the set the checkpoint copies is still there (#4594,
-  !1261).
+  (`ResumeFrom`, `:32-58`; "Restart"). Which entries of the dedup set a
+  checkpoint carries is stated in "Restart" (#4594).
 - **Which groups a restored or seeded node orders.** A node restored from
   a checkpoint orders the certificates of its tail above the checkpoint's
   commit floor, lowest round first, then goes on live
@@ -1324,7 +1325,21 @@ position now (`Node.CheckpointAt(leaderRound)`): groups Bullshark has ordered
 since are still in the executor's queue, so the checkpoint's last commit is
 that block's leader round and its committed-digest set leaves out the
 certificates of the groups ordered after it. A restart from Bullshark's
-position now would never be handed those groups.
+position now would never be handed those groups. For the set to be there to
+copy, Bullshark prunes it a rescue window below the **oldest group handed to
+the executor and not yet produced**, not below its own last commit: the
+executor can lag ordering by more than the window (the commit buffer holds
+thousands of groups), and a set pruned against the frontier has nothing left
+for the block being produced, so a node restored from its checkpoint
+re-commits the window's history inside the next group (#4594). The node
+reports that floor as it hands groups over and as it checkpoints
+(`Bullshark.SetDedupFloor`), and never more than `DAGGCDepth` below the
+last commit: past that depth the checkpoint's tail cannot be written, and a
+node that collects or is halted takes no checkpoint, so the floor would
+otherwise never move and the set would grow with every certificate it
+orders. A node without a state directory records no handed groups, so it
+reports no floor and prunes at the frontier. The checkpoint copies only the
+window it keeps, from 2 × `RescueWindow` below its leader.
 
 **A restart reloads the DAG it stopped with** (#4448). The DAG lives in
 memory, and a header needs a quorum of the previous round's certificates as
