@@ -617,8 +617,12 @@ func (p *Primary) prunePendingCerts() {
 
 // ForgetHeld drops every certificate held for want of a parent, and reports
 // how many: what a node seeded by Node.Rejoin held before the seed
-// (PendingCertificates.Forget).
+// (PendingCertificates.Forget). The requests in flight go with them
+// (CertSyncer.ForgetInFlight), so that each is asked for again at once.
 func (p *Primary) ForgetHeld() int {
+	if p.certSyncer != nil {
+		p.certSyncer.ForgetInFlight()
+	}
 	return p.pendingCerts.Forget()
 }
 

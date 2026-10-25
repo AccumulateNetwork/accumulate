@@ -1491,6 +1491,18 @@ held exactly the rounds it was seeded at, its DAG stayed empty and it ordered
 nothing (the libp2p join test, three runs of four). Forgotten, each is judged
 again when catch-up next delivers it.
 
+**The seed forgets the requests in flight too** (`CertSyncer.ForgetInFlight`).
+Before the seed the node asks for the weak-link parents of the frontier
+certificates it holds, and the answers are held in their turn; a certificate
+held does not check, so its digest stays in flight ("Certificate catch-up").
+The certificates at `S + 2` name those parents, a few rounds below `S`, which
+the seed makes acceptable without parents of their own, and the node asks
+for them again — an ask deduplicated against the request the held answer had
+already met, for five seconds and then until the pending rescan fifteen
+seconds after. The join waited out its own five seconds and pulled a state
+past its first: every CI run of the libp2p join test once #4596 made a held
+certificate not check (#4610, `TestASeedForgetsWhatItAskedForBeforeIt`).
+
 Two networks are seeded at `P` itself, as before, and pay the refused first
 handoff: one younger than thirty-four rounds, and one whose `DAGGCDepth` is
 below `seedBelowDepth` (eight times the distance, 272 rounds). The first

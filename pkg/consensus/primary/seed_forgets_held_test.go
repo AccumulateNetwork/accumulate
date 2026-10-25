@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -63,4 +64,59 @@ func TestASeedForgetsWhatWasHeldBeforeIt(t *testing.T) {
 	require.Equal(t, CertBuffered, p.receiveCertificate(above, false))
 	require.True(t, d.Contains(at.Digest()))
 	require.True(t, d.Contains(after.Digest()))
+}
+
+// A certificate asked for before a seed is asked for again at once after it.
+// A joining node asks for the weak-link parents of the frontier certificates
+// it holds; before the seed the answer is held for want of parents in turn,
+// and a certificate held does not check, so its digest stays in flight
+// (#4597). The seed forgot the held certificate but not the request, and the
+// node's next ask for it went unsent for the five-second deduplication
+// interval and then until the pending rescan, fifteen seconds after: the
+// round two above the seed waited on it, and the libp2p join test pulled past
+// its first proven state on every CI run once #4596 made a held certificate
+// not check (#4610).
+func TestASeedForgetsWhatItAskedForBeforeIt(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, nil)
+	p.requestParents = func([]types.CertificateDigest) {}
+	config := CertSyncerConfig{PublicKey: validators[0].pub, Partition: "test"}
+	config.applyDefaults()
+	s := NewCertSyncer(config, d, nil, p.pendingCerts)
+	s.SetCertReceivedCallback(func(c *types.Certificate) CertOutcome { return p.receiveCertificate(c, false) })
+	p.certSyncer = s
+
+	h := types.NewHeader(validators[1].pub, 38, 1, nil, []types.CertificateDigest{{1, 37}})
+	require.NoError(t, h.Sign(validators[1].priv))
+	sigs := make([][]byte, len(validators))
+	idx := make([]uint16, len(validators))
+	for i, v := range validators {
+		vote := types.NewVote(h.Digest(), h.Round, h.Epoch, v.pub)
+		require.NoError(t, vote.Sign(v.priv))
+		sigs[i], idx[i] = vote.Signature, uint16(i)
+	}
+	parent := types.NewCertificate(h, sigs, idx)
+
+	// Before the seed: asked for, answered, and held.
+	s.RequestMissing([]types.CertificateDigest{parent.Digest()})
+	s.sendBatchRequest()
+	s.handleSyncResponse(&gossip.CertSyncResponse{Certificates: []*types.Certificate{parent}})
+	require.Equal(t, 1, p.PendingCertsCount())
+
+	// The seed, as Node.Rejoin makes it.
+	p.SetRound(40)
+	d.SetLastCommitRound(40)
+	p.ForgetHeld()
+
+	// Asked for again, it is sent with the next batch.
+	s.RequestMissing([]types.CertificateDigest{parent.Digest()})
+	s.batchQueueMu.Lock()
+	queued := append([]types.CertificateDigest(nil), s.batchQueue...)
+	s.batchQueueMu.Unlock()
+	require.Contains(t, queued, parent.Digest(), "a certificate asked for before the seed is not asked for again after it")
 }
