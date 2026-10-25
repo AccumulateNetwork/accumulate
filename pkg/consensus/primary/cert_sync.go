@@ -385,6 +385,19 @@ func (s *CertSyncer) RequestMissing(digests []types.CertificateDigest) {
 	}
 }
 
+// ForgetInFlight drops every request in flight, so that the next ask for any
+// of the digests goes out at once. A seed (Node.Rejoin, Primary.ForgetHeld)
+// calls it: a certificate answered before the seed and held for want of
+// parents does not check, so its digest stays in flight (#4597), and the
+// seed that makes it acceptable without them forgets the held copy, not the
+// request. Its next ask was deduplicated against the request the answer had
+// already met (#4610).
+func (s *CertSyncer) ForgetInFlight() {
+	s.inFlightMu.Lock()
+	defer s.inFlightMu.Unlock()
+	s.inFlight = make(map[types.CertificateDigest]*inFlightRequest)
+}
+
 // RequestRounds requests every certificate of the given rounds from peers.
 // Used for round catch-up (#4057): a node that has fallen behind cannot know
 // which digests it is missing, only which rounds. The caller is responsible
