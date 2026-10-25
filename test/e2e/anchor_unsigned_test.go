@@ -16,9 +16,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
-// An unsigned block anchor is refused, not fatal (#4572): validation
-// refused it, then filled the status with the message's ID, which read the
-// signer off the nil signature and panicked. Any peer could send one.
+// An unsigned block anchor is refused (#4572), and the refusal's status names
+// it without a signature to read the signer from.
 func TestUnsignedBlockAnchorIsRefused(t *testing.T) {
 	sim := NewSim(t,
 		simulator.SimpleNetwork(t.Name(), 1, 1),

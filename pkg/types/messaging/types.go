@@ -65,10 +65,8 @@ func (m *SyntheticMessage) ID() *url.TxID {
 }
 
 // ID is the signer's URL with the anchor's hash. An anchor without a
-// signature — refused by validation, but any peer can send one — is named
-// under acc://unknown rather than dereferenced (#4572): validation computes
-// the ID of a refused message for its status, and a nil signature there took
-// the node down.
+// signature is refused by validation, which still names it for the refusal's
+// status; it is named under acc://unknown (#4572).
 func (m *BlockAnchor) ID() *url.TxID {
 	if m.Signature == nil {
 		return protocol.UnknownUrl().WithTxID(m.Hash())
@@ -203,8 +201,18 @@ func (m *BadSyntheticMessage) Hash() [32]byte {
 	// This is unsafe and buggy, which is why this type is deprecated
 	var h hash.Hasher
 	h.AddHash2(m.Message.Hash())
-	h.AddHash((*[32]byte)(m.Proof.Receipt.Anchor))
+	h.AddHash2(m.proofAnchor())
 	return *(*[32]byte)(h.MerkleHash())
+}
+
+// proofAnchor is the anchor of the message's receipt, or zero if the message
+// has no proof, no receipt or a short anchor. The hash names the message, so
+// it does not read through them (#4572); such a message is named, and refused.
+func (m *BadSyntheticMessage) proofAnchor() [32]byte {
+	if m.Proof == nil || m.Proof.Receipt == nil || len(m.Proof.Receipt.Anchor) < 32 {
+		return [32]byte{}
+	}
+	return *(*[32]byte)(m.Proof.Receipt.Anchor)
 }
 
 func (m *SequencedMessage) Hash() [32]byte         { return encoding.Hash(m) }

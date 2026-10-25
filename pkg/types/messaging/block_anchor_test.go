@@ -14,9 +14,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// A block anchor's ID must not depend on a field a peer can leave out
-// (#4572): validation computed the ID of a refused, unsigned anchor and
-// panicked on the nil signature, which took the node down.
+// A block anchor's ID does not depend on its signature (#4572): validation
+// names a refused, unsigned anchor for its status.
 func TestBlockAnchor_IDWithoutSignature(t *testing.T) {
 	anchor := &messaging.BlockAnchor{
 		Anchor: &messaging.SequencedMessage{
