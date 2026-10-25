@@ -92,6 +92,11 @@ func (e *Envelope) Normalize() ([]Message, error) {
 			continue
 		}
 
+		// Refused, not dereferenced (#4572)
+		if sig.Signature == nil {
+			return nil, errors.BadRequest.WithFormat("signature %d: missing signature", i)
+		}
+
 		switch {
 		case sig.TxID != nil:
 			// Message specifies the transaction ID
@@ -129,7 +134,9 @@ func (e *Envelope) Normalize() ([]Message, error) {
 
 	// Check for unsigned transactions
 	for _, msg := range messages {
-		if msg, ok := UnwrapAs[MessageForTransaction](msg); ok {
+		// A message that names no transaction signs none; validation
+		// refuses it (#4572)
+		if msg, ok := UnwrapAs[MessageForTransaction](msg); ok && msg.GetTxID() != nil {
 			delete(unsigned, msg.GetTxID().Hash())
 		}
 	}
@@ -141,6 +148,9 @@ func (e *Envelope) Normalize() ([]Message, error) {
 }
 
 func getTxnHash(txn *protocol.Transaction, defaultTxID *url.TxID) ([]byte, error) {
+	if txn == nil {
+		return nil, errors.BadRequest.With("missing transaction")
+	}
 	if txn.Body == nil {
 		return nil, errors.BadRequest.With("nil body")
 	}

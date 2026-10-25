@@ -2789,6 +2789,20 @@ refusal only: an anchor without a signature is refused whatever its proof
 says (`BlockAnchor.check`, "Anchor signatures are not that path"), so nothing
 is ever executed or recorded under it.
 
+The rule holds for every message type and for everything the executor asks
+of a message it refuses: its ID, its hash, and the IDs it produced and was
+caused by, which execution records with a refused message's status. A
+message missing the account it is named by is named under `acc://unknown`
+(`messaging.named`); a missing inner message, transaction or signature
+produces and causes nothing; a `BadSyntheticMessage` without a 32-byte proof
+anchor hashes the anchor as bytes, which no well-formed one does. A
+well-formed message's ID and hash are unchanged. `Envelope.Normalize` refuses
+a transaction or signature entry with nothing in it, as it already refused a
+transaction with no body, and an anchor body without a source is refused by
+its transaction executor. A message of every type with every field left out
+is refused, not fatal, through validation and through a block
+(`TestMalformedMessagesAreRefused`).
+
 ### Execution
 
 `exec_process.go`:

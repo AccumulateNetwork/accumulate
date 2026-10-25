@@ -36,7 +36,11 @@ func (DirectoryAnchor) check(st *StateManager, tx *Delivery) (*protocol.Director
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.DirectoryAnchor), tx.Transaction.Body)
 	}
 
-	// Verify the source URL is from the DN
+	// Verify the source URL is from the DN. A body without one is refused,
+	// not dereferenced (#4572).
+	if body.Source == nil {
+		return nil, fmt.Errorf("missing source")
+	}
 	if !protocol.IsDnUrl(body.Source) {
 		return nil, fmt.Errorf("invalid source: not the DN")
 	}

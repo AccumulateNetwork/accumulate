@@ -39,7 +39,11 @@ func (PartitionAnchor) check(st *StateManager, tx *Delivery) (*protocol.BlockVal
 		return nil, fmt.Errorf("invalid payload: want %T, got %T", new(protocol.BlockValidatorAnchor), tx.Transaction.Body)
 	}
 
-	// Verify the source URL and get the partition name
+	// Verify the source URL and get the partition name. A body without one
+	// is refused, not dereferenced (#4572).
+	if body.Source == nil {
+		return nil, fmt.Errorf("missing source")
+	}
 	_, ok = protocol.ParsePartitionUrl(body.Source)
 	if !ok {
 		return nil, fmt.Errorf("invalid source: not a BVN or the DN")

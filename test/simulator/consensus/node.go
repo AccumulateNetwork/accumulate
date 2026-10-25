@@ -180,7 +180,9 @@ func (n *Node) check(ctx context.Context, env *messaging.Envelope) ([]*protocol.
 				)
 				goto again
 			}
-			kv = append(kv, "type", msg.Type())
+			if msg != nil { // A wrapper may be missing its message (#4572)
+				kv = append(kv, "type", msg.Type())
+			}
 		}
 		if err != nil {
 			kv = append(kv, "error", err)
