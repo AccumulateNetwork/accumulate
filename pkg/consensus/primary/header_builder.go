@@ -169,7 +169,6 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 	// straggler a later ride into the committed DAG; duplicates across
 	// headers are harmless (ancestry walks and the commit path dedup by
 	// digest).
-	const weakLinkWindow = 8
 	if round >= 3 {
 		for r := round - 2; r >= 1 && r+weakLinkWindow >= round; r-- {
 			for _, cert := range p.dag.GetRound(r) {
@@ -184,6 +183,10 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 
 	return digests, nil
 }
+
+// weakLinkWindow is how far below its round a header reaches for weak links:
+// every certificate of the rounds from two below it to weakLinkWindow below.
+const weakLinkWindow = 8
 
 // waitForAllParents waits until all validators' certificates from the previous round
 // are available, or until a timeout expires. This should be called BEFORE taking

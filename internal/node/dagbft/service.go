@@ -1092,12 +1092,10 @@ func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, le
 		metrics.BlocksEmptyTotal.WithLabelValues(s.config.Partition.ID).Inc()
 	}
 
-	// Record state hash for consistency verification. Every certificate in
-	// the group carries the block's resulting hash — the group IS the block.
+	// Record state hash for consistency verification. It is recorded for the
+	// round, not written on the group's certificates: those are the DAG's,
+	// and gossip marshals them on other goroutines meanwhile (#4610).
 	stateHash := s.adapter.StateHash()
-	for _, cert := range certs {
-		cert.SetStateHash(types.StateHash(stateHash))
-	}
 	s.RecordStateHash(leader.Header.Round, blockIndex, types.StateHash(stateHash))
 
 	s.pruneCommitted(certs, blockIndex)

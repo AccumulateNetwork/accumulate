@@ -166,11 +166,12 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) Ce
 				// anyway: re-delivery (round catch-up, stall recovery) brings
 				// the certificate back, and without the parents it is refused
 				// again every time. After a Rejoin at P the certificates at
-				// P+2 name, as weak links, those of P-6..P-1, which no round
-				// request asks for, while gossip fills the buffer with
-				// frontier certificates it never prunes -- a follower's
-				// Directory sat at P+2 for four minutes (#4469). Certificates
-				// further ahead are left to round catch-up.
+				// P+2 name, as weak links, those of P-6..P-1, which round
+				// requests asked for only from #4610 (catchUpRequests), while
+				// gossip fills the buffer with frontier certificates it never
+				// prunes -- a follower's Directory sat at P+2 for four minutes
+				// (#4469). Certificates further ahead are left to round
+				// catch-up.
 				p.roundMu.Lock()
 				needed := cert.Round() <= p.currentRound+1
 				p.roundMu.Unlock()
@@ -433,6 +434,18 @@ func (p *Primary) AdvanceRound() {
 func (p *Primary) SetRound(round types.Round) {
 	p.roundMu.Lock()
 	p.currentRound = round
+	p.roundMu.Unlock()
+}
+
+// SetRoundAndSeed sets the current round to the round Node.Rejoin seeded
+// this node at, and records it as the seed. The DAG holds nothing below it,
+// and the certificates just above it name rounds below it as weak links, so
+// round catch-up asks for those too (catchUpRequests, #4610). One lock, so
+// no catch-up sees the new round without the seed.
+func (p *Primary) SetRoundAndSeed(round types.Round) {
+	p.roundMu.Lock()
+	p.currentRound = round
+	p.seed, p.seeded = round, true
 	p.roundMu.Unlock()
 }
 
