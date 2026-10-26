@@ -34,7 +34,8 @@ func TestExecutorVersionNumbersAreFrozen(t *testing.T) {
 		ExecutorVersionV2Jiuquan:            8,
 		ExecutorVersionV2Tanegashima:        9,
 		ExecutorVersionV2Kourou:             10,
-		ExecutorVersionVNext:                11,
+		ExecutorVersionV2Canaveral:          11,
+		ExecutorVersionVNext:                12,
 	}
 	for v, n := range frozen {
 		assert.Equal(t, n, uint64(v),
@@ -54,6 +55,7 @@ func TestExecutorVersionsAreOrdered(t *testing.T) {
 		ExecutorVersionV2Jiuquan,
 		ExecutorVersionV2Tanegashima,
 		ExecutorVersionV2Kourou,
+		ExecutorVersionV2Canaveral,
 		ExecutorVersionVNext,
 	}
 	for i := 1; i < len(ladder); i++ {
@@ -64,8 +66,8 @@ func TestExecutorVersionsAreOrdered(t *testing.T) {
 
 // The init() panic in version.go guards the SHAPE (Latest+1 == VNext); this
 // guards the VALUE.
-func TestExecutorVersionLatestIsKourou(t *testing.T) {
-	assert.Equal(t, ExecutorVersionV2Kourou, ExecutorVersionLatest)
+func TestExecutorVersionLatestIsCanaveral(t *testing.T) {
+	assert.Equal(t, ExecutorVersionV2Canaveral, ExecutorVersionLatest)
 }
 
 // A renumber cannot silently move a label onto a different number: every
@@ -92,6 +94,12 @@ func TestV2KourouEnabled_Boundaries(t *testing.T) {
 	assert.False(t, ExecutorVersionV2Tanegashima.V2KourouEnabled(), "false at 9")
 	assert.True(t, ExecutorVersionV2Kourou.V2KourouEnabled(), "true at 10")
 	assert.True(t, ExecutorVersionVNext.V2KourouEnabled(), "true above 10")
+}
+
+func TestV2CanaveralEnabled_Boundaries(t *testing.T) {
+	assert.False(t, ExecutorVersionV2Kourou.V2CanaveralEnabled(), "false at 10")
+	assert.True(t, ExecutorVersionV2Canaveral.V2CanaveralEnabled(), "true at 11")
+	assert.True(t, ExecutorVersionVNext.V2CanaveralEnabled(), "true above 11")
 }
 
 func TestUnknownVersionStringIsRejected(t *testing.T) {

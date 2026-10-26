@@ -2632,7 +2632,11 @@ one thing a per-block record must never do. An empty block has no entry.
 
 Behaviour that changes what a block produces is gated on an `ExecutorVersion` so
 nodes at different versions do not disagree about the same block — `V2Baikonur`
-(6), `V2Jiuquan` (8), `V2Kourou` (10, collection proofs). A gate protects a
+(6), `V2Jiuquan` (8), `V2Kourou` (10, collection proofs), `V2Canaveral` (11,
+the DAG-BFT consensus rules: the first version after Kourou, which Kermit
+already runs, so what DAG-BFT changes in a block waits for its activation).
+`ExecutorVersionLatest`, the version tests and simulations run at, is
+`V2Canaveral`, one below the `VNext` placeholder (12). A gate protects a
 network that is running; it is not ceremony for code that has never been
 deployed.
 
@@ -3133,7 +3137,32 @@ depends on the last:
     account at all.
 11. Update major index chains if this is a major block.
 12. Execute post-update actions.
-13. **Update the BPT**, and only then active globals.
+13. **Update the BPT**, and only then active globals. Only the network-account
+    writes of transactions that succeeded reach them ("Globals change only
+    with the transaction that writes them", below).
+
+### Globals change only with the transaction that writes them
+
+A transaction that writes a network data account (`network`, `globals`,
+`oracle`, `routing`) or activates a protocol version changes the executor's
+pending globals, which step 13 makes active and, where the validator sets
+differ, hands to consensus as validator updates. The pending globals are held
+in memory, not in the block's state, so they are not discarded with a failed
+transaction the way its writes are. From `V2Canaveral` the executor parses the
+new value into a copy and makes the copy its pending globals only once the
+transaction's commit and the record of its success have both succeeded. A
+transaction that fails for any reason after the parse — an update that does
+not write to state, a direct write to a BVN's account, a network definition
+whose version does not increase, a commit error — leaves the pending globals
+as they were, so the globals and the committed state of the network accounts
+change together or not at all. `ParseNetwork` rejects a definition whose
+version does not increase without storing it (#4615).
+
+Before `V2Canaveral` the executor parsed into the pending globals directly,
+before it rejected, and a definition with a stale version was stored and then
+rejected (`ParseNetworkLegacy`). That path is kept unchanged for replaying
+history, in the v1 executor as well as in v2 before `V2Canaveral`: a node
+replaying it must end with the globals the network had.
 
 ### Anchor emission, and the heartbeat
 

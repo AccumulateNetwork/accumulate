@@ -89,7 +89,7 @@ func (x *Executor) processNetworkAccountUpdates(batch *database.Batch, delivery 
 
 		case protocol.Network:
 			// Validate entry and update variable
-			err = x.globals().Pending.ParseNetwork(body.Entry)
+			err = x.globals().Pending.ParseNetworkLegacy(body.Entry)
 
 		case protocol.Routing:
 			// Validate entry and update variable

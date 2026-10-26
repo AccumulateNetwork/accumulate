@@ -152,8 +152,11 @@ const ExecutorVersionV2Tanegashima ExecutorVersion = 9
 // ExecutorVersionV2Kourou enables collection proofs for cross-partition messaging.
 const ExecutorVersionV2Kourou ExecutorVersion = 10
 
+// ExecutorVersionV2Canaveral activates the DAG-BFT consensus rules.
+const ExecutorVersionV2Canaveral ExecutorVersion = 11
+
 // ExecutorVersionVNext is a placeholder for testing. DO NOT USE.
-const ExecutorVersionVNext ExecutorVersion = 11
+const ExecutorVersionVNext ExecutorVersion = 12
 
 // KeyPageOperationTypeUnknown is used when the key page operation is not known.
 const KeyPageOperationTypeUnknown KeyPageOperationType = 0
@@ -836,7 +839,7 @@ func (v ExecutorVersion) GetEnumValue() uint64 { return uint64(v) }
 func (v *ExecutorVersion) SetEnumValue(id uint64) bool {
 	u := ExecutorVersion(id)
 	switch u {
-	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionV2Tanegashima, ExecutorVersionV2Kourou, ExecutorVersionVNext:
+	case ExecutorVersionV1, ExecutorVersionV1SignatureAnchoring, ExecutorVersionV1DoubleHashEntries, ExecutorVersionV1Halt, ExecutorVersionV2, ExecutorVersionV2Baikonur, ExecutorVersionV2Vandenberg, ExecutorVersionV2Jiuquan, ExecutorVersionV2Tanegashima, ExecutorVersionV2Kourou, ExecutorVersionV2Canaveral, ExecutorVersionVNext:
 		*v = u
 		return true
 	}
@@ -866,6 +869,8 @@ func (v ExecutorVersion) String() string {
 		return "v2-tanegashima"
 	case ExecutorVersionV2Kourou:
 		return "v2-kourou"
+	case ExecutorVersionV2Canaveral:
+		return "v2-canaveral"
 	case ExecutorVersionVNext:
 		return "vnext"
 	}
@@ -911,6 +916,10 @@ func ExecutorVersionByName(name string) (ExecutorVersion, bool) {
 		return ExecutorVersionV2Kourou, true
 	case "v2-kourou":
 		return ExecutorVersionV2Kourou, true
+	case "v2canaveral":
+		return ExecutorVersionV2Canaveral, true
+	case "v2-canaveral":
+		return ExecutorVersionV2Canaveral, true
 	case "vnext":
 		return ExecutorVersionVNext, true
 	}
