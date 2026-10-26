@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
@@ -73,5 +74,52 @@ func TestPutAuthored_SyncsFileThenDirectory(t *testing.T) {
 		if syncs[i] != want[i] {
 			t.Errorf("sync %d: got %v, want %v", i, syncs[i], want[i])
 		}
+	}
+}
+
+// Every certificate is written as it is inserted (#4595), from the
+// primary's loop among other places, so the authored header's two syncs
+// must not hold up a certificate write: a slow device would stall the
+// inserts behind every header this node authors.
+func TestPutAuthored_SyncHoldsUpNoCertificateWrite(t *testing.T) {
+	s, err := OpenDAGStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	syncing, release := make(chan struct{}), make(chan struct{})
+	prev := fsync
+	fsync = func(f *os.File) error {
+		select {
+		case syncing <- struct{}{}:
+			<-release
+		default:
+		}
+		return prev(f)
+	}
+	t.Cleanup(func() { fsync = prev })
+
+	authored := make(chan error, 1)
+	go func() { authored <- s.PutAuthored(types.NewHeader(pub, 1, 0, nil, nil)) }()
+	<-syncing
+	written := make(chan error, 1)
+	go func() {
+		_, err := s.PutCertificate(types.NewCertificate(types.NewHeader(pub, 2, 0, nil, nil), nil, nil))
+		written <- err
+	}()
+	select {
+	case err := <-written:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a certificate write waited for the authored header's sync")
+	}
+	close(release)
+	if err := <-authored; err != nil {
+		t.Fatal(err)
 	}
 }

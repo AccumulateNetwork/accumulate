@@ -170,7 +170,7 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 	// headers are harmless (ancestry walks and the commit path dedup by
 	// digest).
 	if round >= 3 {
-		for r := round - 2; r >= 1 && r+weakLinkWindow >= round; r-- {
+		for r := round - 2; r >= 1 && r+types.WeakLinkWindow >= round; r-- {
 			for _, cert := range p.dag.GetRound(r) {
 				d := cert.Digest()
 				if !seen[d] {

@@ -62,6 +62,18 @@ type DAG struct {
 	gcDepth types.Round
 	// lastCommitRound is the most recently committed round.
 	lastCommitRound types.Round
+	// seed is the round Restore or Rejoin seeded the DAG at. Zero when
+	// never seeded.
+	seed types.Round
+	// waiveTo is the highest round whose certificates enter without their
+	// parents: the round after the seed, whose history is in the restored
+	// state (consensus.md, "Restart"), until Restore puts a tail back
+	// (#4595). Zero when there is none.
+	waiveTo types.Round
+	// onInsert is told of each certificate inserted, once (#4595): the node
+	// writes it to the DAG store so the persisted tail is the DAG as of the
+	// crash, whatever a weak link names.
+	onInsert func(*types.Certificate)
 	// latestRound is the highest round number seen.
 	latestRound types.Round
 	// certifiedBatches maps each batch digest a certified header names to
@@ -171,19 +183,67 @@ func (d *DAG) checkParentsLocked(round types.Round, parents []types.CertificateD
 	return nil
 }
 
-// Restore inserts certificates a restarted node persisted with its
-// checkpoint (#4448), lowest round first, without requiring their parents:
-// the persisted tail begins RescueWindow below the commit floor, and the
-// certificates below it are committed history the node no longer needs.
-// Each was quorum-verified when this node first took it in.
-func (d *DAG) Restore(certs []*types.Certificate) error {
+// SetOnInsert sets the function told of each certificate Insert adds.
+func (d *DAG) SetOnInsert(fn func(*types.Certificate)) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.onInsert = fn
+}
+
+// Restore inserts the tail a restarted node persisted with its checkpoint
+// (#4448), lowest round first, and makes floor, where the tail begins, the
+// DAG's collection floor (#4595): what lies below it is committed history,
+// not inserted, and a certificate within a weak-link window above it may
+// name a parent below it, as one above the floor of a collected DAG may.
+// The seed's waiver ends: the parents of every other round are in the tail
+// or with the peers.
+//
+// A certificate above that window whose parent is absent from the tail, and
+// one anywhere in the tail whose parent was dropped, is dropped too: a write
+// lost or reordered before a crash leaves a child on disk without its
+// parent, and inserted it would leave the parent out of a group its peers
+// order with it. Restore returns what it dropped, lowest round first, for
+// the node to take in again as late certificates, held until their parents
+// are fetched. Each certificate was quorum-verified when this node first
+// took it in.
+func (d *DAG) Restore(floor types.Round, certs []*types.Certificate) (orphans []*types.Certificate, err error) {
 	sort.Slice(certs, func(i, j int) bool { return certs[i].Round() < certs[j].Round() })
+	have := make(map[types.CertificateDigest]bool, len(certs))
 	for _, c := range certs {
-		if err := d.insert(c, false); err != nil {
-			return err
+		if c.Round() >= floor {
+			have[c.Digest()] = true
 		}
 	}
-	return nil
+	if len(have) == 0 {
+		return nil, nil
+	}
+	dropped := map[types.CertificateDigest]bool{}
+	for _, c := range certs {
+		if c.Round() < floor {
+			continue
+		}
+		inBand := c.Round() < floor+types.WeakLinkWindow
+		for _, p := range c.Parents() {
+			if dropped[p] || (!inBand && !have[p]) {
+				dropped[c.Digest()] = true
+				break
+			}
+		}
+		if dropped[c.Digest()] {
+			orphans = append(orphans, c)
+			continue
+		}
+		if err := d.insert(c, false); err != nil {
+			return orphans, err
+		}
+	}
+	d.mu.Lock()
+	d.waiveTo = 0
+	if floor > d.gcCutoff {
+		d.gcCutoff = floor
+	}
+	d.mu.Unlock()
+	return orphans, nil
 }
 
 // Equivocations counts the conflicting certificates this DAG refused: a
@@ -196,7 +256,18 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 	}
 
 	d.mu.Lock()
-	defer d.mu.Unlock()
+	inserted, err := d.insertLocked(cert, checkParents)
+	onInsert := d.onInsert
+	d.mu.Unlock()
+	if inserted && checkParents && onInsert != nil {
+		onInsert(cert)
+	}
+	return err
+}
+
+// insertLocked is insert under mu. It reports whether the certificate was
+// new to the DAG.
+func (d *DAG) insertLocked(cert *types.Certificate, checkParents bool) (bool, error) {
 
 	round := cert.Round()
 	key := toAuthorKey(cert.Author())
@@ -211,26 +282,34 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 	if roundMap, ok := d.rounds[round]; ok {
 		if existing, exists := roundMap[key]; exists {
 			if existing.Digest() == cert.Digest() {
-				return nil // idempotent re-insert
+				return false, nil // idempotent re-insert
 			}
 			d.equivocations.Add(1)
-			return fmt.Errorf("%w: author %x round %d", ErrEquivocation, key[:4], round)
+			return false, fmt.Errorf("%w: author %x round %d", ErrEquivocation, key[:4], round)
 		}
 	}
 
-	// The parents must be here, and the distinct ones of the round before
-	// must carry a quorum (checkParentsLocked, #4591). Once there is a
-	// commit floor, parents at or below it may be legitimately absent:
-	// garbage collection prunes them, and a node rejoining after a fast
-	// sync (#4058) starts with an EMPTY DAG whose history is embodied in
-	// its restored state — requiring parents there recurses into pruned
-	// history and wedges the rejoin. The certificate itself is
-	// quorum-verified before insertion, so accepting it without its pruned
-	// parents does not weaken trust.
-	pruned := d.lastCommitRound > 0 && round <= d.lastCommitRound+1
-	if checkParents && !pruned {
+	// A certificate enters the DAG only with its parents present (Narwhal
+	// §4). Ordering flattens a leader's ancestors as found here and skips a
+	// parent it does not hold, so this is what makes the committed groups
+	// the same on every node whatever order certificates arrived in
+	// (#4595). It used to be waived for everything at or below the last
+	// commit plus one — in normal running, every late certificate.
+	//
+	// The exceptions are where the parents cannot be fetched. A seed into
+	// an empty DAG (Rejoin, or Restore without a tail) accepts certificates
+	// up to the round after it without their parents, since its history is
+	// embodied in the restored state and asking for it recurses into
+	// collected rounds (#4058); the seed's distance below the network keeps
+	// these rounds out of the walks that matter (#4405). And a certificate
+	// within a weak-link window of the collection floor may name parents
+	// that were collected, which a digest cannot tell from one that is
+	// missing; Bullshark stops ordering before its walk reaches there.
+	waived := round <= d.waiveTo ||
+		(d.gcCutoff > 0 && round < d.gcCutoff+types.WeakLinkWindow)
+	if checkParents && !waived {
 		if err := d.checkParentsLocked(round, cert.Parents()); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -256,7 +335,10 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 	// Update latest round. The round advance is a collection point too: the
 	// DAG holds gcDepth rounds behind the frontier whether or not this node
 	// is committing, so a halted executor does not grow it without bound
-	// (#4239).
+	// (#4239). A node whose commits fall behind what this collects is
+	// stranded: Bullshark orders nothing more once the collection floor is
+	// within a rescue window of its last commit (#4595), rather than
+	// ordering a group over the collected rounds that its peers did not.
 	if round > d.latestRound {
 		d.latestRound = round
 		if round > d.gcDepth {
@@ -264,7 +346,15 @@ func (d *DAG) insert(cert *types.Certificate, checkParents bool) error {
 		}
 	}
 
-	return nil
+	return true, nil
+}
+
+// CollectedBelow is the round below which every round has been collected;
+// zero when nothing has been.
+func (d *DAG) CollectedBelow() types.Round {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.gcCutoff
 }
 
 // HasCertifiedBatch reports whether a certified header in the DAG names the
@@ -315,7 +405,16 @@ func (d *DAG) InsertGenesis(cert *types.Certificate) error {
 	}
 
 	d.mu.Lock()
-	defer d.mu.Unlock()
+	err := d.insertGenesisLocked(cert)
+	onInsert := d.onInsert
+	d.mu.Unlock()
+	if err == nil && onInsert != nil {
+		onInsert(cert)
+	}
+	return err
+}
+
+func (d *DAG) insertGenesisLocked(cert *types.Certificate) error {
 
 	key := toAuthorKey(cert.Author())
 
@@ -418,14 +517,19 @@ func (d *DAG) LastCommitRound() types.Round {
 	return d.lastCommitRound
 }
 
-// SetLastCommitRound sets the last committed round.
-// This is typically called after consensus commits a leader.
+// SetLastCommitRound seeds the DAG at a committed round (Restore, Rejoin):
+// certificates up to the round after it enter without their parents, until
+// Restore puts a tail back.
 func (d *DAG) SetLastCommitRound(round types.Round) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if round > d.lastCommitRound {
 		d.lastCommitRound = round
+	}
+	if round > d.seed {
+		d.seed = round
+		d.waiveTo = round + 1
 	}
 }
 

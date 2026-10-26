@@ -303,8 +303,8 @@ func (e *lagExec) step(round types.Round) {
 
 // Ordering is the same on nodes whose floors differ: the default depth, a
 // DAGGCDepth below the lag that clips the floor, a node with no state
-// directory (it prunes at the frontier), a node that never checkpoints, and a
-// depth below the prune window. The last two checkpoints of the default-depth
+// directory (it prunes at the frontier), a node that never checkpoints, and
+// the shallowest depth a node runs with, the prune window. The last two checkpoints of the default-depth
 // node restore a node that catches up and orders every later group as the
 // live node did. The prune margin is pinned to the round: a margin of
 // rescueWindow-1 already orders a leader differently from a frontier node.
@@ -327,11 +327,11 @@ func TestDedup_OrderingSameAcrossFloors(t *testing.T) {
 			cps: map[types.Round]*persist.Checkpoint{}, cpRound: map[types.Round]types.Round{}}
 	}
 	execs := []*lagExec{
-		mk(dir, 0, 150, 360),           // default depth, lag 150
-		mk(t.TempDir(), 100, 150, 360), // depth below the lag: floor clipped
-		mk("", 0, 150, 360),            // no state directory: the reference
-		mk(t.TempDir(), 100, 0, 0),     // never checkpoints
-		mk(t.TempDir(), 40, 300, 100),  // depth below the prune window
+		mk(dir, 0, 150, 360),                           // default depth, lag 150
+		mk(t.TempDir(), 100, 150, 360),                 // depth below the lag: floor clipped
+		mk("", 0, 150, 360),                            // no state directory: the reference
+		mk(t.TempDir(), 100, 0, 0),                     // never checkpoints
+		mk(t.TempDir(), types.MinDAGGCDepth, 300, 100), // the shallowest depth: the prune window
 	}
 	for round, cs := range dag {
 		for _, e := range execs {

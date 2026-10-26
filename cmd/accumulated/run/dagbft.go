@@ -102,6 +102,10 @@ func (s *DAGBFTService) Verify() error {
 	if s.ValidatorKey == nil {
 		return errors.BadRequest.With("validator key is required")
 	}
+	// Below this Bullshark stops ordering on a healthy node (#4595).
+	if s.DAGGCDepth != nil && *s.DAGGCDepth < types.MinDAGGCDepth {
+		return errors.BadRequest.WithFormat("DAGGCDepth %d is below the minimum of %d", *s.DAGGCDepth, types.MinDAGGCDepth)
+	}
 	return nil
 }
 

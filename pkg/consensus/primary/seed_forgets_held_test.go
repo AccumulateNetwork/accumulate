@@ -180,12 +180,16 @@ func TestASeedsCatchUpAnswersCarryItsOwnRound(t *testing.T) {
 				}
 			}
 			held := dag.NewDAG(100)
-			require.NoError(t, held.Restore(certs))
+			orphans, err := held.Restore(0, certs)
+			require.NoError(t, err)
+			require.Empty(t, orphans)
 			peer := NewCertSyncer(CertSyncerConfig{Partition: "test"}, held, nil, nil)
 
 			d := newTestDAG()
 			p := New(Config{Partition: "test", KeyPair: validators[0].priv}, newTestCommittee(validators, 1), nil, d, nil)
+			// The seed, as Node.Rejoin makes it.
 			p.SetRoundAndSeed(seed)
+			d.SetLastCommitRound(seed)
 
 			for current := seed + 2; current <= seed+weakLinkWindow; current++ {
 				got := map[types.Round]int{}
@@ -209,7 +213,11 @@ func TestASeedsCatchUpAnswersCarryItsOwnRound(t *testing.T) {
 				}
 				require.Less(t, i, 3, "rounds held whole are asked for again")
 				resp := peer.answer(&gossip.CertSyncRequest{Rounds: requests[1], Requester: validators[0].pub, RequestID: uint64(i)})
-				require.NoError(t, d.Restore(resp.Certificates))
+				// The fixture's certificates are unsigned: taken in as the
+				// router delivers them, not verified again.
+				for _, c := range resp.Certificates {
+					require.Equal(t, CertInserted, p.receiveCertificate(c, true), "round %d", c.Round())
+				}
 			}
 			for r := seed + 2 - weakLinkWindow; r < seed; r++ {
 				require.Len(t, d.GetRound(r), n, "round %d below the seed", r)

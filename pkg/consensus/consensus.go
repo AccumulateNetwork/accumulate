@@ -183,6 +183,7 @@ type Node struct {
 	handed   []handedGroup // groups handed to the executor not yet checkpointed
 	prevTail map[string]bool
 	restored []*types.Certificate // replayed through Bullshark at start
+	orphans  []*types.Certificate // dropped by Restore, taken in again at start
 	// prevFloor is the tail floor of the last checkpoint saved: the vote
 	// records (#4590) are kept from there, as that checkpoint may be the one
 	// resumed. A checkpoint computed and not saved does not move it.
@@ -236,6 +237,9 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 	}
 
 	config.applyDefaults()
+	if config.DAGGCDepth < types.MinDAGGCDepth {
+		return nil, fmt.Errorf("DAG GC depth %d is below the minimum of %d", config.DAGGCDepth, types.MinDAGGCDepth)
+	}
 
 	// Create DAG
 	d := dag.NewDAG(config.DAGGCDepth)
@@ -354,6 +358,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		}
 		p.RestoreVotedFloor(n.dagStore.VotedFloor())
 		p.SetOnVoted(n.dagStore.PutVoted)
+		n.dag.SetOnInsert(n.persistInserted)
 	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
@@ -720,6 +725,8 @@ func (n *Node) Start(ctx context.Context) error {
 	n.wg.Add(1)
 	go n.processBullshark()
 
+	n.takeInOrphans()
+
 	// Serve batch fetches: CollectBatches on other nodes depends on peers
 	// answering, and a certificate is only as good as the availability of
 	// its batches.
@@ -1031,8 +1038,9 @@ func (n *Node) Checkpoint() *persist.Checkpoint {
 // Restore seeds the consensus position from a checkpoint, before Start: the
 // primary participates from the checkpoint's round, Bullshark orders nothing
 // at or below its last commit and knows what each author had committed, and
-// the DAG accepts certificates at the commit floor without their pruned
-// parents. The checkpoint's tail, if it has one, goes back into the DAG and
+// the DAG accepts certificates up to the round after it without their
+// parents until a tail is restored. The checkpoint's tail, if it has one,
+// goes back into the DAG, less what lacks a parent (#4595), and
 // the batch store, and the header this node last authored back into vote
 // collection (#4448): a partition restarted as a whole has its parents in
 // memory again and continues from the round it stopped at. Certificate
@@ -1123,9 +1131,11 @@ func (n *Node) processBullshark() {
 				return
 			}
 
-			// Garbage collect old rounds
-			if lastCommit := n.bullshark.LastCommitRound(); lastCommit > n.config.DAGGCDepth {
-				n.dag.GarbageCollect(lastCommit)
+			// Tell the DAG the commit round — it bounds collection on round
+			// advance (#4595) — and collect once the depth is passed.
+			lastCommit := n.bullshark.LastCommitRound()
+			n.dag.GarbageCollect(lastCommit)
+			if lastCommit > n.config.DAGGCDepth {
 				n.committees.Prune(lastCommit - n.config.DAGGCDepth)
 			}
 

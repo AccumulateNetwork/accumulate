@@ -101,6 +101,10 @@ type Bullshark struct {
 	// means none reported and the frontier is the floor.
 	dedupFloor types.Round
 
+	// stranded is set while ordering refuses to proceed over collected
+	// rounds (#4595): the refusal is logged once, and the resumption.
+	stranded bool
+
 	// onCommit is called when certificates are committed.
 	// This callback is used to notify external components (e.g., workers)
 	// that batches associated with these certificates can be pruned.

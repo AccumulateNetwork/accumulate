@@ -47,6 +47,11 @@ type DAGStore struct {
 	// restarted node otherwise knew the records it kept but not that lower
 	// rounds had been voted in and dropped (#4590). It only rises.
 	votedFloor types.Round
+
+	// authoredMu orders the authored header's writes, apart from mu: its
+	// two syncs must not hold up the certificate written at each insert
+	// (#4595).
+	authoredMu sync.Mutex
 }
 
 // authorRoundKey keys votedBy.
@@ -123,7 +128,7 @@ var fsync = func(f *os.File) error { return f.Sync() }
 // before it returns, for a write whose loss is not merely a loss (#4592):
 // the authored header is broadcast once it returns, and a power loss that
 // brought the previous file back would have the node author the round
-// again. The caller holds mu.
+// again. The caller holds authoredMu.
 func (s *DAGStore) writeFileSynced(name string, data []byte) error {
 	path := filepath.Join(s.dir, name)
 	tmp := path + ".tmp"
@@ -239,8 +244,8 @@ func (s *DAGStore) PutAuthored(h *types.Header) error {
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.authoredMu.Lock()
+	defer s.authoredMu.Unlock()
 	// Synced, alone in this store (DIFFERENCES, C9): a certificate or batch
 	// lost to a power loss costs a fetch, this file an equivocation.
 	return s.writeFileSynced(authoredFile, data)
