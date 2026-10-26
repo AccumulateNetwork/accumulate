@@ -2503,9 +2503,11 @@ anchor committed to Bitcoin at every interval (a stored Directory block at
 least 10 blocks below the proposer's tip) from an address on a published list,
 changed only by a recorded spend from the old list's addresses or by its backup
 within a window, the validators signing at a count threshold through per-signer
-coordination data accounts, a proof builder keeping each listed account's
-entries' receipts to the next anchored root, and a verifier that checks a
-package with Bitcoin and one pinned transaction. None of it exists:
+coordination data accounts, each validator's Bitcoin key in a separate signer
+that checks every transaction against its own nodes and a locally set fee cap
+(§2.8, part of B2), a proof builder keeping each listed account's entries'
+receipts to the next anchored root, and a verifier that checks a package with
+Bitcoin and one pinned transaction. None of it exists:
 
 - **B1. No accounts, no types.** `dn.acme/bitcoin` (an ADI),
   `dn.acme/bitcoin/addresses` and the per-signer coordination accounts and
@@ -2516,9 +2518,7 @@ package with Bitcoin and one pinned transaction. None of it exists:
   transactions, not by an
   executor change; there is no version gate.
 - **B2. No coordination.** No validator proposes, signs or broadcasts an anchor
-  (anchoring.md §2.4), on the Bitcoin-height slot rule. No separate Bitcoin
-  signer exists that checks each transaction against its own nodes and a
-  locally set fee cap before signing (§2.8).
+  (anchoring.md §2.4), on the Bitcoin-height slot rule.
 - **B3. No proof builder.** Nothing reads the block ledgers for a configured
   set of accounts and keeps receipts to an anchored root; the only account
   proofs are `ProofService`'s, built on request against the current BPT and
