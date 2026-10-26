@@ -725,18 +725,67 @@ func (p *Primary) requestRoundCatchUp(current, target types.Round) {
 	p.lastRoundPull = time.Now()
 	p.roundSyncMu.Unlock()
 
-	// Request at most MaxSyncRounds rounds, starting from where we are —
-	// certificates insert parent-first, so pulling the oldest gap first
-	// makes steady forward progress even across a large gap.
+	for _, rounds := range p.catchUpRequests(current, target) {
+		p.certSyncer.RequestRounds(rounds)
+	}
+}
+
+// catchUpRequests is what round catch-up asks for, one round request each.
+//
+// The first is at most MaxSyncRounds rounds, from one below the node's round
+// upward to target. Certificates insert parent-first, so pulling the oldest
+// gap first makes steady forward progress even across a large gap; the round
+// below is asked for again in case this node's copy of it is partial.
+//
+// A node seeded at S (SetRoundAndSeed) also asks, in a second request, for the rounds
+// below S that the certificates still to come name as weak links, from
+// S + 2 - weakLinkWindow, until its round passes S + weakLinkWindow. Its DAG
+// holds nothing below S, and the DAG takes S and S + 1 without parents but
+// not S + 2, so without them the node waits at S + 2. Asked for by digest
+// only, an answer lost was asked for again by the pending rescan fifteen
+// seconds after (#4610). They are a request of their own because an answer
+// carries at most MaxSyncCertificates, the rounds in the order asked: ahead
+// of the node's own rounds they filled the answer from 13 validators up, and
+// the node got none of the rounds it needed to advance. A round is asked for
+// until the DAG holds a certificate of every validator in it, not a quorum:
+// the weak links are to exactly the certificates a quorum can leave out.
+func (p *Primary) catchUpRequests(current, target types.Round) [][]types.Round {
 	first := current
 	if first > 0 {
-		first-- // Re-fetch the previous round in case our copy is partial
+		first--
 	}
 	var rounds []types.Round
 	for r := first; r <= target && len(rounds) < gossip.MaxSyncRounds; r++ {
 		rounds = append(rounds, r)
 	}
-	p.certSyncer.RequestRounds(rounds)
+	requests := [][]types.Round{rounds}
+	if below := p.seedRounds(current, first); len(below) > 0 {
+		requests = append(requests, below)
+	}
+	return requests
+}
+
+// seedRounds is the rounds below the seed, and below first, the start of the
+// node's own request, that a seeded node at current still lacks a
+// certificate of some validator in (catchUpRequests).
+func (p *Primary) seedRounds(current, first types.Round) []types.Round {
+	p.roundMu.Lock()
+	seed, seeded := p.seed, p.seeded
+	p.roundMu.Unlock()
+	if !seeded || current > seed+weakLinkWindow {
+		return nil
+	}
+	low := types.Round(0)
+	if seed+2 > weakLinkWindow {
+		low = seed + 2 - weakLinkWindow
+	}
+	var rounds []types.Round
+	for r := low; r < seed && r < first; r++ {
+		if len(p.dag.GetRound(r)) < p.committeeAt(r).Len() {
+			rounds = append(rounds, r)
+		}
+	}
+	return rounds
 }
 
 // pushCertsForStaleRound rebroadcasts the certificates of a stale round (and

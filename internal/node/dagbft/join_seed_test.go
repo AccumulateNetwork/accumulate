@@ -173,6 +173,14 @@ func TestAJoinerAddedPastTheDAGsCollectedRoundsHandsOff(t *testing.T) {
 	const produce = 10
 	require.Eventually(t, func() bool { return len(joinerAdapter.produced()) >= produce },
 		30*time.Second, 100*time.Millisecond, "the new node produced nothing after the handoff")
+	// Every node commits a leader when its own DAG shows the votes, so the
+	// new node, ordering from its buffer, can produce a block the validator
+	// recorded here has not produced yet: block 328, a second after the
+	// handoff at 318 (#4610). The blocks are compared once both have
+	// produced them.
+	last := joinerAdapter.produced()[produce-1].Index
+	require.Eventually(t, func() bool { _, ok := recorded.block(last); return ok },
+		30*time.Second, 100*time.Millisecond, "validator has no block %d", last)
 	for _, got := range joinerAdapter.produced()[:produce] {
 		want, ok := recorded.block(got.Index)
 		require.True(t, ok, "validator has no block %d", got.Index)

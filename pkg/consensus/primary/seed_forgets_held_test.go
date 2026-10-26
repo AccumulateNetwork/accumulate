@@ -7,9 +7,11 @@
 package primary
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
@@ -119,4 +121,99 @@ func TestASeedForgetsWhatItAskedForBeforeIt(t *testing.T) {
 	queued := append([]types.CertificateDigest(nil), s.batchQueue...)
 	s.batchQueueMu.Unlock()
 	require.Contains(t, queued, parent.Digest(), "a certificate asked for before the seed is not asked for again after it")
+}
+
+// A node seeded at S asks, with each round of catch-up, for the rounds below S
+// that the certificates above it name as weak links. A header names every
+// certificate of the eight rounds below it but the last, so those at S + 2
+// name S - 6 to S; the DAG takes S and S + 1 without parents, and the
+// certificates above wait for the rounds below S, which round catch-up --
+// one round below the node's own, upward -- never asked for. They were asked
+// for by digest only, and an answer lost was asked for again only by the
+// pending rescan fifteen seconds after: the node sat at S + 2, the join's
+// five-second wait ran out, and it pulled past its first proven state (the
+// libp2p join test in CI, 77 s against 56 s for a pass; #4610). Asked for by
+// round, they come with the next second's request.
+func TestASeedAsksForTheRoundsItsCertificatesNameBelowIt(t *testing.T) {
+	validators := []*testValidator{newTestValidator(t)}
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, newTestCommittee(validators, 1), nil, newTestDAG(), nil)
+
+	// Not seeded: one request, from one round below the node's own.
+	requests := p.catchUpRequests(40, 100)
+	require.Len(t, requests, 1)
+	require.Equal(t, types.Round(39), requests[0][0])
+
+	p.SetRoundAndSeed(40)
+	requests = p.catchUpRequests(40, 100)
+	require.Len(t, requests, 2, "the rounds S+2 names below the seed are not asked for")
+	require.Equal(t, types.Round(39), requests[0][0], "the node's own rounds come first")
+	require.Len(t, requests[0], 62)
+	require.Equal(t, []types.Round{34, 35, 36, 37, 38}, requests[1], "S-1 is in the node's own request")
+	require.Equal(t, []types.Round{34, 35, 36, 37, 38, 39}, p.catchUpRequests(48, 100)[1], "S+7 names S-1")
+
+	// Past S + 8 no certificate still to come names a round below the seed.
+	require.Len(t, p.catchUpRequests(49, 100), 1)
+}
+
+// What a seeded node asks for below its seed must not crowd out of the answer
+// the rounds it needs to advance. An answer carries at most
+// MaxSyncCertificates, the rounds in the order asked; asked for ahead of the
+// node's own rounds, the eight rounds S-6..S+1 of 13 validators were 104
+// certificates, and a node at S+2..S+8 got none of its own round's (the
+// review of !1278). A round below the seed the node holds whole is not asked
+// for again.
+func TestASeedsCatchUpAnswersCarryItsOwnRound(t *testing.T) {
+	for _, n := range []int{4, 12, 13, 20} {
+		t.Run(fmt.Sprint(n), func(t *testing.T) {
+			const seed = types.Round(40)
+			validators := make([]*testValidator, n)
+			for i := range validators {
+				validators[i] = newTestValidator(t)
+			}
+
+			// The peer answering holds every validator's certificate of
+			// every round up to S + 12.
+			var certs []*types.Certificate
+			for r := types.Round(1); r <= seed+12; r++ {
+				for _, v := range validators {
+					certs = append(certs, types.NewCertificate(types.NewHeader(v.pub, r, 1, nil, nil), nil, nil))
+				}
+			}
+			held := dag.NewDAG(100)
+			require.NoError(t, held.Restore(certs))
+			peer := NewCertSyncer(CertSyncerConfig{Partition: "test"}, held, nil, nil)
+
+			d := newTestDAG()
+			p := New(Config{Partition: "test", KeyPair: validators[0].priv}, newTestCommittee(validators, 1), nil, d, nil)
+			p.SetRoundAndSeed(seed)
+
+			for current := seed + 2; current <= seed+weakLinkWindow; current++ {
+				got := map[types.Round]int{}
+				for i, rounds := range p.catchUpRequests(current, current+4) {
+					resp := peer.answer(&gossip.CertSyncRequest{Rounds: rounds, Requester: validators[0].pub, RequestID: uint64(current)*10 + uint64(i)})
+					require.NotNil(t, resp)
+					for _, c := range resp.Certificates {
+						got[c.Round()]++
+					}
+				}
+				require.Equal(t, n, got[current], "certificates of round %d, the node's own", current)
+				t.Logf("n=%d current=S+%d: %d of the node's round", n, current-seed, got[current])
+			}
+
+			// The rounds below the seed come too, as many answers as they
+			// take, and once held whole are not asked for again.
+			for i := 0; ; i++ {
+				requests := p.catchUpRequests(seed+2, seed+6)
+				if len(requests) == 1 {
+					break
+				}
+				require.Less(t, i, 3, "rounds held whole are asked for again")
+				resp := peer.answer(&gossip.CertSyncRequest{Rounds: requests[1], Requester: validators[0].pub, RequestID: uint64(i)})
+				require.NoError(t, d.Restore(resp.Certificates))
+			}
+			for r := seed + 2 - weakLinkWindow; r < seed; r++ {
+				require.Len(t, d.GetRound(r), n, "round %d below the seed", r)
+			}
+		})
+	}
 }

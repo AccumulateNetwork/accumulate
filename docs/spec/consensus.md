@@ -174,8 +174,8 @@ So a validator holds batches in four places, for four reasons:
     passed, the handlers judge against the primary's own round and epoch
     without verifying its signatures again, and a copy of a certificate
     the node holds, the same as encoded on the wire (the header with its
-    signature, the vote signatures and the signers; the state hash, set
-    after execution, aside), is accepted on the verification that admitted
+    signature, the vote signatures and the signers; the state hash, which
+    nothing signs, aside), is accepted on the verification that admitted
     it (#4596). Certificate-sync responses are the
     one carve-out: a response carries up to 100 certificates and every node
     receives every response, so the router relays one once each
@@ -608,7 +608,12 @@ A certificate is valid when all of these hold (`Certificate.Verify`,
   32-byte state hash (`certificate.go:289-291`, `:382-387`) that is not in
   the header digest and so not under any signature (`:58-61`). Nothing
   reads it for consensus; it is zero on every certificate the network
-  forms. A node must not treat it as attested.
+  forms. A node must not treat it as attested. Execution does not write
+  it: a block's state hash is the node's record for the round
+  (`Service.RecordStateHash`). Until #4610 the block production loop also
+  stamped it on each certificate of the group, the DAG's own, while gossip
+  marshalled the same certificates for a stalled round's re-share and for
+  catch-up answers — a data race (`TestProducingABlockWritesNothingOnItsCertificates`).
 
 The author forms the certificate itself, from the votes it collected plus
 its self-vote, as soon as their stake is a quorum (`tryCreateCertificateLocked`,
@@ -1216,7 +1221,11 @@ broadcast:
 - **By round.** A header more than one round ahead of the node's round asks
   for every certificate of the rounds from one below the node's round
   upward, at most 64 rounds, at most once a second
-  (`requestRoundCatchUp`). A node whose round has not advanced for 5 s
+  (`requestRoundCatchUp`). A node seeded at `S` (`Node.Rejoin`) also asks,
+  in a second request, for the rounds from `S − 6` that the certificates up
+  to `S + 7` name as weak links, until its round passes `S + 8`
+  (`catchUpRequests`; "The seed asks for the rounds below it", in
+  "Restart"). A node whose round has not advanced for 5 s
   re-shares the certificates of its current and previous round and asks for
   the rounds either side of its own, at most every 2 s (`recoverFromStall`).
 - **By digest.** A certificate whose parents the node lacks asks for those
@@ -1248,8 +1257,9 @@ the digest covers only the header, and not its signature, so a copy is a
 duplicate only if it is the held certificate as encoded on the wire: the
 header with its signature, the vote signatures and the signers, compared
 as encodings so that no field added later reopens this. The state hash is
-left out: a node sets it on the certificate it holds after executing it,
-and a fresh copy of an executed certificate is the same certificate. A
+left out: a node built before #4610 set it on the certificate it held after
+executing it, and a fresh copy of an executed certificate is the same
+certificate. A
 genuine header, which is public, with other signatures, its own included,
 is invalid. That rule is the primary's (`receiveCertificate`), one rule
 for every path a certificate arrives by
@@ -1364,8 +1374,9 @@ seed, `S` in "Restart"), not a corner:
 the DAG accepts certificates at `P` and `P + 1` without their parents, but a
 header names as weak links every certificate of the rounds from eight below
 it to two below it, so the certificates at `P + 2` name those of
-`P − 6 … P − 1`, which no round request asks for (round catch-up starts one
-round below the node's own). And a joining node's buffer is already full:
+`P − 6 … P − 1`, which until #4610 no round request asked for (round
+catch-up started one round below the node's own; now a seeded node also
+asks for `P − 6 … P − 1` in a request of their own). And a joining node's buffer is already full:
 until `Rejoin` its floor is zero, so every live certificate gossip delivered
 while it pulled its state waits for parents, and none is pruned, being above
 its round. Refusing without asking left a follower's Directory at `P + 2`
@@ -1656,6 +1667,40 @@ already met, for five seconds and then until the pending rescan fifteen
 seconds after. The join waited out its own five seconds and pulled a state
 past its first: every CI run of the libp2p join test once #4596 made a held
 certificate not check (#4610, `TestASeedForgetsWhatItAskedForBeforeIt`).
+
+**The seed asks for the rounds below it** (`Primary.SetRoundAndSeed`,
+`catchUpRequests`). The parents of the certificates at `S + 2 … S + 7` reach
+down to `S − 6` as weak links — of honest nodes on this build: the reach is
+the build's `weakLinkWindow` (eight), and `CheckParents` takes a weak link
+from any older round, so a certificate from a build with a wider window, or
+a faulty author's, can name one further down, which is still asked for by
+digest only and waits for the rescan when its answer is lost; at most `f`
+authors do, and the round completes without them. Round catch-up asked only from one round
+below the node's own. Those rounds were asked for by digest alone, and a
+digest request is mostly answered once: every peer judges an answer by its
+own DAG, so the peers that see the first keep theirs. An answer that never reached the
+node left the digest in flight, deduplicated for five seconds; the copies of
+the certificates waiting on it were refused as already held, so nothing asked
+again, and the pending rescan did, fifteen seconds after. The node sat at
+`S + 2`, the join waited out its five seconds and pulled a state past its
+first: the libp2p join test in CI after the forgetting above, 75 to 77 s
+against 56 s for a pass, a lost answer reproducing it with that time and
+that assertion, and a pinned or loaded run never meeting it. Until its round
+passes `S + 8`, the seeded node sends with each round request a second, for
+the rounds from `S − 6` below its own request that its DAG does not hold a
+certificate of every validator in; a round request has its own ID each
+second and is always answered, the DAG takes those rounds without parents,
+and an answer lost costs a second
+(`TestASeedAsksForTheRoundsItsCertificatesNameBelowIt`). Every validator's,
+not a quorum: the weak links are to exactly the certificates a quorum of
+parents leaves out. A request of their own, because an answer carries at most
+100 certificates, the rounds in the order asked: asked for ahead of the
+node's own rounds, `S − 6 … S + 1` filled the answer from 13 validators up
+(and left 4 of 12 at `S + 2`), and the node got none of the round it needed
+to advance (the review of !1278,
+`TestASeedsCatchUpAnswersCarryItsOwnRound`). The round and the seed are set
+under one lock, so no catch-up sees the one without the other. Which
+requests a node sends changes nothing it orders or commits.
 
 Two networks are seeded at `P` itself, as before, and pay the refused first
 handoff: one younger than thirty-four rounds, and one whose `DAGGCDepth` is

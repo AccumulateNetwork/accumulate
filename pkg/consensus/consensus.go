@@ -990,9 +990,12 @@ func (n *Node) CurrentRound() types.Round {
 // its state, on a join that took seconds, held exactly the rounds it was
 // seeded at and ordered nothing (the libp2p join test, three runs of four,
 // #4530).
+//
+// The primary is told the seed, so that round catch-up asks for the rounds
+// below it that the certificates above it name as weak links (#4610).
 func (n *Node) Rejoin(round types.Round) {
 	n.StateAt(round)
-	n.primary.SetRound(round)
+	n.primary.SetRoundAndSeed(round)
 	n.bullshark.SetLastCommitRound(round)
 	n.dag.SetLastCommitRound(round)
 	forgot := n.primary.ForgetHeld()

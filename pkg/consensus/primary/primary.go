@@ -189,6 +189,10 @@ type Primary struct {
 	roundMu          sync.Mutex
 	currentRound     types.Round
 	lastRoundAdvance time.Time
+	// seed is the round Node.Rejoin seeded this node at, if seeded: its
+	// DAG holds nothing below it (catchUpRequests).
+	seed   types.Round
+	seeded bool
 
 	// Vote collection and certificate tracking (protected by pendingMu)
 	pendingMu sync.Mutex

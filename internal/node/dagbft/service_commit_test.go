@@ -145,10 +145,6 @@ func TestProcessCommittedCertificate_PrunesExactlyTheCommittedBatches(t *testing
 	require.True(t, w0.HasBatch(survivor.Digest()),
 		"a batch outside the certificate must NOT be retired — its transactions would be lost")
 	require.False(t, w0.HasRetained(survivor.Digest()))
-
-	// State hash was stamped onto the certificate for cross-node comparison.
-	// (The tracker records it; a diverging remote hash for the same round is
-	// what halts the node.)
 }
 
 // TestProcessCommittedCertificate_BlockTimeFromCertificate pins #4054's time
