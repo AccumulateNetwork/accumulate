@@ -206,6 +206,24 @@ type Primary struct {
 	votedHeaders map[types.HeaderDigest]types.Round
 	sentVotes    map[types.HeaderDigest]*types.Vote
 
+	// votedRounds is, per author and round, the header this primary voted
+	// for (#4590). A validator signs one header per author and round, the
+	// first it votes for (Narwhal 4.1): two headers from one author for one
+	// round otherwise both reached a quorum of honest votes, and the
+	// partition split on which certificate was real. The record is made
+	// before the vote is signed and persisted through onVoted; a restarted
+	// primary gets it back through RestoreVoted. Nil onVoted persists
+	// nothing.
+	votedRounds map[authorRound]types.HeaderDigest
+	onVoted     func(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) error
+	// votedFloor is the round below which votedRounds has been pruned, in
+	// memory here or on disk by the checkpoints before a restart
+	// (RestoreVotedFloor): no header below it is voted, as the record of
+	// what was voted there is gone. A rejoin that lowers the round
+	// (Node.Rejoin) otherwise reopened pruned rounds with no record. It
+	// only rises.
+	votedFloor types.Round
+
 	// deferredPins records, per header whose vote is deferred, the batches
 	// pinned in the workers on its behalf, and the round it was for so the
 	// same round-based cleanup that drops votedHeaders releases these.
@@ -313,6 +331,12 @@ func (p *Primary) parentQuorum(round types.Round, authors []ed25519.PublicKey) b
 	return p.committee.HasQuorum(stake)
 }
 
+// authorRound keys votedRounds.
+type authorRound struct {
+	author string
+	round  types.Round
+}
+
 // DefaultPendingCertsGCDepth is the gc_depth for sizing the pending certificates buffer.
 const DefaultPendingCertsGCDepth = 10
 
@@ -376,6 +400,7 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		deferredPins:   make(map[types.HeaderDigest][]types.BatchDigest),
 		deferredRounds: make(map[types.HeaderDigest]types.Round),
 		sentVotes:      make(map[types.HeaderDigest]*types.Vote),
+		votedRounds:    make(map[authorRound]types.HeaderDigest),
 		pendingCerts:   pendingCerts,
 		newCerts:       make(chan *types.Certificate, config.NewCertsChannelSize),
 		deferred:       newDeferredVotes(),
@@ -770,6 +795,14 @@ func (p *Primary) cleanupOldHeadersLocked() (expired []types.HeaderDigest) {
 			delete(p.votedHeaders, digest)
 			delete(p.sentVotes, digest)
 		}
+	}
+	for key := range p.votedRounds {
+		if key.round < certCutoff {
+			delete(p.votedRounds, key)
+		}
+	}
+	if certCutoff > p.votedFloor {
+		p.votedFloor = certCutoff
 	}
 
 	// A header old enough to be dropped is never going to be voted on, so

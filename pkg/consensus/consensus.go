@@ -181,6 +181,10 @@ type Node struct {
 	handed   []handedGroup // groups handed to the executor not yet checkpointed
 	prevTail map[string]bool
 	restored []*types.Certificate // replayed through Bullshark at start
+	// prevFloor is the tail floor of the last checkpoint saved: the vote
+	// records (#4590) are kept from there, as that checkpoint may be the one
+	// resumed. A checkpoint computed and not saved does not move it.
+	prevFloor types.Round
 
 	// Committed certificates channel
 	committed chan []*types.Certificate
@@ -320,6 +324,18 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 			return nil, fmt.Errorf("reading the last authored header: %w", err)
 		}
 		p.RestoreAuthoredRound(authored)
+		// The headers this node voted for come back on every start,
+		// checkpoint or not (#4590): the record otherwise started empty,
+		// and a restarted validator could sign a second header from an
+		// author for a round it had already voted in. With them the floor
+		// the checkpoints dropped the records to: a start that rejoins
+		// below it otherwise reopened rounds it had voted in with no
+		// record left of what it voted.
+		for _, v := range n.dagStore.Voted() {
+			p.RestoreVoted(v.Author, v.Round, v.Header)
+		}
+		p.RestoreVotedFloor(n.dagStore.VotedFloor())
+		p.SetOnVoted(n.dagStore.PutVoted)
 	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's

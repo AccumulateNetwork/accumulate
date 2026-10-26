@@ -1846,6 +1846,16 @@ batches and its last authored header (#4448). What differs:
   170–177 blocks, against 163–185 in five runs of the merge base, every run
   over the floor. The cost on a validator with a disk of its own is
   unmeasured.
+  The vote records (#4590) stay unsynced: the authored header is one write
+  per round, and its loss alone makes the node author the round again
+  (self-equivocation); a vote record is one write per header received, and
+  its loss matters only alongside f faulty validators, since the second
+  header still needs a quorum. So after a power loss a validator can sign a
+  second header for an (author, round) it voted in during the filesystem's
+  journal window before the loss. A record the loss cut short is dropped
+  when the store opens, and the file rewritten without it: it is in the
+  same window, and keeping a torn line would make the file unreadable for
+  the records after it.
 - **The authored-round sweep is four rounds deep.** A certificate that
   reaches the DAG more than four rounds below the node's current round after
   the node authored there is on disk only from the next block's checkpoint.

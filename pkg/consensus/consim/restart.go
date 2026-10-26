@@ -47,6 +47,7 @@ func (s *Sim) checkpoint(sn *simNode, node *consensus.Node, group []*types.Certi
 		_ = sn.cpPrev.Save(sn.lastSaved)
 	}
 	if err := sn.cpCur.Save(cp); err == nil {
+		node.CheckpointSaved(cp)
 		sn.lastSaved = cp
 	}
 }
@@ -57,12 +58,14 @@ func (s *Sim) checkpointNow(sn *simNode) {
 	if s.cfg.StateDir == "" || sn.cpCur == nil {
 		return
 	}
-	cp := sn.n().CheckpointAt(0)
+	node := sn.n()
+	cp := node.CheckpointAt(0)
 	cp.BlockIndex = sn.height.Load()
 	if sn.lastSaved != nil {
 		_ = sn.cpPrev.Save(sn.lastSaved)
 	}
 	if err := sn.cpCur.Save(cp); err == nil {
+		node.CheckpointSaved(cp)
 		sn.lastSaved = cp
 	}
 }
