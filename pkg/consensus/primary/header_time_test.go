@@ -7,6 +7,7 @@
 package primary
 
 import (
+	"crypto/ed25519"
 	"testing"
 	"time"
 
@@ -114,4 +115,70 @@ func TestVote_AnAuthorWhoseClockRunsAhead(t *testing.T) {
 	voterClock = now.Add(skew - MaxHeaderTimeAhead)
 	voter.OnHeaderReceived(header)
 	require.True(t, voted(), "the rebroadcast is voted on once the voter's clock is within the bound")
+}
+
+// The time check runs before the vote-once record (#4590): a header refused
+// for its time leaves no record, in memory or through the persistence hook,
+// so neither its own rebroadcast nor another header from the author for the
+// round is refused for it once the voter's clock has caught up.
+func TestVote_HeaderRefusedForTimeLeavesNoVoteRecord(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+
+	clock := time.Unix(1_000_000, 0)
+	newVoter := func() (*Primary, *[]types.HeaderDigest) {
+		p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, newTestDAG(), nil)
+		p.now = func() time.Time { return clock }
+		var persisted []types.HeaderDigest
+		p.SetOnVoted(func(_ ed25519.PublicKey, _ types.Round, digest types.HeaderDigest) error {
+			persisted = append(persisted, digest)
+			return nil
+		})
+		return p, &persisted
+	}
+	recorded := func(p *Primary) (types.HeaderDigest, bool) {
+		p.pendingMu.Lock()
+		defer p.pendingMu.Unlock()
+		d, ok := p.votedRounds[authorRound{string(validators[1].pub), 0}]
+		return d, ok
+	}
+
+	ahead := signedHeader(t, validators[1], 0, clock.Add(MaxHeaderTimeAhead+time.Second).UnixNano())
+	other := signedHeader(t, validators[1], 0, clock.UnixNano())
+	require.NotEqual(t, ahead.Digest(), other.Digest())
+
+	t.Run("another header for the round", func(t *testing.T) {
+		p, persisted := newVoter()
+		p.OnHeaderReceived(ahead)
+		require.False(t, votedFor(p, ahead), "a header stamped past the bound is not voted on")
+		_, ok := recorded(p)
+		require.False(t, ok, "a header refused for its time leaves no vote record")
+		require.Empty(t, *persisted, "and persists none")
+
+		p.OnHeaderReceived(other)
+		require.True(t, votedFor(p, other), "the author's header within the bound is voted on")
+		d, ok := recorded(p)
+		require.True(t, ok)
+		require.Equal(t, other.Digest(), d)
+		require.Equal(t, []types.HeaderDigest{other.Digest()}, *persisted)
+	})
+
+	t.Run("its rebroadcast once the clock has caught up", func(t *testing.T) {
+		clock = time.Unix(1_000_000, 0)
+		p, persisted := newVoter()
+		p.OnHeaderReceived(ahead)
+		require.False(t, votedFor(p, ahead))
+		require.Empty(t, *persisted)
+
+		clock = clock.Add(time.Second)
+		p.OnHeaderReceived(ahead)
+		require.True(t, votedFor(p, ahead), "the rebroadcast is voted on once the voter's clock is within the bound")
+		require.Equal(t, []types.HeaderDigest{ahead.Digest()}, *persisted, "the record is written once, for the vote")
+
+		p.OnHeaderReceived(other)
+		require.False(t, votedFor(p, other), "the vote-once rule then holds for the round")
+	})
 }
