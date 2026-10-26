@@ -204,16 +204,17 @@ type StatePosition struct {
 
 // StateHashTracker tracks state hashes from validators for consistency
 // verification. A node's state has diverged from its partition's at a
-// position when validators holding a quorum of the current committee's stake
-// report one hash for that position and the node's own is another (consensus
-// spec, "State hash comparison"). One validator's report, a split, or reports
-// for another position decide nothing.
+// position when validators holding a quorum of the stake of the committee of
+// its round report one hash for that position and the node's own is another
+// (consensus spec, "State hash comparison"). One validator's report, a split,
+// or reports for another position decide nothing.
 type StateHashTracker struct {
 	mu sync.RWMutex
 
-	// committee is who may report a hash, and with what stake. Until it is
-	// set, remote hashes are not recorded.
-	committee *Committee
+	// committeeAt is the committee of a round: who may report a hash for
+	// it, and with what stake. Until it is set, remote hashes are not
+	// recorded.
+	committeeAt func(Round) *Committee
 
 	// stateHashes maps position -> validator pubkey hex -> reported hash
 	stateHashes map[StatePosition]map[string]remoteHash
@@ -252,13 +253,41 @@ func NewStateHashTracker(maxRounds int) *StateHashTracker {
 	}
 }
 
-// SetCommittee sets the committee whose members' hashes are counted. Stake is
-// read from the committee when a divergence is decided, so a report from a
-// validator that has left counts for nothing.
+// SetCommittee makes c the committee of every round.
 func (t *StateHashTracker) SetCommittee(c *Committee) {
+	if c == nil {
+		t.setCommitteeAt(nil)
+		return
+	}
+	t.setCommitteeAt(func(Round) *Committee { return c })
+}
+
+// SetSchedule counts the reports for a round in the committee the schedule
+// gives that round, as headers, votes and certificates are checked (consensus
+// spec, "Committee changes"). The schedule is read when a report is recorded
+// and when a divergence is decided, so a change scheduled later applies to
+// the rounds it takes over, and a validator not in a round's committee
+// counts for nothing there.
+func (t *StateHashTracker) SetSchedule(s *CommitteeSchedule) {
+	if s == nil {
+		t.setCommitteeAt(nil)
+		return
+	}
+	t.setCommitteeAt(s.At)
+}
+
+func (t *StateHashTracker) setCommitteeAt(at func(Round) *Committee) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.committee = c
+	t.committeeAt = at
+}
+
+// committeeLocked is the committee of round, or nil when none is set.
+func (t *StateHashTracker) committeeLocked(round Round) *Committee {
+	if t.committeeAt == nil {
+		return nil
+	}
+	return t.committeeAt(round)
 }
 
 // OnDivergence registers a callback for state divergence events.
@@ -282,12 +311,12 @@ func (t *StateHashTracker) RecordLocalHash(pos StatePosition, hash StateHash) {
 // RecordRemoteHash records a state hash a committee member reported for a
 // position. Returns a StateDivergenceError if, with it, a quorum reports a
 // hash other than our local one at our position. A hash from a key outside
-// the committee is not recorded.
+// the committee of the position's round is not recorded.
 func (t *StateHashTracker) RecordRemoteHash(pos StatePosition, validator ed25519.PublicKey, hash StateHash) *StateDivergenceError {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.committee == nil || t.committee.StakeOf(validator) == 0 {
+	if c := t.committeeLocked(pos.Round); c == nil || c.StakeOf(validator) == 0 {
 		return nil
 	}
 
@@ -317,11 +346,15 @@ func (t *StateHashTracker) RecordRemoteHash(pos StatePosition, validator ed25519
 }
 
 // divergenceLocked reports divergence at round if we have a local hash and
-// validators holding a quorum of the current committee's stake report one
+// validators holding a quorum of the stake of the round's committee report one
 // other hash at the same position.
 func (t *StateHashTracker) divergenceLocked(round Round) *StateDivergenceError {
 	local, ok := t.localHashes[round]
-	if !ok || t.committee == nil {
+	if !ok {
+		return nil
+	}
+	committee := t.committeeLocked(round)
+	if committee == nil {
 		return nil
 	}
 	stake := map[StateHash]uint64{}
@@ -329,8 +362,8 @@ func (t *StateHashTracker) divergenceLocked(round Round) *StateDivergenceError {
 		if r.hash == local.hash {
 			continue
 		}
-		stake[r.hash] += t.committee.StakeOf(r.author)
-		if t.committee.HasQuorum(stake[r.hash]) {
+		stake[r.hash] += committee.StakeOf(r.author)
+		if committee.HasQuorum(stake[r.hash]) {
 			return &StateDivergenceError{
 				Round:          round,
 				BlockIndex:     local.position.BlockIndex,

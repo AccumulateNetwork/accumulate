@@ -234,7 +234,6 @@ func (s *Service) Start(ctx context.Context) error {
 	activation, prevVersion := s.activationRound()
 	committee.ActivationRound = activation
 	s.committee = committee
-	s.stateHashTracker.SetCommittee(committee)
 
 	// Create consensus node with optional libp2p networking
 	nodeConfig := s.config.NodeConfig
@@ -249,6 +248,10 @@ func (s *Service) Start(ctx context.Context) error {
 	if err != nil {
 		return errors.UnknownError.WithFormat("create consensus node: %w", err)
 	}
+	// A state hash report for a round counts in the committee that orders
+	// the round, as the node's schedule has it through every change, restore
+	// and join (consensus spec, "State hash comparison").
+	s.stateHashTracker.SetSchedule(s.node.Committees())
 
 	// Initialize genesis if needed
 	if err := s.initializeGenesis(); err != nil {
@@ -1229,7 +1232,6 @@ func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo, versi
 		}
 		s.validatorUpdateHeight = s.lastBlockIndex
 		s.committee = newCommittee
-		s.stateHashTracker.SetCommittee(newCommittee)
 		return
 	}
 	newCommittee.ActivationRound = round + types.CommitteeActivationMargin
@@ -1252,7 +1254,6 @@ func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo, versi
 	// Track when the update was detected
 	s.validatorUpdateHeight = s.lastBlockIndex
 	s.committee = newCommittee
-	s.stateHashTracker.SetCommittee(newCommittee)
 }
 
 // UpdateCommittee schedules a committee from its ActivationRound, for tests
@@ -1268,7 +1269,6 @@ func (s *Service) UpdateCommittee(committee *types.Committee) error {
 		return err
 	}
 	s.committee = committee
-	s.stateHashTracker.SetCommittee(committee)
 	return nil
 }
 

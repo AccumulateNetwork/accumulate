@@ -168,3 +168,56 @@ func TestStateHashTracker_OneReportPerMemberPerRound(t *testing.T) {
 	require.Equal(t, 1, reports)
 	require.Contains(t, tr.stateHashes, StatePosition{Epoch: 1, Round: 6, BlockIndex: 99}, "the latest report is kept")
 }
+
+// A report for a round counts in the committee of that round (#4593): across
+// a change scheduled at an activation round, the committee before it decides
+// the rounds below that round and the new one the rounds from it, and a key
+// in one committee only counts for nothing in the other's rounds.
+func TestStateHashTracker_CountsTheCommitteeOfTheRound(t *testing.T) {
+	keys := make([]ed25519.PublicKey, 5)
+	for i := range keys {
+		pub, _, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		keys[i] = pub
+	}
+	infos := func(ks ...ed25519.PublicKey) []ValidatorInfo {
+		var v []ValidatorInfo
+		for _, k := range ks {
+			v = append(v, ValidatorInfo{PublicKey: k, Stake: 1})
+		}
+		return v
+	}
+	// Epoch 1 is keys 0-3; epoch 2, from round 100, drops key 3 and adds
+	// key 4.
+	before := NewCommittee(infos(keys[0], keys[1], keys[2], keys[3]), 1)
+	after := NewCommittee(infos(keys[0], keys[1], keys[2], keys[4]), 2)
+	after.ActivationRound = 100
+	schedule := NewCommitteeSchedule(before)
+
+	tr := NewStateHashTracker(1000)
+	tr.SetSchedule(schedule)
+	local, other := StateHash{0xAA}, StateHash{0xBB}
+
+	// Scheduled after the tracker took the schedule: it applies all the same.
+	require.NoError(t, schedule.Schedule(after))
+
+	// Below the activation round the committee before decides: key 4 is not
+	// recorded, and key 3 counts.
+	at98 := StatePosition{Epoch: 2, Round: 98, BlockIndex: 10}
+	tr.RecordLocalHash(at98, local)
+	require.Nil(t, tr.RecordRemoteHash(at98, keys[4], other))
+	require.NotContains(t, tr.GetRemoteHashes(98), hexEncode(keys[4]), "a key outside the round's committee is not recorded")
+	require.Nil(t, tr.RecordRemoteHash(at98, keys[0], other))
+	require.Nil(t, tr.RecordRemoteHash(at98, keys[1], other))
+	require.NotNil(t, tr.RecordRemoteHash(at98, keys[3], other), "the committee of round 98 includes key 3")
+
+	// From the activation round the new committee decides: key 3 is not
+	// recorded, and key 4 counts.
+	at100 := StatePosition{Epoch: 2, Round: 100, BlockIndex: 11}
+	tr.RecordLocalHash(at100, local)
+	require.Nil(t, tr.RecordRemoteHash(at100, keys[3], other))
+	require.NotContains(t, tr.GetRemoteHashes(100), hexEncode(keys[3]), "a key that left is not recorded for the new committee's rounds")
+	require.Nil(t, tr.RecordRemoteHash(at100, keys[0], other))
+	require.Nil(t, tr.RecordRemoteHash(at100, keys[1], other))
+	require.NotNil(t, tr.RecordRemoteHash(at100, keys[4], other), "the committee of round 100 includes key 4")
+}
