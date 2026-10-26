@@ -175,14 +175,19 @@ type Primary struct {
 	dag             *dag.DAG
 	workers         []*worker.Worker
 
-	// Committee (protected by committeeMu - read-heavy, writes rare during epoch transitions)
-	committeeMu sync.RWMutex
-	committee   *types.Committee
+	// committees is the committee of each round: a header, vote or
+	// certificate is checked against the committee of its own round, and a
+	// round's quorum is counted in it (#4593).
+	committees *types.CommitteeSchedule
+
+	// roundLimit, when set and reporting true, is the highest round this
+	// primary may advance to, author or vote at: the rounds whose committee
+	// it is sure of (Node.ReportExecuted).
+	roundLimit func() (types.Round, bool)
 
 	// Current round state (protected by roundMu)
 	roundMu          sync.Mutex
 	currentRound     types.Round
-	currentEpoch     uint64
 	lastRoundAdvance time.Time
 
 	// Vote collection and certificate tracking (protected by pendingMu)
@@ -317,18 +322,16 @@ type Primary struct {
 }
 
 // parentQuorum reports whether authors carry a stake quorum of the committee
-// (#4591): the rule a header's parents of the round before must meet, for
-// the headers this primary votes for, the certificates its DAG takes in and
-// the headers it builds. round is the parents' round; the committee is the
-// current one until #4593 routes it by round.
+// of round (#4591): the rule a header's parents of the round before must
+// meet, for the headers this primary votes for, the certificates its DAG
+// takes in and the headers it builds. round is the parents' round.
 func (p *Primary) parentQuorum(round types.Round, authors []ed25519.PublicKey) bool {
-	p.committeeMu.RLock()
-	defer p.committeeMu.RUnlock()
+	committee := p.committeeAt(round)
 	var stake uint64
 	for _, a := range authors {
-		stake += p.committee.StakeOf(a)
+		stake += committee.StakeOf(a)
 	}
-	return p.committee.HasQuorum(stake)
+	return committee.HasQuorum(stake)
 }
 
 // authorRound keys votedRounds.
@@ -387,12 +390,11 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 
 	p := &Primary{
 		config:         config,
-		committee:      committee,
+		committees:     types.NewCommitteeSchedule(committee),
 		gossip:         g,
 		dag:            d,
 		workers:        workers,
 		currentRound:   0,
-		currentEpoch:   committee.Epoch,
 		pendingVotes:   make(map[types.HeaderDigest][]*types.Vote),
 		ourHeaders:     make(map[types.HeaderDigest]*types.Header),
 		ourCerts:       make(map[types.Round]*types.Certificate),
@@ -468,8 +470,8 @@ func (p *Primary) Start(ctx context.Context) error {
 	// Get current round/epoch for logging (thread-safe)
 	p.roundMu.Lock()
 	startRound := p.currentRound
-	startEpoch := p.currentEpoch
 	p.roundMu.Unlock()
+	startEpoch := p.committeeAt(startRound).Epoch
 
 	slog.Info("Primary started",
 		"partition", p.config.Partition,
@@ -571,11 +573,29 @@ func (p *Primary) CurrentRound() types.Round {
 	return p.currentRound
 }
 
-// CurrentEpoch returns the current consensus epoch.
+// CurrentEpoch returns the epoch of the committee of the current round.
 func (p *Primary) CurrentEpoch() uint64 {
-	p.roundMu.Lock()
-	defer p.roundMu.Unlock()
-	return p.currentEpoch
+	return p.committeeAt(p.CurrentRound()).Epoch
+}
+
+// committeeAt is the committee of a round.
+func (p *Primary) committeeAt(round types.Round) *types.Committee {
+	return p.committees.At(round)
+}
+
+// SetRoundLimit wires the highest round this primary may advance to, author
+// or vote at; limit reports false while there is none.
+func (p *Primary) SetRoundLimit(limit func() (types.Round, bool)) {
+	p.roundLimit = limit
+}
+
+// beyondLimit is whether round is above the round limit.
+func (p *Primary) beyondLimit(round types.Round) bool {
+	if p.roundLimit == nil {
+		return false
+	}
+	limit, ok := p.roundLimit()
+	return ok && round > limit
 }
 
 // NewCertificates returns a channel that receives new certificates.
@@ -607,8 +627,13 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	// Get current round (needs roundMu)
 	p.roundMu.Lock()
 	currentRound := p.currentRound
-	currentEpoch := p.currentEpoch
 	p.roundMu.Unlock()
+	// A round above the limit may belong to a committee this node has not
+	// executed the change to yet; its header would carry the wrong epoch.
+	if p.beyondLimit(currentRound) {
+		return
+	}
+	currentEpoch := p.committeeAt(currentRound).Epoch
 
 	// Check pending state and create header (needs pendingMu)
 	p.pendingMu.Lock()

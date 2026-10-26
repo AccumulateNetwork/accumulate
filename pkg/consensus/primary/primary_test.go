@@ -149,12 +149,9 @@ func TestPrimaryCurrentRoundEpoch(t *testing.T) {
 	require.Equal(t, types.Round(0), p.CurrentRound())
 	require.Equal(t, uint64(5), p.CurrentEpoch())
 
-	// Set round and epoch
 	p.SetRound(10)
-	p.SetEpoch(7)
-
 	require.Equal(t, types.Round(10), p.CurrentRound())
-	require.Equal(t, uint64(7), p.CurrentEpoch())
+	require.Equal(t, uint64(5), p.CurrentEpoch())
 }
 
 func TestPrimaryPublicKey(t *testing.T) {
@@ -278,14 +275,20 @@ func TestPrimaryUpdateCommittee(t *testing.T) {
 	}
 
 	p := New(config, committee1, nil, d, nil)
+	p.SetRound(10)
 
 	require.Equal(t, uint64(1), p.CurrentEpoch())
-	require.Equal(t, 1, p.committee.Len())
+	require.Equal(t, 1, p.Committee().Len())
 
-	p.UpdateCommittee(committee2)
+	// The new committee takes over at its activation round, not now.
+	committee2.ActivationRound = 12
+	require.NoError(t, p.UpdateCommittee(committee2))
+	require.Equal(t, uint64(1), p.CurrentEpoch())
+	require.Equal(t, 1, p.Committee().Len())
 
+	p.SetRound(12)
 	require.Equal(t, uint64(2), p.CurrentEpoch())
-	require.Equal(t, 2, p.committee.Len())
+	require.Equal(t, 2, p.Committee().Len())
 }
 
 func TestPrimaryAdvanceRound(t *testing.T) {

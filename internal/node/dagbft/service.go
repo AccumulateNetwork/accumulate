@@ -156,10 +156,17 @@ type Service struct {
 	// hold certificates the peers committed before the seed (#4405).
 	awaitingSeed bool
 	seedFloor    types.Round
+	// seedRefusals counts the pulled states seedCommittee has refused in a
+	// row: a joiner that refuses every state orders nothing (#4593).
+	seedRefusals atomic.Int64
 	// producing is the leader round of the group the block production loop
 	// is producing or collecting, zero between groups: what a request the
 	// loop cannot take says it is waiting on.
 	producing atomic.Uint64
+	// blockRound is the leader round of the block the executor is producing,
+	// zero outside ProduceBlock: a committee change it reports was committed
+	// at that round (#4593).
+	blockRound atomic.Uint64
 	// Validator synchronization
 	validatorUpdateHeight uint64 // Height at which validator update was detected
 
@@ -222,7 +229,10 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// The committee epoch is the network definition version, which is part
 	// of executed state — a rejoining node derives it from its restored
-	// globals (InitialNetworkVersion).
+	// globals (InitialNetworkVersion) — and the round it took over at is in
+	// the system ledger (#4593).
+	activation, prevVersion := s.activationRound()
+	committee.ActivationRound = activation
 	s.committee = committee
 
 	// Create consensus node with optional libp2p networking
@@ -248,17 +258,26 @@ func (s *Service) Start(ctx context.Context) error {
 	// A joining node with none orders nothing until the join names a round
 	// the network committed (#4405): from round zero it would order history
 	// whose batches every peer has retired, and wait for them for ever.
-	seeded, err := s.seedFromCheckpoint()
+	restored, err := s.seedFromCheckpoint()
 	if err != nil {
 		return errors.UnknownError.WithFormat("resume consensus position: %w", err)
 	}
-	if !seeded && s.Collecting() {
+	switch {
+	case restored:
+		if err := s.resumeCommittee(committee, prevVersion); err != nil {
+			return err
+		}
+	case s.Collecting():
 		s.node.HoldOrdering()
 		s.mu.Lock()
 		s.awaitingSeed = true
 		s.mu.Unlock()
 		s.logger.Info("Joining with no consensus checkpoint: ordering nothing until the join's state names the round to order from",
 			"partition", s.config.Partition.ID)
+	default:
+		// A node that executes from genesis holds the state of no leader
+		// round yet, and orders up to the round limit above none.
+		s.node.StateAt(s.lastLeaderRound)
 	}
 
 	// Start consensus node
@@ -661,7 +680,7 @@ func (s *Service) blockProductionLoop() {
 				// lagging: its primary proposes no batches it could not
 				// execute until the handoff (consensus spec, invariant 9;
 				// #4292, #4294).
-				s.node.ReportExecuted()
+				s.node.ReportExecuted(group[len(group)-1].Header.Round)
 			}
 			if err != nil {
 				// A committed certificate whose batches are gone from the whole
@@ -1048,7 +1067,9 @@ func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, le
 		s.saveCheckpoint(blockIndex, leader.Header.Round)
 	}
 
+	s.blockRound.Store(uint64(leader.Header.Round))
 	hash, err := s.adapter.ProduceBlock(s.ctx, params)
+	s.blockRound.Store(0)
 	if err != nil {
 		return fmt.Errorf("produce block: %w", err)
 	}
@@ -1092,7 +1113,7 @@ func (s *Service) produce(certs []*types.Certificate, batches []*types.Batch, le
 		Index: blockIndex,
 		Time:  blockTime,
 		Round: uint64(leader.Header.Round),
-		Epoch: s.committee.Epoch,
+		Epoch: s.node.Committees().At(leader.Header.Round).Epoch,
 	}
 	if major, _, ok := s.adapter.LastMajorBlock(); ok {
 		event.Major = major
@@ -1159,8 +1180,12 @@ func (s *Service) Status() Status {
 }
 
 // onValidatorSetChange is called when the adapter detects a validator set
-// change (or a network definition version bump). It updates the consensus
-// node's committee to reflect the new validator set.
+// change (or a network definition version bump). It schedules the new
+// committee at the round the change takes effect (#4593): the leader round
+// of the block that activated it, plus types.CommitteeActivationMargin,
+// which the executor records in the system ledger as it activates the
+// definition. Every node schedules the same round however far its executor
+// lags its consensus, and the rounds below it keep the committee they had.
 //
 // The committee epoch IS the network definition version. The version is part
 // of executed state, so a node that replays these blocks later — or restores
@@ -1168,7 +1193,17 @@ func (s *Service) Status() Status {
 // block as every node that executed them live. A locally incremented counter
 // (the previous scheme) only exists in the memory of nodes that were running
 // at the time, which is precisely what a joining node is not.
-func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo, version uint64) {
+//
+// Only a change reported while a block is produced is scheduled here. One
+// reported when the executor loads or reloads its globals is a state this
+// node did not produce: a start reads its state's committee (Start), and a
+// join the pulled state's (adoptPulledState).
+func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo, version uint64, executor protocol.ExecutorVersion) {
+	round := types.Round(s.blockRound.Load())
+	if round == 0 {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1183,55 +1218,56 @@ func (s *Service) onValidatorSetChange(validators []adapter.ValidatorInfo, versi
 		return
 	}
 
-	// Convert adapter validators to committee validators
-	committeeValidators := make([]types.ValidatorInfo, len(validators))
-	for i, v := range validators {
-		committeeValidators[i] = types.ValidatorInfo{
-			PublicKey: v.PublicKey[:],
-			Stake:     v.Stake,
+	newCommittee := types.NewCommittee(committeeValidators(validators), version)
+
+	// Before v2-canaveral a change takes effect at once, as the executor
+	// records no activation round for it: the version is the one active for
+	// the block, which the ledger write is gated on too (#4593).
+	if !executor.V2CanaveralEnabled() {
+		if err := s.node.ReplaceCommittee(newCommittee); err != nil {
+			slog.Error("Cannot replace the committee", "partition", s.config.Partition.ID, "error", err)
+			return
 		}
+		s.validatorUpdateHeight = s.lastBlockIndex
+		s.committee = newCommittee
+		return
 	}
+	newCommittee.ActivationRound = round + types.CommitteeActivationMargin
 
-	newEpoch := version
-	newCommittee := types.NewCommittee(committeeValidators, newEpoch)
-
-	slog.Info("Validator set changed, updating committee",
+	slog.Info("Validator set changed, scheduling the committee",
 		"partition", s.config.Partition.ID,
 		"oldEpoch", s.committee.Epoch,
-		"newEpoch", newEpoch,
+		"newEpoch", version,
 		"oldValidators", s.committee.Len(),
 		"newValidators", len(validators),
-		"atHeight", s.lastBlockIndex)
+		"atHeight", s.lastBlockIndex,
+		"committedAtRound", round,
+		"activationRound", newCommittee.ActivationRound)
+
+	if err := s.node.UpdateCommittee(newCommittee); err != nil {
+		slog.Error("Cannot schedule the committee", "partition", s.config.Partition.ID, "error", err)
+		return
+	}
 
 	// Track when the update was detected
 	s.validatorUpdateHeight = s.lastBlockIndex
-
-	// Update the local committee reference
 	s.committee = newCommittee
-
-	// Propagate to consensus node (updates Primary and Bullshark)
-	s.node.UpdateCommittee(newCommittee)
 }
 
-// UpdateCommittee allows external callers to update the committee.
-// This can be used during testing or for manual committee updates.
-func (s *Service) UpdateCommittee(committee *types.Committee) {
+// UpdateCommittee schedules a committee from its ActivationRound, for tests
+// and manual committee updates.
+func (s *Service) UpdateCommittee(committee *types.Committee) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.node == nil {
-		slog.Warn("UpdateCommittee called but node not started")
-		return
+		return errors.NotReady.With("node not started")
 	}
-
-	slog.Info("Updating committee",
-		"partition", s.config.Partition.ID,
-		"oldEpoch", s.committee.Epoch,
-		"newEpoch", committee.Epoch,
-		"validators", committee.Len())
-
+	if err := s.node.UpdateCommittee(committee); err != nil {
+		return err
+	}
 	s.committee = committee
-	s.node.UpdateCommittee(committee)
+	return nil
 }
 
 // ValidatorUpdateHeight returns the block height at which the last validator update was detected.

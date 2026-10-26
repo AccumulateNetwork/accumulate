@@ -620,7 +620,7 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 			// executor reports each one back when its block is done, and the
 			// difference is the execution lag the primary bounds (consensus
 			// spec, invariant 9). consim's executor is this loop.
-			node.ReportExecuted()
+			node.ReportExecuted(group[len(group)-1].Round())
 			if lag := int64(node.ExecutionLag()); lag > sn.maxLag.Load() {
 				sn.maxLag.Store(lag)
 			}

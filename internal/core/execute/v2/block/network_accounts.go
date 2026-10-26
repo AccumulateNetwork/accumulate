@@ -11,6 +11,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	dagtypes "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
@@ -120,6 +121,9 @@ func (x *Executor) updateNetworkAccount(st *chain.StateManager, delivery *chain.
 			// Validate entry and update variable
 			if staged {
 				err = pending().ParseNetwork(body.Entry)
+				if err == nil {
+					err = x.recordCommitteeActivation(st)
+				}
 			} else {
 				err = pending().ParseNetworkLegacy(body.Entry)
 			}
@@ -179,5 +183,52 @@ func (x *Executor) updateNetworkAccount(st *chain.StateManager, delivery *chain.
 		}
 	}
 
+	return nil
+}
+
+// recordCommitteeActivation records in the system ledger the DAG round from
+// which the network definition this block activates orders and verifies the
+// partition's rounds: the block's leader round plus the activation margin,
+// fixed by the committed sequence rather than by when a node executes the
+// block (consensus spec, "Committee changes"; #4593). A restarted or joining
+// node reads it back from its state. From v2-canaveral, the version that
+// activates the DAG-BFT rules; before it the ledger encodes as it did.
+func (x *Executor) recordCommitteeActivation(st *chain.StateManager) error {
+	if x.isGenesis || !x.globals().Active.ExecutorVersion.V2CanaveralEnabled() {
+		return nil
+	}
+	record := st.GetBatch().Account(x.Describe.Ledger())
+	var ledger *protocol.SystemLedger
+	err := record.Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load ledger: %w", err)
+	}
+	// The committee before this one, so a node joining between the two
+	// knows the committee of the rounds below the new one's (#4593). Every
+	// write in a block sees the same active definition, so only the block's
+	// first write shifts the round: a second would record the round the
+	// first just set. A second write finds the ledger as the first left it;
+	// the version alone does not say so, as the genesis definition's is
+	// zero, like a ledger's that recorded none.
+	active := x.globals().Active.Network
+	round := ledger.LeaderRound + uint64(dagtypes.CommitteeActivationMargin)
+	if active == nil || ledger.PreviousNetworkVersion != active.Version || ledger.CommitteeActivationRound != round {
+		ledger.PreviousCommitteeActivationRound = ledger.CommitteeActivationRound
+	}
+	ledger.CommitteeActivationRound = round
+	ledger.PreviousNetworkVersion = 0
+	ledger.PreviousValidators = nil
+	if active != nil {
+		ledger.PreviousNetworkVersion = active.Version
+		for _, v := range active.Validators {
+			if v.IsActiveOn(x.Describe.PartitionId) {
+				ledger.PreviousValidators = append(ledger.PreviousValidators, v.PublicKey)
+			}
+		}
+	}
+	err = record.Main().Put(ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store ledger: %w", err)
+	}
 	return nil
 }

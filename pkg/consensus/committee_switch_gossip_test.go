@@ -94,11 +94,10 @@ func (*headerTrace) UndeliverableMessage(*pubsub.Message)  {}
 // own first epoch-2 header must reach B: a router runs its validator on the
 // node's own messages too, and a header the node's own router refuses is
 // never sent, so gossip has to hold the new committee before the primary
-// makes a header for it. The switch is made before the primaries start, so
-// that header is the round-1 header; a switch while the primaries run
-// stalls them on the headers of the round in flight until the committee is
-// routed by round (#4593), and whether the primary or gossip learns the new
-// committee first is then a matter of timing.
+// makes a header for it. Gossip reads the node's committee schedule, so it
+// holds the new committee from when it is scheduled, before any round it
+// orders (#4593). The switch takes over at round 1, so A's first header is
+// of epoch 2.
 func TestCommitteeSwitchReachesGossip(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -119,6 +118,7 @@ func TestCommitteeSwitchReachesGossip(t *testing.T) {
 	}
 	epoch1 := types.NewCommittee([]types.ValidatorInfo{member(pubA), member(pubB), member(pubR)}, 1)
 	epoch2 := types.NewCommittee([]types.ValidatorInfo{member(pubA), member(pubB), member(pubN)}, 2)
+	epoch2.ActivationRound = 1
 
 	// The routers before any connection (testutil.NewTestNetwork).
 	newHost := func(trace *headerTrace) (host.Host, *pubsub.PubSub) {
@@ -157,7 +157,7 @@ func TestCommitteeSwitchReachesGossip(t *testing.T) {
 
 	// The switch: N joins, R leaves.
 	for _, n := range []*consensus.Node{nodeA, nodeB} {
-		n.UpdateCommittee(epoch2)
+		require.NoError(t, n.UpdateCommittee(epoch2))
 		require.NoError(t, n.InsertGenesisForAll([]ed25519.PrivateKey{keyA, keyB, keyN}))
 	}
 	refusedBefore := testutil.ToFloat64(metrics.GossipRefusedTotal.WithLabelValues(partition, "headers", "reject"))

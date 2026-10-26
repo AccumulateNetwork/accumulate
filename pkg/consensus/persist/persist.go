@@ -10,7 +10,9 @@
 package persist
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,6 +73,12 @@ type Checkpoint struct {
 	// PendingBatches holds batch digests for pending transactions.
 	PendingBatches []string `json:"pending_batches,omitempty"`
 
+	// Committees is the committee of each round as the node orders and
+	// verifies them (types.CommitteeSchedule): a restart orders its tail and
+	// verifies catch-up with these, not with the committee its executor's
+	// state names, which may not have taken over yet (#4593).
+	Committees []CommitteeData `json:"committees,omitempty"`
+
 	// Tail names, in the DAGStore beside the checkpoint, the certificates of
 	// the DAG from RescueWindow below LastCommitRound up to the frontier, and
 	// the batches they name that this node held (#4448). Restore loads them
@@ -93,6 +101,50 @@ type CertificateData struct {
 
 	// Data is the full certificate serialized as JSON.
 	Data json.RawMessage `json:"data"`
+}
+
+// CommitteeData is a committee in a checkpoint.
+type CommitteeData struct {
+	Epoch           uint64          `json:"epoch"`
+	ActivationRound types.Round     `json:"activation_round"`
+	Validators      []ValidatorData `json:"validators"`
+}
+
+// ValidatorData is a committee member in a checkpoint.
+type ValidatorData struct {
+	// PublicKey is hex-encoded.
+	PublicKey string `json:"public_key"`
+	Stake     uint64 `json:"stake"`
+}
+
+// EncodeCommittees is committees as a checkpoint carries them.
+func EncodeCommittees(committees []*types.Committee) []CommitteeData {
+	out := make([]CommitteeData, len(committees))
+	for i, c := range committees {
+		out[i] = CommitteeData{Epoch: c.Epoch, ActivationRound: c.ActivationRound}
+		for _, v := range c.Validators {
+			out[i].Validators = append(out[i].Validators, ValidatorData{PublicKey: hex.EncodeToString(v.PublicKey), Stake: v.Stake})
+		}
+	}
+	return out
+}
+
+// DecodeCommittees is the committees a checkpoint carries.
+func DecodeCommittees(data []CommitteeData) ([]*types.Committee, error) {
+	out := make([]*types.Committee, len(data))
+	for i, d := range data {
+		validators := make([]types.ValidatorInfo, len(d.Validators))
+		for j, v := range d.Validators {
+			key, err := hex.DecodeString(v.PublicKey)
+			if err != nil || len(key) != ed25519.PublicKeySize {
+				return nil, fmt.Errorf("committee of epoch %d: validator %d: invalid public key", d.Epoch, j)
+			}
+			validators[j] = types.ValidatorInfo{PublicKey: key, Stake: v.Stake}
+		}
+		out[i] = types.NewCommittee(validators, d.Epoch)
+		out[i].ActivationRound = d.ActivationRound
+	}
+	return out, nil
 }
 
 // NewCheckpoint creates a new checkpoint with the given state.

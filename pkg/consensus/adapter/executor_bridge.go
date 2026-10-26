@@ -57,7 +57,8 @@ type ExecutorBridge struct {
 	lastMajorOK            bool
 	validators             []ValidatorInfo
 	validatorVersion       uint64
-	validatorChangeHandler func(validators []ValidatorInfo, version uint64)
+	executorVersion        protocol.ExecutorVersion
+	validatorChangeHandler func(validators []ValidatorInfo, version uint64, executor protocol.ExecutorVersion)
 }
 
 // ExecutorBridgeConfig holds configuration for creating an ExecutorBridge.
@@ -107,7 +108,7 @@ func NewExecutorBridge(config ExecutorBridgeConfig) (*ExecutorBridge, error) {
 	// Subscribe to global value changes if event bus is provided
 	if config.EventBus != nil {
 		events.SubscribeSync(config.EventBus, func(e events.WillChangeGlobals) error {
-			bridge.updateValidatorsFromGlobals(e.New)
+			bridge.updateValidatorsFromGlobals(e.Old, e.New)
 			return nil
 		})
 	}
@@ -115,10 +116,18 @@ func NewExecutorBridge(config ExecutorBridgeConfig) (*ExecutorBridge, error) {
 	return bridge, nil
 }
 
-// updateValidatorsFromGlobals extracts validators from global values and updates the stored set.
-func (b *ExecutorBridge) updateValidatorsFromGlobals(globals *network.GlobalValues) {
+// updateValidatorsFromGlobals extracts validators from global values and
+// updates the stored set. old is the globals the change replaces, nil when
+// they are loaded: the executor version reported with a change is old's, the
+// version active for the block that made it, which is the version the
+// executor gates the change's ledger fields on (#4593).
+func (b *ExecutorBridge) updateValidatorsFromGlobals(old, globals *network.GlobalValues) {
 	if globals == nil || globals.Network == nil {
 		return
+	}
+	executor := globals.ExecutorVersion
+	if old != nil {
+		executor = old.ExecutorVersion
 	}
 
 	validators := make([]ValidatorInfo, 0)
@@ -151,6 +160,7 @@ func (b *ExecutorBridge) updateValidatorsFromGlobals(globals *network.GlobalValu
 	oldVersion := b.validatorVersion
 	b.validators = validators
 	b.validatorVersion = version
+	b.executorVersion = globals.ExecutorVersion
 	handler := b.validatorChangeHandler
 	b.mu.Unlock()
 
@@ -164,7 +174,7 @@ func (b *ExecutorBridge) updateValidatorsFromGlobals(globals *network.GlobalValu
 			"oldCount", len(oldValidators),
 			"newCount", len(validators),
 			"version", version)
-		handler(validators, version)
+		handler(validators, version, executor)
 	}
 }
 
@@ -192,12 +202,13 @@ func (b *ExecutorBridge) SetValidators(validators []ValidatorInfo, version uint6
 	b.validators = make([]ValidatorInfo, len(validators))
 	copy(b.validators, validators)
 	b.validatorVersion = version
+	executor := b.executorVersion
 	handler := b.validatorChangeHandler
 	b.mu.Unlock()
 
 	// Notify handler if validators changed
 	if handler != nil && (version != oldVersion || !validatorSetsEqual(oldValidators, validators)) {
-		handler(validators, version)
+		handler(validators, version, executor)
 	}
 }
 
@@ -577,7 +588,7 @@ func (b *ExecutorBridge) Validators() []ValidatorInfo {
 }
 
 // OnValidatorSetChange registers a callback for validator set changes.
-func (b *ExecutorBridge) OnValidatorSetChange(callback func(validators []ValidatorInfo, version uint64)) {
+func (b *ExecutorBridge) OnValidatorSetChange(callback func(validators []ValidatorInfo, version uint64, executor protocol.ExecutorVersion)) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.validatorChangeHandler = callback

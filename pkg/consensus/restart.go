@@ -29,6 +29,13 @@ type handedGroup struct {
 // commits to the executor, one group per leader. It reports false when the
 // node is stopping.
 func (n *Node) order(cert *types.Certificate) bool {
+	// A leader above the round limit may belong to a committee this node has
+	// not executed the change to; it is ordered when the limit has passed it
+	// (orderDeferred, #4593).
+	if n.beyondLimit(cert.Round()) {
+		return true
+	}
+
 	// Ordering and recording what was handed over are one step under
 	// orderMu, so a checkpoint never sees a commit it cannot attribute to
 	// its leader.
@@ -146,6 +153,7 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 		n.primary.CurrentRound(), n.primary.CurrentEpoch(),
 		leaderRound, lastCommitted)
 	cp.Committed = committed
+	cp.Committees = persist.EncodeCommittees(n.committees.Committees())
 	if n.dagStore != nil {
 		cp.Tail = n.writeTail(leaderRound)
 	}

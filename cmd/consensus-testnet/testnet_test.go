@@ -319,7 +319,10 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case group := <-committed:
+			case group, ok := <-committed:
+				if !ok {
+					return
+				}
 				// One executor block per committed leader group (#4164)
 				for _, cert := range group {
 					if cert == nil {
@@ -345,7 +348,7 @@ func TestSingleNodeBlockProduction_ADI(t *testing.T) {
 				}
 				// The executor reports each committed group back, or the execution-lag
 				// bound (consensus spec, invariant 9) empties every header after eight.
-				node.ReportExecuted()
+				node.ReportExecuted(group[len(group)-1].Round())
 			}
 		}
 	}()
@@ -466,7 +469,10 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 			select {
 			case <-ctx.Done():
 				return
-			case group := <-committed:
+			case group, ok := <-committed:
+				if !ok {
+					return
+				}
 				for _, cert := range group {
 					if cert == nil {
 						continue
@@ -489,7 +495,7 @@ func TestSingleNodeBlockProduction_MemoryStability(t *testing.T) {
 				}
 				// The executor reports each committed group back, or the execution-lag
 				// bound (consensus spec, invariant 9) empties every header after eight.
-				node.ReportExecuted()
+				node.ReportExecuted(group[len(group)-1].Round())
 			}
 		}
 	}()

@@ -28,6 +28,10 @@ type Committee struct {
 	Validators []ValidatorInfo
 	// Epoch is the epoch number this committee is valid for.
 	Epoch uint64
+	// ActivationRound is the first DAG round this committee orders and
+	// verifies; the rounds below it belong to the committee before it
+	// (CommitteeSchedule). Zero for the first committee of a schedule.
+	ActivationRound Round
 
 	// mu protects cached values.
 	mu sync.RWMutex
@@ -164,8 +168,9 @@ func (c *Committee) Clone() *Committee {
 		}
 	}
 	return &Committee{
-		Validators: validators,
-		Epoch:      c.Epoch,
+		Validators:      validators,
+		Epoch:           c.Epoch,
+		ActivationRound: c.ActivationRound,
 	}
 }
 

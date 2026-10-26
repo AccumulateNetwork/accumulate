@@ -276,6 +276,9 @@ func (s *Service) performHandoff(q uint64) error {
 	if err != nil {
 		return err
 	}
+	if err := s.adoptPulledState(round); err != nil {
+		return err
+	}
 	return s.performHandoffAt(q, round)
 }
 
@@ -338,21 +341,81 @@ const seedBelowDepth = 8 * seedBelow
 // A state at or below seedBelow is of a network a few blocks old, with no
 // round that far under it, and a DAG shallower than seedBelowDepth may not
 // hold one: the node then orders from the state's own round, and that state
-// is refused as it always was. It is called with the lock held.
-func (s *Service) seed(stateRound types.Round) {
-	depth := s.config.NodeConfig.DAGGCDepth
-	if depth == 0 {
-		depth = consensus.DefaultDAGGCDepth
-	}
-	from := stateRound
-	if stateRound > seedBelow && depth >= seedBelowDepth {
-		from = stateRound - seedBelow
+// is refused as it always was.
+//
+// It orders with the committees seedCommittee chose -- its own schedule when
+// committees is nil -- and holds the state at stateRound (Node.StateAt), so
+// it orders up to the round limit above it (#4593). It is called with the
+// lock held.
+func (s *Service) seed(stateRound types.Round, committees []*types.Committee) {
+	from := seedRound(stateRound, s.config.NodeConfig.DAGGCDepth)
+	if committees != nil {
+		if err := s.node.Committees().Replace(committees); err != nil {
+			s.logger.Error("Taking the state's committees", "partition", s.config.Partition.ID, "error", err)
+		}
+		s.committee = committees[len(committees)-1]
 	}
 	s.node.Rejoin(from)
+	s.node.StateAt(stateRound)
 	s.awaitingSeed = false
 	s.seedFloor = from + bullshark.RescueWindow
 	s.logger.Info("Joining: consensus orders from below the round of the first proven state; handing off above the rescue window",
 		"partition", s.config.Partition.ID, "stateRound", stateRound, "round", from, "handoffAbove", s.seedFloor)
+}
+
+// seedRound is the round seed orders from below a state at stateRound.
+func seedRound(stateRound, depth types.Round) types.Round {
+	if depth == 0 {
+		depth = consensus.DefaultDAGGCDepth
+	}
+	if stateRound > seedBelow && depth >= seedBelowDepth {
+		return stateRound - seedBelow
+	}
+	return stateRound
+}
+
+// seedCommittee decides the committees a joining node seeded below a state
+// at stateRound orders with (#4593), or nil to keep its own schedule. It
+// orders nothing at or below the seed, so it needs the committee of every
+// round above it:
+//
+//   - its own schedule, with the state's committee scheduled after it if
+//     that is the one after its last, when the schedule's first committee
+//     orders every round from the seed: a schedule built from a state at
+//     start begins with that state's committee, which orders no round below
+//     its activation round;
+//   - the state's committee alone, when it took over at or below the seed;
+//   - the committee before it, as the state's ledger records it, and then
+//     the state's, when that one took over at or below the seed. The node
+//     then authors and votes from the state's activation round, so a change
+//     whose new quorum needs it is not left without it.
+//
+// Otherwise two changes activate between the seed and the state, and the
+// state is refused (Conflict): a later state is not.
+func (s *Service) seedCommittee(stateRound types.Round) ([]*types.Committee, error) {
+	c, prevEpoch, prev, err := s.stateCommittee()
+	if err != nil {
+		return nil, errors.NotReady.Wrap(err)
+	}
+	from := seedRound(stateRound, s.config.NodeConfig.DAGGCDepth)
+	switch {
+	case s.adoptCommittee(c, prevEpoch) && s.node.Committees().Committees()[0].ActivationRound <= from:
+		s.seedRefusals.Store(0)
+		return nil, nil
+	case c.ActivationRound <= from:
+		s.seedRefusals.Store(0)
+		return []*types.Committee{c}, nil
+	case prev != nil && prev.ActivationRound <= from:
+		s.seedRefusals.Store(0)
+		return []*types.Committee{prev, c}, nil
+	}
+	err = errors.Conflict.WithFormat("%s: the state at round %d names the committee of epoch %d from round %d, after epoch %d, and this node knows no committee for the rounds above round %d below that",
+		s.config.Partition.ID, stateRound, c.Epoch, c.ActivationRound, prevEpoch, from)
+	if n := s.seedRefusals.Add(1); n%10 == 0 {
+		s.logger.Error("Joining: every pulled state names committees this node cannot order the rounds above its seed with",
+			"partition", s.config.Partition.ID, "refusals", n, "error", err)
+	}
+	return nil, err
 }
 
 // CollectedRound is the highest leader round of any group this node has
@@ -455,13 +518,15 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 
 	// The groups at or below the round are in the state; the rest, in the
 	// order consensus committed them, are the blocks after it.
-	var groups []*CollectedGroup
+	var groups, held []*CollectedGroup
 	for _, g := range s.buffer {
 		if g.Round() > round {
 			groups = append(groups, g)
+		} else {
+			held = append(held, g)
 		}
 	}
-	inState := len(s.buffer) - len(groups)
+	inState := len(held)
 	s.buffer = nil
 	s.bufferBytes = 0
 	s.collecting = false
@@ -479,8 +544,8 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 	// the executor as behind by them for ever and every restarted validator
 	// refused user submissions for good (run 20261008T170913Z: 125 on BVN1,
 	// 50 on the Directory; consensus spec, invariant 9).
-	for i := 0; i < inState; i++ {
-		s.node.ReportExecuted()
+	for _, g := range held {
+		s.node.ReportExecuted(g.Round())
 	}
 
 	for i, g := range groups {
@@ -494,7 +559,7 @@ func (s *Service) performHandoffAt(q uint64, round types.Round) error {
 		// this the executor reads as permanently behind by the size of the
 		// buffer, and past MaxExecutionLag a joined validator's primary
 		// proposes empty headers for ever (consensus spec, invariant 9).
-		s.node.ReportExecuted()
+		s.node.ReportExecuted(g.Round())
 	}
 	return nil
 }
@@ -608,10 +673,32 @@ func (s *Service) stageThroughNow(block uint64) error {
 	if err != nil {
 		return err
 	}
+	s.mu.RLock()
+	awaiting := s.awaitingSeed
+	s.mu.RUnlock()
+	if !awaiting {
+		err = s.adoptPulledState(round)
+		if errors.Is(err, errors.Conflict) {
+			s.mu.Lock()
+			s.dropPosition(round)
+			s.mu.Unlock()
+			awaiting, err = true, nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	var committees []*types.Committee
+	if awaiting {
+		committees, err = s.seedCommittee(round)
+		if err != nil {
+			return err
+		}
+	}
 
 	s.mu.Lock()
 	if s.awaitingSeed {
-		s.seed(round)
+		s.seed(round, committees)
 	}
 	if err := s.checkRound(q, round); err != nil {
 		s.mu.Unlock()

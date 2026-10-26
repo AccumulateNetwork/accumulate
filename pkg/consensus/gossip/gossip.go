@@ -60,8 +60,10 @@ type GossipLayer struct {
 	rateLimiter *PeerRateLimiter
 
 	// committees is what the topic validators judge messages by; committeeMu
-	// serialises SetCommittee. See topic-validators.go.
+	// serialises SetCommittee. A node's schedule, once set, takes their
+	// place. See topic-validators.go.
 	committees  atomic.Pointer[committees]
+	schedule    atomic.Pointer[types.CommitteeSchedule]
 	committeeMu sync.Mutex
 	validated   []string // topics whose validators this layer registered
 	// held, if set, finds the certificate the node holds for a digest.

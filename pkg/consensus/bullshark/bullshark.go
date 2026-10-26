@@ -13,6 +13,8 @@ package bullshark
 import (
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -63,8 +65,10 @@ type ConsensusOutput struct {
 // It processes certificates as they are added to the DAG and determines
 // when leaders can be committed along with their sub-DAGs.
 type Bullshark struct {
-	// committee is the current validator committee.
-	committee *types.Committee
+	// committees is the committee of each round: a leader is elected and
+	// supported by the committee of its round, whatever this node had
+	// executed when it ordered that round (#4593).
+	committees *types.CommitteeSchedule
 	// dag is the certificate DAG.
 	dag *dag.DAG
 	// partition names the partition in log output. Both partitions of a dual
@@ -106,7 +110,7 @@ type Bullshark struct {
 // New creates a new Bullshark consensus instance.
 func New(committee *types.Committee, d *dag.DAG) *Bullshark {
 	return &Bullshark{
-		committee:     committee,
+		committees:    types.NewCommitteeSchedule(committee),
 		dag:           d,
 		lastCommitted: make(map[authorKey]types.Round),
 		committed:     make(map[types.CertificateDigest]types.Round),
@@ -124,7 +128,7 @@ func NewWithState(committee *types.Committee, d *dag.DAG, lastCommitRound types.
 		}
 	}
 	return &Bullshark{
-		committee:       committee,
+		committees:      types.NewCommitteeSchedule(committee),
 		dag:             d,
 		lastCommitRound: lastCommitRound,
 		lastCommitted:   committed,
@@ -290,12 +294,35 @@ func (b *Bullshark) SetLastCommitRound(round types.Round) {
 	b.lastCommitRound = round
 }
 
-// UpdateCommittee updates the validator committee.
-// This should be called when the epoch changes.
-func (b *Bullshark) UpdateCommittee(committee *types.Committee) {
+// UpdateCommittee schedules a committee from its ActivationRound. A round
+// already ordered keeps the committee it was ordered with: a committee that
+// activates at or below the last committed leader is refused.
+func (b *Bullshark) UpdateCommittee(committee *types.Committee) error {
+	if committee == nil {
+		return errors.New("committee is nil")
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.committee = committee
+	if committee.ActivationRound <= b.lastCommitRound {
+		return fmt.Errorf("committee of epoch %d activates at round %d, at or below the last committed leader %d",
+			committee.Epoch, committee.ActivationRound, b.lastCommitRound)
+	}
+	return b.committees.Schedule(committee)
+}
+
+// SetCommittees makes s the schedule this instance orders by, so a node's
+// primary and Bullshark share one.
+func (b *Bullshark) SetCommittees(s *types.CommitteeSchedule) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.committees = s
+}
+
+// Committees is the schedule this instance orders by.
+func (b *Bullshark) Committees() *types.CommitteeSchedule {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.committees
 }
 
 // MarkCommitted marks a certificate as committed.

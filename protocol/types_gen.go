@@ -984,7 +984,15 @@ type SystemLedger struct {
 	BvnExecutorVersions []*PartitionExecutorVersion `json:"bvnExecutorVersions,omitempty" form:"bvnExecutorVersions" query:"bvnExecutorVersions" validate:"required"`
 	// LeaderRound is the consensus round of the leader that committed the block, from v2-kourou (DAG-BFT); zero on older blocks.
 	LeaderRound uint64 `json:"leaderRound,omitempty" form:"leaderRound" query:"leaderRound"`
-	extraData   []byte
+	// CommitteeActivationRound is the DAG round from which the validators of the active network definition order and verify this partition's rounds, set by the block that activated that definition to its leader round plus the activation margin, from v2-canaveral (DAG-BFT); zero before.
+	CommitteeActivationRound uint64 `json:"committeeActivationRound,omitempty" form:"committeeActivationRound" query:"committeeActivationRound"`
+	// PreviousNetworkVersion is the version of the network definition whose validators order and verify the rounds below CommitteeActivationRound, from v2-canaveral (DAG-BFT); zero before.
+	PreviousNetworkVersion uint64 `json:"previousNetworkVersion,omitempty" form:"previousNetworkVersion" query:"previousNetworkVersion"`
+	// PreviousValidators is the public keys of the validators of the previous network definition active on this partition, the committee that orders and verifies the rounds below CommitteeActivationRound, from v2-canaveral (DAG-BFT); empty before.
+	PreviousValidators [][]byte `json:"previousValidators,omitempty" form:"previousValidators" query:"previousValidators"`
+	// PreviousCommitteeActivationRound is the DAG round from which the previous network definition's validators ordered and verified this partition's rounds, zero when that definition took effect before v2-canaveral or at genesis.
+	PreviousCommitteeActivationRound uint64 `json:"previousCommitteeActivationRound,omitempty" form:"previousCommitteeActivationRound" query:"previousCommitteeActivationRound"`
+	extraData                        []byte
 }
 
 type SystemWriteData struct {
@@ -3433,6 +3441,14 @@ func (v *SystemLedger) Copy() *SystemLedger {
 		}
 	}
 	u.LeaderRound = v.LeaderRound
+	u.CommitteeActivationRound = v.CommitteeActivationRound
+	u.PreviousNetworkVersion = v.PreviousNetworkVersion
+	u.PreviousValidators = make([][]byte, len(v.PreviousValidators))
+	for i, v := range v.PreviousValidators {
+		v := v
+		u.PreviousValidators[i] = encoding.BytesCopy(v)
+	}
+	u.PreviousCommitteeActivationRound = v.PreviousCommitteeActivationRound
 	if len(v.extraData) > 0 {
 		u.extraData = make([]byte, len(v.extraData))
 		copy(u.extraData, v.extraData)
@@ -6044,6 +6060,23 @@ func (v *SystemLedger) Equal(u *SystemLedger) bool {
 		}
 	}
 	if !(v.LeaderRound == u.LeaderRound) {
+		return false
+	}
+	if !(v.CommitteeActivationRound == u.CommitteeActivationRound) {
+		return false
+	}
+	if !(v.PreviousNetworkVersion == u.PreviousNetworkVersion) {
+		return false
+	}
+	if len(v.PreviousValidators) != len(u.PreviousValidators) {
+		return false
+	}
+	for i := range v.PreviousValidators {
+		if !(bytes.Equal(v.PreviousValidators[i], u.PreviousValidators[i])) {
+			return false
+		}
+	}
+	if !(v.PreviousCommitteeActivationRound == u.PreviousCommitteeActivationRound) {
 		return false
 	}
 
@@ -13528,6 +13561,10 @@ var fieldNames_SystemLedger = []string{
 	8:  "ExecutorVersion",
 	9:  "BvnExecutorVersions",
 	10: "LeaderRound",
+	11: "CommitteeActivationRound",
+	12: "PreviousNetworkVersion",
+	13: "PreviousValidators",
+	14: "PreviousCommitteeActivationRound",
 }
 
 func (v *SystemLedger) MarshalBinary() ([]byte, error) {
@@ -13571,6 +13608,20 @@ func (v *SystemLedger) MarshalBinary() ([]byte, error) {
 	}
 	if !(v.LeaderRound == 0) {
 		writer.WriteUint(10, v.LeaderRound)
+	}
+	if !(v.CommitteeActivationRound == 0) {
+		writer.WriteUint(11, v.CommitteeActivationRound)
+	}
+	if !(v.PreviousNetworkVersion == 0) {
+		writer.WriteUint(12, v.PreviousNetworkVersion)
+	}
+	if !(len(v.PreviousValidators) == 0) {
+		for _, v := range v.PreviousValidators {
+			writer.WriteBytes(13, v)
+		}
+	}
+	if !(v.PreviousCommitteeActivationRound == 0) {
+		writer.WriteUint(14, v.PreviousCommitteeActivationRound)
 	}
 
 	_, _, err := writer.Reset(fieldNames_SystemLedger)
@@ -19331,6 +19382,22 @@ func (v *SystemLedger) UnmarshalFieldsFrom(reader *encoding.Reader) error {
 	if x, ok := reader.ReadUint(10); ok {
 		v.LeaderRound = x
 	}
+	if x, ok := reader.ReadUint(11); ok {
+		v.CommitteeActivationRound = x
+	}
+	if x, ok := reader.ReadUint(12); ok {
+		v.PreviousNetworkVersion = x
+	}
+	for {
+		if x, ok := reader.ReadBytes(13); ok {
+			v.PreviousValidators = append(v.PreviousValidators, x)
+		} else {
+			break
+		}
+	}
+	if x, ok := reader.ReadUint(14); ok {
+		v.PreviousCommitteeActivationRound = x
+	}
 
 	seen, err := reader.Reset(fieldNames_SystemLedger)
 	if err != nil {
@@ -21061,6 +21128,10 @@ func init() {
 		encoding.NewTypeField("executorVersion", "string"),
 		encoding.NewTypeField("bvnExecutorVersions", "PartitionExecutorVersion[]"),
 		encoding.NewTypeField("leaderRound", "uint64"),
+		encoding.NewTypeField("committeeActivationRound", "uint64"),
+		encoding.NewTypeField("previousNetworkVersion", "uint64"),
+		encoding.NewTypeField("previousValidators", "bytes[]"),
+		encoding.NewTypeField("previousCommitteeActivationRound", "uint64"),
 	}, "SystemLedger", "systemLedger")
 
 	encoding.RegisterTypeDefinition(&[]*encoding.TypeField{
@@ -23329,17 +23400,21 @@ func (v *SystemGenesis) MarshalJSON() ([]byte, error) {
 
 func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type                AccountType                                  `json:"type"`
-		Url                 *url.URL                                     `json:"url,omitempty"`
-		Index               uint64                                       `json:"index,omitempty"`
-		Timestamp           time.Time                                    `json:"timestamp,omitempty"`
-		AcmeBurnt           *string                                      `json:"acmeBurnt,omitempty"`
-		PendingUpdates      encoding.JsonList[NetworkAccountUpdate]      `json:"pendingUpdates,omitempty"`
-		Anchor              *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
-		ExecutorVersion     ExecutorVersion                              `json:"executorVersion,omitempty"`
-		BvnExecutorVersions encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
-		LeaderRound         uint64                                       `json:"leaderRound,omitempty"`
-		ExtraData           *string                                      `json:"$epilogue,omitempty"`
+		Type                             AccountType                                  `json:"type"`
+		Url                              *url.URL                                     `json:"url,omitempty"`
+		Index                            uint64                                       `json:"index,omitempty"`
+		Timestamp                        time.Time                                    `json:"timestamp,omitempty"`
+		AcmeBurnt                        *string                                      `json:"acmeBurnt,omitempty"`
+		PendingUpdates                   encoding.JsonList[NetworkAccountUpdate]      `json:"pendingUpdates,omitempty"`
+		Anchor                           *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
+		ExecutorVersion                  ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions              encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LeaderRound                      uint64                                       `json:"leaderRound,omitempty"`
+		CommitteeActivationRound         uint64                                       `json:"committeeActivationRound,omitempty"`
+		PreviousNetworkVersion           uint64                                       `json:"previousNetworkVersion,omitempty"`
+		PreviousValidators               encoding.JsonList[*string]                   `json:"previousValidators,omitempty"`
+		PreviousCommitteeActivationRound uint64                                       `json:"previousCommitteeActivationRound,omitempty"`
+		ExtraData                        *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	if !(v.Url == nil) {
@@ -23368,6 +23443,21 @@ func (v *SystemLedger) MarshalJSON() ([]byte, error) {
 	}
 	if !(v.LeaderRound == 0) {
 		u.LeaderRound = v.LeaderRound
+	}
+	if !(v.CommitteeActivationRound == 0) {
+		u.CommitteeActivationRound = v.CommitteeActivationRound
+	}
+	if !(v.PreviousNetworkVersion == 0) {
+		u.PreviousNetworkVersion = v.PreviousNetworkVersion
+	}
+	if !(len(v.PreviousValidators) == 0) {
+		u.PreviousValidators = make(encoding.JsonList[*string], len(v.PreviousValidators))
+		for i, x := range v.PreviousValidators {
+			u.PreviousValidators[i] = encoding.BytesToJSON(x)
+		}
+	}
+	if !(v.PreviousCommitteeActivationRound == 0) {
+		u.PreviousCommitteeActivationRound = v.PreviousCommitteeActivationRound
 	}
 	u.ExtraData = encoding.BytesToJSON(v.extraData)
 	return json.Marshal(&u)
@@ -26828,17 +26918,21 @@ func (v *SystemGenesis) UnmarshalJSON(data []byte) error {
 
 func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type                AccountType                                  `json:"type"`
-		Url                 *url.URL                                     `json:"url,omitempty"`
-		Index               uint64                                       `json:"index,omitempty"`
-		Timestamp           time.Time                                    `json:"timestamp,omitempty"`
-		AcmeBurnt           *string                                      `json:"acmeBurnt,omitempty"`
-		PendingUpdates      encoding.JsonList[NetworkAccountUpdate]      `json:"pendingUpdates,omitempty"`
-		Anchor              *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
-		ExecutorVersion     ExecutorVersion                              `json:"executorVersion,omitempty"`
-		BvnExecutorVersions encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
-		LeaderRound         uint64                                       `json:"leaderRound,omitempty"`
-		ExtraData           *string                                      `json:"$epilogue,omitempty"`
+		Type                             AccountType                                  `json:"type"`
+		Url                              *url.URL                                     `json:"url,omitempty"`
+		Index                            uint64                                       `json:"index,omitempty"`
+		Timestamp                        time.Time                                    `json:"timestamp,omitempty"`
+		AcmeBurnt                        *string                                      `json:"acmeBurnt,omitempty"`
+		PendingUpdates                   encoding.JsonList[NetworkAccountUpdate]      `json:"pendingUpdates,omitempty"`
+		Anchor                           *encoding.JsonUnmarshalWith[AnchorBody]      `json:"anchor,omitempty"`
+		ExecutorVersion                  ExecutorVersion                              `json:"executorVersion,omitempty"`
+		BvnExecutorVersions              encoding.JsonList[*PartitionExecutorVersion] `json:"bvnExecutorVersions,omitempty"`
+		LeaderRound                      uint64                                       `json:"leaderRound,omitempty"`
+		CommitteeActivationRound         uint64                                       `json:"committeeActivationRound,omitempty"`
+		PreviousNetworkVersion           uint64                                       `json:"previousNetworkVersion,omitempty"`
+		PreviousValidators               encoding.JsonList[*string]                   `json:"previousValidators,omitempty"`
+		PreviousCommitteeActivationRound uint64                                       `json:"previousCommitteeActivationRound,omitempty"`
+		ExtraData                        *string                                      `json:"$epilogue,omitempty"`
 	}{}
 	u.Type = v.Type()
 	u.Url = v.Url
@@ -26850,6 +26944,13 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	u.ExecutorVersion = v.ExecutorVersion
 	u.BvnExecutorVersions = v.BvnExecutorVersions
 	u.LeaderRound = v.LeaderRound
+	u.CommitteeActivationRound = v.CommitteeActivationRound
+	u.PreviousNetworkVersion = v.PreviousNetworkVersion
+	u.PreviousValidators = make(encoding.JsonList[*string], len(v.PreviousValidators))
+	for i, x := range v.PreviousValidators {
+		u.PreviousValidators[i] = encoding.BytesToJSON(x)
+	}
+	u.PreviousCommitteeActivationRound = v.PreviousCommitteeActivationRound
 	err := json.Unmarshal(data, &u)
 	if err != nil {
 		return err
@@ -26873,6 +26974,17 @@ func (v *SystemLedger) UnmarshalJSON(data []byte) error {
 	v.ExecutorVersion = u.ExecutorVersion
 	v.BvnExecutorVersions = u.BvnExecutorVersions
 	v.LeaderRound = u.LeaderRound
+	v.CommitteeActivationRound = u.CommitteeActivationRound
+	v.PreviousNetworkVersion = u.PreviousNetworkVersion
+	v.PreviousValidators = make([][]byte, len(u.PreviousValidators))
+	for i, x := range u.PreviousValidators {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding PreviousValidators: %w", err)
+		} else {
+			v.PreviousValidators[i] = x
+		}
+	}
+	v.PreviousCommitteeActivationRound = u.PreviousCommitteeActivationRound
 	v.extraData, err = encoding.BytesFromJSON(u.ExtraData)
 	if err != nil {
 		return err
