@@ -22,7 +22,7 @@ the same two sections:
 | [Healing](healing.md) | Filling gaps in sequenced cross-partition streams: gaps by index, hash-set requests, bundles from the producer cache |
 | [Consensus](consensus.md) | The batch plane's memory and execution lag; the DAG-BFT protocol: rounds, headers, votes, certificates, insertion, leader election, commit, order, epochs, retention, persistence, who may send |
 | [Network parameters](network.md) | What a network declares about itself, and how a node is held to it |
-| [Bitcoin anchoring](anchoring.md) | Committing the Directory's root to Bitcoin from published addresses, validator multisig coordinated through per-signer data accounts, list succession that needs both key sets, and the evidence package a stranger verifies with Bitcoin alone |
+| [Bitcoin anchoring](anchoring.md) | Committing the Directory's root to Bitcoin from published addresses, a multisig of one vaulted key per operator on a key page, coordinated through per-signer data accounts, list succession by a spend the old keys sign, and the evidence package a stranger verifies with Bitcoin alone |
 
 Alongside them, [DIFFERENCES.md](DIFFERENCES.md) records where the code departs
 from the specification, and [PLAN.md](PLAN.md) orders that work. It is kept separate on purpose: a spec that documents

@@ -2500,24 +2500,30 @@ not serving. Not built.
 
 [anchoring.md](anchoring.md) (Paul, 2026-10-12) has the Directory's root chain
 anchor committed to Bitcoin at every interval (a stored Directory block at
-least 10 blocks below the proposer's tip) from an address on a published list,
-changed only by a recorded spend from the old list's addresses or by its backup
-within a window, the validators signing at a count threshold through per-signer
-coordination data accounts, each validator's Bitcoin key in a separate signer
-that checks every transaction against its own nodes and a locally set fee cap
+least 10 blocks below the proposer's tip) from an address on a published list
+that equals the key page `dn.acme/bitcoin/book/1` and is changed only by a
+recorded spend from the old list's addresses, `k` of the page's operators
+signing through per-signer coordination data accounts, each operator's one key
+created in its own vault by a separate signer that unlocks it per signature and
+checks every transaction against its own nodes and a locally set fee cap
 (§2.8, part of B2), a proof builder keeping each listed account's entries'
 receipts to the next anchored root, and a verifier that checks a package with
 Bitcoin and one pinned transaction. None of it exists:
 
-- **B1. No accounts, no types.** `dn.acme/bitcoin` (an ADI),
-  `dn.acme/bitcoin/addresses` and the per-signer coordination accounts and
+- **B1. No accounts, no types.** `dn.acme/bitcoin` (an ADI), its book
+  `dn.acme/bitcoin/book`, which governs it once the operators' authority is
+  removed, `dn.acme/bitcoin/addresses` and the per-signer coordination
+  accounts and
   books are not created by genesis or by any transaction;
   `pkg/anchoring` and its payload, list and record types do not exist.
   On an existing network the accounts and the book are created by
   operator-signed `CreateIdentity`/`CreateKeyBook`/`CreateDataAccount`
   transactions, not by an
   executor change; there is no version gate.
-- **B2. No coordination.** No validator proposes, signs or broadcasts an anchor
+- **B2. No coordination, no vault signer.** No signer creates its key in a
+  vault or signs after its checks (§2.8; staking's `walletsign` holds ed25519
+  keys only, and the signer needs secp256k1), and no one proposes, signs or
+  broadcasts an anchor
   (anchoring.md §2.4), on the Bitcoin-height slot rule.
 - **B3. No proof builder.** Nothing reads the block ledgers for a configured
   set of accounts and keeps receipts to an anchored root; the only account
