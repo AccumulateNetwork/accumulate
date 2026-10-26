@@ -39,8 +39,13 @@ ExecutorVersion:
     label: v2-kourou
     description: enables collection proofs for cross-partition messaging
 
-  VNext:
+  V2Canaveral:
     value: 11
+    label: v2-canaveral
+    description: activates the DAG-BFT consensus rules
+
+  VNext:
+    value: 12
     description: is a placeholder for testing. DO NOT USE
 
 PartitionType:

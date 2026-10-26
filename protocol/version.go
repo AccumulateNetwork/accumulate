@@ -11,7 +11,7 @@ type ExecutorVersion uint64
 
 // ExecutorVersionLatest is the latest version of the executor.
 // ExecutorVersionLatest is intended primarily for testing.
-const ExecutorVersionLatest = ExecutorVersionV2Kourou
+const ExecutorVersionLatest = ExecutorVersionV2Canaveral
 
 func init() {
 	// Verify that ExecutorVersionLatest has been updated, so that tests can
@@ -67,4 +67,11 @@ func (v ExecutorVersion) V2TanegashimaEnabled() bool {
 // activates collection proofs for cross-partition messaging (#4048).
 func (v ExecutorVersion) V2KourouEnabled() bool {
 	return v >= ExecutorVersionV2Kourou
+}
+
+// V2CanaveralEnabled checks if the version is at least V2 Canaveral.
+// Canaveral activates the DAG-BFT consensus rules, the first version after
+// Kourou, which Kermit already runs.
+func (v ExecutorVersion) V2CanaveralEnabled() bool {
+	return v >= ExecutorVersionV2Canaveral
 }
