@@ -23,6 +23,15 @@ func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
 	p.receiveCertificate(cert, false)
 }
 
+// OnRestoredCertificate takes in a certificate a restart dropped from the
+// restored tail for a missing parent (#4595): held, and its parents asked
+// for, as a late certificate is. It was verified when this node first took
+// it in, so it is not verified again; its epoch still has to be this
+// primary's.
+func (p *Primary) OnRestoredCertificate(cert *types.Certificate) CertOutcome {
+	return p.receiveCertificate(cert, true)
+}
+
 // receiveCertificate is OnCertificateReceived reporting what inserting the
 // certificate did, which the catch-up path counts (#4469). routerVerified
 // says the certificate came through the certs topic, whose validator

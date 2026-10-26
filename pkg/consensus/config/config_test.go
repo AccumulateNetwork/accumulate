@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -63,6 +64,16 @@ func TestConfigValidate(t *testing.T) {
 			name:    "low gc depth invalid",
 			modify:  func(c *Config) { c.Consensus.DAGGCDepth = 5 },
 			wantErr: true,
+		},
+		{
+			name:    "gc depth one below the minimum invalid",
+			modify:  func(c *Config) { c.Consensus.DAGGCDepth = types.MinDAGGCDepth - 1 },
+			wantErr: true,
+		},
+		{
+			name:    "gc depth at the minimum valid",
+			modify:  func(c *Config) { c.Consensus.DAGGCDepth = types.MinDAGGCDepth },
+			wantErr: false,
 		},
 		{
 			name:    "low commit buffer invalid",

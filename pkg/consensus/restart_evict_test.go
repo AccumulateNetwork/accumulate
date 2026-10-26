@@ -178,7 +178,7 @@ func restoredTailFixture(t *testing.T, lastCommit types.Round, committed int) (*
 		payload := []types.PayloadEntry{{Digest: b.Digest()}}
 		certs = append(certs, &types.Certificate{Header: types.NewHeader(author, types.Round(i+1), 0, payload, nil)})
 	}
-	if err := n.dag.Restore(certs); err != nil {
+	if _, err := n.dag.Restore(0, certs); err != nil {
 		t.Fatal(err)
 	}
 	own := types.NewBatch([][]byte{[]byte("the batch this node's header names")})

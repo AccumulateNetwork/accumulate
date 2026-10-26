@@ -635,22 +635,36 @@ them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
   parents cannot be there and no ordering walk will reach below the
   certificate:
   - **genesis**, round 0 (`dag.go:154`, `:207-241`);
-  - **a seed**: a node seeded by a join at `S` takes certificates at `S`
-    and `S + 1` without their parents, since it orders nothing at or
-    below `S` ("Restart"; `consensus.go:936-943`);
+  - **a seed into an empty DAG**: a node seeded at `S` by a join, or by a
+    restore with no tail, takes certificates at or below `S + 1` without
+    their parents (`DAG.SetLastCommitRound`), since their history is in
+    the restored state, asking for it recurses into collected rounds
+    (#4058), and the seed's distance below the network keeps those rounds
+    out of the walks that matter (#4405; "Restart");
+  - **the weak-link window above the collection floor**: a certificate at
+    a round below the floor plus the weak-link window may name a parent
+    that was collected, which a digest cannot tell from one that never
+    arrived. Bullshark stops ordering before its walk reaches there
+    ("DAG retention");
   - **a restored tail**: `DAG.Restore` inserts the certificates a
-    checkpoint persisted, lowest round first, without the check
-    (`dag.go:98-111`); each was verified when the node first took it in,
-    the tail starts a rescue window below the commit floor, and what is
-    below the tail is committed history. The tail must be closed under
-    parents down to that floor, which is #4595's second half.
-  - **a certificate taken in without its parents at all**: at a seed, as
-    above, and at `7d9458e10` any certificate at or below the commit floor
-    plus one once there is a floor (`dag.go:153`), which in normal running
-    lets a late certificate in without a parent the node never received,
-    and the walk below then differs between nodes (#4595, !1259;
-    DIFFERENCES C22). !1259 narrows the waiver to the seed and the
-    weak-link window above the collection floor.
+    checkpoint persisted, lowest round first, without the check; each was
+    verified when the node first took it in. The tail begins at the tail
+    floor, a rescue window and a weak-link window below the commit floor;
+    `Restore` makes that the DAG's collection floor, so the band above
+    it is the case before, and ends the seed's waiver. Above the band a
+    tail certificate whose parent is not in the tail, and anywhere in the
+    tail one whose parent was dropped, is dropped: an unsynced write lost
+    to a power loss, or two inserters reaching the store out of order,
+    leaves a child on disk without its parent. The node counts what it
+    dropped (`accumulate_dagbft_restore_orphans_total`) and takes each in
+    again as a late certificate once it starts (`Primary.OnRestoredCertificate`):
+    held, its parents asked for, inserted when they arrive (#4595).
+
+  No other certificate enters without its parents, whatever the commit
+  floor: until #4595 the DAG took in any certificate at or below the commit
+  floor plus one, which in normal running let a late certificate in
+  without a parent the node never received, and the walk below then
+  differed between nodes.
 - **One certificate per (author, round).** A second copy of the same
   certificate is an idempotent no-op (`dag.go:135-139`). A **different**
   certificate for an author and round the DAG already holds is refused,
@@ -830,24 +844,28 @@ The protocol's windows, as constants, with the relation they must keep:
 |---|---|---|---|
 | weak-link window | 8 rounds | how far below its round a header names certificates | `primary/header_builder.go:184` |
 | `RescueWindow` | 32 rounds | how far below the last commit an ordering walk reaches; the seed is 34 below the first proven state and no handoff is taken within 32 of a seed ("Restart") | `bullshark/ordering.go:125-138` |
+| tail depth | `RescueWindow` + weak-link window = 40 rounds | how far below a checkpoint's last commit its tail begins; a restored DAG's collection floor (#4595) | `restart.go`, `tailFloor` |
 | committed-digest retention | 64 rounds below the floor: the lower of the last commit and the oldest unproduced group, itself at most `DAGGCDepth` below the last commit (#4594) | how long a committed certificate is remembered as committed | `bullshark/ordering.go:77-85` |
 | held-certificate buffer | 2 × 10 × committee certificates, pruned 10 rounds below the node's round | certificates waiting for parents | `primary/primary.go:292-293`, `:336-338`; `pending_certs.go:138-173` |
 | round request | 64 rounds, 100 certificates per response | one catch-up request | `gossip/cert_sync.go:32-33`, `:326` |
-| `DAGGCDepth` | 2,000 rounds | how many rounds a node keeps below the further of its last commit and its frontier; how far behind a node can be and still catch up from peers | `consensus.go:37-49`; `dag/dag.go:332-392` |
+| `DAGGCDepth` | 2,000 rounds, at least 64 (`types.MinDAGGCDepth`) | how many rounds a node keeps below the further of its last commit and its frontier; how far behind a node can be and still catch up from peers | `consensus.go:37-49`; `dag/dag.go:332-392` |
 
 Proposed under #4593 and not decided: a committee activation margin, how far
 consensus may run ahead of the newest state a node holds, 256 rounds in the
 proposal ("Epochs"); it would sit between the seed distance and `DAGGCDepth`.
 
 The relation: **weak-link window < `RescueWindow` ≤ ½ committed-digest
-retention < seed distance (34) < `DAGGCDepth`**, and
+retention < seed distance (34) < tail depth (40) < minimum `DAGGCDepth` (64)
+≤ `DAGGCDepth`**, and
 `DAGGCDepth` is also larger than any catch-up a round request spans. The
 weak-link window must be inside the rescue window or a straggler would be
 named and never ordered; the digest set must cover the whole walk or a
 certificate would be ordered twice; the seed must be below the first state
 by more than the walk, or the first leaders after it would take in
-certificates the peers committed before the seed; and the GC depth must
-be above all of them, because collecting a round inside any of these
+certificates the peers committed before the seed; the tail and the
+stop at a collected round must leave a weak-link window below the walk,
+because the DAG takes certificates there without their parents (#4595);
+and the GC depth must be above all of them, because collecting a round inside any of these
 windows removes something the protocol still reads. Narwhal §4.3 and
 Bullshark §7 garbage-collect by agreement; this network collects by depth
 behind the frontier, so the relation is what keeps collection out of the
@@ -860,9 +878,9 @@ protocol's way.
   the frontier is **stranded**, says so once a minute
   (`primary/vote_handler.go:581-602`), and rejoins from a pulled state
   ("Restart");
-- an ordering walk that would reach a collected round **stops ordering**
-  rather than order a group its peers did not (#4595, !1259; "DAG
-  retention"), and the node needs a join;
+- an ordering walk that would reach a collected round, or the weak-link
+  window above it, **stops ordering** rather than order a group its peers
+  did not (#4595, !1259; "DAG retention"), and the node needs a join;
 - a batch outside every peer's retention is not fetched; the node resyncs
   (invariant 6, E11; "Retention" under the batch plane).
 
@@ -881,8 +899,8 @@ these are the rules.
   !1258). With it go the certificates and batches the DAG holds, so that
   the restored DAG has the header's parents: at `7d9458e10` from four
   rounds below the header (`restart.go:217-222`), after !1259 every
-  certificate as it is inserted (#4595). The write is not synced
-  (DIFFERENCES C9).
+  certificate as it is inserted (#4595). The header's write is synced,
+  the certificates' and batches' are not (DIFFERENCES C9).
 - **Before a vote is signed**, the (author, round) → digest record is
   appended to the `voted` file, unsynced like the rest of the store
   (#4590, !1271; "The vote rule"; DIFFERENCES C9). At `7d9458e10` nothing
@@ -987,10 +1005,10 @@ are normative, and this list summarizes them:
   honest nodes that received the same certificates in a different order
   commit different sequences. The exceptions are where the parents cannot
   be present: genesis certificates (round 0, no parents); the restored tail
-  (`DAG.Restore`, each checked when first taken in); and the certificates
-  the DAG takes in without their parents at all — at a seed, and today at
-  or below the last commit plus one ("Certificate catch-up"; #4595 narrows
-  this to the seed and the weak-link window above the collection floor).
+  (`DAG.Restore`, each checked when first taken in, and closed under
+  parents above its floor); and the certificates the DAG takes in without
+  their parents at all — at a seed into an empty DAG, and within the
+  weak-link window above the collection floor ("DAG insertion"; #4595).
 - **One vote per author and round** (#4590). A validator votes for one header
   from each author at each round: the first it votes for (Narwhal, sec. 4.1).
   A second header from the same author for the same round is refused, and
@@ -1004,9 +1022,9 @@ are normative, and this list summarizes them:
   the vote is signed, **on disk before the vote exists** ("Restart", below),
   and a record that cannot be written is not voted; the author's rebroadcast
   tries it again. The record is kept for ten rounds in memory, which covers
-  every round a header can still be voted in, and a rescue window below the
-  checkpoint's commit on disk. Once a round's records are pruned, in memory
-  or on disk, no header below the prune floor is voted: a rejoin that lowers
+  every round a header can still be voted in, and from the checkpoint's
+  tail floor on disk. Once a round's records are pruned, in memory or on
+  disk, no header below the prune floor is voted: a rejoin that lowers
   the round ("Sync", executor spec) cannot reopen a round the validator no
   longer has the record of, before or after a restart.
 
@@ -1209,6 +1227,16 @@ are outside every peer's retention, so it could not have executed them
 (invariant 6, E11). A healthy node commits within a few rounds of the
 frontier, and the round advance collects nothing the commit path would not.
 Collection walks only the rounds the cutoff moved over, never the whole DAG.
+Once the collection floor plus a rescue window and a weak-link window is
+above its last commit, Bullshark orders nothing more (#4595): the walk from
+its last commit reaches rounds that are gone, or the band above them whose
+certificates the DAG took without their parents, and proceeding would order
+a group its peers did not. The stop is logged once, and
+`accumulate_dagbft_ordering_stranded` is 1 while it lasts; the node needs a
+join, and ordering resumes, logged, once a seed puts the last commit above
+the gap. `DAGGCDepth` is at least 64 (`types.MinDAGGCDepth`, refused below by
+`NewNode`, `config.Validate` and the run configuration), so a healthy node's
+frontier has 24 rounds to run ahead of its commit before the stop.
 
 ### Certificate catch-up
 
@@ -1309,13 +1337,20 @@ their certificates are read. A partial answer leaves the request open for
 the next one. The `Certificate catch-up` line counts the dropped copies as
 `repeatedAnswers`.
 
-What arrives is verified against the committee and inserted, and the
-insert applies the parent rule ("The DAG facts", above): the certificate's
-distinct parents of the round before must be in the DAG and carry a stake
-quorum, or it is refused (#4591). A certificate whose parents are missing
-is held (up to `2 × 10 × committee` certificates) until they arrive, and
-its parents are asked for; one released whose parents do not certify it is
-dropped.
+What arrives is verified against the committee and inserted. The insert
+applies the parent rule of #4591: the certificate's distinct parents of the
+round before must be in the DAG and carry a stake quorum, or it is refused.
+**A certificate enters the DAG only with its parents present** (Narwhal
+§4), whatever the commit floor (#4595): ordering flattens a leader's
+ancestors as found in the DAG, so this is what makes the committed groups
+the same on every node whatever order certificates arrived in. The DAG
+waives it only where the parents legitimately cannot be there and no
+ordering walk reaches: at a seed into an empty DAG (up to `S + 1`,
+"Restart") and within a weak-link window above the collection floor, which a
+restored tail sets ("DAG insertion"). A certificate whose parents are
+missing is held (up to `2 × 10 × committee` certificates) until they
+arrive, and its parents are asked for; one released whose parents do not
+certify it is dropped.
 
 **A held certificate is released whenever its parents are in the DAG,
 whoever inserted them** (#4515). A copy of a held certificate is reported
@@ -1515,11 +1550,13 @@ round 80129, `certificates_created_total` 0). So beside the checkpoint, in
 `consensus-dag/` (`persist.DAGStore`, one file per certificate or batch,
 named by digest, written once):
 
-- **With each checkpoint**, every certificate in the DAG from `RescueWindow`
-  below the checkpoint's last commit up to the frontier, and the batches they
-  name that the node holds. The window is what ordering walks
-  (`orderDag`), so the restored node orders the certificates above the floor
-  exactly as its peers do; the batches are what those groups execute, and
+- **With each checkpoint**, every certificate in the DAG from the **tail
+  floor**, `RescueWindow` plus the weak-link window (40 rounds) below the
+  checkpoint's last commit, up to the frontier, and the batches they name
+  that the node holds. The rescue window is what ordering walks
+  (`orderDag`), and the weak-link window below it holds the rounds whose
+  parents the restored DAG does not have, so the restored node orders the
+  certificates above the floor exactly as its peers do (#4595); the batches are what those groups execute, and
   after a whole restart no memory holds them. The checkpoint lists them
   (`Checkpoint.Tail`), with the batches of the header this node authored
   last: authored after the rounds above and not yet certified, no
@@ -1528,15 +1565,25 @@ named by digest, written once):
   again (#4502). Files neither this checkpoint nor the previous one lists
   are removed, except those written after the checkpoint began. The write
   cost per block is the certificates and batches the block adds.
+- **As each certificate is inserted**, that certificate with the batches it
+  names that the node holds (`DAG.SetOnInsert`, `Node.persistInserted`),
+  so the store holds the DAG as of a crash whatever a weak link names
+  (#4595). These writes are not synced, and two inserters can reach the
+  store out of order, so the tail is closed under parents only once
+  `DAG.Restore` has dropped what lacks one ("DAG insertion"). The executor, and so the
+  checkpoint, can be many rounds behind consensus when the node stops; those
+  rounds are on disk because inserting them wrote them. Writing from four
+  rounds below each authored header missed a straggler named only as a weak
+  link by later headers.
 - **Before each header this node authors is broadcast**, the header itself
-  and the DAG from four rounds below it up, with the batches held. The
-  executor, and so the checkpoint, can be many rounds behind consensus when
-  the node stops; those rounds are on disk only because authoring wrote them.
+  with the batches it names.
 
 On restart, before the primary starts, `Node.Restore` loads every persisted
-certificate into the DAG without parent checks (`DAG.Restore`: each was
-quorum-verified when first taken in, and the ones below the window are
-committed history), every persisted batch into the batch store — the ones
+certificate from the tail floor up into the DAG without parent checks
+(`DAG.Restore`: each was quorum-verified when first taken in, and the ones
+below the floor are committed history and stay out), less those without a
+parent, which the node takes in again once it starts ("DAG insertion"),
+every persisted batch into the batch store — the ones
 named under this node's key, by its certificates in the tail or by its last
 authored header, as its **own** (invariant 4: never evicted; the tail is a
 whole rescue window and can be larger than the active store, and only the
@@ -1617,8 +1664,8 @@ reach its primary and none is ordered. The join's first proven state names
 the round (`Service.StageThrough` reads the leader round `P` its system
 ledger records), and consensus is seeded **thirty-four rounds below it**, at
 `S = P − (RescueWindow + 2)` (`Node.Rejoin(S)`, `seedBelow`; #4530):
-Bullshark orders nothing at or below `S`, the DAG accepts certificates at `S`
-and `S + 1` without their parents, and the primary participates from `S`.
+Bullshark orders nothing at or below `S`, the DAG accepts certificates at or
+below `S + 1` without their parents, and the primary participates from `S`.
 `P` is the round of a leader the network committed, recorded in a state the
 join itself pulled seconds earlier, so `S` is near the frontier: the
 certificates above it are in every peer's DAG and their batches are still

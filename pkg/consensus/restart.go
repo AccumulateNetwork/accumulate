@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/bullshark"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/persist"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
@@ -113,7 +114,7 @@ func (n *Node) order(cert *types.Certificate) bool {
 // Bullshark's position now.
 //
 // With a StateDir, the checkpoint also carries the DAG's tail (#4448): every
-// certificate from RescueWindow below the commit floor up, and the batches
+// certificate from tailFloor up, and the batches
 // they name that this node holds, written to the DAGStore once each.
 func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 	n.orderMu.Lock()
@@ -160,11 +161,21 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 	return cp
 }
 
-// writeTail persists the certificates at and above RescueWindow below the
-// commit floor, and the batches they name that this node holds or has
-// already persisted, keeps the batches of the header this node authored
-// last, and removes what neither this checkpoint nor the previous one
-// names, sparing what was written since it began.
+// tailFloor is the round a checkpoint's tail begins at: the rescue window
+// below the commit floor that an ordering walk reaches, and a weak-link
+// window below that, so that the rounds whose parents a restored DAG does
+// not hold are below every walk (#4595).
+func tailFloor(lastCommit types.Round) types.Round {
+	if depth := types.Round(bullshark.RescueWindow + types.WeakLinkWindow); lastCommit > depth {
+		return lastCommit - depth
+	}
+	return 0
+}
+
+// writeTail persists the certificates from tailFloor up, and the batches they
+// name that this node holds or has already persisted, keeps the batches of the
+// header this node authored last, and removes what neither this checkpoint nor
+// the previous one names, sparing what was written since it began.
 func (n *Node) writeTail(lastCommit types.Round) []string {
 	mark := n.dagStore.Mark()
 	floor := tailFloor(lastCommit)
@@ -196,15 +207,6 @@ func (n *Node) writeTail(lastCommit types.Round) []string {
 	n.dagStore.Retain(retain, mark)
 	n.prevTail = names
 	return tail
-}
-
-// tailFloor is the lowest round a checkpoint's tail holds: RescueWindow
-// below its commit.
-func tailFloor(lastCommit types.Round) types.Round {
-	if lastCommit > bullshark.RescueWindow {
-		return lastCommit - bullshark.RescueWindow
-	}
-	return 0
 }
 
 // CheckpointSaved tells the node that cp is on disk. The vote records (#4590)
@@ -263,18 +265,23 @@ func (n *Node) persistBatches(h *types.Header, names map[string]bool) {
 	}
 }
 
-// persistAuthored is the primary's hook: before a header this node authored
-// is broadcast, the header is on disk, and so is the DAG from a few rounds
-// below its parents up, with the batches this node holds. A block checkpoint
-// follows the executor, which can be many rounds behind consensus when the
-// node stops; the rounds between it and the frontier are then on disk only
-// because each header this node authored wrote them.
-func (n *Node) persistAuthored(h *types.Header) error {
-	from := types.Round(0)
-	if h.Round > 4 {
-		from = h.Round - 4
+// persistInserted is the DAG's hook: a certificate is on disk as soon as it
+// is in the DAG, with the batches it names that this node holds, so the
+// store holds the DAG as of a crash and the restored tail is closed under
+// parents whatever a weak link names (#4595). Writing from four rounds below
+// each authored header missed a straggler named only as a weak link.
+func (n *Node) persistInserted(c *types.Certificate) {
+	if _, err := n.dagStore.PutCertificate(c); err != nil {
+		slog.Error("Persisting certificate for restart", "partition", n.config.Partition, "error", err)
+		return
 	}
-	n.persistRounds(from, map[string]bool{})
+	n.persistBatches(c.Header, map[string]bool{})
+}
+
+// persistAuthored is the primary's hook: before a header this node authored
+// is broadcast, the header is on disk with the batches it names. The DAG it
+// was built on is already there, written as each certificate was inserted.
+func (n *Node) persistAuthored(h *types.Header) error {
 	for _, e := range h.Payload {
 		if b, _ := (multiWorkerBatchStore{n.workers}).GetBatch(e.Digest); b != nil {
 			if _, err := n.dagStore.PutBatch(b); err != nil {
@@ -364,9 +371,23 @@ func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int, error) {
 		}
 		batches++
 	}
-	if err := n.dag.Restore(certs); err != nil {
+	orphans, err := n.dag.Restore(tailFloor(cp.LastCommitRound), certs)
+	if err != nil {
 		slog.Error("Restoring the DAG tail", "partition", n.config.Partition, "error", err)
 	}
+	if len(orphans) > 0 {
+		slog.Warn("Restored tail is not closed under parents; its orphans are taken in again as late certificates",
+			"partition", n.config.Partition, "orphans", len(orphans), "lowest", orphans[0].Round())
+		metrics.RestoreOrphansTotal.Add(float64(len(orphans)))
+	}
+	n.orphans = orphans
+	inserted := certs[:0]
+	for _, c := range certs {
+		if n.dag.Contains(c.Digest()) {
+			inserted = append(inserted, c)
+		}
+	}
+	certs = inserted
 	for _, c := range certs {
 		if committed[c.Digest()] {
 			n.dag.MarkExecuted(c)
@@ -388,6 +409,16 @@ func (n *Node) restoreTail(cp *persist.Checkpoint) (int, int, error) {
 
 	n.primary.RestoreAuthored(authored)
 	return len(certs), batches, nil
+}
+
+// takeInOrphans hands the primary what Restore dropped for a missing
+// parent, lowest round first, as late certificates: each is held and its
+// parents asked for, and enters the DAG once they arrive (#4595).
+func (n *Node) takeInOrphans() {
+	for _, c := range n.orphans {
+		n.primary.OnRestoredCertificate(c)
+	}
+	n.orphans = nil
 }
 
 // ownPayloads is the set of batch digests the given certificates and header

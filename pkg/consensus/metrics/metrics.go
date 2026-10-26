@@ -162,6 +162,26 @@ var (
 		Name:      "dag_uncommitted_rounds_dropped_total",
 		Help:      "Rounds collected by the round advance that this node never committed",
 	})
+
+	// RestoreOrphansTotal counts certificates a restore dropped from the
+	// tail because a parent was not there; the node takes each in again as
+	// a late certificate and fetches its parents (#4595).
+	RestoreOrphansTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "restore_orphans_total",
+		Help:      "Certificates a restore dropped from the tail for a missing parent",
+	})
+
+	// OrderingStranded is 1 while Bullshark refuses to order because the
+	// DAG has collected rounds its next walk reaches; the node needs a join
+	// (#4595).
+	OrderingStranded = promauto.NewGauge(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "ordering_stranded",
+		Help:      "1 while ordering is stopped over collected rounds and the node needs to rejoin",
+	})
 )
 
 // Network metrics

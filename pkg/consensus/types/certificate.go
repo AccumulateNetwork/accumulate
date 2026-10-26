@@ -14,6 +14,25 @@ import (
 	"sort"
 )
 
+// WeakLinkWindow is how many rounds below its own a header names as weak
+// links (primary.buildHeader): every certificate of the rounds from two to
+// WeakLinkWindow below. The DAG waives the parent check only for
+// certificates that far above its collection floor, because a weak link they
+// name may have been collected (#4595).
+const WeakLinkWindow = 8
+
+// RescueWindow is how many rounds below the last commit an ordering walk can
+// still reach (bullshark.orderDag): a certificate older than that can never
+// enter a committed leader's history.
+const RescueWindow = 32
+
+// MinDAGGCDepth is the shallowest DAG a node runs with (#4595): Bullshark
+// stops ordering once the collection floor is within RescueWindow plus
+// WeakLinkWindow of its last commit, and a DAG of twice the rescue window
+// leaves the frontier 24 rounds to run ahead of the commit before that
+// happens, which a healthy node never needs.
+const MinDAGGCDepth = 2 * RescueWindow
+
 // CertificateDigest is a 32-byte hash uniquely identifying a certificate.
 // It is the same as the header digest since certificates are uniquely
 // identified by their headers.

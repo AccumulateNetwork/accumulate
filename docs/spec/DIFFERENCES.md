@@ -1856,9 +1856,19 @@ batches and its last authored header (#4448). What differs:
   when the store opens, and the file rewritten without it: it is in the
   same window, and keeping a torn line would make the file unreadable for
   the records after it.
-- **The authored-round sweep is four rounds deep.** A certificate that
-  reaches the DAG more than four rounds below the node's current round after
-  the node authored there is on disk only from the next block's checkpoint.
+  Every certificate the DAG inserts is written as it is inserted (#4595),
+  unsynced, so none waits for a checkpoint to reach the disk; the authored
+  header's syncs hold a lock of their own in the store, so those writes do
+  not wait on them either.
+- **An orphan more than ten rounds below the node's round is not held for
+  its parent.** `DAG.Restore` drops a tail certificate whose parent the
+  store lost, and the node takes it in again as a late certificate (#4595),
+  but the held-certificate buffer prunes ten rounds below the primary's
+  round within a tick, before any fetch can answer. What a power loss or an
+  inserter race loses is the last writes before the crash, which sit near
+  the authored round the node resumes at, so the orphans are within the
+  window; one further below comes back only when a later certificate names
+  it, through the ordinary hold and fetch of its child.
 - **The checkpoint's position being the produced block's, not Bullshark's
   now**, is exercised only where consim's executor lags; no test isolates it.
 
@@ -2262,14 +2272,6 @@ merge request is merged**; remove the entry when the list is empty.
   checkpoint is resumed, so a start that resumes none (no checkpoint for
   the executor's last block, or a store at genesis) signs a second header
   for a round it already signed ("Persistence and restart").
-- **#4595** (!1259): `DAG.Insert` skips the parent check for any
-  certificate at or below the commit floor plus one (`dag/dag.go:153`),
-  not only at a seed, so in normal running a late certificate enters
-  without a parent the node never received and the ordering walk differs
-  between nodes; the persisted tail is written from four rounds below each
-  authored header (`restart.go:217-222`) and can miss a straggler named only
-  as a weak link; an ordering walk proceeds over a collected round
-  ("DAG insertion", "Sub-DAG order", "Retention").
 - **#4596** (!1266): the router relays a consensus message before any
   handler checks its author; the check is in the handlers only ("Who may
   send consensus messages"). What the merge request leaves open, which
@@ -2353,6 +2355,18 @@ its executed state, where the code before #4593 has no cap. It is timing
 only; the committed sequence is the same. 128 blocks is above the 75-block
 lags seen under load (#4517). Gating it needs the executor version in
 `Node` outside validator changes, which it does not have.
+
+### C27. A node whose ordering stopped at a collected round waits for an operator
+
+*[#4595](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4595)*
+
+consensus.md, "DAG retention": once the collection floor plus a rescue
+window and a weak-link window is above the last commit, Bullshark orders
+nothing more and the node needs a join. The stop is logged once and
+`accumulate_dagbft_ordering_stranded` reads 1, but nothing starts the
+join: the node keeps voting and authoring while it orders nothing, until an
+operator restarts it into one. A node more than `DAGGCDepth` behind the
+frontier is in the same position today ("Retention").
 
 ## Durability: the seal is still on the block path; the committed log is not on disk
 

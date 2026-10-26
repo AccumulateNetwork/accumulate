@@ -98,6 +98,21 @@ func TestNewNode(t *testing.T) {
 		assert.Error(t, err)
 	})
 
+	// Below the minimum Bullshark stops ordering on a healthy node (#4595).
+	t.Run("DAG depth below the minimum", func(t *testing.T) {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		committee := types.NewCommittee([]types.ValidatorInfo{{PublicKey: pub, Stake: 100}}, 1)
+
+		cfg := consensus.NodeConfig{Partition: "test", KeyPair: priv, DAGGCDepth: types.MinDAGGCDepth - 1}
+		_, err = consensus.NewNode(cfg, committee, nil, nil)
+		assert.Error(t, err)
+
+		cfg.DAGGCDepth = types.MinDAGGCDepth
+		_, err = consensus.NewNode(cfg, committee, nil, nil)
+		assert.NoError(t, err)
+	})
+
 	t.Run("with gossip", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()

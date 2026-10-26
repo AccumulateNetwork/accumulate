@@ -80,7 +80,8 @@ type Checkpoint struct {
 	Committees []CommitteeData `json:"committees,omitempty"`
 
 	// Tail names, in the DAGStore beside the checkpoint, the certificates of
-	// the DAG from RescueWindow below LastCommitRound up to the frontier, and
+	// the DAG from RescueWindow plus the weak-link window below
+	// LastCommitRound up to the frontier (#4595), and
 	// the batches they name that this node held (#4448). Restore loads them
 	// into the DAG and the batch store before the primary starts, so the
 	// restored round has its parents and the uncommitted rounds can be

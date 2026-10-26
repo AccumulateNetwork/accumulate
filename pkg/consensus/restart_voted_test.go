@@ -167,13 +167,16 @@ func TestVoteRecordsFollowTheCheckpointsSaved(t *testing.T) {
 	}
 
 	// c1, floor r, is saved. c2, floor 8, is computed, and its save fails.
-	// c3, floor 28, is saved: the checkpoints on disk are c1 and c3.
+	// c3, floor 28, is saved: the checkpoints on disk are c1 and c3. c2's
+	// floor must be above r, or pruning to it would keep the record anyway.
+	const high = types.Round(1 << 20)
+	depth := high - tailFloor(high)
 	n.bullshark.SetLastCommitRound(r)
 	c1 := n.CheckpointAt(0)
 	n.CheckpointSaved(c1)
-	n.bullshark.SetLastCommitRound(r + bullshark.RescueWindow + 8)
+	n.bullshark.SetLastCommitRound(r + depth + 8)
 	_ = n.CheckpointAt(0)
-	n.bullshark.SetLastCommitRound(r + bullshark.RescueWindow + 28)
+	n.bullshark.SetLastCommitRound(r + depth + 28)
 	c3 := n.CheckpointAt(0)
 	n.CheckpointSaved(c3)
 
