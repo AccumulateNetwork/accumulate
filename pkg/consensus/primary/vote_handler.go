@@ -396,6 +396,12 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 	}
 	p.pendingMu.Unlock()
 
+	// One header per author and round (#4590): the first this validator
+	// voted for. Refused before anything is asked for on its behalf.
+	if p.votedOther(header, headerDigest) {
+		return
+	}
+
 	// Check we have all parent certificates. Deferring alone is not enough,
 	// for exactly the reason the batch gate below spells out: the author's
 	// header rebroadcast re-tests a condition that only a re-sent certificate
@@ -497,6 +503,14 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 	p.releasePins(headerDigest)
 	p.deferred.drop(headerDigest)
 
+	// Record the header as this author's for the round, on disk before the
+	// vote exists: a restart must refuse any other header for the pair
+	// (#4590). The author rebroadcasts the header until it is certified, so
+	// a record that could not be written is tried again then.
+	if !p.recordVote(header, headerDigest) {
+		return
+	}
+
 	// Create and send vote
 	vote := types.NewVote(headerDigest, header.Round, header.Epoch, pubKey)
 	if err := vote.Sign(p.config.KeyPair); err != nil {
@@ -524,6 +538,60 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 
 	// Broadcast vote
 	p.broadcastVoteAsync(vote, headerDigest)
+}
+
+// votedOther reports whether this primary voted for a header other than
+// digest from the header's author for its round, or can no longer tell
+// because the round's records were pruned (#4590).
+func (p *Primary) votedOther(header *types.Header, digest types.HeaderDigest) bool {
+	p.pendingMu.Lock()
+	voted, ok := p.votedRounds[authorRound{string(header.Author), header.Round}]
+	floor := p.votedFloor
+	p.pendingMu.Unlock()
+	if header.Round < floor {
+		slog.Warn("Header for a round whose vote records were pruned; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"floor", floor,
+			"header", digest.String())
+		return true
+	}
+	if !ok || voted == digest {
+		return false
+	}
+	slog.Warn("Second header from an author for a round; not voting",
+		"partition", p.config.Partition,
+		"author", hexEncode(header.Author),
+		"round", header.Round,
+		"voted", voted.String(),
+		"refused", digest.String())
+	return true
+}
+
+// recordVote records digest as the header this primary votes for from the
+// header's author at its round, in memory and through the persistence hook,
+// and reports whether the vote may be signed (#4590).
+func (p *Primary) recordVote(header *types.Header, digest types.HeaderDigest) bool {
+	if p.votedOther(header, digest) {
+		return false
+	}
+	p.pendingMu.Lock()
+	p.votedRounds[authorRound{string(header.Author), header.Round}] = digest
+	onVoted := p.onVoted
+	p.pendingMu.Unlock()
+	if onVoted == nil {
+		return true
+	}
+	if err := onVoted(header.Author, header.Round, digest); err != nil {
+		slog.Error("Cannot persist the vote record; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"error", err)
+		return false
+	}
+	return true
 }
 
 // haveBatch reports whether any of this node's workers holds the batch. A

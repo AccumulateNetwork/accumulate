@@ -187,6 +187,7 @@ func (m *ShutdownManager) persistState() error {
 	if err := m.config.CheckpointStore.Save(checkpoint); err != nil {
 		return err
 	}
+	m.node.CheckpointSaved(checkpoint)
 
 	slog.Info("Consensus state persisted",
 		"round", checkpoint.CurrentRound,
@@ -289,6 +290,7 @@ func (n *Node) PersistState(store *persist.Store) error {
 	if err := store.Save(checkpoint); err != nil {
 		return err
 	}
+	n.CheckpointSaved(checkpoint)
 
 	slog.Info("Node state persisted",
 		"partition", n.Partition(),

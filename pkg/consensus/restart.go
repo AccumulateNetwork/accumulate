@@ -159,10 +159,7 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 // names, sparing what was written since it began.
 func (n *Node) writeTail(lastCommit types.Round) []string {
 	mark := n.dagStore.Mark()
-	floor := types.Round(0)
-	if lastCommit > bullshark.RescueWindow {
-		floor = lastCommit - bullshark.RescueWindow
-	}
+	floor := tailFloor(lastCommit)
 	names := map[string]bool{}
 	n.persistRounds(floor, names)
 	// The header this node authored last comes back with the DAG at a
@@ -191,6 +188,28 @@ func (n *Node) writeTail(lastCommit types.Round) []string {
 	n.dagStore.Retain(retain, mark)
 	n.prevTail = names
 	return tail
+}
+
+// tailFloor is the lowest round a checkpoint's tail holds: RescueWindow
+// below its commit.
+func tailFloor(lastCommit types.Round) types.Round {
+	if lastCommit > bullshark.RescueWindow {
+		return lastCommit - bullshark.RescueWindow
+	}
+	return 0
+}
+
+// CheckpointSaved tells the node that cp is on disk. The vote records (#4590)
+// below the lower of its tail floor and the previous saved checkpoint's are
+// dropped: either checkpoint may be the one resumed. A checkpoint computed
+// and not saved drops nothing, as the one still on disk needs its records.
+func (n *Node) CheckpointSaved(cp *persist.Checkpoint) {
+	if n.dagStore == nil || cp == nil {
+		return
+	}
+	floor := tailFloor(cp.LastCommitRound)
+	n.dagStore.RetainVoted(min(floor, n.prevFloor))
+	n.prevFloor = floor
 }
 
 // persistRounds writes every certificate in the DAG at or above from, and
