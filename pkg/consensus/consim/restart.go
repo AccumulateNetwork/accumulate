@@ -183,6 +183,7 @@ func (s *Sim) restartStaggered(nodes, first []*simNode, gap, executorFirst time.
 		if err := node.Restore(cp); err != nil {
 			return fmt.Errorf("restart %s/%d: %w", sn.part, sn.val, err)
 		}
+		node.StateAt(cp.LastCommitRound)
 		sn.lastSaved = cp
 		sn.height.Store(cp.BlockIndex)
 		sn.resumedAt, sn.keptAtRestart = cp.BlockIndex, sn.kept.Load()

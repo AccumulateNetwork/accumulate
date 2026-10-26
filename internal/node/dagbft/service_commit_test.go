@@ -44,12 +44,13 @@ func (a *commitAdapter) ProduceBlock(_ context.Context, params adapter.BlockPara
 	a.mu.Unlock()
 	return a.hash, nil
 }
-func (a *commitAdapter) ValidateTransaction([]byte) error                           { return nil }
-func (a *commitAdapter) LastBlock() (uint64, [32]byte, error)                       { return a.last, a.hash, nil }
-func (a *commitAdapter) LastMajorBlock() (uint64, time.Time, bool)                  { return 0, time.Time{}, false }
-func (a *commitAdapter) StateHash() [32]byte                                        { return a.hash }
-func (a *commitAdapter) Validators() []adapter.ValidatorInfo                        { return nil }
-func (a *commitAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64)) {}
+func (a *commitAdapter) ValidateTransaction([]byte) error          { return nil }
+func (a *commitAdapter) LastBlock() (uint64, [32]byte, error)      { return a.last, a.hash, nil }
+func (a *commitAdapter) LastMajorBlock() (uint64, time.Time, bool) { return 0, time.Time{}, false }
+func (a *commitAdapter) StateHash() [32]byte                       { return a.hash }
+func (a *commitAdapter) Validators() []adapter.ValidatorInfo       { return nil }
+func (a *commitAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64, protocol.ExecutorVersion)) {
+}
 
 // newCommitService builds an unstarted Service with a real (unstarted)
 // consensus node holding real workers, and a recording adapter.

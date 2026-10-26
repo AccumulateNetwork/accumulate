@@ -32,12 +32,12 @@ func (p *Primary) handleVote(vote *types.Vote, routerVerified bool) {
 
 	p.votesReceived.Add(1)
 
-	// CHEAP CHECK FIRST: Committee membership (~21ns)
+	// CHEAP CHECK FIRST: Committee membership (~21ns), in the committee of
+	// the vote's round.
 	// This prevents CPU exhaustion from non-validator vote spam
-	p.committeeMu.RLock()
-	inCommittee := p.committee.ContainsValidator(vote.Author)
-	quorumCount := p.committee.QuorumCount()
-	p.committeeMu.RUnlock()
+	committee := p.committeeAt(vote.Round)
+	inCommittee := committee.ContainsValidator(vote.Author)
+	quorumCount := committee.QuorumCount()
 
 	if !inCommittee {
 		slog.Debug("Vote from unknown validator",
@@ -138,15 +138,14 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 		return
 	}
 
-	// Calculate total stake from votes (needs committeeMu for reading stake)
-	p.committeeMu.RLock()
+	// Calculate total stake from votes, in the committee of the header's round
+	committee := p.committeeAt(header.Round)
 	var totalStake uint64
 	for _, v := range votes {
-		totalStake += p.committee.StakeOf(v.Author)
+		totalStake += committee.StakeOf(v.Author)
 	}
-	hasQuorum := p.committee.HasQuorum(totalStake)
-	quorumThreshold := p.committee.QuorumThreshold()
-	p.committeeMu.RUnlock()
+	hasQuorum := committee.HasQuorum(totalStake)
+	quorumThreshold := committee.QuorumThreshold()
 
 	// Need 2f+1 stake
 	if !hasQuorum {
@@ -157,7 +156,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 		return
 	}
 
-	// Create certificate (needs committeeMu for finding validators)
+	// Create certificate
 	cert := p.createCertificateFromVotes(header, votes)
 	if cert == nil {
 		return
@@ -243,8 +242,9 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	}()
 }
 
-// createCertificateFromVotes creates a certificate from the header and collected votes.
-// Uses committeeMu internally for finding validators.
+// createCertificateFromVotes creates a certificate from the header and
+// collected votes, indexing the signers in the committee of the header's
+// round.
 func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*types.Vote) *types.Certificate {
 	if len(votes) == 0 {
 		return nil
@@ -253,19 +253,18 @@ func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*type
 	sigs := make([][]byte, len(votes))
 	authors := make([]uint16, len(votes))
 
-	p.committeeMu.RLock()
+	committee := p.committeeAt(header.Round)
 	for i, v := range votes {
 		sigs[i] = make([]byte, len(v.Signature))
 		copy(sigs[i], v.Signature)
 
-		idx, found := p.committee.FindValidator(v.Author)
+		idx, found := committee.FindValidator(v.Author)
 		if !found {
 			// This shouldn't happen as we check in OnVoteReceived
 			continue
 		}
 		authors[i] = idx
 	}
-	p.committeeMu.RUnlock()
 
 	return types.NewCertificate(header, sigs, authors)
 }
@@ -291,13 +290,10 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 			"round", header.Round)
 	}
 
-	// Check author is in committee (uses committeeMu): the map lookup
+	// Check author is in the committee of the header's round: the lookup
 	// before the signature check, as for votes
-	p.committeeMu.RLock()
-	inCommittee := p.committee.ContainsValidator(header.Author)
-	p.committeeMu.RUnlock()
-
-	if !inCommittee {
+	committee := p.committeeAt(header.Round)
+	if !committee.ContainsValidator(header.Author) {
 		slog.Debug("Header from unknown validator",
 			"author", hexEncode(header.Author))
 		return
@@ -320,17 +316,16 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 		return
 	}
 
-	// Check epoch and round (uses roundMu)
 	p.roundMu.Lock()
-	currentEpoch := p.currentEpoch
 	currentRound := p.currentRound
 	p.roundMu.Unlock()
 
-	// Check epoch matches
-	if header.Epoch != currentEpoch {
+	// The epoch is the one of the header's round
+	if header.Epoch != committee.Epoch {
 		slog.Debug("Header epoch mismatch",
 			"headerEpoch", header.Epoch,
-			"currentEpoch", currentEpoch)
+			"roundEpoch", committee.Epoch,
+			"round", header.Round)
 		return
 	}
 
@@ -375,6 +370,13 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 			// The author is behind — push the certificates it is missing
 			p.pushCertsForStaleRound(header.Round, currentRound)
 		}
+		return
+	}
+
+	// No vote above the round limit: the round may belong to a committee
+	// change this node has not executed yet. The author rebroadcasts, and
+	// the vote goes out once the limit has passed the round.
+	if p.beyondLimit(header.Round) {
 		return
 	}
 

@@ -15,6 +15,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	. "gitlab.com/accumulatenetwork/accumulate/protocol"
 	. "gitlab.com/accumulatenetwork/accumulate/test/harness"
@@ -80,14 +81,19 @@ func TestFailedNetworkWriteChangesNoGlobals(t *testing.T) {
 			require.Zero(t, w.globalsChanges, "block close must publish no globals change for a failed write")
 			require.Zero(t, w.validatorUpdates, "block close must return no validator updates for a failed write")
 			requireSameGlobals(t, before, partitionGlobals(sim, c.partition))
+			require.Zero(t, systemLedger(t, sim, c.partition).CommitteeActivationRound, "a failed write must record no committee activation round (#4593)")
 		})
 	}
 }
 
-// The control: the same write succeeding changes the globals at block close.
+// The control: the same write succeeding changes the globals at block close
+// and records the round the new committee takes over at, with the committee
+// before it (#4593). The simulator commits no DAG-BFT leader, so the round is
+// the margin itself.
 func TestSucceededNetworkWriteChangesGlobals(t *testing.T) {
 	sim, w := newGlobalsSim(t, ExecutorVersionLatest, Directory)
 	g := partitionGlobals(sim, Directory)
+	previous := g.Network.Version
 	changeValidators(sim, g)
 
 	st := sim.BuildAndSubmitTxnSuccessfully(
@@ -101,6 +107,9 @@ func TestSucceededNetworkWriteChangesGlobals(t *testing.T) {
 	require.NotZero(t, w.globalsChanges)
 	require.NotZero(t, w.validatorUpdates)
 	require.Equal(t, g.Network.Version, partitionGlobals(sim, Directory).Network.Version)
+	l := systemLedger(t, sim, Directory)
+	require.Equal(t, uint64(types.CommitteeActivationMargin), l.CommitteeActivationRound)
+	require.Equal(t, previous, l.PreviousNetworkVersion)
 }
 
 // Before V2Canaveral a write rejected after the parse did change the globals,

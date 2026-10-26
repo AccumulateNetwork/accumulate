@@ -169,9 +169,8 @@ func (p *Primary) RoundStatus() RoundStatus {
 	}
 	p.seenMu.Unlock()
 	st.Authors = len(authors)
-	p.committeeMu.RLock()
-	st.Committee, st.Quorum = p.committee.Len(), p.committee.QuorumCount()
-	p.committeeMu.RUnlock()
+	committee := p.committeeAt(st.Round)
+	st.Committee, st.Quorum = committee.Len(), committee.QuorumCount()
 	return st
 }
 

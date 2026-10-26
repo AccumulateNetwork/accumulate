@@ -222,6 +222,31 @@ func TestValidateAcrossCommitteeSwitch(t *testing.T) {
 	require.Equal(t, pubsub.ValidationIgnore, g.validateHeader(ctx, "", message(mustMarshal(t, h))))
 }
 
+// A node's schedule judges a message by the committee of its epoch however
+// many committees it holds: the active one and two scheduled after it, and
+// none it does not hold (#4593).
+func TestValidateByTheNodesSchedule(t *testing.T) {
+	active := newTestCommittee(t, 4, 3)
+	next := newTestCommittee(t, 4, 4)
+	after := newTestCommittee(t, 4, 5)
+	next.committee.ActivationRound = 100
+	after.committee.ActivationRound = 200
+	s := types.NewCommitteeSchedule(active.committee)
+	require.NoError(t, s.Schedule(next.committee))
+	require.NoError(t, s.Schedule(after.committee))
+	g := &GossipLayer{}
+	g.SetCommittees(s)
+	ctx := context.Background()
+
+	for _, tc := range []*testCommittee{active, next, after} {
+		h := tc.header(t, tc.keys[0], 5)
+		require.Equal(t, pubsub.ValidationAccept, g.validateHeader(ctx, "", message(mustMarshal(t, h))),
+			"epoch %d", tc.committee.Epoch)
+	}
+	unknown := newTestCommittee(t, 4, 6)
+	require.Equal(t, pubsub.ValidationIgnore, g.validateHeader(ctx, "", message(mustMarshal(t, unknown.header(t, unknown.keys[0], 5)))))
+}
+
 // A copy, byte for byte, of a certificate the node holds is accepted on the
 // verification that admitted it. A stalled node re-shares every certificate
 // of its round and the one before as new messages, and each copy cost every

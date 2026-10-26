@@ -240,6 +240,9 @@ func (s *validatorLedgerState) Pull(context.Context) error {
 	}
 	u := protocol.PartitionUrl(s.into.config.Partition.ID).JoinPath(protocol.Ledger)
 	err := s.into.config.Database.Update(func(batch *database.Batch) error {
+		if err := putNetwork(batch, s.into.config.Partition.ID, s.into.Committee()); err != nil {
+			return err
+		}
 		return batch.Account(u).Main().Put(&protocol.SystemLedger{Url: u, Index: b.Index, LeaderRound: uint64(b.LeaderRound)})
 	})
 	if err != nil {

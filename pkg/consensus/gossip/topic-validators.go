@@ -54,6 +54,14 @@ func (g *GossipLayer) SetCommittee(c *types.Committee) {
 	g.committees.Store(next)
 }
 
+// SetCommittees makes the node's schedule what messages are checked against:
+// a message is judged by the committee of the epoch it names wherever in the
+// schedule that committee is, one scheduled and not yet active included
+// (#4593). It takes the place of SetCommittee.
+func (g *GossipLayer) SetCommittees(s *types.CommitteeSchedule) {
+	g.schedule.Store(s)
+}
+
 // SetHeldCertificate gives the certificate validator a way to find the
 // certificate the node holds for a digest, or nil. A copy of a held
 // certificate, byte for byte, is then accepted on the verification that
@@ -78,6 +86,14 @@ func (g *GossipLayer) heldCertificate(d types.CertificateDigest) *types.Certific
 // committeeFor returns the committee of the epoch, or nil if this node holds
 // none for it.
 func (g *GossipLayer) committeeFor(epoch uint64) *types.Committee {
+	if s := g.schedule.Load(); s != nil {
+		for _, c := range s.Committees() {
+			if c.Epoch == epoch {
+				return c
+			}
+		}
+		return nil
+	}
 	cs := g.committees.Load()
 	switch {
 	case cs == nil:

@@ -207,7 +207,11 @@ func (m *RecoveryManager) restoreState(checkpoint *persist.Checkpoint) error {
 		"round", checkpoint.CurrentRound,
 		"epoch", checkpoint.CurrentEpoch)
 
-	return m.node.Restore(checkpoint)
+	if err := m.node.Restore(checkpoint); err != nil {
+		return err
+	}
+	m.node.StateAt(checkpoint.LastCommitRound)
+	return nil
 }
 
 // catchUp requests and processes missing certificates from peers.

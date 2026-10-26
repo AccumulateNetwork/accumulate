@@ -9,7 +9,9 @@ package adapter
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -40,7 +42,7 @@ func TestBridgeEpochTracksNetworkVersion(t *testing.T) {
 	var gotValidators []ValidatorInfo
 	var gotVersion uint64
 	var calls int
-	b.OnValidatorSetChange(func(v []ValidatorInfo, version uint64) {
+	b.OnValidatorSetChange(func(v []ValidatorInfo, version uint64, _ protocol.ExecutorVersion) {
 		gotValidators, gotVersion = v, version
 		calls++
 	})
@@ -48,13 +50,13 @@ func TestBridgeEpochTracksNetworkVersion(t *testing.T) {
 	k1, k2 := [32]byte{1}, [32]byte{2}
 
 	// Initial set at version 1
-	b.updateValidatorsFromGlobals(globalsWith(1, k1))
+	b.updateValidatorsFromGlobals(nil, globalsWith(1, k1))
 	if calls != 1 || gotVersion != 1 || len(gotValidators) != 1 {
 		t.Fatalf("initial: calls=%d version=%d validators=%d", calls, gotVersion, len(gotValidators))
 	}
 
 	// Same set, same version — no notification
-	b.updateValidatorsFromGlobals(globalsWith(1, k1))
+	b.updateValidatorsFromGlobals(nil, globalsWith(1, k1))
 	if calls != 1 {
 		t.Fatalf("duplicate globals notified: calls=%d", calls)
 	}
@@ -62,13 +64,13 @@ func TestBridgeEpochTracksNetworkVersion(t *testing.T) {
 	// Version bump with NO set change must still notify: nodes that skip it
 	// would disagree with a later joiner whose initial epoch is the restored
 	// version
-	b.updateValidatorsFromGlobals(globalsWith(2, k1))
+	b.updateValidatorsFromGlobals(nil, globalsWith(2, k1))
 	if calls != 2 || gotVersion != 2 {
 		t.Fatalf("version-only bump: calls=%d version=%d", calls, gotVersion)
 	}
 
 	// A validator add arrives with the full set, not a diff
-	b.updateValidatorsFromGlobals(globalsWith(3, k1, k2))
+	b.updateValidatorsFromGlobals(nil, globalsWith(3, k1, k2))
 	if calls != 3 || gotVersion != 3 {
 		t.Fatalf("add: calls=%d version=%d", calls, gotVersion)
 	}
@@ -77,8 +79,40 @@ func TestBridgeEpochTracksNetworkVersion(t *testing.T) {
 	}
 
 	// A removal likewise delivers the remaining set
-	b.updateValidatorsFromGlobals(globalsWith(4, k2))
+	b.updateValidatorsFromGlobals(nil, globalsWith(4, k2))
 	if len(gotValidators) != 1 || gotValidators[0].PublicKey != k2 {
 		t.Fatalf("remove must deliver the remaining set, got %d validators", len(gotValidators))
 	}
+}
+
+// A validator change is reported with the executor version active for the
+// block that made it: the globals it replaces, which is what the executor
+// gates the change's ledger fields on, so the block that activates
+// v2-canaveral reports Kourou. Globals loaded with nothing before them report
+// their own version (#4593).
+func TestBridgeReportsTheExecutorVersionOfTheBlockThatMadeTheChange(t *testing.T) {
+	bus := events.NewBus(nil)
+	b, err := NewExecutorBridge(ExecutorBridgeConfig{Executor: &fakeExec{}, PartitionID: "BVN1", EventBus: bus})
+	require.NoError(t, err)
+	var got []protocol.ExecutorVersion
+	b.OnValidatorSetChange(func(_ []ValidatorInfo, _ uint64, executor protocol.ExecutorVersion) {
+		got = append(got, executor)
+	})
+
+	k1, k2 := [32]byte{1}, [32]byte{2}
+	loaded := globalsWith(1, k1)
+	loaded.ExecutorVersion = protocol.ExecutorVersionV2Kourou
+	require.NoError(t, bus.Publish(events.WillChangeGlobals{New: loaded}))
+	require.Equal(t, []protocol.ExecutorVersion{protocol.ExecutorVersionV2Kourou}, got, "loaded: the new globals' version")
+
+	old := loaded
+	next := globalsWith(2, k1, k2)
+	next.ExecutorVersion = protocol.ExecutorVersionV2Canaveral
+	require.NoError(t, bus.Publish(events.WillChangeGlobals{Old: old, New: next}))
+	require.Equal(t, protocol.ExecutorVersionV2Kourou, got[1], "the block's version, not the one it activates")
+
+	later := globalsWith(3, k2)
+	later.ExecutorVersion = protocol.ExecutorVersionV2Canaveral
+	require.NoError(t, bus.Publish(events.WillChangeGlobals{Old: next, New: later}))
+	require.Equal(t, protocol.ExecutorVersionV2Canaveral, got[2])
 }

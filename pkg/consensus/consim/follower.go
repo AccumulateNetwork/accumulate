@@ -74,11 +74,11 @@ func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Rou
 				select {
 				case <-s.runCtx.Done():
 					return
-				case _, ok := <-n.Committed():
+				case group, ok := <-n.Committed():
 					if !ok {
 						return
 					}
-					n.ReportExecuted()
+					n.ReportExecuted(group[len(group)-1].Round())
 				}
 			}
 		}()

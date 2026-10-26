@@ -37,6 +37,7 @@ func processNetworkWrite(t *testing.T, version protocol.ExecutorVersion, def *pr
 
 	batch := database.OpenInMemory(nil).Begin(true)
 	t.Cleanup(batch.Discard)
+	require.NoError(t, batch.Account(x.Describe.Ledger()).Main().Put(&protocol.SystemLedger{Url: x.Describe.Ledger()}))
 	st := chain.NewStateManager(x.Describe, &x.globals().Active, nil, batch.Begin(true), principal, txn, nil)
 	t.Cleanup(st.Discard)
 
@@ -127,6 +128,7 @@ func TestNetworkAccountUpdate_CommitFailureChangesNothing(t *testing.T) {
 	txn.Header.Principal = protocol.DnUrl().JoinPath(protocol.Network)
 	txn.Body = &protocol.WriteData{Entry: values.FormatNetwork(), WriteToState: true}
 	require.NoError(t, batch.Account(txn.Header.Principal).Main().Put(&protocol.DataAccount{Url: txn.Header.Principal}))
+	require.NoError(t, batch.Account(x.Describe.Ledger()).Main().Put(&protocol.SystemLedger{Url: x.Describe.Ledger()}))
 
 	// The transaction is initiated, and arrives inside a synthetic message so
 	// it executes without collecting signatures

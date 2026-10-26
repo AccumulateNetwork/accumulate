@@ -389,7 +389,7 @@ func TestSetValidators_FiresExactlyOnChange(t *testing.T) {
 
 	var mu sync.Mutex
 	fired := 0
-	bridge.OnValidatorSetChange(func([]ValidatorInfo, uint64) {
+	bridge.OnValidatorSetChange(func([]ValidatorInfo, uint64, protocol.ExecutorVersion) {
 		mu.Lock()
 		fired++
 		mu.Unlock()

@@ -84,13 +84,11 @@ func (p *Primary) receiveCertificate(cert *types.Certificate, routerVerified boo
 
 	// Verify the certificate, unless the router did. Its epoch is still
 	// this primary's to judge: the router verifies a certificate against the
-	// committee of the epoch it names, which may be the previous one, and
-	// Verify's first check refuses any epoch but the committee's.
+	// committee of the epoch it names, which need not be the committee of
+	// the certificate's round, and Verify's first check refuses any epoch
+	// but the committee's.
 	if routerVerified {
-		p.committeeMu.RLock()
-		epoch := p.committee.Epoch
-		p.committeeMu.RUnlock()
-		if cert.Header.Epoch != epoch {
+		if cert.Header.Epoch != p.committeeAt(cert.Round()).Epoch {
 			slog.Info("Invalid certificate",
 				"error", "certificate epoch does not match committee epoch",
 				"round", cert.Round(),
@@ -105,7 +103,9 @@ func (p *Primary) receiveCertificate(cert *types.Certificate, routerVerified boo
 	if p.certSyncer != nil {
 		p.certSyncer.window.verification()
 	}
-	if err := cert.Verify(p.committee); err != nil {
+	// The committee of the certificate's round: one of an earlier epoch
+	// still verifies below the round its successor took over at (#4593).
+	if err := cert.Verify(p.committeeAt(cert.Round())); err != nil {
 		// Info, not Debug: silently dropping peers' certificates stalls
 		// round advancement with no externally visible cause (#4054).
 		slog.Info("Invalid certificate",
@@ -312,12 +312,13 @@ func (p *Primary) tryAdvanceRound() {
 		currentRound := p.currentRound
 		p.roundMu.Unlock()
 
-		p.committeeMu.RLock()
-		committee := p.committee
-		p.committeeMu.RUnlock()
-
 		// Can advance when we have 2f+1 certificates in current round
-		if !p.dag.HasQuorum(currentRound, committee) {
+		if !p.dag.HasQuorum(currentRound, p.committeeAt(currentRound)) {
+			break
+		}
+		// Nor past the round limit: the next round may belong to a
+		// committee change this node has not executed yet.
+		if p.beyondLimit(currentRound + 1) {
 			break
 		}
 
@@ -435,131 +436,26 @@ func (p *Primary) SetRound(round types.Round) {
 	p.roundMu.Unlock()
 }
 
-// SetEpoch sets the current epoch (useful for committee changes).
-func (p *Primary) SetEpoch(epoch uint64) {
-	p.roundMu.Lock()
-	p.currentEpoch = epoch
-	p.roundMu.Unlock()
+// UpdateCommittee schedules a committee from its ActivationRound
+// (types.CommitteeSchedule): the rounds below it keep the committee they had.
+func (p *Primary) UpdateCommittee(committee *types.Committee) error {
+	return p.committees.Schedule(committee)
 }
 
-// UpdateCommittee updates the committee (for epoch transitions).
-// This method handles epoch transitions by updating the committee and epoch,
-// recalculating dependent values, and ensuring certificate validity across epochs.
-func (p *Primary) UpdateCommittee(committee *types.Committee) {
-	// Lock both committee and round mutexes (always in same order to avoid deadlock)
-	p.committeeMu.Lock()
-	p.roundMu.Lock()
-
-	oldEpoch := p.currentEpoch
-	oldCommittee := p.committee
-
-	// Update committee and epoch
-	p.committee = committee
-	p.currentEpoch = committee.Epoch
-
-	p.roundMu.Unlock()
-	p.committeeMu.Unlock()
-
-	// Log the transition
-	slog.Info("Updated committee",
-		"oldEpoch", oldEpoch,
-		"newEpoch", committee.Epoch,
-		"validators", len(committee.Validators))
-
-	// If this is an epoch transition, perform additional cleanup
-	if committee.Epoch > oldEpoch {
-		// Compute and log validator changes
-		if oldCommittee != nil {
-			diff := oldCommittee.DiffWith(committee)
-			for _, update := range diff {
-				switch update.Type {
-				case types.ValidatorUpdateAdd:
-					slog.Info("Validator added",
-						"pubkey", hexEncode(update.PublicKey),
-						"stake", update.NewStake)
-				case types.ValidatorUpdateRemove:
-					slog.Info("Validator removed",
-						"pubkey", hexEncode(update.PublicKey))
-				case types.ValidatorUpdateStake:
-					slog.Info("Validator stake changed",
-						"pubkey", hexEncode(update.PublicKey),
-						"newStake", update.NewStake)
-				}
-			}
-		}
-	}
+// SetCommittees makes s the schedule this primary verifies and authors by,
+// so a node's primary and Bullshark share one.
+func (p *Primary) SetCommittees(s *types.CommitteeSchedule) {
+	p.committees = s
 }
 
-// TransitionEpoch performs a complete epoch transition with the given validator updates.
-// This creates a new committee by applying the updates and sets it as the current committee.
-// The round is optionally reset based on the resetRound parameter.
-func (p *Primary) TransitionEpoch(updates []types.ValidatorUpdate, resetRound bool) {
-	// Lock both committee and round mutexes (always in same order to avoid deadlock)
-	p.committeeMu.Lock()
-	p.roundMu.Lock()
-
-	oldEpoch := p.currentEpoch
-	oldRound := p.currentRound
-
-	// Create new committee by applying updates
-	newCommittee := p.committee.UpdateValidators(updates)
-
-	// Validate the new committee
-	if err := newCommittee.Validate(); err != nil {
-		p.roundMu.Unlock()
-		p.committeeMu.Unlock()
-		slog.Error("Invalid committee after epoch transition",
-			"error", err,
-			"epoch", newCommittee.Epoch)
-		return
-	}
-
-	// Update committee and epoch
-	p.committee = newCommittee
-	p.currentEpoch = newCommittee.Epoch
-
-	// Optionally reset round for new epoch
-	if resetRound {
-		p.currentRound = 0
-		p.lastRoundAdvance = time.Time{}
-	}
-
-	currentRound := p.currentRound
-	p.roundMu.Unlock()
-	p.committeeMu.Unlock()
-
-	slog.Info("Completed epoch transition",
-		"oldEpoch", oldEpoch,
-		"newEpoch", newCommittee.Epoch,
-		"oldRound", oldRound,
-		"currentRound", currentRound,
-		"validators", len(newCommittee.Validators),
-		"totalStake", newCommittee.TotalStake(),
-		"quorumThreshold", newCommittee.QuorumThreshold())
-
-	// Log individual updates
-	for _, update := range updates {
-		switch update.Type {
-		case types.ValidatorUpdateAdd:
-			slog.Info("Validator added",
-				"pubkey", hexEncode(update.PublicKey),
-				"stake", update.NewStake)
-		case types.ValidatorUpdateRemove:
-			slog.Info("Validator removed",
-				"pubkey", hexEncode(update.PublicKey))
-		case types.ValidatorUpdateStake:
-			slog.Info("Validator stake changed",
-				"pubkey", hexEncode(update.PublicKey),
-				"newStake", update.NewStake)
-		}
-	}
+// Committees is the schedule this primary verifies and authors by.
+func (p *Primary) Committees() *types.CommitteeSchedule {
+	return p.committees
 }
 
-// Committee returns the current committee (thread-safe).
+// Committee returns the committee of the current round.
 func (p *Primary) Committee() *types.Committee {
-	p.committeeMu.RLock()
-	defer p.committeeMu.RUnlock()
-	return p.committee
+	return p.committeeAt(p.CurrentRound())
 }
 
 // GetOurCertificate returns our certificate for the given round, if any.

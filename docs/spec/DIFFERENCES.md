@@ -2229,30 +2229,6 @@ linked-leader walk: two nodes that receive the same certificates in a
 different order commit different leader sequences
 (`TestDefect_ZeroParentLeaderSplitsCommitSequence`, #4601).
 
-### C20. A committee change applies when the node executes the block
-
-*[#4593](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4593); #4162 items 9 and 13*
-
-consensus.md, "Epochs": a committee change takes effect at a DAG round
-fixed in the committed sequence, and the rounds below it are ordered and
-verified with the previous committee on every node, including after a
-restart. The activation round (`L + 256` in the proposal), the margin a
-node may run ahead of its newest state, and what a node down across two
-changes does are proposed in the spec and #4593's to decide. The code
-applies a new committee to the primary, Bullshark and the
-gossip layer the moment the node executes the block that carries it
-(`internal/node/dagbft/service.go:1164-1207`; `consensus.go:1154-1179`),
-and execution lags ordering by a different amount on every node, so the
-rounds between are ordered with the old committee on some nodes and the
-new on others; leader election reads whatever committee Bullshark holds
-(`bullshark/leader.go:31`); a header of any epoch but the node's current
-one is refused (`primary/vote_handler.go:309-315`) and a certificate
-verifies only against the current committee (`types/certificate.go:158-161`),
-so in-flight headers of the old epoch can never certify and their author
-cannot re-author the round (#4162 item 13); a restarted node replays its
-tail with the committee its state names now. The checkpoint carries an
-epoch, not a schedule (`persist/persist.go:51-52`).
-
 ### C21. A lost insertion trigger leaves a committable leader to a later leader's walk
 
 *[#4162](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4162) items 1 and 6*
@@ -2328,6 +2304,55 @@ arbitrarily far ahead; every later block is clamped above it, and nothing
 moves it back. Whether to bound it, and against what — the parents'
 timestamps, the voter's clock with a skew limit, or both — is undecided.
 The spec states the facts and no bound.
+
+### C24. The router judges an old epoch's message by epoch, not by round
+
+*[#4593](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4593); found in review of !1277*
+
+consensus.md, "Who may send consensus messages" and "Committee changes": a
+header, vote or certificate is checked against the committee of its own
+round. The topic validators (`committeeFor`, `gossip/topic-validators.go`)
+look up the committee of the epoch the message names in the node's schedule,
+and never compare it with the committee of the message's round. So while
+the previous committee is still in the schedule, a validator removed by a
+change has its messages of the previous epoch at rounds at or above `A`
+delivered and relayed; the primary refuses them, as it checks the committee
+of the round (`committeeAt`). Before #4593 the router kept the previous
+committee too, with the same effect. Closing it needs the router to refuse a
+message whose epoch is not that of its round's committee.
+
+### C25. Before v2-canaveral the router forgets the previous committee at a change
+
+*[#4593](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4593); found in review of !1277; pending the owner's decision*
+
+consensus.md, "Who may send consensus messages": the rule on the code before
+#4593 is that around a change the router still judges messages of the
+previous epoch by their own committee, and relays them to the peers that
+still need them. Before v2-canaveral a change now replaces the whole
+schedule with the new committee (`Node.ReplaceCommittee`), and the router
+judges by the schedule (`committeeFor`, `gossip/topic-validators.go`), so
+the previous epoch's headers, votes and certificates are ignored, neither
+delivered nor relayed, from the moment the node executes the change. The
+base kept the previous committee in the router (`committees.previous`).
+Ordering is unaffected: the primary refuses those messages in both. What a
+lagging peer loses is the relay of the previous epoch's messages through a
+node that has executed the change. Whether to keep the previous committee in
+the router before v2-canaveral is the owner's call.
+
+### C26. The round limit applies before v2-canaveral too
+
+*[#4593](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4593); found in review of !1277; pending the owner's decision*
+
+consensus.md, "Committee changes": no node takes part in a round more than
+`CommitteeActivationMargin` above the newest state it holds
+(`Node.RoundLimit`, `pkg/consensus/committee-change.go`). The limit exists
+for changes that take effect at an activation round, which happen only from
+v2-canaveral, but it applies at every version: a node on this code on a
+v2-kourou network stops authoring and voting 256 rounds (128 blocks) above
+its executed state, where the code before #4593 has no cap. It is timing
+only; the committed sequence is the same. 128 blocks is above the 75-block
+lags seen under load (#4517). Gating it needs the executor version in
+`Node` outside validator changes, which it does not have.
 
 ## Durability: the seal is still on the block path; the committed log is not on disk
 

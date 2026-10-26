@@ -24,10 +24,9 @@ const DefaultParentWaitTimeout = 80 * time.Millisecond
 // createHeaderLocked creates a header for the current round.
 // Must be called with p.roundMu held.
 func (p *Primary) createHeaderLocked() (*types.Header, error) {
-	// p.roundMu must be held by caller (ensures thread-safe access to currentRound/currentEpoch)
+	// p.roundMu must be held by caller (ensures thread-safe access to currentRound)
 	round := p.currentRound
-	epoch := p.currentEpoch
-	return p.createHeaderLockedWithRound(round, epoch)
+	return p.createHeaderLockedWithRound(round, p.committeeAt(round).Epoch)
 }
 
 // createHeaderLockedWithRound creates a header for the specified round.
@@ -61,7 +60,7 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// time, not as one block (consensus spec, invariant 9). The budget is
 	// this header's share of the block, so the block is bounded whatever the
 	// number of validators (#4230).
-	budget := p.headerBudget()
+	budget := p.headerBudget(round)
 	for _, w := range p.workers {
 		if budget <= 0 {
 			break
@@ -102,14 +101,11 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	return header, nil
 }
 
-// headerBudget is the bytes of batches this header may carry: its share of
-// MaxBlockBytes among the committee's headers in one block, capped by
+// headerBudget is the bytes of batches a header of the round may carry: its
+// share of MaxBlockBytes among the committee's headers in one block, capped by
 // MaxHeaderBytes.
-func (p *Primary) headerBudget() int {
-	p.committeeMu.RLock()
-	validators := p.committee.Len()
-	p.committeeMu.RUnlock()
-	return headerBudget(p.config.MaxHeaderBytes, p.config.MaxBlockBytes, validators)
+func (p *Primary) headerBudget(round types.Round) int {
+	return headerBudget(p.config.MaxHeaderBytes, p.config.MaxBlockBytes, p.committeeAt(round).Len())
 }
 
 // headerBudget divides maxBlock among the validators' headers of one block
@@ -139,8 +135,7 @@ func (p *Primary) getParentCertsLocked() ([]types.CertificateDigest, error) {
 
 // getParentCertsForRound retrieves the parent certificates from round-1,
 // which must carry a stake quorum: the rule a voter applies to the header
-// (#4591). Does not require any lock to be held (uses committeeMu internally
-// for committee access).
+// (#4591), of the committee of round-1. Does not require any lock to be held.
 func (p *Primary) getParentCertsForRound(round types.Round) ([]types.CertificateDigest, error) {
 	if round == 0 {
 		return nil, nil // genesis round has no parents
@@ -198,13 +193,10 @@ func (p *Primary) waitForAllParents() {
 	round := p.currentRound
 	p.roundMu.Unlock()
 
-	p.committeeMu.RLock()
-	validatorCount := p.committee.Len()
-	p.committeeMu.RUnlock()
-
 	if round == 0 {
 		return // genesis round has no parents
 	}
+	validatorCount := p.committeeAt(round - 1).Len()
 
 	prevRound := round - 1
 	deadline := time.Now().Add(DefaultParentWaitTimeout)

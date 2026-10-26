@@ -206,7 +206,7 @@ func TestExtended_ThirtyMinuteIntegration(t *testing.T) {
 					}
 					// The executor reports each committed group back, or the execution-lag
 					// bound (consensus spec, invariant 9) empties every header after eight.
-					nodes[i].ReportExecuted()
+					nodes[i].ReportExecuted(group[len(group)-1].Round())
 				}
 			}
 		}()

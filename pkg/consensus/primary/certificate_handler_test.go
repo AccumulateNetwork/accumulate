@@ -342,25 +342,6 @@ func TestSetRound(t *testing.T) {
 	require.Equal(t, types.Round(0), p.CurrentRound())
 }
 
-func TestSetEpoch(t *testing.T) {
-	v := newTestValidator(t)
-	validators := []*testValidator{v}
-	committee := newTestCommittee(validators, 1)
-	d := newTestDAG()
-
-	config := Config{
-		Partition: "test",
-		KeyPair:   v.priv,
-	}
-
-	p := New(config, committee, nil, d, nil)
-
-	require.Equal(t, uint64(1), p.CurrentEpoch())
-
-	p.SetEpoch(100)
-	require.Equal(t, uint64(100), p.CurrentEpoch())
-}
-
 func TestRoundAdvancementTriggersNewHeader(t *testing.T) {
 	validators := make([]*testValidator, 4)
 	for i := range validators {

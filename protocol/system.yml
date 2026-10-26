@@ -40,6 +40,23 @@ SystemLedger:
       description: is the consensus round of the leader that committed the block, from v2-kourou (DAG-BFT); zero on older blocks
       type: uint
       optional: true
+    - name: CommitteeActivationRound
+      description: is the DAG round from which the validators of the active network definition order and verify this partition's rounds, set by the block that activated that definition to its leader round plus the activation margin, from v2-canaveral (DAG-BFT); zero before
+      type: uint
+      optional: true
+    - name: PreviousNetworkVersion
+      description: is the version of the network definition whose validators order and verify the rounds below CommitteeActivationRound, from v2-canaveral (DAG-BFT); zero before
+      type: uint
+      optional: true
+    - name: PreviousValidators
+      description: is the public keys of the validators of the previous network definition active on this partition, the committee that orders and verifies the rounds below CommitteeActivationRound, from v2-canaveral (DAG-BFT); empty before
+      type: bytes
+      repeatable: true
+      optional: true
+    - name: PreviousCommitteeActivationRound
+      description: is the DAG round from which the previous network definition's validators ordered and verified this partition's rounds, zero when that definition took effect before v2-canaveral or at genesis
+      type: uint
+      optional: true
 
 SyntheticLedger:
   union: { type: account }

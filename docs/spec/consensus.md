@@ -680,9 +680,7 @@ them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
   the round has a leader certificate only if that validator's certificate
   for the round is in the DAG (`:36-44`).
 - **The committee is the committee of the leader's round** ("Epochs";
-  #4593). At `7d9458e10` it is whatever committee Bullshark holds at the
-  moment of the check (`leader.go:31`), which differs between nodes around
-  a change (DIFFERENCES C20).
+  #4593; `leader.go`, `committeeAt`).
 - *Departure.* Bullshark §6 names leaders round-robin ("a predetermined
   leader"). This network weights the choice by stake, so that a
   validator's share of leadership, and of the latency and the dispatch
@@ -811,19 +809,13 @@ them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
   header, vote or certificate is checked against the committee of its own
   round, with that committee's epoch, and a round's parent quorum is
   counted in the committee of the round before; a leader is elected, and
-  its support counted, in the committee of the leader's round. *Proposed
-  under #4593, not decided:* `A = L + 256`; a node does not order, author
-  or vote above the leader round of the newest committed state it holds
-  plus that margin, since a change committed above that state could take
-  effect there; and a node that was down across two changes does not know
-  the committee of the rounds between and rejoins as a node with no
-  checkpoint does. The constant, the restart and join cases are #4593's to
-  decide. At `7d9458e10` a change applies to
-  every component the moment the node executes the block
-  (`consensus.go:1154-1179`; `primary/certificate_handler.go:411-457`),
-  a header of any other epoch than the node's current one is refused
-  (`vote_handler.go:309-315`), and a certificate verifies only against the
-  node's current committee (`certificate.go:158-161`): DIFFERENCES C20.
+  its support counted, in the committee of the leader's round. `A = L +
+  256`; a node does not order, author or vote above the leader round of the
+  newest committed state it holds plus that margin, since a change committed
+  above that state could take effect there; and a restored node that was
+  down across two changes does not know the committee of the rounds between
+  and joins as a node with no checkpoint does. "Committee changes" below
+  has the mechanism (`types.CommitteeSchedule`).
 
 #### Retention
 
@@ -1034,17 +1026,21 @@ the author's membership of that committee; signatures.
 A message that fails a check is **rejected**. A message naming an epoch the
 node holds no committee for is **ignored**: neither delivered nor relayed,
 but not counted as invalid against its sender, because a node behind on a
-committee change cannot tell a future epoch from a false one. The node holds the
-current committee and the one before it, so around a switch messages of the
-previous epoch are still judged by their own committee; a node that has been
-given no committee ignores every message that needs one. When the committee
-changes, `Node.UpdateCommittee` passes it to gossip before the primary and
-Bullshark: the router runs the validator on the node's own messages too, and
-a header the node's own router refuses is never sent, so gossip holds the
-new committee before the primary makes a header for it
-(`TestCommitteeSwitchReachesGossip`: after the switch, a new member's header
-is relayed and delivered, a removed member's is rejected, and the switching
-node's own first header of the new epoch reaches its peer). What is refused
+committee change cannot tell a future epoch from a false one. The router
+judges a message by the committee of its epoch wherever that committee is in
+the node's schedule ("Committee changes"): around a switch messages of the
+previous epoch are still judged by their own committee, and those of a
+committee scheduled and not yet active by theirs. The router does not compare
+the epoch with the committee of the message's round; the primary does
+(DIFFERENCES C24). A node that has been given no committee ignores every
+message that needs one. The router runs the
+validator on the node's own messages too, and a header the node's own router
+refuses is never sent; gossip reads the schedule the primary and Bullshark
+read, so it holds a committee from when it is scheduled, before the first
+round it orders (`TestCommitteeSwitchReachesGossip`: after the switch, a new
+member's header is relayed and delivered, a removed member's is rejected,
+and the switching node's own first header of the new epoch reaches its
+peer). What is refused
 is counted in
 `accumulate_dagbft_gossip_refused_total{topic,outcome}` and logged at Debug,
 since anyone can send messages that are refused (invariant 5); ignored
@@ -1068,6 +1064,130 @@ CPU, nearly all of it in the validators' second signature checks, and on the
 2-vCPU CI runner `TestRestartOneDirectoryValidatorOfTwelve` went from
 430-615 s to 750-1020 s and once stalled outright after the restart
 (pipeline 2979598992).
+
+### Committee changes
+
+A partition's committee is the validators of the active network definition
+that are active on the partition, and its epoch is the definition's version.
+Every honest node must order the same leaders (Bullshark §5.2), so every node
+must use the same committee for a round, and a reconfiguration must take
+effect at a point all of them agree on in the committed sequence (Narwhal §6).
+The point is a round fixed by the leader that committed the change, not the
+moment a node executes it: ordering runs ahead of execution by a different
+amount on every node, and a committee applied at execution ordered the rounds
+between with the old committee on some nodes and the new one on others, and a
+restarted node replayed its tail with whichever committee its state named
+(#4593).
+
+- **A change takes effect at its activation round.** The block that activates
+  a new network definition is committed at leader round `L`, the same on
+  every node. Its committee orders and verifies the rounds from
+  **`A = L + CommitteeActivationMargin`** (256 rounds), and the committee
+  before it every round below `A` — on every node, whenever that node
+  executes the block, including after a restart (`types.CommitteeSchedule`,
+  shared by the primary and Bullshark). A leader is elected, and its support
+  counted, in the committee of the leader's round; `L` and the margin are
+  even, so a leader and the round that votes for it are in one committee.
+- **A header, vote or certificate is checked against the committee of its own
+  round**, with that committee's epoch, and a round's parent quorum is
+  counted in the committee of the round before. A certificate of the previous
+  epoch below `A` still verifies after the change, so the rounds below `A`
+  can still be caught up; one of the previous epoch at or above `A` does not.
+  A committee stays in the schedule until no round within `DAGGCDepth` of the
+  last commit belongs to it.
+- **The activation round is in the committed state.** The executor records
+  `A` in the partition's system ledger as the block's network-definition
+  write is executed (`SystemLedger.CommitteeActivationRound`), with the
+  committee before it: its version (`PreviousNetworkVersion`), its
+  validators on the partition (`PreviousValidators`) and the round it took
+  over at (`PreviousCommitteeActivationRound`, zero for one placed before
+  v2-canaveral or at genesis). All four are written from v2-canaveral: the
+  executor version that activates the DAG-BFT rules, the first after
+  v2-kourou, which Kermit already runs and so cannot gate a change to what
+  a block writes. The validators are recorded in the definition's order,
+  the order the committee built from it has. Every write in a block sees the
+  same active definition, so a second write in the block keeps the previous
+  committee's round the first recorded rather than taking the `A` the first
+  just set. A node that produces the block schedules the committee at
+  `A` (`Service.onValidatorSetChange`, `Node.UpdateCommittee`). A node that
+  loads or reloads its globals outside block production — when it starts, or
+  when a join pulls a state — reads `A` from the ledger instead.
+- **Before v2-canaveral a change takes effect as it did before #4593: at
+  once.** The executor records neither field, so `A` is zero in the state.
+  The node that executes the block replaces its committee for every round
+  (`Node.ReplaceCommittee`), and a start or a join whose state records no
+  activation round takes the state's committee for every round
+  (`Service.adoptCommittee`). The version that decides is the one active for
+  the block that makes the change, which is what the ledger write is gated on
+  (the bridge reports it with the change), so a change in the block that
+  activates v2-canaveral is made at once on every node too. The next change
+  records that definition as the previous committee with round zero, which
+  misorders a joiner only if it lands within the activation margin of the
+  block that activated v2-canaveral. A rolling upgrade
+  to this code therefore orders as the code before it until v2-canaveral is
+  active.
+- **No node takes part in a round whose committee it may not know.** A change
+  in a block committed above the newest state a node holds activates more
+  than the margin above that state's leader round. So a node orders no
+  leader, authors no header and casts no vote above **`S +
+  CommitteeActivationMargin`**, where `S` is the leader round of the newest
+  committed state it holds: the last block it executed
+  (`Node.ReportExecuted`), the position it restored or was seeded at, or a
+  state a join pulled (`Node.StateAt`, `Node.RoundLimit`). Its primary does
+  not advance past that round, and a header above it is voted on at a later
+  rebroadcast. Ordering that reaches the limit waits and resumes from the
+  certificates already in the DAG as execution raises it; Bullshark's order
+  does not depend on when a certificate arrived, so this is ordering late. A
+  certificate above the limit is verified with the last committee the node
+  has scheduled; one of a change it has not executed yet is refused, and
+  caught up again once it has.
+- **The margin is a bound on how far consensus runs ahead of execution.**
+  256 rounds is 128 blocks: sixteen times the eight blocks at which a lagging
+  executor stops user work (invariant 9) and above the 75-block lags seen
+  under load (#4517), so the wait is not met in normal running; and well
+  inside the DAG's 2,000 rounds, so what a waiting node has not ordered is
+  still in its DAG and its peers'. It costs a change up to 256 rounds to take
+  effect, about two minutes at one-second blocks.
+- **A restart orders with the committees it had.** The checkpoint carries the
+  committee schedule (`Checkpoint.Committees`), and `Node.Restore` takes it in
+  place of the committee the executor's state names now, which for the rounds
+  of the tail may not have taken over yet. The checkpoint of the block that
+  carried a change is written before that block is produced, so it lacks the
+  change; the start schedules the state's committee from the ledger's `A`
+  when its epoch is after the checkpoint's last and the ledger's previous
+  version is that one (`Service.adoptCommittee`), and only then holds the
+  checkpoint's state (`Service.resumeCommittee`, `Node.StateAt`): that
+  change activates at exactly the round limit the checkpoint's state sets,
+  and a change at or below the limit is refused. A state naming a committee
+  the start cannot place stops the start: ordering on would order rounds
+  with a committee its peers do not.
+- **A join places the pulled state's committee, or joins as a node with no
+  checkpoint.** A state at leader round `P` names its committee, `A` and the
+  previous version. A restored node schedules that committee if it is its own
+  last one or the one after it, and then holds the state at `P`
+  (`Service.adoptPulledState`). Otherwise it was down across more than one
+  change and does not know the committee of the rounds between: it drops the
+  position its checkpoint restored and joins as a node with no checkpoint
+  does (`Service.dropPosition`). Everything it ordered from the checkpoint is
+  below the first change it missed, so the groups it collected stand; they are
+  at or below the state, and count as executed at the handoff. A node joining
+  with no checkpoint, seeded at `P − 34` ("Restart"), orders with its own
+  schedule and the state's committee after it in the same way, or with the
+  state's committee alone when `A` is at or below the seed. When `A` is above
+  the seed, it orders the rounds between with the committee before the
+  state's, which the state records, if that one took over at or below the
+  seed, and the state's from `A`; so a joiner authors and votes from `A`, and
+  a change whose new quorum needs it is not left waiting for a state the
+  quorum cannot commit without it. Its own schedule stands only if its first
+  committee took over at or below the seed: one built from the state at start
+  begins with the state's committee, which orders no round below its `A`
+  (`Service.seedCommittee`). A state is refused (`Conflict`), and the join
+  pulls a newer one, only when two changes activate between the seed and the
+  state, or when the state records no previous committee (one written before
+  `PreviousValidators` was) and its `A` is above the seed; ten refusals in a
+  row are logged as an error. A validator the new committee's quorum needs
+  should be running and synced before the change is submitted: until it has
+  joined it orders nothing, and a join's seed window is 34 rounds.
 
 ### DAG retention
 
@@ -1290,8 +1410,8 @@ already hold in memory; it is the same data, made durable.
 ### Restart
 
 A validator's consensus position is **checkpointed per block, before the
-block is produced**: the primary's round and epoch, Bullshark's last committed
-leader round, its per-author watermarks and its committed-digest set (the
+block is produced**: the primary's round, the committee of each round
+("Committee changes"), Bullshark's last committed leader round, its per-author watermarks and its committed-digest set (the
 certificates within the rescue window already committed — without it the
 first leader after a restart re-commits every ancestor in the window and the
 node executes a block its peers did not, #4290), and the block index the
