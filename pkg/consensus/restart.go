@@ -72,13 +72,21 @@ func (n *Node) order(cert *types.Certificate) bool {
 	// cannot be written, and a node that never checkpoints (collecting,
 	// halted) would otherwise never move the floor.
 	if len(n.handed) > 0 {
-		floor := n.handed[0].leader
 		lc := n.bullshark.LastCommitRound()
 		depth := n.config.DAGGCDepth
-		if lc > depth && floor < lc-depth {
-			floor = lc - depth
+		// The groups are held to the same depth (#4624): a node that
+		// never checkpoints would otherwise keep one per leader forever.
+		if lc > depth {
+			drop := 0
+			for drop < len(n.handed) && n.handed[drop].leader < lc-depth {
+				n.handedDropped = n.handed[drop].leader
+				drop++
+			}
+			n.handed = append(n.handed[:0], n.handed[drop:]...)
 		}
-		n.bullshark.SetDedupFloor(floor)
+	}
+	if len(n.handed) > 0 {
+		n.bullshark.SetDedupFloor(n.handed[0].leader)
 	}
 	n.orderMu.Unlock()
 
@@ -111,7 +119,8 @@ func (n *Node) order(cert *types.Certificate) bool {
 // commit-dedup as they were when that group was ordered, not as they are now
 // — groups ordered since are in the executor's queue, and a restart from a
 // position that counted them committed would never execute them. Zero means
-// Bullshark's position now.
+// Bullshark's position now. Nil means the leader is below the groups dropped
+// from handed past DAGGCDepth: no checkpoint is right there (#4624).
 //
 // With a StateDir, the checkpoint also carries the DAG's tail (#4448): every
 // certificate from tailFloor up, and the batches
@@ -128,6 +137,23 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 	if w := types.Round(2 * bullshark.RescueWindow); leaderRound > w {
 		from = leaderRound - w
 	}
+	if n.dagStore != nil && leaderRound < n.handedDropped {
+		// Groups after this leader were dropped past DAGGCDepth, so their
+		// digests cannot be left out of the set, and a set that counts
+		// them committed would never execute them on a restart. No
+		// checkpoint is better than a wrong one (#4624; the tail is out of
+		// reach here too, #4625).
+		// Said once per lag, not once per block produced while it lasts.
+		warn := !n.lagWarned
+		n.lagWarned = true
+		n.orderMu.Unlock()
+		if warn {
+			slog.Warn("No checkpoint: its leader is below the handed groups dropped past the DAG depth",
+				"leader", leaderRound, "dropped", n.handedDropped, "gcDepth", n.config.DAGGCDepth)
+		}
+		return nil
+	}
+	n.lagWarned = false
 	committed := n.bullshark.GetCommittedFrom(from)
 	lastCommitted := n.bullshark.GetLastCommitted()
 	keep := n.handed[:0]

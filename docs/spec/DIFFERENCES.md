@@ -2403,6 +2403,17 @@ join: the node keeps voting and authoring while it orders nothing, until an
 operator restarts it into one. A node more than `DAGGCDepth` behind the
 frontier is in the same position today ("Retention").
 
+### C28. A block produced more than `DAGGCDepth` rounds behind ordering takes no checkpoint
+
+*[#4624](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4624)*
+
+consensus.md, "Restart": handed groups are dropped once their leader is more
+than `DAGGCDepth` below the last commit, so `CheckpointAt` returns nil for a
+leader below them and the service writes no checkpoint for that block. The
+checkpoint files then match no executor block, and a restart finds none and
+starts at round zero (E11). The tail of such a checkpoint could not be
+written either (#4625).
+
 ## Durability: the seal is still on the block path; the committed log is not on disk
 
 The spec (database.md invariant 5, consensus.md "The committed log") makes the

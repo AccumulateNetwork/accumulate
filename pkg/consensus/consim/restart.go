@@ -42,6 +42,9 @@ func (s *Sim) checkpoint(sn *simNode, node *consensus.Node, group []*types.Certi
 		sn.cpPrev.SetFilename(prevCheckpointFile)
 	}
 	cp := node.CheckpointAt(group[len(group)-1].Round())
+	if cp == nil {
+		return
+	}
 	cp.BlockIndex = sn.height.Load() + 1
 	if sn.lastSaved != nil {
 		_ = sn.cpPrev.Save(sn.lastSaved)

@@ -517,6 +517,11 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 		s.prevCheckpoint.SetFilename(prevCheckpointFile)
 	}
 	cp := s.node.CheckpointAt(leaderRound)
+	if cp == nil {
+		// Ordering ran more than the DAG depth ahead of this block; the
+		// checkpoint files are left as they were (#4624, DIFFERENCES C28).
+		return
+	}
 	cp.BlockIndex = blockIndex
 	if s.lastSaved != nil {
 		if err := s.prevCheckpoint.Save(s.lastSaved); err != nil {
