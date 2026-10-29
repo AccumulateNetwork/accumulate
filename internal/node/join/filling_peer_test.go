@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -116,10 +117,10 @@ func TestAFillingPeersAnswerIsNoVerdict(t *testing.T) {
 			putTokens(t, db, alice, 5)
 			putTokens(t, db, protocol.AccountUrl("bob", "tokens"), 9)
 		}
-		counting = &countingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: filling, Partition: "BVN0"}), calls: map[string]int{}}
+		counting = &countingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: filling, Partition: "BVN0"}), calls: map[string]int{}}
 		peers = &somePeers{partition: here, srcs: []pull.Source{
 			namedPeer{servedAt{Source: api.Querier2{Querier: counting}, block: 10}, "filling"},
-			namedPeer{servedAt{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: loaded, Partition: "BVN0"})}, block: 10}, "loaded"},
+			namedPeer{servedAt{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: loaded, Partition: "BVN0"})}, block: 10}, "loaded"},
 		}}
 		joiner = database.OpenInMemory(nil)
 		t.Cleanup(func() { _ = joiner.Close() })

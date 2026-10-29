@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -86,7 +87,7 @@ func TestARoundCostsCallsPerPageNotPerBlockOrAccount(t *testing.T) {
 		putTokens(t, peerDB, u, 5)
 	}
 
-	counting := &countingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}), calls: map[string]int{}}
+	counting := &countingQuerier{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"}), calls: map[string]int{}}
 	db := database.OpenInMemory(nil)
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
@@ -196,7 +197,7 @@ func TestAnAccountIsNotTakenTorn(t *testing.T) {
 	before := leafIn(t, peerDB, alice)
 
 	tearing := &tearingQuerier{
-		Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}),
+		Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"}),
 		account: alice,
 		change: func() {
 			// One block: the body and the chain move together.

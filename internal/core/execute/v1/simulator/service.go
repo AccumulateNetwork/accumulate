@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/private"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -130,6 +131,7 @@ func newExecService(x *ExecEntry, logger logging.Logger) *partService {
 	s.x = x
 	rpcLogger := logger.With("module", "acc-rpc")
 	s.query = apiimpl.NewQuerier(apiimpl.QuerierParams{
+		NodeState: nodestate.Always{}, // executed or archived database, not a joining node
 		Logger:    rpcLogger,
 		Database:  x,
 		Partition: x.Partition.Id,

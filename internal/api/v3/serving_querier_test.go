@@ -59,18 +59,15 @@ func TestQuerier_AJoiningNodeDoesNotServeAPull(t *testing.T) {
 	require.True(t, errors.Is(err, errors.NotReady), "account with a receipt: got %v", err)
 }
 
-// TestQuerier_ANodeThatNeverJoinedAnswersEverything — no node state means the
-// node has always executed what it holds, here as for the sequencer.
+// TestQuerier_ANodeThatNeverJoinedAnswersEverything -- a node that never
+// joined says so with nodestate.Always. Saying nothing refuses
+// (TestQuerierGate_NoNodeStateRefuses, #4335).
 func TestQuerier_ANodeThatNeverJoinedAnswersEverything(t *testing.T) {
 	db := servingQuerierDB(t)
 	page := &api.BptPageQuery{Count: 4}
 
-	q := NewQuerier(QuerierParams{Database: db, Partition: "BVN0"})
+	q := NewQuerier(QuerierParams{Database: db, Partition: "BVN0", NodeState: nodestate.Always{}})
 	_, err := q.Query(context.Background(), protocol.PartitionUrl("BVN0"), page)
-	require.False(t, errors.Is(err, errors.NotReady), "an ungated node refused a BPT page: %v", err)
-
-	q = NewQuerier(QuerierParams{Database: db, Partition: "BVN0", NodeState: nodestate.Always{}})
-	_, err = q.Query(context.Background(), protocol.PartitionUrl("BVN0"), page)
 	require.False(t, errors.Is(err, errors.NotReady), "a node that never joined refused a BPT page: %v", err)
 }
 

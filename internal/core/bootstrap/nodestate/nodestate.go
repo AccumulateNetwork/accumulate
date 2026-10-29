@@ -95,7 +95,16 @@ type Always struct{}
 // CanServeCurrent implements [Serving].
 func (Always) CanServeCurrent() bool { return true }
 
+// Never is a node that has not said what it holds: it answers for nothing. It
+// is what a querier given no [Serving] gets, so that leaving the state out
+// refuses rather than serves (#4335).
+type Never struct{}
+
+// CanServeCurrent implements [Serving].
+func (Never) CanServeCurrent() bool { return false }
+
 var _ Serving = Always{}
+var _ Serving = Never{}
 var _ Serving = (*Machine)(nil)
 
 // Advertisement is the payload published to peer discovery.

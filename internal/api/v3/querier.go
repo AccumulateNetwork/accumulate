@@ -72,7 +72,8 @@ type QuerierParams struct {
 	// refuses every read with NotReady (servingFor; executor spec, "Sync",
 	// step 6; #4368): its store is the one the pull is filling, and another
 	// node's pull must not take an unverified spine from it (#4297). Nil
-	// means the node never joined, and it serves everything.
+	// means the node has not said, and it refuses like a joining one: a
+	// node that never joined passes nodestate.Always (#4335).
 	NodeState nodestate.Serving
 
 	// Redirect names the partition's other peers serving queries. A read
@@ -88,6 +89,9 @@ func NewQuerier(params QuerierParams) *Querier {
 	s.db = params.Database
 	s.consensus = params.Consensus
 	s.nodeState = params.NodeState
+	if s.nodeState == nil {
+		s.nodeState = nodestate.Never{}
+	}
 	s.redirect = params.Redirect
 	s.partition.URL = protocol.PartitionUrl(params.Partition)
 	return s
@@ -179,10 +183,10 @@ func (s *Querier) redirected(ctx context.Context, err error) error {
 // a relay's standing check and peer discovery break. The join reads from
 // peers, never from this querier, so refusing here cannot starve it.
 //
-// A nil machine is a node that took nothing from a peer, and serves
-// everything. NotReady, so the caller asks another node.
+// A node that took nothing from a peer says so with nodestate.Always; no
+// state at all refuses (#4335). NotReady, so the caller asks another node.
 func (s *Querier) servingFor(query api.Query) error {
-	if s.nodeState == nil || s.nodeState.CanServeCurrent() {
+	if s.nodeState.CanServeCurrent() {
 		return nil
 	}
 	mNotQuerying.WithLabelValues(strings.ToLower(s.partition.PartitionID()), queryCall(query)).Inc()

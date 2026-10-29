@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -58,6 +59,7 @@ func TestAnAccountInASectionNotLoadedIsNotServedAsNoLeaf(t *testing.T) {
 	require.NoError(t, b.Commit())
 
 	q := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{
+		NodeState: nodestate.Always{}, // executed or archived database, not a joining node
 		Database:  db,
 		Partition: "BVN0",
 		Redirect:  func(context.Context) []string { return []string{"holder"} },

@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -67,7 +68,7 @@ func TestAnAccountWhosePartsDoNotHashToItsLeafIsRefused(t *testing.T) {
 	peerDB := peerStore(t)
 	putLedger(t, peerDB, here, 10)
 	putTokens(t, peerDB, alice, 5)
-	prod := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
+	prod := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})}
 	var asked int
 	bent := bentStates{Source: prod, name: "peer a", asked: &asked}
 	honest := named{Source: prod, name: "peer b"}
@@ -125,7 +126,7 @@ func TestAMainlessAccountTheRecordsNameDoesNotHoldTheRecords(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
-	peer := &onePeer{partition: here, querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}), block: 10}
+	peer := &onePeer{partition: here, querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"}), block: 10}
 	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: peer, ExecutedBlock: 1})
 	require.NoError(t, err)
 	ctx := context.Background()
@@ -180,7 +181,7 @@ func joiningOne(t *testing.T, peerDB *database.Database, wrap func(api.Querier) 
 	t.Cleanup(func() { _ = db.Close() })
 	values, _ := genesisValues(t, 4)
 	putNetwork(t, db, here, values)
-	q := wrap(apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}))
+	q := wrap(apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"}))
 	s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, querier: q, block: 10}, ExecutedBlock: 1})
 	require.NoError(t, err)
 	return s, db

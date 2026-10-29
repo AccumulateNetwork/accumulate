@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -82,7 +83,7 @@ func TestServedBodyHashesToItsReceipt(t *testing.T) {
 	require.NoError(t, batch.UpdateBPT())
 	require.NoError(t, batch.Commit())
 
-	q := api.Querier2{Querier: NewQuerier(QuerierParams{Database: db, Partition: partitionID})}
+	q := api.Querier2{Querier: NewQuerier(QuerierParams{NodeState: nodestate.Always{}, Database: db, Partition: partitionID})}
 	ctx := context.Background()
 
 	for _, c := range []struct {

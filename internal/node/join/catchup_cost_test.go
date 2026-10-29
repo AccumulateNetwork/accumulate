@@ -17,6 +17,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -115,7 +116,7 @@ func TestMeasureTheTopAndTheRecords(t *testing.T) {
 	peerDB := bcdbStore(t, "peer")
 	putLedger(t, peerDB, here, 10)
 	accounts := putManyTokens(t, peerDB, U, 5)
-	timed := newTimedQuerier(apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}))
+	timed := newTimedQuerier(apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"}))
 
 	db := bcdbStore(t, "joiner")
 	values, _ := genesisValues(t, 4)
@@ -192,7 +193,7 @@ func catchUpCost(t *testing.T, u, k int) (walkCalls, walkCommits, recordCalls, r
 	peerDB := peerStore(t)
 	putLedger(t, peerDB, here, 10)
 	accounts := putManyTokens(t, peerDB, u, 5)
-	timed := newTimedQuerier(apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"}))
+	timed := newTimedQuerier(apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"}))
 
 	commits := 0
 	db := database.New(committingStore{memory.New(nil), &commits}, nil)
