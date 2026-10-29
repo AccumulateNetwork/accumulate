@@ -36,6 +36,7 @@ import (
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/lastcomplete"
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
@@ -476,6 +477,14 @@ func (s *DAGBFTService) start(inst *Instance) error {
 		DataDir:           inst.path("consensus", strings.ToLower(s.Partition.ID)),
 		InitialValidators: initialValidators,
 	}
+	// The partition's last complete block is what the Directory has delivered
+	// of its anchors: a BVN's own pool never holds its peers' signatures, and
+	// the Directory executes an anchor only with the threshold's (#4512).
+	//
+	// Not for the Directory: its anchor ledger counts the BVNs' anchors, and
+	// it holds its own, so the Directory's last complete block is not read
+	// this way and is not said (the answer would be a false "none delivered").
+	svcConfig.LastComplete = lastcomplete.Source(client, db, s.Partition.ID)
 	if globals != nil && globals.Network != nil {
 		// The committee epoch is the network definition version (state-derived)
 		svcConfig.InitialNetworkVersion = globals.Network.Version
@@ -607,6 +616,7 @@ func (s *DAGBFTService) start(inst *Instance) error {
 			// "Sync", §3b).
 			RepairLog:    filepath.Join(inst.path("consensus", strings.ToLower(s.Partition.ID)), "repairs.jsonl"),
 			BackfillWhen: inst.everyPartitionPastItsFill,
+			LastComplete: svcConfig.LastComplete,
 		})
 		if err != nil {
 			return errors.UnknownError.WithFormat("prepare the join: %w", err)

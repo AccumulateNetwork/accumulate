@@ -7,14 +7,17 @@
 package join
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"log/slog"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/lastcomplete"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -146,4 +149,43 @@ func TestJoin_AGapThePeersAreHeldOnDoesNotHoldTheHandoffForGood(t *testing.T) {
 	require.Len(t, buf.handoffs, 1, "the join never handed off past a gap the peers are held on")
 	require.GreaterOrEqual(t, buf.handoffs[0], uint64(b+HeldGapBlocks), "it handed off before the gap had stood still for HeldGapBlocks")
 	require.Less(t, buf.handoffs[0], uint64(b+2*HeldGapBlocks), "it waited on the held gap long past HeldGapBlocks")
+}
+
+// TestTheJoinRefusalNamesTheLastCompleteBlock: the line a node at genesis says
+// when no state can be proven to it carries the partition's last complete
+// block, or that it is unknown and why (#4512).
+func TestTheJoinRefusalNamesTheLastCompleteBlock(t *testing.T) {
+	for name, answer := range map[string]lastcomplete.Answer{
+		"known":   {Known: true, Block: 33, Root: [32]byte{0xab}, State: lastcomplete.NotObtainable},
+		"unknown": {Why: "the Directory could not be read: no peer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			here := protocol.PartitionUrl("BVN0")
+			db := database.OpenInMemory(nil)
+			t.Cleanup(func() { _ = db.Close() })
+			values, _ := genesisValues(t, 4)
+			putNetwork(t, db, here, values)
+			id, _ := protocol.ParsePartitionUrl(here)
+			batch := db.Begin(true)
+			require.NoError(t, batch.Account(here.JoinPath(protocol.Ledger)).Main().Put(&protocol.SystemLedger{Url: here.JoinPath(protocol.Ledger), Index: protocol.GenesisBlock}))
+			require.NoError(t, batch.SystemData(id).ExecutedBlock().Put(protocol.GenesisBlock))
+			require.NoError(t, batch.Commit())
+
+			var out bytes.Buffer
+			s, err := NewState(StateOptions{Partition: here, Database: db, Sources: &onePeer{partition: here, block: 10}, ExecutedBlock: protocol.GenesisBlock,
+				Logger:       slog.New(slog.NewTextHandler(&out, nil)),
+				LastComplete: func(context.Context) lastcomplete.Answer { return answer }})
+			require.NoError(t, err)
+			s.peersJoining = true
+			_, ok := s.Resumable()
+			require.False(t, ok)
+			require.Contains(t, out.String(), "no state can be proven to it")
+			if answer.Known {
+				require.Contains(t, out.String(), "lastCompleteBlock=33")
+			} else {
+				require.Contains(t, out.String(), "lastCompleteBlock=unknown")
+				require.Contains(t, out.String(), "no peer")
+			}
+		})
+	}
 }
