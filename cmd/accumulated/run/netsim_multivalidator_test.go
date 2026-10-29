@@ -22,7 +22,7 @@ import (
 
 // TestNetSimMultiValidatorAdvancesBlocks starts a netsim whose partitions have
 // more than one validator and requires every partition to keep producing
-// blocks (#4392). Each sub-node's DAG-BFT service needs its own libp2p host
+// blocks (#4392, #4167). Each sub-node's DAG-BFT service needs its own libp2p host
 // and GossipSub router; without them a committee of two never reaches quorum
 // ("Not enough stake for certificate") and the ledgers stay at genesis.
 func TestNetSimMultiValidatorAdvancesBlocks(t *testing.T) {
@@ -35,7 +35,9 @@ func TestNetSimMultiValidatorAdvancesBlocks(t *testing.T) {
 		Bvns       uint64
 		Validators uint64
 	}{
+		{"One BVN, one validator", 1, 1},
 		{"Two validators per partition", 1, 2},
+		{"One BVN, four validators", 1, 4},
 		{"Two BVNs", 2, 1},
 		{"Two validators and two BVNs", 2, 2},
 	}
