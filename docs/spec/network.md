@@ -207,6 +207,11 @@ accepted** (a tombstone).
   identical to the active entry (same `ID`, `Sequence` and signatures) is
   accepted unchanged: every definition write carries the whole definition, and
   an unchanged entry's `Sequence` equals its tombstone.
+- **Genesis seeds it.** Genesis binds every validator and writes the tombstone
+  for every peer ID it binds, the same record a block would write, with each
+  entry's `Sequence`. Without that a genesis-bound validator, removed and
+  re-added with its genesis attestation (`Sequence` 1), would find no tombstone
+  and be accepted.
 - **`RemoveValidator` and `UpdateValidatorKey`.** Neither touches the
   tombstone. A validator removed and re-added with its old attestation is a
   differing entry whose `Sequence` does not exceed the tombstone, and is

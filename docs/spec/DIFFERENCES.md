@@ -2048,7 +2048,10 @@ chosen here, and no code is written for the gate until it is.
   entry says only "the first executor version activated after v2-kourou on
   this line".
 - Genesis (`BuildGenesisDocs`, which holds every node's keys) and the
-  simulator's network writing every validator bound; `init network` and
+  simulator's network writing every validator bound, **and seeding the
+  tombstone for every peer ID they bind** (the same record a block would
+  write), so a genesis-bound validator cannot be removed and re-added with its
+  genesis attestation; `init network` and
   `netsim` checked to produce definitions the executor accepts. Binding an
   existing network (Kermit, a converted mainnet) before activation, by the
   operators' write (network.md, "Binding an existing network"), with a test
@@ -2061,10 +2064,9 @@ chosen here, and no code is written for the gate until it is.
   from #4593's committee schedule (`types.CommitteeSchedule`) and held by
   the gossip layer, for followers too.
 - The gossip layer: the origin check first in the batch validator, and
-  first after the type byte is read in the certificate-sync
-  validator (one topic and one validator for requests and responses): after
-  the type byte is read, a request (`0x01`) passes and a response (`0x02`) is
-  gated on `msg.GetFrom()`, returning `ValidationIgnore` with
+  first after the type byte is read in the certificate-sync validator (one
+  topic and one validator for requests and responses): a request (`0x01`)
+  passes and a response (`0x02`) is gated on `msg.GetFrom()`, returning `ValidationIgnore` with
   its own `outcome`, and passing everything while the gate is dormant; the
   connection keeper (dial via peerstore then DHT, `Protect`, backoff,
   `Unprotect` on leaving the set; #4587). A per-origin limit on
@@ -2078,8 +2080,8 @@ chosen here, and no code is written for the gate until it is.
   still delivered (the lost `p2p.key` of one validator and of f+1); a
   definition with a bad, duplicate or missing attestation, or a node
   signature by another key, is refused, and accepted below the activating
-  version; a validator removed and re-added with its old attestation is
-  refused, and accepted with a higher `Sequence`; a definition write that
+  version; a validator removed and re-added with its old attestation, a
+  genesis-bound one included, is refused, and accepted with a higher `Sequence`; a definition write that
   leaves every entry unchanged is accepted (the tombstone is checked only for
   entries that differ); a gated node still answers a certificate-sync request
   from an origin that is not admitted; the executor/spine agreement test; a binary from before the activation
@@ -2088,7 +2090,7 @@ chosen here, and no code is written for the gate until it is.
   simulator a member restarted under the same peer ID receives every batch
   of the minute after, which is #4587's measurement.
 - Alternatives considered and rejected (decisions recorded in
-  design-questions.md): matching an entry to its predecessor by validator key
+  [design-questions.md](design-questions.md)): matching an entry to its predecessor by validator key
   (misses a removed-then-re-added validator, which has no predecessor, and a
   rotated key, which has a new hash); recovering the node key from the peer
   ID, which restricts the node key to types whose ID carries the key inline
