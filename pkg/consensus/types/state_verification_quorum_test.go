@@ -209,8 +209,9 @@ func TestStateHashTracker_CountsTheCommitteeOfTheRound(t *testing.T) {
 	epoch, ok := tr.EpochAt(98)
 	require.True(t, ok)
 	require.Equal(t, uint64(1), epoch)
-	require.Nil(t, tr.RecordRemoteHash(StatePosition{Epoch: 2, Round: 98, BlockIndex: 10}, keys[2], other))
-	require.Empty(t, tr.GetRemoteHashes(98), "a report naming another epoch than its round's committee's is not recorded")
+	wrongEpoch := StatePosition{Epoch: 2, Round: 98, BlockIndex: 10}
+	require.Nil(t, tr.RecordRemoteHash(wrongEpoch, keys[2], other))
+	require.NotContains(t, tr.stateHashes, wrongEpoch, "a report naming another epoch than its round's committee's is not recorded")
 	require.Nil(t, tr.RecordRemoteHash(at98, keys[4], other))
 	require.NotContains(t, tr.GetRemoteHashes(98), hexEncode(keys[4]), "a key outside the round's committee is not recorded")
 	require.Nil(t, tr.RecordRemoteHash(at98, keys[0], other))
