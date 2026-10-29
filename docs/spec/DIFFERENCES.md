@@ -2403,6 +2403,20 @@ join: the node keeps voting and authoring while it orders nothing, until an
 operator restarts it into one. A node more than `DAGGCDepth` behind the
 frontier is in the same position today ("Retention").
 
+### C28. A checkpoint is skipped while the executor is more than `DAGGCDepth` behind ordering
+
+*[#4625](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4625)*
+
+consensus.md, "Restart": `CheckpointAt` fails when the DAG has collected the
+tail of the block being produced, and `saveCheckpoint` then skips it. The
+commit buffer holds 5,000 groups (about 10,000 rounds) and `DAGGCDepth` is
+2,000, so ordering can run past the depth while the executor lags, for
+instance during catch-up, and every checkpoint is skipped until it is back
+within it. The previous checkpoint is not resumed: when none matches the
+executor's last block the service starts at round zero (E11). The checkpoint
+taken before this change was not correct either: its dedup set was clamped at
+`DAGGCDepth` below the last commit and its tail collected.
+
 ## Durability: the seal is still on the block path; the committed log is not on disk
 
 The spec (database.md invariant 5, consensus.md "The committed log") makes the

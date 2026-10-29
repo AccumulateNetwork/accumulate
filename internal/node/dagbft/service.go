@@ -124,6 +124,8 @@ type Service struct {
 	checkpoint     *persist.Store
 	prevCheckpoint *persist.Store
 	lastSaved      *persist.Checkpoint
+	// checkpointSkipped: the last checkpoint was skipped and said so.
+	checkpointSkipped bool
 
 	// Liveness watchdog. lastBlockAt is the local wall clock; lastBlockTime
 	// carries the certificate author's timestamp, which is executed state and
@@ -505,7 +507,10 @@ const (
 
 // saveCheckpoint writes the node's consensus position for blockIndex, keeping
 // the previous block's position as well. A failure to write is reported, not
-// fatal: the next block writes again.
+// fatal: the next block writes again. While the DAG no longer holds the tail
+// (the executor more than DAGGCDepth behind ordering) none is written, and a
+// restart finds no checkpoint matching the executor's last block and starts at
+// round zero (DIFFERENCES C28, E11); that is reported once per lag.
 func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 	if s.config.DataDir == "" {
 		return
@@ -518,9 +523,14 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 	}
 	cp, err := s.node.CheckpointAt(leaderRound)
 	if err != nil {
-		s.logger.Error("Taking consensus checkpoint", "error", err, "block", blockIndex)
+		if !s.checkpointSkipped {
+			slog.Warn("Skipping consensus checkpoints while the executor lags; a restart now starts at round zero", "partition", s.config.Partition.ID,
+				"error", err, "block", blockIndex)
+		}
+		s.checkpointSkipped = true
 		return
 	}
+	s.checkpointSkipped = false
 	cp.BlockIndex = blockIndex
 	if s.lastSaved != nil {
 		if err := s.prevCheckpoint.Save(s.lastSaved); err != nil {

@@ -1708,8 +1708,11 @@ for the groups it buffers or for the handoff's, lists them off instead
 (`Node.Handled`) and does not wait; a halted node waits. And `CheckpointAt` fails,
 changing nothing, when the DAG has already collected rounds from the tail
 floor up — a checkpoint without its tail restores a node that orders
-differently — so none is written without one; the next block's checkpoint
-is taken again.
+differently — so none is written without one. While the executor is that far behind
+(the commit buffer holds 5,000 groups, about 10,000 rounds, and `DAGGCDepth`
+is 2,000, so catch-up can be), every checkpoint is skipped, and a restart does
+not resume from the previous one: with none matching the executor's last
+block it starts at round zero (DIFFERENCES, E11, C28).
 
 **A restart reloads the DAG it stopped with** (#4448). The DAG lives in
 memory, and a header needs a quorum of the previous round's certificates as
