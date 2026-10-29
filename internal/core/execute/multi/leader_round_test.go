@@ -219,3 +219,26 @@ func (nullDispatcher) Send(context.Context) <-chan error {
 	return ch
 }
 func (nullDispatcher) Close() {}
+
+// From v2-canaveral the system ledger records the block's time below the
+// second (#4576), and before it the field is not written. The block time is
+// one the test chooses, with a known offset below the second, so the
+// expected offset does not come from the ledger it checks.
+func TestBlockTime_TheSystemLedgerRecordsTheOffsetBelowTheSecond(t *testing.T) {
+	const offset = 123456789
+	for _, version := range []protocol.ExecutorVersion{protocol.ExecutorVersionV2Kourou, protocol.ExecutorVersionV2Canaveral} {
+		t.Run(version.String(), func(t *testing.T) {
+			n := newLeaderRoundNode(t, version)
+			n.time = n.time.Truncate(time.Second).Add(offset)
+
+			n.execute(t, 1)
+			ledger := n.ledger(t)
+			if version.V2CanaveralEnabled() {
+				require.Equal(t, uint64(offset), ledger.TimestampNanosecond, "the ledger records the block time's offset below the second")
+			} else {
+				require.Zero(t, ledger.TimestampNanosecond, "before v2-canaveral the offset is not recorded")
+			}
+			require.Equal(t, n.time.Unix(), ledger.Timestamp.Unix(), "Timestamp records the block time's second")
+		})
+	}
+}
