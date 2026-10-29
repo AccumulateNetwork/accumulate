@@ -2023,15 +2023,22 @@ chosen here, and no code is written for the gate until it is.
   branch; the `ParseNetworkLegacy` branch and v1 stay as they are), behind
   the version above, refusing: an entry whose
   attestation or node signature does not verify; two entries naming one
-  peer; an active entry without one; a write that lowers a validator's
-  `Sequence` or changes its peer without raising it; an attestation whose
-  `Sequence` does not exceed the per-peer-ID tombstone (kept across
-  `RemoveValidator` and `UpdateValidatorKey`, in the executor's state); a
-  `NodePublicKey` that does not derive `ID`; a write that changes another
-  validator's peer without a new attestation for it. The
-  active globals' version decides, the pending definition is what is parsed.
+  peer; an active entry without one; a `NodePublicKey` that does not derive
+  `ID`. The active globals' version decides, the pending definition is what
+  is parsed. `ParseNetwork` does **not** check the tombstone.
+- The tombstone (network.md, "The sequence, and the tombstone"): a record per
+  peer ID in executor state, the highest `Sequence` ever accepted, kept across
+  `RemoveValidator` and `UpdateValidatorKey`; checked in the executor's write
+  path (`network_accounts.go`, beside the `ParseNetwork` call), only for an
+  entry that differs from the active one, which must exceed it; an unchanged
+  entry is accepted. There is no validator-wide "`Sequence` rises on a peer
+  change" rule: the count is per peer ID.
 - The spine verifier (`internal/spine/spine.go:254`) calls `ParseNetwork` too
   and has no executor version in hand; it is given one, or the two diverge.
+  It skips the tombstone check (it has no executor state), and an agreement
+  test runs the same sequence of definition writes through the executor and
+  the spine verifier and requires the same verdict from both on everything
+  `ParseNetwork` decides.
 - An executor version to gate on: see above. v2-kourou is active on Kermit,
   so it cannot be the gate, and the `VNext` placeholder is not for use.
   `protocol/enums.yml` already carries v2-canaveral ("activates the DAG-BFT
@@ -2054,8 +2061,10 @@ chosen here, and no code is written for the gate until it is.
   from #4593's committee schedule (`types.CommitteeSchedule`) and held by
   the gossip layer, for followers too.
 - The gossip layer: the origin check first in the batch validator, and
-  first after the envelope's origin field is decoded in the certificate-sync
-  validator (one topic and one validator for requests and responses), returning `ValidationIgnore` with
+  first after the type byte is read in the certificate-sync
+  validator (one topic and one validator for requests and responses): after
+  the type byte is read, a request (`0x01`) passes and a response (`0x02`) is
+  gated on `msg.GetFrom()`, returning `ValidationIgnore` with
   its own `outcome`, and passing everything while the gate is dormant; the
   connection keeper (dial via peerstore then DHT, `Protect`, backoff,
   `Unprotect` on leaving the set; #4587). A per-origin limit on
@@ -2067,13 +2076,25 @@ chosen here, and no code is written for the gate until it is.
   keep failing); a header, vote
   and certificate from a committee author under an unrecorded peer ID are
   still delivered (the lost `p2p.key` of one validator and of f+1); a
-  definition with a bad, duplicate, missing or replayed (lower `Sequence`)
-  attestation, or a node signature by another key, is refused, and accepted
-  below the activating version; a binary from before the activation
+  definition with a bad, duplicate or missing attestation, or a node
+  signature by another key, is refused, and accepted below the activating
+  version; a validator removed and re-added with its old attestation is
+  refused, and accepted with a higher `Sequence`; a definition write that
+  leaves every entry unchanged is accepted (the tombstone is checked only for
+  entries that differ); a gated node still answers a certificate-sync request
+  from an origin that is not admitted; the executor/spine agreement test; a binary from before the activation
   round-trips an entry carrying `Peer`; a definition without peers does not stall a
   gated node; a follower two committee changes behind catches up; in the
   simulator a member restarted under the same peer ID receives every batch
   of the minute after, which is #4587's measurement.
+- Alternatives considered and rejected (decisions recorded in
+  design-questions.md): matching an entry to its predecessor by validator key
+  (misses a removed-then-re-added validator, which has no predecessor, and a
+  rotated key, which has a new hash); recovering the node key from the peer
+  ID, which restricts the node key to types whose ID carries the key inline
+  (ed25519, secp256k1) and excludes ECDSA and RSA; two certificate-sync
+  topics, one for requests and one for responses, so each has its own
+  validator (more topics and a wire change for what one byte read does).
 - Follow-ups, not this entry: retiring the relay challenge once every
   candidate is a recorded peer; the vote limiter keyed on the author
   (#4162 item 18); the unused `acc/%s/dispatch` and `acc/%s/anchors`

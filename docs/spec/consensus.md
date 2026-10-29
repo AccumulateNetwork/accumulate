@@ -1249,8 +1249,9 @@ committee keeps it from its globals, as it keeps the committee.
 nothing else.** For a batch, which has a validator of its own, it is the
 first check, before the decode. Certificate-sync requests and responses share
 one topic and one validator, so there it is the first check after the
-envelope's origin field is decoded (a request is let through, a response is
-gated), and before the rest of the message is decoded. The message's origin
+type byte of the envelope is read: a request (`0x01`) passes, a response
+(`0x02`) is gated on `msg.GetFrom()`, and before the rest of the message is
+decoded. The message's origin
 (`msg.GetFrom()`, the signed `from`) must be an admitted peer, or the message
 is **ignored** (`ValidationIgnore`), counted
 as its own outcome in `accumulate_dagbft_gossip_refused_total`, as the

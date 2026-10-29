@@ -142,15 +142,15 @@ ValidatorPeer:
       type: bytes
 ```
 
-The record is the peer ID itself, not the node's public key: the peer ID is
-what the router compares and what a connection is authenticated by, and it
-is defined for every key type libp2p has, while nothing requires a node key
-to be ed25519 (every key the node writes is). The record also carries the
-node's public key (`NodePublicKey`), because a peer ID does not always carry
-it: an ed25519 peer ID is an identity multihash with the key inline, but an
-ECDSA or RSA one is a hash of the key. The verifier derives the peer ID from
-`NodePublicKey` and refuses the entry unless it equals `ID`. In JSON it is hex, as every
-`bytes` field is; tooling prints the base58 form (`12D3KooW…`) beside it. A
+The record is matched on the peer ID: the peer ID is what the router
+compares and what a connection is authenticated by, and it is defined for
+every key type libp2p has, while nothing requires a node key to be ed25519
+(every key the node writes is). The node's public key (`NodePublicKey`) is
+carried beside it only to verify the node signature, because a peer ID does
+not always carry the key: an ed25519 peer ID is an identity multihash with the
+key inline, but an ECDSA or RSA one is a hash of it. The verifier derives the
+peer ID from `NodePublicKey` and refuses the entry unless it equals `ID`. In
+JSON each is hex, as every `bytes` field is; tooling prints the base58 form (`12D3KooW…`) beside it. A
 node is one libp2p identity whatever partitions it runs (the Directory and a
 BVN on one host, "Converting a mainnet node"), and a validator key is one
 node's, so the record is per validator, not per partition.
@@ -180,28 +180,41 @@ derive `ID`; the key is not recovered from the ID, which for some key types
 (ECDSA, RSA) does not contain it.
 
 **The sequence, and the tombstone.** `Sequence` is a number the validator
-chooses and raises each time it attests a peer: 1 the first time, more after.
-An attestation never expires, so without a memory of what was accepted, an
-operator tool editing a stale copy of the definition, or a validator removed
-and added back, would write back a retired peer, or undo a rotation made
-because a node key was compromised, and nothing would object. Matching an
-entry to its predecessor by validator key is not enough, since a removed
-validator has no entry to compare with and a rotated key has a new hash. So
-**the network keeps, per peer ID, the highest `Sequence` it has ever
-accepted** (a tombstone, in the executor's state beside the definition,
-written by the block that accepts the write). An attestation for a peer ID
-is accepted only if its `Sequence` exceeds that value (the first for a peer
-ID has none and needs only `Sequence` 1 or more). The tombstone is not
-touched by `RemoveValidator`: a validator removed and re-added with its old
-attestation is refused, and must attest again with a higher `Sequence`. Nor
-is it touched by `UpdateValidatorKey`: the tombstone is keyed by peer ID, not
-by validator key, so a key update that keeps the node's peer re-attests under
-the new key with a `Sequence` above the tombstone, and one that changes the
-peer starts the new peer ID's own count while the old peer ID keeps its
-tombstone for ever. Within one write a validator's entry is refused if it
-keeps the peer and lowers or keeps the `Sequence`, and a write that changes
-some other validator's peer without a new attestation for that peer in the
-same write is refused too.
+chooses and raises each time it attests a peer ID afresh: 1 the first time,
+more after. An attestation never expires, so without a memory of what was
+accepted, an operator tool editing a stale copy of the definition, or a
+validator removed and added back, would write back a retired peer, or undo a
+rotation made because a node key was compromised, and nothing would object.
+Matching an entry to its predecessor by validator key is not enough, since a
+removed validator has no entry to compare with and a rotated key has a new
+hash. So **the network keeps, per peer ID, the highest `Sequence` it has ever
+accepted** (a tombstone).
+
+- **Where it is stored and checked.** The tombstone is executor state, a record
+  per peer ID beside the definition, written by the block that accepts the
+  write. It is checked in the executor's write path
+  (`network_accounts.go`, beside the `ParseNetwork` call), and **not in
+  `ParseNetwork`**, which is pure, is shared with genesis and the spine
+  verifier, and has no state to read. The spine verifier
+  (`internal/spine/spine.go`) does not check the tombstone: it checks the
+  definition's structure and signatures, which `ParseNetwork` decides, and the
+  agreement test (DIFFERENCES C17) holds the two to the same verdict on every
+  write the spine replays.
+- **What is checked.** Only an entry that *differs from the active one* — a
+  new peer ID, or the same peer ID with a new attestation — is compared with
+  the tombstone, and is accepted only if its `Sequence` exceeds it (the first
+  attestation of a peer ID has none and needs `Sequence` 1 or more). An entry
+  identical to the active entry (same `ID`, `Sequence` and signatures) is
+  accepted unchanged: every definition write carries the whole definition, and
+  an unchanged entry's `Sequence` equals its tombstone.
+- **`RemoveValidator` and `UpdateValidatorKey`.** Neither touches the
+  tombstone. A validator removed and re-added with its old attestation is a
+  differing entry whose `Sequence` does not exceed the tombstone, and is
+  refused; it attests again with a higher one. The tombstone is keyed by peer
+  ID, not by validator key, so a key update that keeps the node's peer
+  re-attests under the new key with a `Sequence` above the tombstone, and one
+  that changes the peer starts the new peer ID's own count while the old peer
+  ID keeps its tombstone for ever.
 
 Who may say what:
 
