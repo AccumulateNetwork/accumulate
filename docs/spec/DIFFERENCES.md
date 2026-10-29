@@ -1983,15 +1983,127 @@ So a peer outside the committee can still:
   (header with its signature, vote signatures, signers; the state hash
   aside) and costs it a lookup and a marshal; a copy of a header or vote
   costs it a signature check, and is recognised as a copy only by the
-  handlers.
+  handlers. This stays: the origin gate does not cover authored messages
+  (a gate that silenced a validator under an unrecorded peer ID would stall
+  the chain that has to repair it), and a copy costs one signature check.
 
-**What must be decided** is whether the consensus topics are limited to
-committee peers and, if they are, how the router learns which peers those
-are: a validator's p2p identity bound to its validator key (a signed record,
-or the relay challenge run at connection), and what non-members — followers
-and joining nodes, which take certificates and batches from these topics —
-receive instead. #4587 (committee members are not guaranteed to be connected
-to one another) is the same decision seen from the other side.
+**Decided** (network.md, "A validator's network identity"; consensus.md,
+"Which peers may send them"; #4596 part 2, with #4587): each validator's
+libp2p peer ID is recorded in its `ValidatorInfo` of `dn.acme/network`,
+attested by the validator key and by the node key over a tagged, sequenced
+struct, written by the same operator-authorized `WriteData` that changes the
+definition today, and required of every active validator from the first
+executor version activated after v2-kourou on this line. The admitted peers
+of a partition are the peer IDs of every committee in its schedule (the one
+before, the one now, the one scheduled by #4593's activation round), so a
+change is never a cut. The origin gate (`msg.GetFrom()`) applies to batches
+and certificate-sync responses only, which have no author; headers, votes
+and certificates admit on their author checks. An unadmitted origin is
+ignored (`ValidationIgnore`), not rejected. The gate is dormant until the
+activating version is active and every member of every scheduled committee
+has a verified peer. Committee members keep a protected connection to every
+other admitted peer, which with flood publishing is what makes a restarted
+member's minute outside the meshes cost nothing. Followers keep taking
+certificates and batches from the same topics; they cannot originate batches
+or responses.
+
+**What remains** until it is built. **The build is blocked on the version
+decision:** it needs the first executor version activated after v2-kourou on
+this line, whose name and number the owner decides (#4139, !1199 reconcile
+the numbering; !1277 wrote v2-canaveral for the same thing in its C25/C26
+questions, and the tree already has an entry of that name). No version is
+chosen here, and no code is written for the gate until it is.
+
+- `protocol/general.yml`: `ValidatorPeer` (`ID`, `NodePublicKey`, `Sequence`,
+  `Signature`, `NodeSignature`) on `ValidatorInfo`, regenerating `protocol/types_gen.go`;
+  the attestation (a length-prefixed struct, two tags) made and verified in
+  one place; `UpdateValidatorKey`'s callers re-attesting.
+- `ParseNetwork` (`pkg/types/network/globals.go`, called from
+  `internal/core/execute/v2/block/network_accounts.go:123`, in the staged
+  branch; the `ParseNetworkLegacy` branch and v1 stay as they are), behind
+  the version above, refusing: an entry whose
+  attestation or node signature does not verify; two entries naming one
+  peer; an active entry without one; a `NodePublicKey` that does not derive
+  `ID`. The active globals' version decides, the pending definition is what
+  is parsed. `ParseNetwork` does **not** check the tombstone.
+- The tombstone (network.md, "The sequence, and the tombstone"): a record per
+  peer ID in executor state, the highest `Sequence` ever accepted, kept across
+  `RemoveValidator` and `UpdateValidatorKey`; checked in the executor's write
+  path (`network_accounts.go`, beside the `ParseNetwork` call), only for an
+  entry that differs from the active one, which must exceed it; an unchanged
+  entry is accepted. There is no validator-wide "`Sequence` rises on a peer
+  change" rule: the count is per peer ID.
+- The spine verifier (`internal/spine/spine.go:254`) calls `ParseNetwork` too
+  and has no executor version in hand; it is given one, or the two diverge.
+  It skips the tombstone check (it has no executor state), and an agreement
+  test runs the same sequence of definition writes through the executor and
+  the spine verifier and requires the same verdict from both on everything
+  `ParseNetwork` decides.
+- An executor version to gate on: see above. v2-kourou is active on Kermit,
+  so it cannot be the gate, and the `VNext` placeholder is not for use.
+  `protocol/enums.yml` already carries v2-canaveral ("activates the DAG-BFT
+  consensus rules", the first after v2-kourou) and #4593's text gates its
+  ledger fields on it; whether the peer record and the origin gate are gated
+  on that same version, or on a later one, is the owner's decision, so this
+  entry says only "the first executor version activated after v2-kourou on
+  this line".
+- Genesis (`BuildGenesisDocs`, which holds every node's keys) and the
+  simulator's network writing every validator bound, **and seeding the
+  tombstone for every peer ID they bind** (the same record a block would
+  write), so a genesis-bound validator cannot be removed and re-added with its
+  genesis attestation; and the activating version's block seeding it from the
+  active definition for every bound peer ID that has none (network.md, "The
+  sequence, and the tombstone"), tested on a network bound before activation;
+  `init network` and
+  `netsim` checked to produce definitions the executor accepts. Binding an
+  existing network (Kermit, a converted mainnet) before activation, by the
+  operators' write (network.md, "Binding an existing network"), with a test
+  that a definition without peers does not stall a node that runs the gate.
+- The node computing its attestation at start, serving it in
+  `ConsensusStatus.PeerAttestation`, and `accumulated` printing it for the
+  operator who writes the definition.
+- `types.ValidatorInfo.PeerID`, carried through `adapter.ValidatorInfo`,
+  the executor bridge and `onValidatorSetChange`; the admitted set derived
+  from #4593's committee schedule (`types.CommitteeSchedule`) and held by
+  the gossip layer, for followers too.
+- The gossip layer: the origin check first in the batch validator, and
+  first after the type byte is read in the certificate-sync validator (one
+  topic and one validator for requests and responses): a request (`0x01`)
+  passes and a response (`0x02`) is gated on `msg.GetFrom()`, returning `ValidationIgnore` with
+  its own `outcome`, and passing everything while the gate is dormant; the
+  connection keeper (dial via peerstore then DHT, `Protect`, backoff,
+  `Unprotect` on leaving the set; #4587). A per-origin limit on
+  certificate-sync requests, or the answers moved to a stream to the
+  requester. A follower's `CertSyncer` no longer answering.
+- Tests: a peer outside the committee publishes a batch and a sync
+  response and neither is delivered or relayed (the #4601 review
+  patch's `TestDefect_StrangerHeaderRelayedToValidators`, not committed, must
+  keep failing); a header, vote
+  and certificate from a committee author under an unrecorded peer ID are
+  still delivered (the lost `p2p.key` of one validator and of f+1); a
+  definition with a bad, duplicate or missing attestation, or a node
+  signature by another key, is refused, and accepted below the activating
+  version; a validator removed and re-added with its old attestation, a
+  genesis-bound or pre-activation-bound one included, is refused, and accepted with a higher `Sequence`; a definition write that
+  leaves every entry unchanged is accepted (the tombstone is checked only for
+  entries that differ); a gated node still answers a certificate-sync request
+  from an origin that is not admitted; the executor/spine agreement test; a binary from before the activation
+  round-trips an entry carrying `Peer`; a definition without peers does not stall a
+  gated node; a follower two committee changes behind catches up; in the
+  simulator a member restarted under the same peer ID receives every batch
+  of the minute after, which is #4587's measurement.
+- Alternatives considered and rejected (decisions recorded in
+  [design-questions.md](design-questions.md)): matching an entry to its predecessor by validator key
+  (misses a removed-then-re-added validator, which has no predecessor, and a
+  rotated key, which has a new hash); recovering the node key from the peer
+  ID, which restricts the node key to types whose ID carries the key inline
+  (ed25519, secp256k1) and excludes ECDSA and RSA; two certificate-sync
+  topics, one for requests and one for responses, so each has its own
+  validator (more topics and a wire change for what one byte read does).
+- Follow-ups, not this entry: retiring the relay challenge once every
+  candidate is a recorded peer; the vote limiter keyed on the author
+  (#4162 item 18); the unused `acc/%s/dispatch` and `acc/%s/anchors`
+  topics in `pkg/consensus/dispatcher`, which register no validator.
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
