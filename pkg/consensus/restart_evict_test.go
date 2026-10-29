@@ -199,7 +199,7 @@ func restoredTailFixture(t *testing.T, lastCommit types.Round, committed int) (*
 	for _, c := range certs[:committed] {
 		n.bullshark.MarkCommitted(c)
 	}
-	cp := n.CheckpointAt(0)
+	cp := mustCheckpointAt(t, n, 0)
 	if cp.LastCommitRound != lastCommit {
 		t.Fatalf("the checkpoint's commit floor is %d, not %d", cp.LastCommitRound, lastCommit)
 	}

@@ -141,10 +141,10 @@ func TestVoteRecordSurvivesTheCheckpointsBelowIt(t *testing.T) {
 	// The first checkpoint commits at r, the second a rescue window above
 	// it: both floors are r, and both keep the record.
 	n.bullshark.SetLastCommitRound(r)
-	c1 := n.CheckpointAt(0)
+	c1 := mustCheckpointAt(t, n, 0)
 	n.CheckpointSaved(c1)
 	n.bullshark.SetLastCommitRound(r + bullshark.RescueWindow)
-	c2 := n.CheckpointAt(0)
+	c2 := mustCheckpointAt(t, n, 0)
 	n.CheckpointSaved(c2)
 
 	f.refusesTheOtherHeader(t, c1, r)
@@ -172,12 +172,12 @@ func TestVoteRecordsFollowTheCheckpointsSaved(t *testing.T) {
 	const high = types.Round(1 << 20)
 	depth := high - tailFloor(high)
 	n.bullshark.SetLastCommitRound(r)
-	c1 := n.CheckpointAt(0)
+	c1 := mustCheckpointAt(t, n, 0)
 	n.CheckpointSaved(c1)
 	n.bullshark.SetLastCommitRound(r + depth + 8)
-	_ = n.CheckpointAt(0)
+	_ = mustCheckpointAt(t, n, 0)
 	n.bullshark.SetLastCommitRound(r + depth + 28)
-	c3 := n.CheckpointAt(0)
+	c3 := mustCheckpointAt(t, n, 0)
 	n.CheckpointSaved(c3)
 
 	// Resumed from either checkpoint on disk, the node still holds the
@@ -186,7 +186,7 @@ func TestVoteRecordsFollowTheCheckpointsSaved(t *testing.T) {
 	f.refusesTheOtherHeader(t, c3, r)
 
 	// Once both checkpoints on disk are above r, the record is dropped.
-	c4 := n.CheckpointAt(0)
+	c4 := mustCheckpointAt(t, n, 0)
 	n.CheckpointSaved(c4)
 	if got := n.dagStore.Voted(); len(got) != 0 {
 		t.Fatalf("a record below the floor of both checkpoints on disk was kept: %v", got)
@@ -210,8 +210,8 @@ func TestRestartKeepsThePruneFloor(t *testing.T) {
 	// Two checkpoints saved a rescue window and more above round 0: both
 	// floors are above the record, and the record is pruned from disk.
 	n.bullshark.SetLastCommitRound(bullshark.RescueWindow + 40)
-	n.CheckpointSaved(n.CheckpointAt(0))
-	n.CheckpointSaved(n.CheckpointAt(0))
+	n.CheckpointSaved(mustCheckpointAt(t, n, 0))
+	n.CheckpointSaved(mustCheckpointAt(t, n, 0))
 	if got := n.dagStore.Voted(); len(got) != 0 {
 		t.Fatalf("the record at round 0 survived two checkpoints above it: %v", got)
 	}

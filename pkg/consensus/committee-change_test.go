@@ -223,7 +223,7 @@ func TestARestartReplaysTheTailWithTheCommitteesItWasOrderedWith(t *testing.T) {
 			live[g[len(g)-1].Round()] = describe(g)
 		}
 	}
-	cp := n.CheckpointAt(checkpointAt)
+	cp := mustCheckpointAt(t, n, checkpointAt)
 
 	replay := func(m *Node) map[types.Round]string {
 		m.orderMu.Lock()

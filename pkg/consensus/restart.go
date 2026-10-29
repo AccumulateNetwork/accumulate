@@ -26,6 +26,48 @@ type handedGroup struct {
 	digests []types.CertificateDigest
 }
 
+// maxLead is how far the frontier may run ahead of the oldest group handed
+// to the executor and not yet produced (#4625). The DAG collects every round
+// more than DAGGCDepth behind the frontier, and the checkpoint for that
+// group needs the rounds from tailFloor up, so past DAGGCDepth less the tail
+// window its tail would be gone. Two rescue windows are kept below that for
+// the frontier running ahead of the certificate being ordered, except at the
+// shallowest depth, where the tail window alone leaves 24 rounds.
+func (n *Node) maxLead() types.Round {
+	depth := n.config.DAGGCDepth
+	tail := types.Round(bullshark.RescueWindow + types.WeakLinkWindow)
+	if margin := types.Round(2 * bullshark.RescueWindow); depth >= margin+tail {
+		return depth - margin
+	}
+	return depth - tail
+}
+
+// awaitLead holds ordering while the executor is further behind than
+// maxLead, until a checkpoint takes a group off the list (CheckpointAt). It
+// reports false when the node is stopping. Only a node with a DAG store
+// records what it handed over, and only such a node writes tails. Ordering
+// output does not change, only when it happens: the executor blocks ordering
+// in the same way once the commit buffer is full.
+func (n *Node) awaitLead() bool {
+	if n.dagStore == nil {
+		return true
+	}
+	for {
+		n.orderMu.Lock()
+		if len(n.handed) == 0 || n.dag.LatestRound() <= n.handed[0].leader+n.maxLead() {
+			n.orderMu.Unlock()
+			return true
+		}
+		wake := n.leadWake
+		n.orderMu.Unlock()
+		select {
+		case <-wake:
+		case <-n.ctx.Done():
+			return false
+		}
+	}
+}
+
 // order runs one certificate through Bullshark and hands the groups it
 // commits to the executor, one group per leader. It reports false when the
 // node is stopping.
@@ -35,6 +77,10 @@ func (n *Node) order(cert *types.Certificate) bool {
 	// (orderDeferred, #4593).
 	if n.beyondLimit(cert.Round()) {
 		return true
+	}
+
+	if !n.awaitLead() {
+		return false
 	}
 
 	// Ordering and recording what was handed over are one step under
@@ -116,11 +162,21 @@ func (n *Node) order(cert *types.Certificate) bool {
 // With a StateDir, the checkpoint also carries the DAG's tail (#4448): every
 // certificate from tailFloor up, and the batches
 // they name that this node holds, written to the DAGStore once each.
-func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
+//
+// It fails, changing nothing, when the DAG no longer holds the tail (#4625):
+// a checkpoint without it would restore a node that orders differently.
+func (n *Node) CheckpointAt(leaderRound types.Round) (*persist.Checkpoint, error) {
 	n.orderMu.Lock()
 	lastCommit := n.bullshark.LastCommitRound()
 	if leaderRound == 0 || leaderRound > lastCommit || n.dagStore == nil {
 		leaderRound = lastCommit
+	}
+	if n.dagStore != nil {
+		if floor, gone := tailFloor(leaderRound), n.dag.CollectedBelow(); floor < gone {
+			n.orderMu.Unlock()
+			return nil, fmt.Errorf("checkpoint at leader %d: the DAG has collected the rounds below %d, and its tail begins at %d",
+				leaderRound, gone, floor)
+		}
 	}
 	// Only the window the checkpoint keeps: a restored node prunes below it
 	// on its first commit anyway.
@@ -142,6 +198,9 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 		}
 	}
 	n.handed = keep
+	// Ordering held for the executor may go on (awaitLead).
+	close(n.leadWake)
+	n.leadWake = make(chan struct{})
 	// Every later checkpoint is at or above this one (#4594). Without a DAG
 	// store no group is recorded as handed, so the floor would never move
 	// again: such a node reports none and prunes at the frontier.
@@ -158,7 +217,7 @@ func (n *Node) CheckpointAt(leaderRound types.Round) *persist.Checkpoint {
 	if n.dagStore != nil {
 		cp.Tail = n.writeTail(leaderRound)
 	}
-	return cp
+	return cp, nil
 }
 
 // tailFloor is the round a checkpoint's tail begins at: the rescue window

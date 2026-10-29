@@ -516,7 +516,11 @@ func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 		s.prevCheckpoint = persist.NewStore(s.config.DataDir)
 		s.prevCheckpoint.SetFilename(prevCheckpointFile)
 	}
-	cp := s.node.CheckpointAt(leaderRound)
+	cp, err := s.node.CheckpointAt(leaderRound)
+	if err != nil {
+		s.logger.Error("Taking consensus checkpoint", "error", err, "block", blockIndex)
+		return
+	}
 	cp.BlockIndex = blockIndex
 	if s.lastSaved != nil {
 		if err := s.prevCheckpoint.Save(s.lastSaved); err != nil {

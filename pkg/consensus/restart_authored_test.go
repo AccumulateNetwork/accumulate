@@ -62,7 +62,7 @@ func TestCheckpointKeepsTheAuthoredHeadersBatches(t *testing.T) {
 
 	// A block checkpoint follows, as one does after every block the
 	// executor produces: nothing certified names the batch.
-	cp := n.CheckpointAt(0)
+	cp := mustCheckpointAt(t, n, 0)
 	if !n.dagStore.HasBatch(b.Digest()) {
 		t.Fatal("the checkpoint removed the batch of the header this node authored and no certificate names yet")
 	}

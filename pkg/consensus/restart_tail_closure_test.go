@@ -125,7 +125,7 @@ func TestRestore_TailHoldsEveryCertificateInserted(t *testing.T) {
 		r.feed(n, live, cur...)
 		prev = cur
 	}
-	cp := n.CheckpointAt(100) // the executor's checkpoint; its tail holds the DAG through 104
+	cp := mustCheckpointAt(t, n, 100) // the executor's checkpoint; its tail holds the DAG through 104
 	require.Equal(t, types.Round(100), cp.LastCommitRound)
 
 	own := func(cs []*types.Certificate) *types.Header { return cs[0].Header } // author 0 is this node
@@ -182,7 +182,7 @@ func TestRestore_OrphansAreTakenInAgain(t *testing.T) {
 		rounds = append(rounds, cur)
 		prev = cur
 	}
-	cp := n.CheckpointAt(100)
+	cp := mustCheckpointAt(t, n, 100)
 	lost := rounds[90][1]
 	require.NoError(t, os.Remove(filepath.Join(r.dir, persist.CertName(lost.Digest()))))
 

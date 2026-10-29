@@ -181,6 +181,7 @@ type Node struct {
 	dagStore *persist.DAGStore
 	orderMu  sync.Mutex    // held across ordering and recording what was handed over
 	handed   []handedGroup // groups handed to the executor not yet checkpointed
+	leadWake chan struct{} // closed when handed shrinks (awaitLead)
 	prevTail map[string]bool
 	restored []*types.Certificate // replayed through Bullshark at start
 	orphans  []*types.Certificate // dropped by Restore, taken in again at start
@@ -316,6 +317,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		bullshark:   bs,
 		committed:   make(chan []*types.Certificate, config.CommitBufferSize),
 		limitRaised: make(chan struct{}, 1),
+		leadWake:    make(chan struct{}),
 	}
 	p.SetCommittees(n.committees)
 	bs.SetCommittees(n.committees)
@@ -1031,7 +1033,7 @@ func (n *Node) LastCommitRound() types.Round {
 
 // Checkpoint is this node's consensus position as Bullshark has it now. The
 // service uses CheckpointAt, the position of the block it is producing.
-func (n *Node) Checkpoint() *persist.Checkpoint {
+func (n *Node) Checkpoint() (*persist.Checkpoint, error) {
 	return n.CheckpointAt(0)
 }
 

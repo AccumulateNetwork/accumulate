@@ -776,7 +776,7 @@ them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
   2 × `RescueWindow` = 64 rounds below a floor: the lower of the last commit
   and the oldest group handed to the executor and not yet produced, which is
   itself never more than `DAGGCDepth` below the last commit ("Restart";
-  #4594; `:77-85`);
+  #4594, #4625; `:77-85`);
   the walk never goes below the window, so nothing older can be emitted
   twice. Bullshark §5.2 orders the leader's whole not-yet-ordered causal
   history. *Departure.* Bullshark's walk has no floor, because its garbage
@@ -1681,8 +1681,7 @@ certificates of the groups ordered after it. A restart from Bullshark's
 position now would never be handed those groups. For the set to be there to
 copy, Bullshark prunes it a rescue window below the **oldest group handed to
 the executor and not yet produced**, not below its own last commit: the
-executor can lag ordering by more than the window (the commit buffer holds
-thousands of groups), and a set pruned against the frontier has nothing left
+executor can lag ordering by more than the window, and a set pruned against the frontier has nothing left
 for the block being produced, so a node restored from its checkpoint
 re-commits the window's history inside the next group (#4594). The node
 reports that floor as it hands groups over and as it checkpoints
@@ -1693,6 +1692,23 @@ otherwise never move and the set would grow with every certificate it
 orders. A node without a state directory records no handed groups, so it
 reports no floor and prunes at the frontier. The checkpoint copies only the
 window it keeps, from 2 × `RescueWindow` below its leader.
+
+**Ordering waits for the executor before the DAG forgets the tail** (#4625).
+The DAG collects every round more than `DAGGCDepth` behind the frontier, and
+the checkpoint for a group needs the DAG from its tail floor (the leader
+round less `RescueWindow` + `WeakLinkWindow`) up. So a node with a state
+directory orders no further while the frontier is more than
+`DAGGCDepth` − 2 × `RescueWindow` rounds (1,936 by default; 24 at the minimum
+depth) past the leader of the oldest group handed to the executor and not
+yet produced (`Node.maxLead`, `Node.awaitLead`); the checkpoint that takes
+that group off the list lets ordering go on. This changes when groups are
+handed over, never which: the commit buffer's capacity no longer bounds the
+lag, as the lead stops far short of filling it. A node that never takes a
+checkpoint (collecting, halted) waits likewise. And `CheckpointAt` fails,
+changing nothing, when the DAG has already collected rounds from the tail
+floor up — a checkpoint without its tail restores a node that orders
+differently — so none is written without one; the next block's checkpoint
+is taken again.
 
 **A restart reloads the DAG it stopped with** (#4448). The DAG lives in
 memory, and a header needs a quorum of the previous round's certificates as

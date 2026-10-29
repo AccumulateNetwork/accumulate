@@ -12,7 +12,9 @@ import (
 	"crypto/rand"
 	"fmt"
 	"sort"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/bullshark"
@@ -144,7 +146,7 @@ func TestCheckpointAt_DedupSurvivesOrderingLead(t *testing.T) {
 	}
 	require.Equal(t, types.Round(208), n.bullshark.LastCommitRound())
 
-	cp := n.CheckpointAt(100)
+	cp := mustCheckpointAt(t, n, 100)
 	require.Equal(t, types.Round(100), cp.LastCommitRound)
 
 	// Every certificate committed within the rescue window below leader 100
@@ -196,18 +198,49 @@ func (r *dedupRig) layer(n *Node, out map[types.Round][]string, round types.Roun
 }
 
 // A node that orders and never checkpoints (collecting, or halted on
-// divergence) still bounds its dedup set: the floor is never more than
-// DAGGCDepth below the last commit (#4594).
+// divergence) waits for its executor once the lead is as far as the DAG
+// retains (#4625), so its dedup set stays within the lead plus the window
+// (#4594), and the floor clip is only a backstop.
 func TestDedupSetBoundedWithoutCheckpoint(t *testing.T) {
 	const depth = 200
 	r := newDedupRig(t)
 	n := r.nodeWithGCDepth(depth)
 	live := map[types.Round][]string{}
-	var prev []*types.Certificate
-	for round := types.Round(0); round <= 1000; round++ {
-		prev = r.layer(n, live, round, prev)
+	var fed atomic.Int64
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		var prev []*types.Certificate
+		for round := types.Round(0); round <= 1000; round++ {
+			prev = r.build(round, prev)
+			for _, c := range prev {
+				if c.Round() == 0 {
+					require.NoError(t, n.dag.InsertGenesis(c))
+				} else {
+					require.NoError(t, n.dag.Insert(c))
+				}
+				if !n.order(c) {
+					return
+				}
+				r.drain(n, live)
+			}
+			fed.Store(int64(round))
+		}
+	}()
+	// Ordering stops when the lead reaches the limit.
+	for last := int64(-1); fed.Load() != last; {
+		last = fed.Load()
+		time.Sleep(200 * time.Millisecond)
 	}
-	require.Greater(t, n.bullshark.LastCommitRound(), types.Round(900))
+	select {
+	case <-done:
+		t.Fatal("ordering never waited for the executor")
+	default:
+	}
+	n.cancel()
+	<-done
+	require.NotEmpty(t, n.handed)
+	require.LessOrEqual(t, n.dag.LatestRound()-n.handed[0].leader, n.maxLead()+4, "ordering waited too late")
 	require.LessOrEqual(t, len(n.bullshark.GetCommitted()), (depth+64+8)*4)
 }
 
@@ -248,7 +281,7 @@ func TestCheckpointAt_DedupWindowUnderLag(t *testing.T) {
 			}
 			l := leaders[next]
 			next++
-			cp := n.CheckpointAt(l)
+			cp := mustCheckpointAt(t, n, l)
 			if l == 300 {
 				cp300 = cp
 			}
@@ -270,6 +303,7 @@ func sortRounds(rs []types.Round) {
 // The executor's lead over one node, as CheckpointAt calls and as ordering
 // proceeds.
 type lagExec struct {
+	t       *testing.T
 	n       *Node
 	live    map[types.Round][]string
 	next    int
@@ -296,20 +330,19 @@ func (e *lagExec) step(round types.Round) {
 		}
 		l := ls[e.next]
 		e.next++
-		e.cps[l] = e.n.CheckpointAt(l)
+		e.cps[l] = mustCheckpointAt(e.t, e.n, l)
 		e.cpRound[l] = round
 	}
 }
 
-// Ordering is the same on nodes whose floors differ: the default depth, a
-// DAGGCDepth below the lag that clips the floor, a node with no state
-// directory (it prunes at the frontier), a node that never checkpoints, and
-// the shallowest depth a node runs with, the prune window. The last two checkpoints of the default-depth
+// Ordering is the same on nodes whose floors differ: the default depth,
+// shallow DAGs, a node with no state directory (it prunes at the frontier),
+// and the shallowest depth a node runs with, the prune window. The last two checkpoints of the default-depth
 // node restore a node that catches up and orders every later group as the
 // live node did. The prune margin is pinned to the round: a margin of
 // rescueWindow-1 already orders a leader differently from a frontier node.
-// A restore from a checkpoint older than DAGGCDepth below the frontier is
-// #4625's territory and not covered here.
+// A checkpoint older than DAGGCDepth below the frontier cannot be taken:
+// ordering waits for the executor first (#4625).
 func TestDedup_OrderingSameAcrossFloors(t *testing.T) {
 	r := newDedupRig(t)
 	r.straggler = true
@@ -323,15 +356,17 @@ func TestDedup_OrderingSameAcrossFloors(t *testing.T) {
 
 	dir := t.TempDir()
 	mk := func(dir string, depth, lag, stall types.Round) *lagExec {
-		return &lagExec{n: r.nodeAt(dir, depth), live: map[types.Round][]string{}, lag: lag, stall: stall,
+		return &lagExec{t: t, n: r.nodeAt(dir, depth), live: map[types.Round][]string{}, lag: lag, stall: stall,
 			cps: map[types.Round]*persist.Checkpoint{}, cpRound: map[types.Round]types.Round{}}
 	}
+	// A node whose executor is further behind than its depth allows waits
+	// for it (#4625), so the shallow nodes' lags are within their depths.
 	execs := []*lagExec{
-		mk(dir, 0, 150, 360),                           // default depth, lag 150
-		mk(t.TempDir(), 100, 150, 360),                 // depth below the lag: floor clipped
-		mk("", 0, 150, 360),                            // no state directory: the reference
-		mk(t.TempDir(), 100, 0, 0),                     // never checkpoints
-		mk(t.TempDir(), types.MinDAGGCDepth, 300, 100), // the shallowest depth: the prune window
+		mk(dir, 0, 150, 360),                        // default depth, lag 150
+		mk(t.TempDir(), 100, 30, 0),                 // a shallow DAG: floor near the frontier
+		mk("", 0, 150, 360),                         // no state directory: the reference
+		mk(t.TempDir(), 100, 20, 0),                 // a shallow DAG, a shorter lag
+		mk(t.TempDir(), types.MinDAGGCDepth, 12, 0), // the shallowest depth: the prune window
 	}
 	for round, cs := range dag {
 		for _, e := range execs {
@@ -386,7 +421,7 @@ func TestCheckpoint_NoStateDirKeepsFrontierPruning(t *testing.T) {
 	for round := types.Round(0); round <= 1000; round++ {
 		prev = r.layer(n, live, round, prev)
 		if round == 50 {
-			n.Checkpoint()
+			mustCheckpointAt(t, n, 0)
 		}
 	}
 	require.LessOrEqual(t, len(n.bullshark.GetCommitted()), (100+64+8)*4)
