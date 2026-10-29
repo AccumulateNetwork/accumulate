@@ -2383,7 +2383,14 @@ missing data: not the sequencer, not healing. **In this phase a syncing node
 refuses every read** and answers once it is fully synced (Paul, 2026-09-19):
 `BOOTING` refuses with `NotReady`, `ACTIVE` serves. "Every read" is the rule
 and, since #4368, what the code does: `servingFor` refuses every query while
-the node is `BOOTING`, counted per call. Tracking
+the node is `BOOTING`, counted per call. For the querier the gate fails
+closed (#4335): a querier given no node state refuses like a `BOOTING` one, and
+a node that never joined says so by being given `nodestate.Always`. This
+covers the querier only: the sequencer, submitter and validator
+get a `*nodestate.Machine` wired directly in `dagbft.go`, where nil means
+never joined, deliberately. A partition with a consensus service always has a
+node state, and a querier that finds none does not start; only a querier with
+no consensus service for its partition (a standalone one) is given `Always`, with a log line. Tracking
 which nodes are not synced, so a *reader* can be sent to one that can answer,
 is the next phase's work and nothing here anticipates it.
 

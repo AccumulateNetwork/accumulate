@@ -17,6 +17,7 @@ import (
 	v3 "gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 )
 
 var (
@@ -68,7 +69,7 @@ func (q *Querier) start(inst *Instance) error {
 		return err
 	}
 
-	nodeState, err := querierWantsNodeState.Get(inst.services, q)
+	nodeState, err := q.nodeState(inst, consensus)
 	if err != nil {
 		return err
 	}
@@ -101,6 +102,25 @@ func (q *Querier) start(inst *Instance) error {
 	// (DIFFERENCES E30); provided in-process at once.
 	registerRpcServiceWhenActive(inst, nodeState, impl.Type().AddressFor(q.Partition), message.Querier{Querier: impl})
 	return querierProvides.Register(inst.services, q, impl)
+}
+
+// nodeState is the partition's join state. A partition with a consensus
+// service has one, so a querier that cannot find it fails to start rather than
+// serve what it has not verified; a querier with no consensus service is
+// standalone, and answers for its store, explicitly (#4335).
+func (q *Querier) nodeState(inst *Instance, consensus v3.ConsensusService) (nodestate.Serving, error) {
+	serving, err := querierWantsNodeState.Get(inst.services, q)
+	if err != nil {
+		return nil, err
+	}
+	if serving != nil {
+		return serving, nil
+	}
+	if consensus != nil {
+		return nil, errors.InternalError.WithFormat("querier %s: a consensus service is registered but no node state is; refusing to start open", q.Partition)
+	}
+	inst.logger.Info("Querier has no consensus service and answers everything", "partition", q.Partition)
+	return nodestate.Always{}, nil
 }
 
 func (n *NetworkService) Requires() []ioc.Requirement {

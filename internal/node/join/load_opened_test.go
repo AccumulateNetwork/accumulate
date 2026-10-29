@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -66,7 +67,7 @@ func TestTheSectionsARoundOpenedAreLoadedInParallel(t *testing.T) {
 		writeAccount(t, peerDB, accounts[i], 2)
 	}
 	var inflight, most atomic.Int64
-	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
+	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})}
 	a := &pageSource{Source: served, inflight: &inflight, most: &most}
 	b := &pageSource{Source: served, inflight: &inflight, most: &most}
 
@@ -141,7 +142,7 @@ func TestTheOpenedSectionsLoadHoldsStatesInFlightPerPeer(t *testing.T) {
 		accounts[i] = protocol.AccountUrl(fmt.Sprintf("spread-%04d", i), "data")
 		writeAccount(t, peerDB, accounts[i], 2)
 	}
-	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
+	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})}
 	slow := &peerLoad{Source: served, pause: 20 * time.Millisecond}
 	fast := &peerLoad{Source: served, pause: time.Millisecond}
 

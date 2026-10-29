@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -62,7 +63,7 @@ func TestTheStatesOfManyAccountsAreAskedAcrossThePeersAtOnce(t *testing.T) {
 		writeAccount(t, peer, accounts[i], 3)
 	}
 	var inflight, most atomic.Int64
-	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}
+	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peer, Partition: "BVN0"})}
 	a := &statesSource{Source: served, inflight: &inflight, most: &most}
 	b := &statesSource{Source: served, inflight: &inflight, most: &most}
 

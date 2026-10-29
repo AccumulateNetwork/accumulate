@@ -343,6 +343,10 @@ var mNotServing = promauto.NewCounterVec(prometheus.CounterOpts{
 func (s *Sequencer) serving(call string) error {
 	// A node with no state of its own never joined: it has always executed
 	// what it holds, and it answers for itself.
+	//
+	// The sequencer, submitter and validator get a *nodestate.Machine wired
+	// directly in dagbft.go, where nil means never joined, deliberately
+	// (unlike the querier, #4335).
 	if s.nodeState == nil {
 		return nil
 	}

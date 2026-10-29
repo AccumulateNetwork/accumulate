@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -62,7 +63,7 @@ func TestARepairBackfillsNothing(t *testing.T) {
 			node := openDisk(t, t.TempDir())
 			t.Cleanup(func() { _ = node.Close() })
 
-			src := &countingSource{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}}
+			src := &countingSource{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peer, Partition: "BVN0"})}}
 			served := servedAt{Source: src, db: peer, block: 7}
 			s := diskState(node, here, served)
 			p := newSyncing()
@@ -133,7 +134,7 @@ func repairWrongGrowth(t *testing.T, held int) {
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())
 
-	src := &countingSource{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}}
+	src := &countingSource{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peer, Partition: "BVN0"})}}
 	s := diskState(node, here, servedAt{Source: src, db: peer, block: 7})
 	p := newSyncing()
 	p.repair = true
