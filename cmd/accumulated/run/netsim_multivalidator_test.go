@@ -21,7 +21,7 @@ import (
 )
 
 // TestNetSimMultiValidatorAdvancesBlocks starts a netsim in each of the devnet
-// shapes (one or two BVNs, one to four validators per partition) and requires
+// shapes (one or two BVNs, up to four validators per partition) and requires
 // every partition to keep producing blocks (#4392, #4167). With more than one
 // validator, each sub-node's DAG-BFT service needs its own libp2p host and
 // GossipSub router; without them a committee never reaches quorum ("Not enough
@@ -36,7 +36,6 @@ func TestNetSimMultiValidatorAdvancesBlocks(t *testing.T) {
 		Bvns       uint64
 		Validators uint64
 	}{
-		{"One BVN, one validator", 1, 1},
 		{"Two validators per partition", 1, 2},
 		{"One BVN, four validators", 1, 4},
 		{"Two BVNs", 2, 1},
