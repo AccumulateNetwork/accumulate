@@ -91,10 +91,9 @@ func TestAFromGenesisNodeAnswersTheTwoPullReads(t *testing.T) {
 // nothing of its own, so it does not join (a nil node-state machine) and it
 // follows the committee from genesis, over gossip.
 //
-// The committee is not a netsim: a netsim's validators are sub-nodes, and a
-// sub-node's DAG-BFT has no gossip (SubnodeService.start shares the host but
-// not the pubsub router), so nothing outside the process could follow it.
-// The netsim is used only to write the genesis documents and derive the
+// The committee is not a netsim: a netsim's validators are sub-nodes of one
+// process, and this test wants a node that is outside the committee and
+// reaches it over its libp2p address alone. The netsim is used only to write the genesis documents and derive the
 // validator and faucet keys; it is never started.
 //
 // The reads go to the querier the second node's daemon registered, not to a

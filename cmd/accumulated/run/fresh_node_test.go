@@ -157,12 +157,11 @@ func writeGenesisSnapshot(t *testing.T, dir, partition string, typ protocol.Part
 // a race whose winner is one arbitrary node per partition, and the other
 // eleven then join from it.
 //
-// ONE VALIDATOR, and that is a limit of the harness rather than a choice: a
-// netsim's subnodes share the parent's libp2p host (subnode.go, `sub.p2p =
-// inst.p2p`), so two in-process validators are one peer and consensus never
-// leaves round 0. Every netsim test in this package is Validators: 1 for that
-// reason. So the twelve-node shape from run 20260918T131713Z — all of them
-// joining, all of them refusing each other the staging none of them had — is
+// ONE VALIDATOR, and that is a choice of this test: a single-node netsim keeps
+// the root's libp2p host (netsimHasPeers), and a multi-node one starts a host
+// and a GossipSub router of its own for each sub-node (#4392). The twelve-node
+// shape from run 20260918T131713Z — all of them joining, all of them refusing
+// each other the staging none of them had — is
 // Docker's to prove, not this test's. What this proves is the node-level
 // property underneath it: a node that has executed nothing does not join, and
 // a network of such nodes therefore starts by executing rather than by
