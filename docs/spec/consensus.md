@@ -216,7 +216,16 @@ So a validator holds batches in four places, for four reasons:
     voter's clock is not refused, because a round's headers can wait on
     parents and batches for longer than any useful bound, and a round none of
     whose headers can be certified never advances; the executor keeps block
-    time increasing instead (Block time, below).
+    time increasing instead (Block time, below). **Rollout:** the check is
+    not gated on the executor version; it rolls out with the binary. The
+    primary that votes has no executor version to read, and it votes ahead
+    of execution, so nodes at different heights would disagree on a gate. A
+    node that runs the check only withholds its own vote; it accepts every
+    valid certificate as before, whatever its time, so a mixed committee
+    does not split over it. The bound above holds for a committee only once
+    a quorum of it runs the check: until then a quorum of voters that do not
+    can certify a header stamped arbitrarily far ahead, and a certificate
+    made then, or held in the DAG from before, keeps the time it carries.
 
 ## 2. Specification — how it is implemented
 
@@ -1005,7 +1014,9 @@ bound, and it does not stand in the way of another header from its author
 for the round. The check is on voting only: a certificate received from a peer,
 live or through catch-up, is not checked against the receiver's clock, since
 its votes already were, and a node catching up receives certificates whose
-stamps are far behind its clock.
+stamps are far behind its clock. The check is not version-gated: it applies
+from the binary that has it, and the bound holds once a quorum of each
+committee runs it (invariant 13, "Rollout").
 
 ### The DAG facts the rest of the specification relies on
 

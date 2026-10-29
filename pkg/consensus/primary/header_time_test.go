@@ -182,3 +182,49 @@ func TestVote_HeaderRefusedForTimeLeavesNoVoteRecord(t *testing.T) {
 		require.False(t, votedFor(p, other), "the vote-once rule then holds for the round")
 	})
 }
+
+// The check is not gated on a version and rolls out with the binary
+// (consensus spec, invariant 13): during a mixed rollout a quorum of voters
+// that do not run it can certify a header stamped far ahead, and a node that
+// runs it refuses its own vote for the header but accepts the certificate,
+// as every node does, so the nodes do not split over it. The bound holds
+// only once a quorum of each committee runs the check.
+func TestVote_ACertificateIsNotCheckedAgainstTheReceiversClock(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesis := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesis))
+	for i, c := range genesis {
+		parents[i] = c.Digest()
+	}
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv, NewCertsChannelSize: 10}, committee, nil, d, nil)
+	clock := time.Unix(1_000_000, 0)
+	p.now = func() time.Time { return clock }
+
+	h := types.NewHeader(validators[1].pub, 1, 1, nil, parents)
+	h.Timestamp = clock.Add(365 * 24 * time.Hour).UnixNano()
+	require.NoError(t, h.Sign(validators[1].priv))
+	p.OnHeaderReceived(h)
+	p.pendingMu.Lock()
+	_, voted := p.sentVotes[h.Digest()]
+	p.pendingMu.Unlock()
+	require.False(t, voted, "precondition: this node does not vote on the header")
+
+	// Votes from the author and two voters that do not run the check.
+	digest := h.Digest()
+	var sigs [][]byte
+	var authors []uint16
+	for i := 1; i < 4; i++ {
+		vote := types.NewVote(digest, 1, 1, validators[i].pub)
+		require.NoError(t, vote.Sign(validators[i].priv))
+		sigs = append(sigs, vote.Signature)
+		authors = append(authors, uint16(i))
+	}
+	cert := types.NewCertificate(h, sigs, authors)
+	p.OnCertificateReceived(cert)
+	require.NotNil(t, d.GetByDigest(cert.Digest()), "a quorum's certificate is accepted whatever its time")
+}
