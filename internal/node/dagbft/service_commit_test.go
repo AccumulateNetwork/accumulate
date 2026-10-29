@@ -281,6 +281,58 @@ func TestVerifyRemoteStateHash_IsBoundToPartitionAndEpoch(t *testing.T) {
 	require.Eventually(t, bvn.IsHalted, time.Second, 10*time.Millisecond)
 }
 
+// A report is about a position, and the epoch of a position is that of the
+// committee its round's schedule names. Once the next committee is
+// scheduled, a quorum's reports for a round the old committee still orders
+// are compared and detect a divergence there; a report that names the new
+// epoch for that round names no position and is refused.
+func TestVerifyRemoteStateHash_ComparesAnOldPositionAfterTheNextCommitteeIsScheduled(t *testing.T) {
+	svc, _, _ := newCommitService(t, 1)
+	self := svc.config.NodeConfig.KeyPair.Public().(ed25519.PublicKey)
+	infos := []types.ValidatorInfo{{PublicKey: self, Stake: 1}}
+	privs := make([]ed25519.PrivateKey, 3)
+	for i := range privs {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		require.NoError(t, err)
+		privs[i] = priv
+		infos = append(infos, types.ValidatorInfo{PublicKey: pub, Stake: 1})
+	}
+	c1 := types.NewCommittee(infos, 1)
+	require.NoError(t, svc.node.ReplaceCommittee(c1))
+	svc.committee = c1
+	svc.stateHashTracker.SetSchedule(svc.node.Committees()) // as Start does
+	svc.RecordStateHash(98, 49, types.StateHash{0xAA})
+
+	// The block at round 100 schedules epoch 2 from round 356.
+	validators := make([]adapter.ValidatorInfo, len(infos))
+	for i, v := range infos {
+		copy(validators[i].PublicKey[:], v.PublicKey)
+		validators[i].Stake, validators[i].Active = v.Stake, true
+	}
+	svc.blockRound.Store(100)
+	svc.onValidatorSetChange(validators, 2, protocol.ExecutorVersionV2Canaveral)
+	require.Equal(t, uint64(2), svc.Committee().Epoch, "precondition: the next committee is scheduled")
+	require.Equal(t, uint64(1), svc.node.Committees().At(98).Epoch, "precondition: round 98 is the old committee's")
+
+	report := func(epoch uint64) error {
+		var last error
+		for _, priv := range privs {
+			msg := types.NewStateHashMessage(svc.config.Partition.ID, 98, epoch, 49, types.StateHash{0xBB}, priv.Public().(ed25519.PublicKey))
+			require.NoError(t, msg.Sign(priv))
+			last = svc.VerifyRemoteStateHash(msg)
+		}
+		return last
+	}
+
+	err := report(2)
+	require.Error(t, err, "a report naming the new epoch for an old round must be refused")
+	require.NotErrorAs(t, err, new(*types.StateDivergenceError))
+	require.Never(t, svc.IsHalted, 100*time.Millisecond, 10*time.Millisecond)
+
+	require.ErrorAs(t, report(1), new(*types.StateDivergenceError), "a quorum for the old position must be compared")
+	require.Eventually(t, svc.IsHalted, time.Second, 10*time.Millisecond)
+}
+
 // TestSubmitterService_ErrorMapping: the submitter is the front door for
 // every envelope entering a partition's DAG. A malformed envelope is refused
 // as BadRequest before touching consensus; an envelope for a service whose

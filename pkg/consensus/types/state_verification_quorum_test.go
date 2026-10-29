@@ -201,10 +201,16 @@ func TestStateHashTracker_CountsTheCommitteeOfTheRound(t *testing.T) {
 	// Scheduled after the tracker took the schedule: it applies all the same.
 	require.NoError(t, schedule.Schedule(after))
 
-	// Below the activation round the committee before decides: key 4 is not
-	// recorded, and key 3 counts.
-	at98 := StatePosition{Epoch: 2, Round: 98, BlockIndex: 10}
+	// Below the activation round the committee before decides: the position
+	// is at its epoch, a report naming the new epoch there is not recorded,
+	// key 4 is not recorded, and key 3 counts.
+	at98 := StatePosition{Epoch: 1, Round: 98, BlockIndex: 10}
 	tr.RecordLocalHash(at98, local)
+	epoch, ok := tr.EpochAt(98)
+	require.True(t, ok)
+	require.Equal(t, uint64(1), epoch)
+	require.Nil(t, tr.RecordRemoteHash(StatePosition{Epoch: 2, Round: 98, BlockIndex: 10}, keys[2], other))
+	require.Empty(t, tr.GetRemoteHashes(98), "a report naming another epoch than its round's committee's is not recorded")
 	require.Nil(t, tr.RecordRemoteHash(at98, keys[4], other))
 	require.NotContains(t, tr.GetRemoteHashes(98), hexEncode(keys[4]), "a key outside the round's committee is not recorded")
 	require.Nil(t, tr.RecordRemoteHash(at98, keys[0], other))

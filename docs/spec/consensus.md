@@ -1237,9 +1237,20 @@ halt the others.
 **A report is bound to its partition.** A node runs several partitions with
 one validator key, and every partition numbers its rounds from the start, so
 the signed content of a report (`types.StateHashMessage`) is a domain tag,
-the partition, the position and the hash; a report for another partition,
-or for another epoch than that of the node's latest committee, is refused
-before it is recorded (`Service.VerifyRemoteStateHash`).
+the partition, the position and the hash; a report for another partition is
+refused before it is recorded (`Service.VerifyRemoteStateHash`).
+
+**A position's epoch is that of the committee of its round**, from the same
+schedule the stake is counted in (`StateHashTracker.EpochAt`,
+`Service.positionEpochLocked`): the node records its own hash, signs its
+report and checks a peer's report with it. It is not the epoch of the node's
+latest committee: once the next committee is scheduled
+(`Service.onValidatorSetChange`), the old one still orders the rounds below
+the new one's activation round, and the reports for a block committed there,
+which may arrive after the change, are compared at the old epoch. A report
+whose epoch is not that of its round's committee names no position a node
+holds and is refused (`Service.VerifyRemoteStateHash`), and the tracker does
+not record it (`StateHashTracker.RecordRemoteHash`).
 
 **The comparison is not wired to the network today.** No message carries a
 validator's state hash to its peers: `Service.BroadcastStateHash` builds and

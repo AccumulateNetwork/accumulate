@@ -290,6 +290,18 @@ func (t *StateHashTracker) committeeLocked(round Round) *Committee {
 	return t.committeeAt(round)
 }
 
+// EpochAt is the epoch of the committee the reports for round count in, the
+// epoch of every position at that round; false when no committee is set.
+func (t *StateHashTracker) EpochAt(round Round) (uint64, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	c := t.committeeLocked(round)
+	if c == nil {
+		return 0, false
+	}
+	return c.Epoch, true
+}
+
 // OnDivergence registers a callback for state divergence events.
 func (t *StateHashTracker) OnDivergence(callback func(*StateDivergenceError)) {
 	t.mu.Lock()
@@ -311,12 +323,13 @@ func (t *StateHashTracker) RecordLocalHash(pos StatePosition, hash StateHash) {
 // RecordRemoteHash records a state hash a committee member reported for a
 // position. Returns a StateDivergenceError if, with it, a quorum reports a
 // hash other than our local one at our position. A hash from a key outside
-// the committee of the position's round is not recorded.
+// the committee of the position's round, or for a position whose epoch is not
+// that committee's, is not recorded.
 func (t *StateHashTracker) RecordRemoteHash(pos StatePosition, validator ed25519.PublicKey, hash StateHash) *StateDivergenceError {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if c := t.committeeLocked(pos.Round); c == nil || c.StakeOf(validator) == 0 {
+	if c := t.committeeLocked(pos.Round); c == nil || c.Epoch != pos.Epoch || c.StakeOf(validator) == 0 {
 		return nil
 	}
 
