@@ -181,8 +181,16 @@ So a validator holds batches in four places, for four reasons:
     receives every response, so the router relays one once each
     certificate's author is a member, and the receiver verifies each
     certificate before it is used or the response counts as an answer
-    (#4597, "Certificate catch-up"). Which peers a validator exchanges these
-    topics with is not yet decided (DIFFERENCES C17).
+    (#4597, "Certificate catch-up"). And only the committee's own nodes speak on the
+    unauthored paths of these topics: each validator's libp2p peer ID is
+    recorded in the network definition under its validator key's signature,
+    a batch or a certificate-sync response whose origin is not a committee
+    peer is ignored at the first check, and committee members keep
+    themselves connected to one another, so a restarted member is never
+    waiting on a mesh (#4587; DIFFERENCES C17 until it is built). The origin
+    check is dormant until the definition binds every committee member's
+    peer, so it cannot stall a network that has not been bound yet ("Which
+    peers may send them").
 
 ## 2. Specification — how it is implemented
 
@@ -929,7 +937,7 @@ The rule, only the committee speaks for consensus, is !1266's (#4596):
 invariant 12 and its section "Who may send consensus messages", with the
 per-topic table, are the one home of what a node delivers and relays;
 what !1266 leaves undecided, which **peers** a validator exchanges the
-topics with, is #4596 part 2 (DIFFERENCES C17; !1269 decides it). This
+topics with, is #4596 part 2, decided in "Which peers may send them" and not yet built (DIFFERENCES C17). This
 subsection is the pinned code of the handlers, which check again what the
 router has checked: a vote is dropped unless its author is a member and
 then unless its signature checks, membership first because it is the cheap
@@ -1027,7 +1035,10 @@ router (`pkg/consensus/gossip/topic-validators.go`). The router runs it on
 every message, including the node's own, before the message is delivered or
 relayed. Checks run in this order and stop at the first that fails: decode
 within the encoding's bounds; the committee of the epoch the message names;
-the author's membership of that committee; signatures.
+the author's membership of that committee; signatures. For a batch and a
+certificate-sync response, which have no author to check, the message's
+origin is first checked against the committee's peers, once the origin gate
+is on ("Which peers may send them").
 
 | topic | delivered and relayed only if |
 |---|---|
@@ -1203,6 +1214,155 @@ restarted node replayed its tail with whichever committee its state named
   row are logged as an error. A validator the new committee's quorum needs
   should be running and synced before the change is submitted: until it has
   joined it orders nothing, and a join's seed window is 34 rounds.
+
+### Which peers may send them
+
+The checks above are of a message's *author*: the committee key that signed
+it. Headers, votes and certificates carry one, and are admitted on it
+(invariant 12). Two paths have none: a batch names no author, and a
+certificate-sync response's certificates are only looked at. A peer outside
+the committee could still publish batches and responses, and every node would
+receive and relay them. The router also authenticates a message's *origin*:
+every gossip message is signed by the node key of the peer that published it
+(the router's default `StrictSign` policy) and carries that peer's ID as its
+`from`, and every connection is authenticated by the node key of the peer at
+its other end. With each validator's peer ID in the network definition
+(network.md, "A validator's network identity"), every node knows the
+committee's peers, and the unauthored paths are limited to them.
+
+**The admitted peers** of a partition are the peer IDs of every committee in
+its schedule: the one ordering now, the one before it while messages of its
+epoch are still judged ("Who may send consensus messages"), and one scheduled
+to take over at its activation round ("Committee changes", #4593). The set
+is the union, so a change is never a cut: a member joining is admitted from
+the moment a node executes the block that schedules its committee, hundreds
+of rounds before it orders anything; a member leaving, and a validator's old
+peer after a rotation, stay admitted until their committee leaves the
+schedule. Nodes execute that block at different times, so for a moment one
+node admits a peer another does not yet. That is a message relayed by one
+path and not another, never a different order: what decides consensus is
+the author checks above and the committee of the round. The set is kept
+with the committees, by `Node.UpdateCommittee`; a node outside the
+committee keeps it from its globals, as it keeps the committee.
+
+**The origin gate applies to batches and certificate-sync responses, and to
+nothing else.** For a batch, which has a validator of its own, it is the
+first check, before the decode. Certificate-sync requests and responses share
+one topic and one validator, so there it is the first check after the
+type byte of the envelope is read: a request (`0x01`) passes, a response
+(`0x02`) is gated on `msg.GetFrom()`, and before the rest of the message is
+decoded. The message's origin
+(`msg.GetFrom()`, the signed `from`) must be an admitted peer, or the message
+is **ignored** (`ValidationIgnore`), counted
+as its own outcome in `accumulate_dagbft_gossip_refused_total`, as the
+validators already count a message naming an epoch the node does not know
+("Who may send consensus messages"). It is ignored and not rejected because
+a node that has not yet executed a committee change cannot tell a new
+member's message from a stranger's, and a rejection is what peer scoring
+penalises: were scoring ever enabled, every honest relay of a new member's
+message would be penalised by the nodes that lag. Headers, votes and
+certificates are admitted on their author checks whatever their origin: a
+validator whose node runs under a peer ID other than the recorded one — a
+lost or regenerated `p2p.key`, a rebuilt host, a restart under a new key
+before the write, a stale attestation — must not go silent, and the repair
+is a definition write that the Directory has to execute, so a gate that
+silenced f+1 seats of the Directory would stop the one chain able to
+repair it. What a header, vote or certificate from an unadmitted origin
+costs is one signature check, bounded by the existing limits; the vote
+limiter keys on the author (#4162 item 18), and a message from an
+unadmitted origin may be deprioritised or rate-limited by author, never
+dropped for its origin. Certificate-sync *requests* are admitted from any
+origin: joining nodes send them and are in no committee. The peer a message
+*arrived from* (`msg.ReceivedFrom`) is not checked: a follower that relays
+a validator's message relays it signed by the validator's node and authored
+by its validator key, and that redundancy is wanted.
+
+**When the gate turns on.** Not before every condition holds, and until then
+every topic validator passes on origin, as it does today:
+
+1. the first executor version activated after v2-kourou on this line
+   (numbered under #4139; the owner decides its name and number) is active
+   on the partition; and
+2. every member of every committee in the schedule carries a verified peer
+   (network.md, "A validator's network identity").
+
+A node that holds no committee, or a committee in which one member has no
+recorded peer, admits every origin. So a definition with no recorded peers —
+Kermit's today, a mainnet converted to DAG-BFT — never stalls a network that
+runs the gate: the gate is dormant until the definition has been bound
+(network.md, "Binding an existing network"). The gate is node code, so the
+version is what turns it on, not the node's binary.
+
+**A node that is behind** takes its admitted set from its own globals, so a
+lagging follower or a rejoining validator may not hold the peer IDs of the
+committee that now answers. Responses from an origin it does not admit are
+ignored, not rejected, and that is correct while its committee is the one
+it holds. A node down across more than one committee change does not know
+the committee of the rounds between, and takes the path "A join places the
+pulled state's committee, or joins as a node with no checkpoint" already
+gives it: it drops its position, pulls a state, and adopts that state's
+committee, with its peers, as its admitted set. Until then it admits every
+origin for a committee whose peers it does not hold, and verifies each
+certificate in a response as it does today ("Certificate catch-up").
+
+The gate is not the router's `PeerFilter`: in go-libp2p-pubsub v0.10.0 that
+filter is consulted for control messages (GRAFT, IHAVE, IWANT) and mesh
+selection, not for a published message, and a filter that kept followers out
+of the meshes would keep messages from reaching them (below). The gate is in
+the validators, where every message passes.
+
+**Committee members are direct peers of one another.** A member holds a
+connection to every other admitted peer and protects it from the connection
+manager's trimming (`host.ConnManager().Protect(id, "consensus/<partition>")`;
+the default manager trims only above its high-water mark, 192 connections,
+down to its low-water mark of 160, which a validator with more than a
+hundred and eighty peers can pass). The gossip layer keeps the set: when the
+admitted peers change it dials those it is not connected to — a peer's
+addresses from the peerstore, else from the DHT (`FindPeer`) — and redials
+one that drops, with backoff; it unprotects a peer that leaves the set, and
+the manager trims that connection in its own time. This is what the
+router's direct peers do (`pubsub.WithDirectPeers`), but that set is fixed
+when the router is built, the router is the API node's and is built before
+any committee is known, and the committee changes while it runs; so the
+layer does it. The effect, for #4587: the router flood-publishes, so a
+member's own message goes to every topic peer it is connected to, and every
+consensus message is published by its originator; with every member
+connected to every other, every message reaches every member from its
+originator, mesh or no mesh. A member restarted under the same peer ID is
+refused its peers' meshes for about a minute, by the unsubscribe and prune
+backoffs, and loses nothing by it: it is connected to every originator. A
+message it still lacks — published while a connection was down — is what
+catch-up asks for ("Certificate catch-up"). Full connectivity of the
+committee no longer rests on the deployments' bootstrap lists: the lists are
+how a node finds its first peers, and the definition is how a member finds
+the rest. Connectivity does not depend on the gate: it is kept from the
+moment the committee's peers are known, whether or not the gate is on.
+
+**Followers and joining nodes** take certificates and batches from the same
+topics, and that does not change. They subscribe; they are grafted into
+meshes and graft validators into theirs; they receive what validators
+publish, flood-published to them when they are connected to the originator
+and relayed through the meshes when they are not; and they relay. What they
+cannot do is originate on the unauthored paths: a batch or a sync response
+published by a follower is ignored at the first hop, and what a follower
+publishes as a header, vote or certificate is admitted only if its author is
+a committee member, which a follower's is not (section 1). They originate
+certificate-sync requests, which are admitted and answered by committee
+peers. A follower's `CertSyncer` does not answer requests, since its answers
+would be ignored at the first hop. Nobody connects to a
+follower on purpose: it connects to the validators it finds and is kept to
+the connection manager's limits like any peer, and since a validator's
+protected connections are its committee's, a follower's is what trimming
+takes first. A separate feed for followers, published by validators only, is
+not needed while a follower can be told from a committee peer by its origin.
+
+**Sync requests are the lever left to outsiders.** A request is unsigned,
+relayed by every node, and admitted from any origin; up to n committee
+members answer it, each with up to 100 certificates, broadcast to every node
+(#4610 measured 8 of 12 answering). The origin of a request is signed, so a
+per-origin limit on requests is possible and is listed under DIFFERENCES C17;
+moving the answers to a stream to the requester, not a broadcast, is the
+alternative, not designed here.
 
 ### DAG retention
 
