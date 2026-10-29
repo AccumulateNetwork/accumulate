@@ -126,8 +126,8 @@ func (d *NetSimConfiguration) apply(inst *Instance, cfg *Config) error {
 	for bvn := range nodes {
 		for node := range nodes[bvn] {
 			n := nodes[bvn][node]
-			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir), n.PeerID))
-			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN), n.PeerID))
+			dnPeers = append(dnPeers, addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portDir+portAccP2P), n.PeerID))
+			bvnPeers[bvn] = append(bvnPeers[bvn], addrForPeer(listen(d.Listen, devNetDefaultHost, n.IP, useTCP{}, portBVN+portAccP2P), n.PeerID))
 		}
 	}
 
@@ -137,6 +137,13 @@ func (d *NetSimConfiguration) apply(inst *Instance, cfg *Config) error {
 			nodes[bvn][node].DnBootstrap = dnPeers
 			nodes[bvn][node].BvnBootstrap = bvnPeers[bvn]
 		}
+	}
+
+	// The root node, which serves the API for the bootstrap sub-node, reaches
+	// the validators' own P2P nodes through them (#4392)
+	cfg.P2P.BootstrapPeers = append(cfg.P2P.BootstrapPeers, dnPeers...)
+	if cfg.P2P.DiscoveryMode == nil {
+		cfg.P2P.DiscoveryMode = Ptr(DhtMode(dht.ModeAutoServer))
 	}
 
 	// Generate genesis documents
@@ -376,6 +383,18 @@ func (n nodeOpts) apply(inst *Instance, root *Config) error {
 
 	cfg.P2P.Key = rawPrivKeyFrom(n.NodeKey)
 
+	// Without a server-mode DHT no node stores provider records and service
+	// discovery between the nodes never resolves (#4065)
+	cfg.P2P.DiscoveryMode = Ptr(DhtMode(dht.ModeAutoServer))
+
+	// Each validator's own P2P node bootstraps from the other nodes of the
+	// network, by address and peer ID (#4392)
+	for _, addr := range n.DnBootstrap {
+		if v, err := addr.ValueForProtocol(multiaddr.P_P2P); err != nil || v != n.PeerID.String() {
+			cfg.P2P.BootstrapPeers = append(cfg.P2P.BootstrapPeers, addr)
+		}
+	}
+
 	// Create partition services
 	opts := partOpts{
 		CoreValidatorConfiguration: &CoreValidatorConfiguration{
@@ -442,13 +461,6 @@ func (d *NetSimConfiguration) writeSubNode(_ *Instance, root, cfg *Config, sub *
 		listen(d.Listen, devNetDefaultHost, ip, portDir+portAccP2P, useQUIC{}),
 		listen(d.Listen, devNetDefaultHost, ip, portBVN+portAccP2P, useTCP{}),
 		listen(d.Listen, devNetDefaultHost, ip, portBVN+portAccP2P, useQUIC{}),
-	}
-
-	// Sub-nodes are bootstrapped from the bootstrap node
-	if ip > 0 {
-		cfg.P2P.BootstrapPeers = []multiaddr.Multiaddr{
-			listen(d.Listen, devNetDefaultHost, portDir+portAccP2P, useTCP{}),
-		}
 	}
 
 	// Write out the sub-node config
