@@ -2193,52 +2193,6 @@ and the HEAL path has none, which is the actual hole.
 path, and assembly at the destination. Build it when a run shows a proof-length
 rejection, which names the real trigger rather than a supposed one.
 
-### C18. Voters lock per header digest, in memory
-
-*[#4590](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4590); fixed by !1271*
-
-consensus.md, "The vote rule": a validator votes for at most one header per
-(author, round), appends (author, round) → digest to the `voted` file
-before the vote is signed, reads it back on every start, and refuses a
-second digest for the pair. The code records the
-headers it voted for by digest alone (`primary/vote_handler.go:361-377`,
-`:471-476`) and only in memory (`primary.go:351`): two headers from one
-author for one round, differing only in timestamp, both get the same honest
-validators' votes and both reach a quorum, and a restarted validator holds
-no record at all. Each node then keeps whichever certificate reached it
-first and refuses the other as equivocation for good ("DAG insertion"), so
-nodes holding different versions cannot insert each other's later
-certificates. With n = 4, no round r+1 header reaches three votes once the
-author stops. Review tests `TestDefect_HonestVotersCertifyTwoHeadersForOneAuthorRound`
-and `TestIntended_EquivocatingAuthorGetsTwoVotes` (#4601) show it.
-
-### C19. Parents are checked for presence, not for round, distinctness or stake quorum
-
-*[#4591](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4591); #4162 item 17; fixed by !1272*
-
-consensus.md, "Header validity", "Certificate validity" and "DAG
-insertion": a header's strong parents are distinct certificates of round
-r−1 whose authors' stake is a quorum of that round's committee, weak links
-are allowed and not counted, and the voter, the insert and the builder
-apply the rule through one check, `DAG.CheckParents`; `Certificate.Verify`
-refuses only a parentless or duplicate-parent header. The code:
-
-- a voter checks only that each named parent is in its DAG
-  (`primary/vote_handler.go:391-409`), so a header with no parents passes;
-- `Certificate.Verify` checks no parent (`types/certificate.go:147-230`);
-- `DAG.Insert` skips the parent check when the list is empty
-  (`dag/dag.go:154`, `len(cert.Parents()) > 0`);
-- the builder's minimum is a count, `QuorumCount` (7 of 12), not stake
-  (`primary/header_builder.go:158-164`; `types/committee.go:207-216`), and
-  with the validity threshold (5 of 12) the two sum to n, so they do not
-  guarantee an intersection; a round set by `Restore`, `RestoreAuthored` or
-  `Rejoin` skips the stake check the round advance makes.
-
-A leader certificate with no path to an earlier committed leader breaks the
-linked-leader walk: two nodes that receive the same certificates in a
-different order commit different leader sequences
-(`TestDefect_ZeroParentLeaderSplitsCommitSequence`, #4601).
-
 ### C21. A lost insertion trigger leaves a committable leader to a later leader's walk
 
 *[#4162](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4162) items 1 and 6*
@@ -2261,37 +2215,6 @@ threshold, `L` is committed only when a later leader's linked walk reaches
 it, one or more leader rounds later. Safety is unaffected, since the walk
 is the same on every node; the latency of that leader's group is what
 differs.
-
-### C22. Review fixes in merge requests not yet merged at 7d9458e10
-
-Each line is the code at `7d9458e10` against the rule the spec states, and
-the merge request that brings the code into line. **Remove a line when its
-merge request is merged**; remove the entry when the list is empty.
-
-- **#4592** (!1258): the last authored header is read back only when a
-  checkpoint is resumed, so a start that resumes none (no checkpoint for
-  the executor's last block, or a store at genesis) signs a second header
-  for a round it already signed ("Persistence and restart").
-- **#4596** (!1266): the router relays a consensus message before any
-  handler checks its author; the check is in the handlers only ("Who may
-  send consensus messages"). What the merge request leaves open, which
-  peers a validator exchanges the topics with, is #4596 part 2 (!1266
-  records it; !1269 decides it).
-- **#4597** (!1257): a node that has seen any response to a sync request
-  answers it no more, so one forged response silences every honest answer
-  ("Certificate catch-up"); the rule is that a response suppresses only
-  the certificates it delivered that checked, unless it completes the
-  request (every certificate checks, nothing missing), in which case it
-  suppresses the request; junk suppresses nothing and a partial answer
-  leaves the rest to the peers.
-- **#4598** (!1264): the active store's eviction does not protect a batch a
-  certified, uncommitted header names, so batches from any peer can evict
-  a voter's copy of what its vote attested (invariant 3); the rule is that
-  such a batch is not evicted, and batches no header names evict only each
-  other.
-- **#4599** (!1256): `UnmarshalBatch` allocates from a count field before
-  checking it against the bytes that remain ("Decoding is bounded by the
-  message").
 
 ### C23. A leader's timestamp moves block time forward without bound
 

@@ -385,7 +385,7 @@ the gaps numbers them (#4601): Narwhal §3 is the model, §4 the core design (§
 mempool protocol, §4.3 garbage collection), §6 reconfiguration; Bullshark §4
 is the DAG construction and its safety argument, §5.2 the ordering of the
 DAG, §6 the eventually synchronous protocol, §7 garbage collection. What
-the code does not yet do is in [DIFFERENCES.md](DIFFERENCES.md), C18 to C23.
+the code does not yet do is in [DIFFERENCES.md](DIFFERENCES.md), C21, C23 and the entries after them.
 
 **The objects.** A **header** (`types.Header`, `types/header.go:40-73`) is
 one validator's proposal for one round: its author's key, the round, the
@@ -408,7 +408,8 @@ order, for one **epoch** (`types/committee.go:26-48`).
 the stake, more than the faulty share can be, so they share an honest
 validator: that is what every rule below rests on. `QuorumCount`
 (:203-216) is a count that assumes equal stakes and is not a threshold of
-the protocol; where the code still uses one, DIFFERENCES C19 says so.
+the protocol: no rule uses it, and the code uses it only to size the vote
+spam cap (`primary/vote_handler.go:40`) and a restart log line.
 
 #### Rounds
 
@@ -459,12 +460,10 @@ are this network's.
 
 - **Its author is a member of the committee of its epoch**, and the
   signature is that member's over the header digest (`Header.Verify`,
-  `types/header.go:227-243`). For a header the signature is checked first
-  and then membership (`primary/vote_handler.go:278`, `:286`); membership
-  comes first only for votes (`:27-47`). !1266 (#4596) moves membership
-  before the signature for headers too, in the topic validator and in the
-  handler (`primary/vote_handler.go` `OnHeaderReceived`; "Sender authority
-  at 7d9458e10"). The epoch a header names is the epoch of the committee
+  `types/header.go:227-243`). Membership is checked before the signature, for
+  votes (`primary/vote_handler.go:27-47`) and, since !1266 (#4596), for
+  headers too, in the topic validator and in the handler (`handleHeader`; "Who may send consensus messages"; "Sender
+  authority"). The epoch a header names is the epoch of the committee
   that orders its round ("Epochs" below).
 - **Its strong parents are distinct certificates of round r−1 whose
   authors' stake is a quorum of the committee of round r−1.** The parent
@@ -476,9 +475,7 @@ are this network's.
   names **every** round r−1 certificate it holds (`header_builder.go:166-173`),
   not a bare quorum, so late certificates are named in their own round
   where they can. The rule is one check, `DAG.CheckParents`, applied by
-  the voter, the insert and the builder (#4591, !1272; "DAG insertion"; the
-  code at `7d9458e10` checks presence only and the builder's minimum is a
-  count — DIFFERENCES C19).
+  the voter, the insert and the builder (#4591, !1272, merged in `129dac488`; "DAG insertion").
 - **Weak links are allowed and not counted.** After the strong parents, a
   header of round r ≥ 3 names every certificate of rounds r−2 down to
   r−8 that it holds (`weakLinkWindow` = 8, `header_builder.go:175-195`).
@@ -542,10 +539,8 @@ are this network's.
   not. A second digest for the same pair is refused, and nothing is asked
   for on its behalf; the recorded header is voted for again whenever its
   author rebroadcasts it. This is the rule that makes a certificate unique
-  per author and round, which the commit rule assumes (Bullshark §4). At
-  `7d9458e10` the record is by header digest and in memory
-  (`primary/vote_handler.go:361-377`, `:471-476`; `primary.go:351`):
-  DIFFERENCES C18.
+  per author and round, which the commit rule assumes (Bullshark §4).
+  The code has it since `dda9451a1` (!1271).
 - **What a voter must hold.** Every parent the header names must be in
   the voter's DAG, and every batch it names must be in the voter's store
   (invariant 11). A header missing either is not refused: the vote is
@@ -602,8 +597,8 @@ A certificate is valid when all of these hold (`Certificate.Verify`,
   voter, the insert and the builder share (#4591, !1272; "DAG insertion").
   A certificate is proof that a quorum voted, and a quorum of honest
   voters would not have voted for a header without one, but a node takes
-  certificates from any peer and must not rely on that. At `7d9458e10`
-  neither `Verify` nor the insert checks it (DIFFERENCES C19).
+  certificates from any peer and must not rely on that. The insert has
+  made the check since `129dac488` (!1272).
 - **`StateHash` is carried but not signed.** The wire format ends with a
   32-byte state hash (`certificate.go:289-291`, `:382-387`) that is not in
   the header digest and so not under any signature (`:58-61`). Nothing
@@ -678,9 +673,9 @@ them ("Certificate catch-up"; `primary/certificate_handler.go:27-87`).
   therefore a tripwire for a fault the protocol's assumptions exclude, not
   an ordering rule, and nothing downstream depends on which one a node
   kept. It is safe to keep the incumbent only because of the vote lock
-  (#4590): until that lock is per (author, round), honest voters can
-  certify two headers of one author and nodes do split on arrival order
-  (DIFFERENCES C18).
+  (#4590, `dda9451a1`): the lock is per (author, round), so honest voters
+  cannot certify two headers of one author and nodes do not split on
+  arrival order.
 - **Insertion is a collection point.** A certificate above every round
   the DAG has seen moves the frontier, and rounds more than `DAGGCDepth`
   below it are collected (`dag.go:182-191`; "DAG retention").
@@ -897,14 +892,14 @@ these are the rules.
   the round again, a second header being self-equivocation (#4159 stall 3;
   "Restart"). It is read back on every start, checkpoint or not (#4592,
   !1258). With it go the certificates and batches the DAG holds, so that
-  the restored DAG has the header's parents: at `7d9458e10` from four
-  rounds below the header (`restart.go:217-222`), after !1259 every
-  certificate as it is inserted (#4595). The header's write is synced,
+  the restored DAG has the header's parents: every certificate is written
+  as it is inserted (#4595, !1259); at `7d9458e10` it was the four rounds
+  below the header (`restart.go:217-222`). The header's write is synced,
   the certificates' and batches' are not (DIFFERENCES C9).
 - **Before a vote is signed**, the (author, round) → digest record is
   appended to the `voted` file, unsynced like the rest of the store
-  (#4590, !1271; "The vote rule"; DIFFERENCES C9). At `7d9458e10` nothing
-  is written (DIFFERENCES C18).
+  (#4590, !1271; "The vote rule"; DIFFERENCES C9). The code writes it
+  since `dda9451a1` (!1271).
 - **A checkpoint**, written before each block is produced, carries the
   consensus position of that block: the primary's round and epoch,
   Bullshark's last committed leader round, its per-author watermarks and
@@ -928,22 +923,19 @@ these are the rules.
   its own last block: the join decides what is executed, consensus only
   where the node stands in the DAG ("Restart", "What it does not do").
 
-#### Sender authority at 7d9458e10
+#### Sender authority
 
 The rule, only the committee speaks for consensus, is !1266's (#4596):
 invariant 12 and its section "Who may send consensus messages", with the
 per-topic table, are the one home of what a node delivers and relays;
 what !1266 leaves undecided, which **peers** a validator exchanges the
-topics with, is #4596 part 2 (!1266 records it; !1269 decides it). This
-subsection is only the pinned code. At `7d9458e10` the checks are in the
-handlers, after the router has already relayed the message to the node's
-peers: a vote is dropped unless its author is a member and then unless
-its signature checks, membership first because it is the cheap check
-(`primary/vote_handler.go:27-47`); a header is checked the other way
-round, signature first and then membership (`:278`, `:286`), and !1266
-moves membership before the signature for headers too, in the topic
-validator and in the handler (`primary/vote_handler.go`
-`OnHeaderReceived`); a certificate is verified against the committee
+topics with, is #4596 part 2 (DIFFERENCES C17; !1269 decides it). This
+subsection is the pinned code of the handlers, which check again what the
+router has checked: a vote is dropped unless its author is a member and
+then unless its signature checks, membership first because it is the cheap
+check (`primary/vote_handler.go:27-47`); a header is checked for its
+author's membership and then, unless the topic validator verified it, its
+signature (`handleHeader`); a certificate is verified against the committee
 before it is inserted or held, after the cheap duplicate and held-buffer
 checks (`primary/certificate_handler.go:32-83`); a batch, a sync request
 or a sync response is decoded and queued from any peer
