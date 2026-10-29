@@ -128,8 +128,14 @@ ValidatorPeer:
     - name: ID
       description: is the node's libp2p peer ID, the bytes of its multihash
       type: bytes
+    - name: Sequence
+      description: orders this validator's attestations; a write never lowers it
+      type: uint
     - name: Signature
       description: is the validator key's signature over the peer-ID attestation
+      type: bytes
+    - name: NodeSignature
+      description: is the node key's signature over the same attestation, with its own tag
       type: bytes
 ```
 
@@ -143,22 +149,38 @@ node is one libp2p identity whatever partitions it runs (the Directory and a
 BVN on one host, "Converting a mainnet node"), and a validator key is one
 node's, so the record is per validator, not per partition.
 
-**What is signed, and by which key.** `Signature` is the validator key's
-ed25519 signature over the attestation
+**What is signed, and by which key.** The attestation is the binary encoding
+of a small struct, not a concatenation, so its fields cannot run into one
+another: the network name, the SHA-256 of the validator public key, the peer
+ID bytes and the `Sequence`, each length-prefixed. Two signatures are made
+over it, each with its own fixed ASCII tag in front:
 
 ```
-"acc-validator-peer-id-v1" ‖ network name ‖ SHA-256(validator public key) ‖ peer ID bytes
+Signature     = validator key signs  "acc-validator-peer-id-v1" ‖ attestation
+NodeSignature = node key signs       "acc-validator-peer-node-v1" ‖ attestation
 ```
 
-The first element is a fixed ASCII tag, in the same role as the relay
-challenge's: the validator key also signs headers, votes, certificates,
-anchors and challenge answers, and the tag is what keeps an attestation from
-being read as any of those, and them as an attestation. The network name is
-in it so an attestation made for a devnet is not one for mainnet. The key
-hash is in it so the record binds *this* validator, and the peer ID so it
-binds *this* node. An attestation holds for the key that made it: a
-validator whose key is rotated (`UpdateValidatorKey`) attests again under
-the new key, in the same write.
+The tags are in the same role as the relay challenge's: the validator key
+also signs headers, votes, certificates, anchors and challenge answers, and
+the node key signs every gossip message and handshake, and a tag is what
+keeps an attestation from being read as any of those, and them as an
+attestation. The network name is in it so an attestation made for a devnet is
+not one for mainnet. The key hash is in it so the record binds *this*
+validator, and the peer ID so it binds *this* node. An attestation holds for
+the key that made it: a validator whose key is rotated
+(`UpdateValidatorKey`) attests again under the new key, in the same write.
+The node key must be one whose peer ID carries the public key (ed25519,
+secp256k1, ECDSA: every key the node writes is), so the verifier needs
+nothing but the ID.
+
+**The sequence.** `Sequence` is a number the validator chooses and raises
+each time it attests a new peer: 1 the first time, the previous value plus
+one after. An attestation never expires, so without it an operator tool that
+edits a stale copy of the definition would write back a retired peer, or
+undo a rotation made because a node key was compromised, and nothing would
+object. A write is refused that lowers a validator's `Sequence`, or keeps it
+and changes the peer; and a write that changes some other validator's peer
+without that validator's `Sequence` rising in the same write is refused too.
 
 Who may say what:
 
@@ -166,28 +188,54 @@ Who may say what:
   validator key's, which no operator and no other validator holds. A
   definition carrying an entry whose signature does not verify against the
   entry's own key is refused.
-- **A node proves it is the peer by connecting.** The libp2p handshake
-  authenticates the peer ID with the node key, and every gossip message is
-  signed with it. So the record needs no second signature by the node key:
-  a validator that records a peer it does not run has bound its committee
-  seat to an identity it cannot speak from, and has shut out itself, nobody
-  else.
+- **Only the node can bind its peer to a validator.** `NodeSignature` is
+  the node key's, which no operator and no other validator holds, over the
+  validator's key hash. A validator cannot record a peer ID it does not own,
+  and so cannot squat on one: it could otherwise take another validator's
+  new peer ID, published in the consensus status before it is written, and
+  that validator's own entry would then be refused as a duplicate. The node
+  holds both keys at start, so the second signature costs nothing, and it is
+  what makes the next rule a rule about ownership.
 - **One peer, one validator.** Two entries naming the same peer ID are
   refused.
-- **Every active validator has one.** From the executor version that
-  activates the DAG-BFT rules — the first after v2-kourou, which is active on
-  Kermit already and so cannot be the gate; the version is not yet defined
-  (DIFFERENCES C16) — an entry active on any partition without a `Peer` that
-  verifies is refused. The DAG-BFT integration is unreleased, so there is no
-  network with unbound validators to carry: genesis writes every validator
-  bound.
+- **Every active validator has one, from the activating version.** From
+  the first executor version activated after v2-kourou on this line,
+  numbered under #4139 (the owner decides its name and number; v2-kourou is
+  active on Kermit already and so cannot be the gate), an entry active on
+  any partition without a `Peer` that verifies is refused. Active on any
+  partition includes the BSN's validators (`internal/node/daemon/init.go`):
+  a node that runs the BSN and a BVN has one node key, and so one peer for
+  both entries. Until that version is active no entry needs a `Peer`.
 
 These are checked where the definition is parsed, `GlobalValues.ParseNetwork`
 (`pkg/types/network/globals.go`), which the executor runs on every write to
 `dn.acme/network` (`network_accounts.go`, beside the check that the version
-increases) and genesis runs on the definition it writes, so the check is one
-and a definition genesis would write is one the executor would accept.
-Twelve validators is twelve ed25519 verifies, once per definition write.
+increases), genesis runs on the definition it writes, and the spine verifier
+runs on the writes it replays (`internal/spine/spine.go`). **Every one of
+these checks sits behind the executor version above**, because the checks
+decide which `WriteData` succeeds, and that is executed state: a definition
+with a bad attestation that old nodes accept and new nodes refuse is a state
+split. The version that decides is the one active in the block that executes
+the write, read from the active globals, and what is parsed is the pending
+definition the write carries. The spine verifier has no executor version in
+hand today and is given one. Twelve validators is twelve ed25519 verifies
+twice, once per definition write.
+
+**Binding an existing network.** A network that runs before the activating
+version, Kermit or a mainnet converted to DAG-BFT, has definitions with no
+peers, and its validators' attestations cannot be made offline: each needs
+that validator's own keys, and the definition is replicated state. So the
+binding is written *before* activation, under the rules that apply then:
+each operator collects its node's attestation (below), and the operators
+write the definition with every entry bound, which an old binary keeps in
+the entry's unknown trailing fields (`extraData`) and a new one reads. Before
+activation nothing refuses an entry for lacking a peer, and nothing refuses
+one for carrying it. The activating version is then scheduled, and a write
+that would leave an entry active without a verified peer is refused from
+activation. And the origin gate in consensus.md, "Which peers may send
+them", stays dormant until every member of every scheduled committee has a
+verified peer, so a network that is late binding a validator is not stalled
+by it: it has an open gate, as today.
 
 **Registering and rotating.** There is no new transaction. The definition
 changes as it always has: a `WriteData` to `dn.acme/network`, writing to
@@ -195,9 +243,9 @@ state, that the operators' key book `dn.acme/operators` authorizes; the
 write carries the whole definition with its version increased ("Where the
 validator set lives"). To register a peer ID — a new validator's, or a
 validator's new one — the operators write the definition with that
-validator's entry carrying the new attestation. The validator makes the
+validator's entry carrying the new attestation, its `Sequence` raised. The validator makes the
 attestation, since only it can: the node computes it at start from the two
-keys it holds and serves it in its consensus status (`ConsensusStatus.Peer`),
+keys it holds and serves it in its consensus status (`ConsensusStatus.PeerAttestation`, named apart from the existing `Peers`),
 and `accumulated` prints it on request; an operator collects it and writes
 it. Genesis (`init network`, `BuildGenesisDocs`) holds both keys of every
 node and writes every validator bound; the simulator's network does the

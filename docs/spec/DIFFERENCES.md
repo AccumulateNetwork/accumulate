@@ -1983,61 +1983,88 @@ So a peer outside the committee can still:
   (header with its signature, vote signatures, signers; the state hash
   aside) and costs it a lookup and a marshal; a copy of a header or vote
   costs it a signature check, and is recognised as a copy only by the
-  handlers.
+  handlers. This stays: the origin gate does not cover authored messages
+  (a gate that silenced a validator under an unrecorded peer ID would stall
+  the chain that has to repair it), and a copy costs one signature check.
 
 **Decided** (network.md, "A validator's network identity"; consensus.md,
 "Which peers may send them"; #4596 part 2, with #4587): each validator's
 libp2p peer ID is recorded in its `ValidatorInfo` of `dn.acme/network`,
-signed by its validator key over a tagged attestation, written by the same
-operator-authorized `WriteData` that changes the definition today, and
-required of every active validator from the executor version that activates
-the DAG-BFT rules. The admitted peers of a
-partition are the peer IDs of every committee in its schedule (the one
+attested by the validator key and by the node key over a tagged, sequenced
+struct, written by the same operator-authorized `WriteData` that changes the
+definition today, and required of every active validator from the first
+executor version activated after v2-kourou on this line. The admitted peers
+of a partition are the peer IDs of every committee in its schedule (the one
 before, the one now, the one scheduled by #4593's activation round), so a
-change is never a cut. Every topic validator refuses, before decoding, a
-message whose signed origin (`msg.GetFrom()`) is not admitted, with the one
-exception of certificate-sync requests; and committee members keep a
-protected connection to every other admitted peer, which with flood
-publishing is what makes a restarted member's minute outside the meshes
-cost nothing. Followers keep taking certificates and batches from the same
-topics; they cannot originate on them.
+change is never a cut. The origin gate (`msg.GetFrom()`) applies to batches
+and certificate-sync responses only, which have no author; headers, votes
+and certificates admit on their author checks. An unadmitted origin is
+ignored (`ValidationIgnore`), not rejected. The gate is dormant until the
+activating version is active and every member of every scheduled committee
+has a verified peer. Committee members keep a protected connection to every
+other admitted peer, which with flood publishing is what makes a restarted
+member's minute outside the meshes cost nothing. Followers keep taking
+certificates and batches from the same topics; they cannot originate batches
+or responses.
 
-**What remains** until it is built:
+**What remains** until it is built. **The build is blocked on the version
+decision:** it needs the first executor version activated after v2-kourou on
+this line, whose name and number the owner decides (#4139, !1199 reconcile
+the numbering; !1277 wrote v2-canaveral for the same thing in its C25/C26
+questions). No version is named or numbered here, and no code is written for
+the gate until it is.
 
-- `protocol/general.yml`: `ValidatorPeer` (`ID`, `Signature`) on
-  `ValidatorInfo`; the attestation (`"acc-validator-peer-id-v1" ‖ network
-  name ‖ key hash ‖ peer ID`) made and verified in one place; `ParseNetwork`
-  refusing an entry whose attestation does not verify, two entries naming
-  one peer, and an active entry without one, gated on the version below;
-  `UpdateValidatorKey`'s callers re-attesting.
-- An executor version to gate on. v2-kourou (10) is active on Kermit, so
-  it cannot be the gate; !1199 (#4139, the DAG-BFT numbering) defines
-  v2-tanegashima (9) below it and nothing above it but the `VNext` (11)
-  placeholder, which is not for use. The first DAG-BFT version after Kourou
-  has to be named and numbered (in `protocol/enums.yml` and
-  `version_freeze_test.go`, on both lines) before this, and #4593's ledger
-  fields, which say v2-kourou today, can be gated.
+- `protocol/general.yml`: `ValidatorPeer` (`ID`, `Sequence`, `Signature`,
+  `NodeSignature`) on `ValidatorInfo`, regenerating `protocol/types_gen.go`;
+  the attestation (a length-prefixed struct, two tags) made and verified in
+  one place; `UpdateValidatorKey`'s callers re-attesting.
+- `ParseNetwork` (`pkg/types/network/globals.go`, called from
+  `internal/core/execute/v2/block/network_accounts.go:91` and its v1
+  counterpart), behind the version above, refusing: an entry whose
+  attestation or node signature does not verify; two entries naming one
+  peer; an active entry without one; a write that lowers a validator's
+  `Sequence` or changes its peer without raising it; a write that changes
+  another validator's peer without that validator's `Sequence` rising. The
+  active globals' version decides, the pending definition is what is parsed.
+- The spine verifier (`internal/spine/spine.go:254`) calls `ParseNetwork` too
+  and has no executor version in hand; it is given one, or the two diverge.
+- An executor version to gate on: see above. v2-kourou (10) is active on
+  Kermit, so it cannot be the gate; v2-tanegashima (9) is below it and the
+  `VNext` (11) placeholder is not for use. #4593's ledger fields, which say
+  v2-kourou in places, are gated on the same.
 - Genesis (`BuildGenesisDocs`, which holds every node's keys) and the
   simulator's network writing every validator bound; `init network` and
-  `netsim` checked to produce definitions the executor accepts.
+  `netsim` checked to produce definitions the executor accepts. Binding an
+  existing network (Kermit, a converted mainnet) before activation, by the
+  operators' write (network.md, "Binding an existing network"), with a test
+  that a definition without peers does not stall a node that runs the gate.
 - The node computing its attestation at start, serving it in
-  `ConsensusStatus.Peer`, and `accumulated` printing it for the operator
-  who writes the definition.
+  `ConsensusStatus.PeerAttestation`, and `accumulated` printing it for the
+  operator who writes the definition.
 - `types.ValidatorInfo.PeerID`, carried through `adapter.ValidatorInfo`,
   the executor bridge and `onValidatorSetChange`; the admitted set derived
-  from #4593's committee schedule and held by the gossip layer, for
-  followers too.
-- The gossip layer: the origin gate first in every validator but the sync
-  request path, with its own `outcome`; the connection keeper (dial via
-  peerstore then DHT, `Protect`, backoff, `Unprotect` on leaving the set).
+  from #4593's committee schedule (`types.CommitteeSchedule`) and held by
+  the gossip layer, for followers too.
+- The gossip layer: the origin check first in the batch and
+  certificate-sync-response validators, returning `ValidationIgnore` with
+  its own `outcome`, and passing everything while the gate is dormant; the
+  connection keeper (dial via peerstore then DHT, `Protect`, backoff,
+  `Unprotect` on leaving the set; #4587). A per-origin limit on
+  certificate-sync requests, or the answers moved to a stream to the
+  requester. A follower's `CertSyncer` no longer answering.
 - Tests: a peer outside the committee publishes a batch and a sync
   response and neither is delivered or relayed (the review patch's
-  `TestDefect_StrangerHeaderRelayedToValidators` must fail); a definition
-  with a bad, duplicate or missing attestation is refused; in the simulator
-  a member restarted under the same peer ID receives every batch of the
-  minute after, which is #4587's measurement.
+  `TestDefect_StrangerHeaderRelayedToValidators` must fail); a header, vote
+  and certificate from a committee author under an unrecorded peer ID are
+  still delivered (the lost `p2p.key` of one validator and of f+1); a
+  definition with a bad, duplicate, missing or replayed (lower `Sequence`)
+  attestation, or a node signature by another key, is refused, and accepted
+  below the activating version; a definition without peers does not stall a
+  gated node; a follower two committee changes behind catches up; in the
+  simulator a member restarted under the same peer ID receives every batch
+  of the minute after, which is #4587's measurement.
 - Follow-ups, not this entry: retiring the relay challenge once every
-  candidate is a recorded peer; the vote limiter keyed on the origin
+  candidate is a recorded peer; the vote limiter keyed on the author
   (#4162 item 18); the unused `acc/%s/dispatch` and `acc/%s/anchors`
   topics in `pkg/consensus/dispatcher`, which register no validator.
 
