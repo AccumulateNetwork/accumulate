@@ -2051,7 +2051,10 @@ chosen here, and no code is written for the gate until it is.
   simulator's network writing every validator bound, **and seeding the
   tombstone for every peer ID they bind** (the same record a block would
   write), so a genesis-bound validator cannot be removed and re-added with its
-  genesis attestation; `init network` and
+  genesis attestation; and the activating version's block seeding it from the
+  active definition for every bound peer ID that has none (network.md, "The
+  sequence, and the tombstone"), tested on a network bound before activation;
+  `init network` and
   `netsim` checked to produce definitions the executor accepts. Binding an
   existing network (Kermit, a converted mainnet) before activation, by the
   operators' write (network.md, "Binding an existing network"), with a test
@@ -2081,7 +2084,7 @@ chosen here, and no code is written for the gate until it is.
   definition with a bad, duplicate or missing attestation, or a node
   signature by another key, is refused, and accepted below the activating
   version; a validator removed and re-added with its old attestation, a
-  genesis-bound one included, is refused, and accepted with a higher `Sequence`; a definition write that
+  genesis-bound or pre-activation-bound one included, is refused, and accepted with a higher `Sequence`; a definition write that
   leaves every entry unchanged is accepted (the tombstone is checked only for
   entries that differ); a gated node still answers a certificate-sync request
   from an origin that is not admitted; the executor/spine agreement test; a binary from before the activation

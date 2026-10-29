@@ -24,7 +24,9 @@ Decided: the network keeps, per peer ID, the highest `Sequence` it has ever
 accepted (the tombstone), kept across `RemoveValidator` and
 `UpdateValidatorKey`, checked only for an entry that differs from the active one,
 in the executor's write path and not in `ParseNetwork`; genesis seeds it for every
-peer ID it binds; the spine verifier skips it, held to the executor by an
+peer ID it binds, and the activating version's block seeds it from the active
+definition for every bound peer ID that has none (the active entry's
+`Sequence` is the floor); the spine verifier skips it, held to the executor by an
 agreement test. Not taken: **matching by validator key** (a removed validator has
 no predecessor, a rotated key has a new hash); a definition-wide counter (cannot
 tell which attestation is stale); checking every entry (refuses every unchanged

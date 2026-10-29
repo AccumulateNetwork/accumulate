@@ -212,6 +212,15 @@ accepted** (a tombstone).
   entry's `Sequence`. Without that a genesis-bound validator, removed and
   re-added with its genesis attestation (`Sequence` 1), would find no tombstone
   and be accepted.
+- **The activating version seeds it.** A network bound before activation
+  ("Binding an existing network") has peers in its definition but no tombstone,
+  since no block wrote one. At the block in which the activating version
+  becomes active, the executor seeds the tombstone from the active definition
+  for every bound peer ID that has none, with that entry's `Sequence`. Where a
+  peer ID has no tombstone, the active entry's `Sequence` is the floor: an
+  attestation for it is accepted only above that. So a validator bound
+  before activation, then removed and re-added with its old attestation, is
+  refused like any other.
 - **`RemoveValidator` and `UpdateValidatorKey`.** Neither touches the
   tombstone. A validator removed and re-added with its old attestation is a
   differing entry whose `Sequence` does not exceed the tombstone, and is
