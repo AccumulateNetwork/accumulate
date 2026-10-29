@@ -237,6 +237,15 @@ func TestDedupSetBoundedWithoutCheckpoint(t *testing.T) {
 		t.Fatal("ordering never waited for the executor")
 	default:
 	}
+	// A joining node lists what it buffers off its hands, and ordering goes on.
+	stuck := fed.Load()
+	n.Handled(n.bullshark.LastCommitRound())
+	time.Sleep(300 * time.Millisecond)
+	require.Greater(t, fed.Load(), stuck, "ordering stayed held after Handled")
+	for last := int64(-1); fed.Load() != last; {
+		last = fed.Load()
+		time.Sleep(200 * time.Millisecond)
+	}
 	n.cancel()
 	<-done
 	require.NotEmpty(t, n.handed)
@@ -362,11 +371,11 @@ func TestDedup_OrderingSameAcrossFloors(t *testing.T) {
 	// A node whose executor is further behind than its depth allows waits
 	// for it (#4625), so the shallow nodes' lags are within their depths.
 	execs := []*lagExec{
-		mk(dir, 0, 150, 360),                        // default depth, lag 150
-		mk(t.TempDir(), 100, 30, 0),                 // a shallow DAG: floor near the frontier
-		mk("", 0, 150, 360),                         // no state directory: the reference
-		mk(t.TempDir(), 100, 20, 0),                 // a shallow DAG, a shorter lag
-		mk(t.TempDir(), types.MinDAGGCDepth, 12, 0), // the shallowest depth: the prune window
+		mk(dir, 0, 150, 360),                       // default depth, lag 150
+		mk(t.TempDir(), 100, 30, 0),                // a shallow DAG: floor near the frontier
+		mk("", 0, 150, 360),                        // no state directory: the reference
+		mk(t.TempDir(), 100, 20, 0),                // a shallow DAG, a shorter lag
+		mk(t.TempDir(), types.MinDAGGCDepth, 6, 0), // the shallowest depth: the prune window
 	}
 	for round, cs := range dag {
 		for _, e := range execs {

@@ -31,15 +31,33 @@ type handedGroup struct {
 // more than DAGGCDepth behind the frontier, and the checkpoint for that
 // group needs the rounds from tailFloor up, so past DAGGCDepth less the tail
 // window its tail would be gone. Two rescue windows are kept below that for
-// the frontier running ahead of the certificate being ordered, except at the
-// shallowest depth, where the tail window alone leaves 24 rounds.
+// the frontier running ahead of the certificate being ordered; at the
+// shallowest depth, where that does not fit, a margin of one weak-link window.
 func (n *Node) maxLead() types.Round {
 	depth := n.config.DAGGCDepth
 	tail := types.Round(bullshark.RescueWindow + types.WeakLinkWindow)
 	if margin := types.Round(2 * bullshark.RescueWindow); depth >= margin+tail {
 		return depth - margin
 	}
-	return depth - tail
+	return depth - tail - types.WeakLinkWindow
+}
+
+// Handled tells the node that the groups with leaders up to leader are off
+// its hands without a checkpoint: buffered by a joining node, or produced by
+// the handoff (the service writes none for them). They leave the list, and
+// ordering held for the executor goes on (awaitLead).
+func (n *Node) Handled(leader types.Round) {
+	n.orderMu.Lock()
+	defer n.orderMu.Unlock()
+	keep := n.handed[:0]
+	for _, g := range n.handed {
+		if g.leader > leader {
+			keep = append(keep, g)
+		}
+	}
+	n.handed = keep
+	close(n.leadWake)
+	n.leadWake = make(chan struct{})
 }
 
 // awaitLead holds ordering while the executor is further behind than

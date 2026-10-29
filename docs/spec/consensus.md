@@ -1698,13 +1698,14 @@ The DAG collects every round more than `DAGGCDepth` behind the frontier, and
 the checkpoint for a group needs the DAG from its tail floor (the leader
 round less `RescueWindow` + `WeakLinkWindow`) up. So a node with a state
 directory orders no further while the frontier is more than
-`DAGGCDepth` − 2 × `RescueWindow` rounds (1,936 by default; 24 at the minimum
+`DAGGCDepth` − 2 × `RescueWindow` rounds (1,936 by default; 16 at the minimum
 depth) past the leader of the oldest group handed to the executor and not
 yet produced (`Node.maxLead`, `Node.awaitLead`); the checkpoint that takes
 that group off the list lets ordering go on. This changes when groups are
 handed over, never which: the commit buffer's capacity no longer bounds the
-lag, as the lead stops far short of filling it. A node that never takes a
-checkpoint (collecting, halted) waits likewise. And `CheckpointAt` fails,
+lag, as the lead stops far short of filling it. A joining node, which takes no checkpoint
+for the groups it buffers or for the handoff's, lists them off instead
+(`Node.Handled`) and does not wait; a halted node waits. And `CheckpointAt` fails,
 changing nothing, when the DAG has already collected rounds from the tail
 floor up — a checkpoint without its tail restores a node that orders
 differently — so none is written without one; the next block's checkpoint
