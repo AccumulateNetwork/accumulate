@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.6.8
+
+A validation-hardening release. No executor version change, no encoding change;
+1.4.6.7 and this release interoperate.
+
+- Validation hardening (#4572)
+  - Message validation refuses a message that lacks a field it is named,
+    routed or executed by, instead of failing while reading it.
+  - Anchors are checked for the fields their validation reads before those
+    fields are used.
+
 ## 1.4.6.7
 
 The release Kermit runs. A devnet can now turn on the BPT history retention
