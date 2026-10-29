@@ -1556,11 +1556,17 @@ time its peers hold for the block before it, read from:
 | a joined state, at the handoff | the pulled state's ledger time for its block (`Service.pulledBlock`) |
 
 **The system ledger records the block's time to the nanosecond from
-v2-canaveral** (`SystemLedger.BlockTimeNanos`, written at block begin beside
-`Timestamp`, which encodes it to the second; `ledgerBlockTime`). Before
-v2-canaveral only `Timestamp` exists, so the last two rows read the time to the
-second and match the peers only when the next block's leader stamped it
-after the last block's time. The ledger records nothing for a block the
+v2-canaveral**: `Timestamp` encodes it as signed Unix seconds, and
+`SystemLedger.TimestampNanosecond`, written at block begin, records the
+offset within that second, 0 to 999999999 (`ledgerBlockTime` reads the
+seconds plus the offset). Unix nanoseconds would not do: a header's stamp
+may be the largest int64, a Byzantine leader's choice that header validation
+does not bound, and the clamp then raises the next blocks past 2262-04-11,
+where `time.Time` still holds the time but `UnixNano` is undefined. The
+seconds and the offset hold every time the clamp can produce. Before
+v2-canaveral the offset is not recorded, so the last two rows read the time
+to the second and match the peers only when the next block's leader stamped
+it after the last block's time. The ledger records nothing for a block the
 executor discarded as empty: the second row then reads the last recorded
 block's time, which a checkpoint that records a time makes moot.
 

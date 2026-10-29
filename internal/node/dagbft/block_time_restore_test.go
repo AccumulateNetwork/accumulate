@@ -8,6 +8,7 @@ package dagbft
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -19,11 +20,11 @@ import (
 )
 
 // pullStateAt is pullState with the time the ledger records for the block,
-// as an executor from v2-canaveral records it: to the nanosecond, and to the
-// second in Timestamp.
+// as an executor from v2-canaveral records it: to the second in Timestamp,
+// and the offset within that second in TimestampNanosecond.
 func pullStateAt(t *testing.T, svc *Service, index uint64, round types.Round, at time.Time) {
 	t.Helper()
-	putLedger(t, svc, &protocol.SystemLedger{Index: index, LeaderRound: uint64(round), Timestamp: at, BlockTimeNanos: at.UnixNano()})
+	putLedger(t, svc, &protocol.SystemLedger{Index: index, LeaderRound: uint64(round), Timestamp: at, TimestampNanosecond: uint64(at.Nanosecond())})
 }
 
 // pullStateAtSeconds is pullStateAt as an executor before v2-canaveral records
@@ -208,4 +209,98 @@ func TestBlockTime_ALedgerTimeIsReadToTheNanosecond(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ca.blocks, 1)
 	require.Equal(t, recorded.Add(time.Millisecond), ca.blocks[0].Time)
+}
+
+// A Byzantine leader may stamp its header at the largest time a header can
+// carry, and the clamp then raises the next blocks past it, beyond the range
+// of Unix nanoseconds (consensus spec, "Restart"). A node that joins from the
+// ledger, or restarts from its ledger or its checkpoint, still times the next
+// block as a peer that did not stop.
+func TestBlockTime_TheLargestStampSurvivesTheLedgerAndTheCheckpoint(t *testing.T) {
+	stamps := []struct {
+		round types.Round
+		at    time.Time
+	}{
+		{4, time.Unix(0, math.MaxInt64)}, // block 1: the largest stamp
+		{6, time.Unix(100, 0)},           // block 2: raised past it
+		{8, time.Unix(200, 0)},           // block 3: raised again
+	}
+
+	peer, peerBlocks, pa := newCommitService(t, 1)
+	peer.node.Bullshark().SetLastCommitRound(3)
+	peer.node.Primary().SetRound(4)
+	for _, s := range stamps {
+		_, err := peer.processCommittedGroup(group(commitCert(pa, s.round, s.at, nil)))
+		require.NoError(t, err)
+	}
+	require.Len(t, peerBlocks.blocks, 3)
+	at2, want := peerBlocks.blocks[1].Time, peerBlocks.blocks[2].Time
+	require.Equal(t, time.Unix(0, math.MaxInt64).Add(2*time.Millisecond).UTC(), want, "precondition: the peer raises both later stamps")
+
+	// A node that joins from the state at block 2.
+	joined, ja, author := newJoiningService(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	joined.ctx = ctx
+	joined.StartCollecting()
+	for _, s := range stamps {
+		_, err := joined.processCommittedGroup(group(commitCert(author, s.round, s.at, nil)))
+		require.NoError(t, err)
+	}
+	joined.wg.Add(1)
+	go joined.blockProductionLoop()
+	defer func() { cancel(); joined.wg.Wait() }()
+	pullStateAt(t, joined, 2, 6, at2)
+	require.NoError(t, joined.Handoff(2))
+	require.Len(t, ja.blocks, 1)
+	require.Equal(t, want, ja.blocks[0].Time, "a node that joined from the ledger must time block 3 as its peer does")
+
+	// A node that restarts at block 2, from its ledger and from its
+	// checkpoint.
+	for _, withTime := range []bool{false, true} {
+		dir := t.TempDir()
+		store := persist.NewStore(dir)
+		store.SetFilename(checkpointFile)
+		cp := &persist.Checkpoint{Version: 1, Partition: "bvn1", BlockIndex: 2, CurrentRound: 7, LastCommitRound: 6}
+		if withTime {
+			cp.BlockTime = at2
+		}
+		require.NoError(t, store.Save(cp))
+
+		restarted, ra, author := newCommitService(t, 1)
+		restarted.config.DataDir = dir
+		ra.last = 2
+		pullStateAt(t, restarted, 2, 6, at2)
+		require.NoError(t, restarted.initializeGenesis())
+		seeded, err := restarted.seedFromCheckpoint()
+		require.NoError(t, err)
+		require.True(t, seeded)
+
+		_, err = restarted.processCommittedGroup(group(commitCert(author, 8, stamps[2].at, nil)))
+		require.NoError(t, err)
+		require.Len(t, ra.blocks, 1)
+		require.Equal(t, want, ra.blocks[0].Time, "a node that restarted (checkpoint time %v) must time block 3 as its peer does", withTime)
+	}
+}
+
+// The ledger's time, as the executor records it from v2-canaveral, survives
+// the ledger's binary encoding for every time the clamp can produce: past
+// the range of Unix nanoseconds, before 1970, and on a whole second.
+func TestBlockTime_TheLedgerTimeSurvivesItsEncoding(t *testing.T) {
+	largest := time.Unix(0, math.MaxInt64)
+	for _, at := range []time.Time{
+		largest,
+		largest.Add(time.Millisecond),
+		largest.Add(time.Hour),
+		time.Unix(0, math.MinInt64),
+		time.Unix(-1, 5),
+		time.Unix(100, 999_999_999),
+		time.Unix(100, 0),
+	} {
+		ledger := &protocol.SystemLedger{Url: protocol.PartitionUrl("bvn1").JoinPath(protocol.Ledger), Index: 1, Timestamp: at, TimestampNanosecond: uint64(at.Nanosecond())}
+		b, err := ledger.MarshalBinary()
+		require.NoError(t, err)
+		read := new(protocol.SystemLedger)
+		require.NoError(t, read.UnmarshalBinary(b))
+		require.Equal(t, at.UTC(), ledgerBlockTime(read), "%v", at)
+	}
 }

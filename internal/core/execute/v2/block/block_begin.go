@@ -147,13 +147,15 @@ func (x *Executor) Begin(params execute.BlockParams) (_ execute.Block, err error
 		ledgerState.LeaderRound = block.LeaderRound
 	}
 
-	// From v2-canaveral the ledger also records the block's time to the
-	// nanosecond. Timestamp encodes it to the second, and a node that joins
-	// or restarts raises its next block above this block's time as its peers
-	// do only if it reads the time they hold (consensus spec, "Restart").
-	ledgerState.BlockTimeNanos = 0
+	// From v2-canaveral the ledger also records the block's time below the
+	// second. Timestamp encodes it to the second, and a node that joins or
+	// restarts raises its next block above this block's time as its peers do
+	// only if it reads the time they hold (consensus spec, "Restart"). The
+	// offset within the second, with Timestamp's seconds, holds every time
+	// the clamp can produce; Unix nanoseconds do not hold a time past 2262.
+	ledgerState.TimestampNanosecond = 0
 	if x.globals().Active.ExecutorVersion.V2CanaveralEnabled() {
-		ledgerState.BlockTimeNanos = block.Time.UnixNano()
+		ledgerState.TimestampNanosecond = uint64(block.Time.Nanosecond())
 	}
 	ledgerState.PendingUpdates = nil
 	ledgerState.AcmeBurnt = *big.NewInt(0)

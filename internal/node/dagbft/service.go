@@ -580,13 +580,13 @@ func (s *Service) seedFromCheckpoint() (bool, error) {
 	return true, nil
 }
 
-// ledgerBlockTime is the time a system ledger records for its block: to the
-// nanosecond from v2-canaveral, and before it to the second.
+// ledgerBlockTime is the time a system ledger records for its block:
+// Timestamp's seconds plus the offset within that second, which is recorded
+// from v2-canaveral and zero before it, so a ledger before v2-canaveral reads
+// to the second. Unlike Unix nanoseconds, the pair holds every time the
+// clamp in produce can reach, including one past 2262.
 func ledgerBlockTime(ledger *protocol.SystemLedger) time.Time {
-	if ledger.BlockTimeNanos != 0 {
-		return time.Unix(0, ledger.BlockTimeNanos).UTC()
-	}
-	return ledger.Timestamp
+	return time.Unix(ledger.Timestamp.Unix(), int64(ledger.TimestampNanosecond)).UTC()
 }
 
 // stateBlockTime is the time the system ledger records for the executor's

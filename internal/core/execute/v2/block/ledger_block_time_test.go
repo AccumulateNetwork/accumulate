@@ -17,8 +17,8 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
 )
 
-// From v2-canaveral the system ledger records each block's time to the
-// nanosecond, beside Timestamp, which records it to the second; a node that
+// From v2-canaveral the system ledger records each block's time below the
+// second, beside Timestamp, which records it to the second; a node that
 // joins or restarts reads the clamp's previous time from it (consensus spec,
 // "Restart"). Before v2-canaveral the field is never written.
 func TestSystemLedgerRecordsTheBlockTime(t *testing.T) {
@@ -33,9 +33,9 @@ func TestSystemLedgerRecordsTheBlockTime(t *testing.T) {
 			for _, part := range []string{protocol.Directory, "BVN0", "BVN1"} {
 				ledger := GetAccount[*protocol.SystemLedger](t, sim.Database(part), protocol.PartitionUrl(part).JoinPath(protocol.Ledger))
 				if version.V2CanaveralEnabled() {
-					require.Equal(t, ledger.Timestamp.UnixNano(), ledger.BlockTimeNanos, "%s", part)
+					require.Equal(t, uint64(ledger.Timestamp.Nanosecond()), ledger.TimestampNanosecond, "%s", part)
 				} else {
-					require.Zero(t, ledger.BlockTimeNanos, "%s", part)
+					require.Zero(t, ledger.TimestampNanosecond, "%s", part)
 				}
 			}
 		})
