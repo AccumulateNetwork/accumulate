@@ -2011,16 +2011,17 @@ or responses.
 decision:** it needs the first executor version activated after v2-kourou on
 this line, whose name and number the owner decides (#4139, !1199 reconcile
 the numbering; !1277 wrote v2-canaveral for the same thing in its C25/C26
-questions). No version is named or numbered here, and no code is written for
-the gate until it is.
+questions, and the tree already has an entry of that name). No version is
+chosen here, and no code is written for the gate until it is.
 
 - `protocol/general.yml`: `ValidatorPeer` (`ID`, `Sequence`, `Signature`,
   `NodeSignature`) on `ValidatorInfo`, regenerating `protocol/types_gen.go`;
   the attestation (a length-prefixed struct, two tags) made and verified in
   one place; `UpdateValidatorKey`'s callers re-attesting.
 - `ParseNetwork` (`pkg/types/network/globals.go`, called from
-  `internal/core/execute/v2/block/network_accounts.go:91` and its v1
-  counterpart), behind the version above, refusing: an entry whose
+  `internal/core/execute/v2/block/network_accounts.go:123`, in the staged
+  branch; the `ParseNetworkLegacy` branch and v1 stay as they are), behind
+  the version above, refusing: an entry whose
   attestation or node signature does not verify; two entries naming one
   peer; an active entry without one; a write that lowers a validator's
   `Sequence` or changes its peer without raising it; a write that changes
@@ -2028,10 +2029,14 @@ the gate until it is.
   active globals' version decides, the pending definition is what is parsed.
 - The spine verifier (`internal/spine/spine.go:254`) calls `ParseNetwork` too
   and has no executor version in hand; it is given one, or the two diverge.
-- An executor version to gate on: see above. v2-kourou (10) is active on
-  Kermit, so it cannot be the gate; v2-tanegashima (9) is below it and the
-  `VNext` (11) placeholder is not for use. #4593's ledger fields, which say
-  v2-kourou in places, are gated on the same.
+- An executor version to gate on: see above. v2-kourou is active on Kermit,
+  so it cannot be the gate, and the `VNext` placeholder is not for use.
+  `protocol/enums.yml` already carries v2-canaveral ("activates the DAG-BFT
+  consensus rules", the first after v2-kourou) and #4593's text gates its
+  ledger fields on it; whether the peer record and the origin gate are gated
+  on that same version, or on a later one, is the owner's decision, so this
+  entry says only "the first executor version activated after v2-kourou on
+  this line".
 - Genesis (`BuildGenesisDocs`, which holds every node's keys) and the
   simulator's network writing every validator bound; `init network` and
   `netsim` checked to produce definitions the executor accepts. Binding an
@@ -2053,13 +2058,15 @@ the gate until it is.
   certificate-sync requests, or the answers moved to a stream to the
   requester. A follower's `CertSyncer` no longer answering.
 - Tests: a peer outside the committee publishes a batch and a sync
-  response and neither is delivered or relayed (the review patch's
-  `TestDefect_StrangerHeaderRelayedToValidators` must fail); a header, vote
+  response and neither is delivered or relayed (the #4601 review
+  patch's `TestDefect_StrangerHeaderRelayedToValidators`, not committed, must
+  keep failing); a header, vote
   and certificate from a committee author under an unrecorded peer ID are
   still delivered (the lost `p2p.key` of one validator and of f+1); a
   definition with a bad, duplicate, missing or replayed (lower `Sequence`)
   attestation, or a node signature by another key, is refused, and accepted
-  below the activating version; a definition without peers does not stall a
+  below the activating version; a binary from before the activation
+  round-trips an entry carrying `Peer`; a definition without peers does not stall a
   gated node; a follower two committee changes behind catches up; in the
   simulator a member restarted under the same peer ID receives every batch
   of the minute after, which is #4587's measurement.

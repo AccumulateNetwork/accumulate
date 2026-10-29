@@ -1310,8 +1310,8 @@ the validators, where every message passes.
 connection to every other admitted peer and protects it from the connection
 manager's trimming (`host.ConnManager().Protect(id, "consensus/<partition>")`;
 the default manager trims only above its high-water mark, 192 connections,
-down to its low-water mark of 160, which a validator with a hundred and
-fifty followers can pass). The gossip layer keeps the set: when the
+down to its low-water mark of 160, which a validator with more than a
+hundred and eighty peers can pass). The gossip layer keeps the set: when the
 admitted peers change it dials those it is not connected to — a peer's
 addresses from the peerstore, else from the DHT (`FindPeer`) — and redials
 one that drops, with backoff; it unprotects a peer that leaves the set, and
@@ -1343,9 +1343,8 @@ published by a follower is ignored at the first hop, and what a follower
 publishes as a header, vote or certificate is admitted only if its author is
 a committee member, which a follower's is not (section 1). They originate
 certificate-sync requests, which are admitted and answered by committee
-peers. A follower's own `CertSyncer` stops answering requests, since its
-answers would be ignored at the first hop; if it still computed them that
-would be accepted waste, and the build says which. Nobody connects to a
+peers. A follower's `CertSyncer` does not answer requests, since its answers
+would be ignored at the first hop. Nobody connects to a
 follower on purpose: it connects to the validators it finds and is kept to
 the connection manager's limits like any peer, and since a validator's
 protected connections are its committee's, a follower's is what trimming
@@ -1358,7 +1357,7 @@ members answer it, each with up to 100 certificates, broadcast to every node
 (#4610 measured 8 of 12 answering). The origin of a request is signed, so a
 per-origin limit on requests is possible and is listed under DIFFERENCES C17;
 moving the answers to a stream to the requester, not a broadcast, is the
-alternative (design-questions.md).
+alternative, not designed here.
 
 ### DAG retention
 
