@@ -10,8 +10,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func TestRouteSyntheticMessage(t *testing.T) {
@@ -32,4 +35,24 @@ func TestRouteSyntheticMessage(t *testing.T) {
 		_, err := RouteMessages(router, []messaging.Message{synth})
 		require.NoError(t, err)
 	})
+}
+
+// An empty GlobalValues is how a failed initialization is reported: the router
+// refuses it and never becomes ready.
+func TestRouter_EmptyGlobalsIsNotReady(t *testing.T) {
+	bus := events.NewBus(nil)
+	r := NewRouter(RouterOptions{Events: bus})
+
+	err := bus.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
+	require.Error(t, err)
+	require.False(t, <-r.Ready())
+}
+
+func TestRouter_RoutingTableIsReady(t *testing.T) {
+	bus := events.NewBus(nil)
+	r := NewRouter(RouterOptions{Events: bus})
+
+	table := &protocol.RoutingTable{Routes: BuildSimpleTable(partitionNames(2))}
+	require.NoError(t, bus.Publish(events.WillChangeGlobals{New: &network.GlobalValues{Routing: table}}))
+	require.True(t, <-r.Ready())
 }

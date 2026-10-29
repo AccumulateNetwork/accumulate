@@ -38,6 +38,17 @@ type DidSaveSnapshot struct {
 	MinorIndex uint64
 }
 
+// WillChangeGlobals announces the network globals an executor is about to
+// apply.
+//
+// On a bus a partition provides (dagbftProvidesEventBus in
+// cmd/accumulated/run/dagbft.go) only executed state may publish it. The
+// submit gate (internal/node/dagbft/membership.go), the conductor's anchor
+// gate (internal/core/crosschain/cadence.go) and the adapter's committee
+// (pkg/consensus/adapter/executor_bridge.go) take the committee from it
+// without checking a signature. exp/apiutil's router publishes a peer's answer
+// only on a private bus of its own. TestWillChangeGlobalsPublishers enforces
+// the set of files that may construct it.
 type WillChangeGlobals struct {
 	New, Old *core.GlobalValues
 }
