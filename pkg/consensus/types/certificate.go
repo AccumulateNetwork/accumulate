@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"encoding/binary"
 	"errors"
+	"reflect"
 	"sort"
 )
 
@@ -158,9 +159,11 @@ func (c *Certificate) Parents() []CertificateDigest {
 	return c.Header.Parents
 }
 
-// SameWire reports whether o is c as encoded on the wire: the header with
-// its signature, the vote signatures and the signers, every field but the
-// state hash. The digest covers only the header, and not its signature, so
+// SameWire reports whether o is c as encoded on the wire: a copy of the whole
+// certificate with only the state hash zeroed is compared, so every field but
+// the state hash counts, the header with its signature, the vote signatures
+// and the signers among them. The digest covers only the header, and not its
+// signature, so
 // this is what makes a copy of a held certificate a duplicate (#4597):
 // comparing the encoding rather than fields means no field added later
 // reopens it. The state hash is left out because a node sets it on the
@@ -182,11 +185,20 @@ func (c *Certificate) SameWire(o *Certificate) bool {
 	return bytes.Equal(a, b)
 }
 
-// wireWithoutStateHash is the certificate's wire encoding with the state
-// hash zero. It reads neither certificate's state hash, which execution
-// sets on another goroutine (#4445).
+// wireWithoutStateHash is the encoding of a copy of the whole certificate
+// with the state hash zero: every field but the state hash is copied, and none
+// is named, so a field added later is not left out. The state hash is never
+// read, not even by a struct copy, because execution sets it on another
+// goroutine (#4445).
 func (c *Certificate) wireWithoutStateHash() ([]byte, error) {
-	bare := Certificate{Header: c.Header, Signatures: c.Signatures, SignedAuthorities: c.SignedAuthorities}
+	var bare Certificate
+	src := reflect.ValueOf(c).Elem()
+	dst := reflect.ValueOf(&bare).Elem()
+	for i := 0; i < src.NumField(); i++ {
+		if src.Type().Field(i).Name != "StateHash" {
+			dst.Field(i).Set(src.Field(i))
+		}
+	}
 	return bare.Marshal()
 }
 

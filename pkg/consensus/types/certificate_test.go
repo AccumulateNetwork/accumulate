@@ -8,6 +8,8 @@ package types_test
 
 import (
 	"crypto/ed25519"
+	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -330,4 +332,89 @@ func TestCertificate_HasSignatureFrom(t *testing.T) {
 	assert.False(t, cert.HasSignatureFrom(0))
 	assert.False(t, cert.HasSignatureFrom(3))
 	assert.False(t, cert.HasSignatureFrom(100))
+}
+
+// perturb changes v so that it no longer equals what it was, or reports false
+// for a kind it cannot change.
+func perturb(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Slice:
+		v.Set(reflect.Append(v, reflect.Zero(v.Type().Elem())))
+	case reflect.Array:
+		if v.Len() == 0 {
+			return false
+		}
+		return perturb(v.Index(0))
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint:
+		v.SetUint(v.Uint() + 1)
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+		v.SetInt(v.Int() + 1)
+	case reflect.Bool:
+		v.SetBool(!v.Bool())
+	case reflect.String:
+		v.SetString(v.String() + "x")
+	case reflect.Struct:
+		if v.NumField() == 0 {
+			return false
+		}
+		return perturb(v.Field(0))
+	case reflect.Pointer:
+		v.Set(reflect.New(v.Type().Elem()))
+	default:
+		return false
+	}
+	return true
+}
+
+// TestSameWireComparesEveryField fails when a field is added to Certificate
+// and SameWire does not compare it. The state hash is the one field it
+// leaves out.
+func TestSameWireComparesEveryField(t *testing.T) {
+	committee, keys := makeCommittee(t, 4)
+	header := createSignedHeader(t, committee.Validators[0].PublicKey, keys[0], 1, 0)
+	a := createCertificate(t, header, committee, keys, []int{0, 1, 2})
+	a.SetStateHash(types.StateHash{1})
+	b := a.Clone()
+	require.True(t, a.SameWire(b), "a clone must be the same on the wire")
+
+	typ := reflect.TypeOf(types.Certificate{})
+	for i := 0; i < typ.NumField(); i++ {
+		name := typ.Field(i).Name
+		t.Run(name, func(t *testing.T) {
+			f := reflect.ValueOf(b).Elem().Field(i)
+			orig := reflect.New(f.Type()).Elem()
+			orig.Set(f)
+			defer f.Set(orig)
+
+			require.Truef(t, perturb(f), "cannot perturb field %s of kind %s", name, f.Kind())
+			if name == "StateHash" {
+				assert.True(t, a.SameWire(b), "SameWire must ignore %s", name)
+			} else {
+				assert.False(t, a.SameWire(b), "SameWire does not compare field %s", name)
+			}
+		})
+	}
+}
+
+// TestSameWireDoesNotReadStateHash runs SameWire while another goroutine sets
+// the state hash, as execution does (#4445); under -race it fails if SameWire
+// reads the field.
+func TestSameWireDoesNotReadStateHash(t *testing.T) {
+	committee, keys := makeCommittee(t, 4)
+	header := createSignedHeader(t, committee.Validators[0].PublicKey, keys[0], 1, 0)
+	a := createCertificate(t, header, committee, keys, []int{0, 1, 2})
+	b := a.Clone()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 100; i++ {
+			a.SetStateHash(types.StateHash{byte(i)})
+		}
+	}()
+	for i := 0; i < 100; i++ {
+		b.SameWire(a)
+	}
+	wg.Wait()
 }
