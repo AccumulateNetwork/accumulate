@@ -1690,7 +1690,12 @@ reports that floor as it hands groups over and as it checkpoints
 last commit: past that depth the checkpoint's tail cannot be written, and a
 node that collects or is halted takes no checkpoint, so the floor would
 otherwise never move and the set would grow with every certificate it
-orders. A node without a state directory records no handed groups, so it
+orders. The handed groups themselves are held to the same depth: those whose
+leader is more than `DAGGCDepth` below the last commit are dropped as ordering
+advances, so a node that never checkpoints holds a bounded list (#4624); a
+checkpoint requested for a leader below the dropped groups is not taken
+(`CheckpointAt` returns nil and the service writes none; DIFFERENCES C28). A node without a state
+directory records no handed groups, so it
 reports no floor and prunes at the frontier. The checkpoint copies only the
 window it keeps, from 2 × `RescueWindow` below its leader.
 
