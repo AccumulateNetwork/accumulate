@@ -20,11 +20,12 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// TestNetSimMultiValidatorAdvancesBlocks starts a netsim whose partitions have
-// more than one validator and requires every partition to keep producing
-// blocks (#4392, #4167). Each sub-node's DAG-BFT service needs its own libp2p host
-// and GossipSub router; without them a committee of two never reaches quorum
-// ("Not enough stake for certificate") and the ledgers stay at genesis.
+// TestNetSimMultiValidatorAdvancesBlocks starts a netsim in each of the devnet
+// shapes (one or two BVNs, one to four validators per partition) and requires
+// every partition to keep producing blocks (#4392, #4167). With more than one
+// validator, each sub-node's DAG-BFT service needs its own libp2p host and
+// GossipSub router; without them a committee never reaches quorum ("Not enough
+// stake for certificate") and the ledgers stay at genesis.
 func TestNetSimMultiValidatorAdvancesBlocks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("starts a multi-validator netsim")
