@@ -2466,3 +2466,20 @@ take its state and route requests to it. The code (#4447/#4466) lets each node
 resume from its own block when fewer peers serve than the signing threshold,
 so nodes can resume at different blocks, and a peer that times out counts as
 not serving. Not built.
+
+### A halted partition states N but cannot revive from it (#4512)
+
+The spec (executor.md, "A partition that loses a quorum of its validators'
+states", Paul 2026-10-03) revives a partition from its last complete block N,
+with the committee for the next block formed from N's state. The code (!1283)
+computes and states N from the Directory's delivered number, and says whether
+state as of N is at hand, retained or not obtainable. It does not roll a
+survivor back to N or redo the blocks after it (#4627), form the committee
+from N's state or have the Directory re-evaluate held anchors (#4628), copy
+state by hand (R4-C, #4629), retain BPT history by default (#4630), or let a
+joiner verify N itself: N is the Directory node's word, not a quorum the
+asker checks (#4631). The network version used for the threshold is the
+Directory's at the time it executed the anchor. The Directory's own last
+complete block is not said: its anchor ledger counts the BVNs' anchors, so
+the read is installed on BVNs only. N is read again at each repeat of the halt
+line (every 10 s, bounded at 5 s).

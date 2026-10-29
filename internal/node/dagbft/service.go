@@ -27,6 +27,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/events"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/lastcomplete"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
@@ -65,6 +66,15 @@ type ServiceConfig struct {
 	// it: the block the pulled state is and the leader round that committed
 	// that block (#4362). Required.
 	Database *database.Database
+
+	// LastComplete, if set, says the partition's last complete block: the
+	// newest block whose anchor the Directory holds with the threshold's
+	// signatures, and whether this node can obtain state as of it. It is
+	// asked at a stall that lost the quorum, so the halt says where the
+	// partition stands (executor spec, "A partition that loses a quorum of
+	// its validators' states"; #4512). It may read the Directory over the
+	// network and is bounded by the caller.
+	LastComplete func(ctx context.Context) lastcomplete.Answer
 
 	// Host is the libp2p host for networking (optional, enables multi-node).
 	Host host.Host
@@ -737,6 +747,10 @@ func (s *Service) noteBlockProduced(blockIndex uint64, round types.Round) {
 		"round", round)
 	s.stallSince = time.Time{}
 	s.lastStallLog = time.Time{}
+	// What the stall said no longer holds: the gauges are set only inside a
+	// stall, so this is the one place that ends them (#4512).
+	mBelowQuorum.WithLabelValues(s.config.Partition.ID).Set(0)
+	mLastComplete.DeleteLabelValues(s.config.Partition.ID)
 }
 
 // checkBlockLiveness reports this partition as stalled when no block has been
@@ -821,14 +835,62 @@ func (s *Service) checkBlockLiveness() {
 			// is, so an operator restores validators rather than hunting a
 			// consensus bug.
 			mBelowQuorum.WithLabelValues(s.config.Partition.ID).Set(1)
-			s.logger.Error("This partition has lost its quorum: fewer of its validators were heard producing at this round in the last 5s than a round needs; it holds its state until enough of them return",
-				"partition", s.config.Partition.ID, "producing", rs.Authors, "committee", rs.Committee, "quorum", rs.Quorum, "lastBlock", lastIndex)
+			lost := []interface{}{"partition", s.config.Partition.ID, "producing", rs.Authors, "committee", rs.Committee, "quorum", rs.Quorum, "lastBlock", lastIndex}
+			lost = append(lost, s.lastComplete()...)
+			s.logger.Error("This partition has lost its quorum: fewer of its validators were heard producing at this round in the last 5s than a round needs; it holds its state until enough of them return", lost...)
 		} else {
 			mBelowQuorum.WithLabelValues(s.config.Partition.ID).Set(0)
+			mLastComplete.DeleteLabelValues(s.config.Partition.ID)
 		}
 	}
 	s.logger.Error("Partition stalled: no block produced", args...)
 }
+
+// lastComplete is the log fields that say the partition's last complete
+// block: N, the root its anchor carries, how far this node is past it, and
+// whether the state as of N can be obtained -- or that N is unknown and why.
+func (s *Service) lastComplete() []interface{} {
+	if s.config.LastComplete == nil {
+		return nil
+	}
+	parent := s.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, lastCompleteTimeout)
+	defer cancel()
+	a := s.config.LastComplete(ctx)
+	if a.Known {
+		mLastComplete.WithLabelValues(s.config.Partition.ID).Set(float64(a.Block))
+	} else {
+		mLastComplete.DeleteLabelValues(s.config.Partition.ID)
+	}
+	if !a.Known {
+		return []interface{}{"lastCompleteBlock", "unknown", "lastCompleteWhy", a.Why, "executed", a.Executed}
+	}
+	kv := []interface{}{
+		"lastCompleteBlock", a.Block, "lastCompleteRoot", fmt.Sprintf("%x", a.Root),
+		"executed", a.Executed, "executedPastIt", a.Ahead, "stateAsOfIt", a.State.String(),
+	}
+	if a.StateErr != "" {
+		kv = append(kv, "stateAsOfItWhy", a.StateErr)
+	}
+	return kv
+}
+
+// mLastComplete is the partition's last complete block N as of the last stall
+// that lost its quorum (#4512). It is absent until one has, while N is
+// unknown and once a stall no longer shows the quorum lost.
+var mLastComplete = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Namespace: "accumulate",
+	Subsystem: "dagbft",
+	Name:      "partition_last_complete_block",
+	Help:      "The newest block of the partition whose anchor the Directory holds with the threshold's signatures, as read when the partition last reported losing its quorum",
+}, []string{"partition"})
+
+// lastCompleteTimeout bounds the read of the Directory the halt message
+// waits for.
+const lastCompleteTimeout = 5 * time.Second
 
 // mBelowQuorum is 1 while the partition's consensus sees fewer of its
 // committee producing at the current round than a round needs (#4512).

@@ -2059,6 +2059,39 @@ sealed" and "Syncing in a partition should not depend on any other partition
    says why; the partitions that receive from it bound what they hold for it
    (#4510); operators restore its validators (with their keys) or intervene.
 
+**The last complete block N (#4512, !1283).** The partition says where it
+stands when it halts. N is the newest block of the partition whose anchor the
+Directory holds with the threshold's signatures. It is read from the
+Directory, not from the partition: a BVN's own pool never holds its peers'
+signatures, so the survivors of a partition below its quorum cannot count a
+quorum on any anchor, old or new, and the Directory executes an anchor only
+with the threshold's signatures of the partition's set (or a collection proof
+under a directory root it holds). The node reads the Directory's anchor ledger
+for the number of the anchor it has delivered from the partition, finds that
+anchor in its own anchor-sequence chain, and states N (the anchor's block) and
+the root the anchor carries. It never derives N from its own unsigned state:
+if the Directory cannot be read, or has delivered none of the partition's
+anchors, or this node does not hold the anchor, the node says N is unknown
+and why. N is said in the halt message ("This partition has lost its quorum"),
+in the line a node with no block of its own to resume from says when no state
+can be proven to it, and on the gauge
+`accumulate_dagbft_partition_last_complete_block`. Beside N the node says how
+many blocks it has executed past it (the anchor of a block is made as the next
+begins, so one is usual; nothing after N has a quorum) and whether it can
+obtain the state as of N: **at hand** (its executed height is N), **in
+retained history** (N is within `RetainedBlockRange`; the root the node
+recorded for N is its own word and must be matched against the anchored root)
+or **not obtainable** (it executed past N and keeps no history that reaches it,
+which is every node with the default configuration); a failure reading the
+retained history is said as that failure, not as absent history. The gauges
+and the halt's N end when the partition produces a block again. Built: this, and its
+tests (`lastcomplete`; e2e `TestAPartitionThatLostItsQuorumStatesItsLastCompleteBlock`).
+Not built: rolling a survivor back to N and redoing the blocks after N (#4627),
+the committee for the block after N from N's state plus operator changes and
+the Directory re-evaluating what it holds (#4628), the operational state copy
+(#4629), retaining history across the rescue window (#4630, the owner's
+decision) and a quorum-bound proof of N a joiner can check itself (#4631).
+
 Before any of it, the partition must be seen for what it is: a torn store is
 detected at resume and not resumed onto (C13, #4507), and the Directory bounds
 what it holds for a partition below its quorum and names it degraded (#4510).

@@ -59,4 +59,26 @@ func TestAPartitionThatLostItsQuorumSaysSo(t *testing.T) {
 		}
 	}
 	_ = err
+
+	// Consim holds no anchors, so it cannot say N (the real source is tested
+	// in internal/node/dagbft against real executors, and in test/e2e). What
+	// it can pin is what N is read against: the survivors halt at one
+	// executed height and have executed the same blocks, so each names the
+	// same N and N is at or below that height (#4512).
+	a, b := sim.byPart["BVN1"][0], sim.byPart["BVN1"][1]
+	if a.height.Load() == 0 || a.height.Load() != b.height.Load() {
+		t.Fatalf("the survivors halted at heights %d and %d, want one nonzero height", a.height.Load(), b.height.Load())
+	}
+	a.seqMu.Lock()
+	b.seqMu.Lock()
+	defer a.seqMu.Unlock()
+	defer b.seqMu.Unlock()
+	if len(a.seq) != len(b.seq) {
+		t.Fatalf("the survivors executed %d and %d blocks", len(a.seq), len(b.seq))
+	}
+	for i := range a.seq {
+		if a.seq[i] != b.seq[i] {
+			t.Fatalf("the survivors executed different blocks at %d", i+1)
+		}
+	}
 }
