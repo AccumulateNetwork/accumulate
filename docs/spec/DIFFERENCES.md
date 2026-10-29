@@ -2014,8 +2014,8 @@ the numbering; !1277 wrote v2-canaveral for the same thing in its C25/C26
 questions, and the tree already has an entry of that name). No version is
 chosen here, and no code is written for the gate until it is.
 
-- `protocol/general.yml`: `ValidatorPeer` (`ID`, `Sequence`, `Signature`,
-  `NodeSignature`) on `ValidatorInfo`, regenerating `protocol/types_gen.go`;
+- `protocol/general.yml`: `ValidatorPeer` (`ID`, `NodePublicKey`, `Sequence`,
+  `Signature`, `NodeSignature`) on `ValidatorInfo`, regenerating `protocol/types_gen.go`;
   the attestation (a length-prefixed struct, two tags) made and verified in
   one place; `UpdateValidatorKey`'s callers re-attesting.
 - `ParseNetwork` (`pkg/types/network/globals.go`, called from
@@ -2024,8 +2024,11 @@ chosen here, and no code is written for the gate until it is.
   the version above, refusing: an entry whose
   attestation or node signature does not verify; two entries naming one
   peer; an active entry without one; a write that lowers a validator's
-  `Sequence` or changes its peer without raising it; a write that changes
-  another validator's peer without that validator's `Sequence` rising. The
+  `Sequence` or changes its peer without raising it; an attestation whose
+  `Sequence` does not exceed the per-peer-ID tombstone (kept across
+  `RemoveValidator` and `UpdateValidatorKey`, in the executor's state); a
+  `NodePublicKey` that does not derive `ID`; a write that changes another
+  validator's peer without a new attestation for it. The
   active globals' version decides, the pending definition is what is parsed.
 - The spine verifier (`internal/spine/spine.go:254`) calls `ParseNetwork` too
   and has no executor version in hand; it is given one, or the two diverge.
@@ -2050,8 +2053,9 @@ chosen here, and no code is written for the gate until it is.
   the executor bridge and `onValidatorSetChange`; the admitted set derived
   from #4593's committee schedule (`types.CommitteeSchedule`) and held by
   the gossip layer, for followers too.
-- The gossip layer: the origin check first in the batch and
-  certificate-sync-response validators, returning `ValidationIgnore` with
+- The gossip layer: the origin check first in the batch validator, and
+  first after the envelope's origin field is decoded in the certificate-sync
+  validator (one topic and one validator for requests and responses), returning `ValidationIgnore` with
   its own `outcome`, and passing everything while the gate is dormant; the
   connection keeper (dial via peerstore then DHT, `Protect`, backoff,
   `Unprotect` on leaving the set; #4587). A per-origin limit on

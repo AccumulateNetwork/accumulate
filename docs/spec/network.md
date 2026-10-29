@@ -128,8 +128,11 @@ ValidatorPeer:
     - name: ID
       description: is the node's libp2p peer ID, the bytes of its multihash
       type: bytes
+    - name: NodePublicKey
+      description: is the node's libp2p public key, in libp2p's protobuf encoding
+      type: bytes
     - name: Sequence
-      description: orders this validator's attestations; a write never lowers it
+      description: orders attestations of one peer ID; a write never lowers it
       type: uint
     - name: Signature
       description: is the validator key's signature over the peer-ID attestation
@@ -142,8 +145,11 @@ ValidatorPeer:
 The record is the peer ID itself, not the node's public key: the peer ID is
 what the router compares and what a connection is authenticated by, and it
 is defined for every key type libp2p has, while nothing requires a node key
-to be ed25519 (every key the node writes is). An ed25519 peer ID is 38 bytes,
-an identity multihash with the key inline. In JSON it is hex, as every
+to be ed25519 (every key the node writes is). The record also carries the
+node's public key (`NodePublicKey`), because a peer ID does not always carry
+it: an ed25519 peer ID is an identity multihash with the key inline, but an
+ECDSA or RSA one is a hash of the key. The verifier derives the peer ID from
+`NodePublicKey` and refuses the entry unless it equals `ID`. In JSON it is hex, as every
 `bytes` field is; tooling prints the base58 form (`12D3KooW…`) beside it. A
 node is one libp2p identity whatever partitions it runs (the Directory and a
 BVN on one host, "Converting a mainnet node"), and a validator key is one
@@ -152,7 +158,7 @@ node's, so the record is per validator, not per partition.
 **What is signed, and by which key.** The attestation is the binary encoding
 of a small struct, not a concatenation, so its fields cannot run into one
 another: the network name, the SHA-256 of the validator public key, the peer
-ID bytes and the `Sequence`, each length-prefixed. Two signatures are made
+ID bytes, `NodePublicKey` and the `Sequence`, each length-prefixed. Two signatures are made
 over it, each with its own fixed ASCII tag in front:
 
 ```
@@ -169,18 +175,33 @@ not one for mainnet. The key hash is in it so the record binds *this*
 validator, and the peer ID so it binds *this* node. An attestation holds for
 the key that made it: a validator whose key is rotated
 (`UpdateValidatorKey`) attests again under the new key, in the same write.
-The node key must be one whose peer ID carries the public key (ed25519,
-secp256k1, ECDSA: every key the node writes is), so the verifier needs
-nothing but the ID.
+`NodeSignature` verifies against `NodePublicKey`, and `NodePublicKey` must
+derive `ID`; the key is not recovered from the ID, which for some key types
+(ECDSA, RSA) does not contain it.
 
-**The sequence.** `Sequence` is a number the validator chooses and raises
-each time it attests a new peer: 1 the first time, the previous value plus
-one after. An attestation never expires, so without it an operator tool that
-edits a stale copy of the definition would write back a retired peer, or
-undo a rotation made because a node key was compromised, and nothing would
-object. A write is refused that lowers a validator's `Sequence`, or keeps it
-and changes the peer; and a write that changes some other validator's peer
-without that validator's `Sequence` rising in the same write is refused too.
+**The sequence, and the tombstone.** `Sequence` is a number the validator
+chooses and raises each time it attests a peer: 1 the first time, more after.
+An attestation never expires, so without a memory of what was accepted, an
+operator tool editing a stale copy of the definition, or a validator removed
+and added back, would write back a retired peer, or undo a rotation made
+because a node key was compromised, and nothing would object. Matching an
+entry to its predecessor by validator key is not enough, since a removed
+validator has no entry to compare with and a rotated key has a new hash. So
+**the network keeps, per peer ID, the highest `Sequence` it has ever
+accepted** (a tombstone, in the executor's state beside the definition,
+written by the block that accepts the write). An attestation for a peer ID
+is accepted only if its `Sequence` exceeds that value (the first for a peer
+ID has none and needs only `Sequence` 1 or more). The tombstone is not
+touched by `RemoveValidator`: a validator removed and re-added with its old
+attestation is refused, and must attest again with a higher `Sequence`. Nor
+is it touched by `UpdateValidatorKey`: the tombstone is keyed by peer ID, not
+by validator key, so a key update that keeps the node's peer re-attests under
+the new key with a `Sequence` above the tombstone, and one that changes the
+peer starts the new peer ID's own count while the old peer ID keeps its
+tombstone for ever. Within one write a validator's entry is refused if it
+keeps the peer and lowers or keeps the `Sequence`, and a write that changes
+some other validator's peer without a new attestation for that peer in the
+same write is refused too.
 
 Who may say what:
 

@@ -185,7 +185,7 @@ So a validator holds batches in four places, for four reasons:
     unauthored paths of these topics: each validator's libp2p peer ID is
     recorded in the network definition under its validator key's signature,
     a batch or a certificate-sync response whose origin is not a committee
-    peer is ignored before it is decoded, and committee members keep
+    peer is ignored at the first check, and committee members keep
     themselves connected to one another, so a restarted member is never
     waiting on a mesh (#4587; DIFFERENCES C17 until it is built). The origin
     check is dormant until the definition binds every committee member's
@@ -1246,9 +1246,13 @@ with the committees, by `Node.UpdateCommittee`; a node outside the
 committee keeps it from its globals, as it keeps the committee.
 
 **The origin gate applies to batches and certificate-sync responses, and to
-nothing else.** It is the first check of those two validators, before the
-decode: the message's origin (`msg.GetFrom()`, the signed `from`) is an
-admitted peer, or the message is **ignored** (`ValidationIgnore`), counted
+nothing else.** For a batch, which has a validator of its own, it is the
+first check, before the decode. Certificate-sync requests and responses share
+one topic and one validator, so there it is the first check after the
+envelope's origin field is decoded (a request is let through, a response is
+gated), and before the rest of the message is decoded. The message's origin
+(`msg.GetFrom()`, the signed `from`) must be an admitted peer, or the message
+is **ignored** (`ValidationIgnore`), counted
 as its own outcome in `accumulate_dagbft_gossip_refused_total`, as the
 validators already count a message naming an epoch the node does not know
 ("Who may send consensus messages"). It is ignored and not rejected because
