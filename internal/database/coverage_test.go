@@ -1528,9 +1528,7 @@ func TestChainAddEntryUnique(t *testing.T) {
 
 	// Adding same entry with unique=true doesn't add duplicate (entry is indexed)
 	require.NoError(t, chain.AddEntry(entry1[:], true))
-	// Height may or may not change depending on implementation
-
-	t.Logf("Chain.AddEntry unique test passed, height: %d", chain.Height())
+	require.Equal(t, int64(2), chain.Height())
 }
 
 // TestAccountIsDirty tests Account.IsDirty function

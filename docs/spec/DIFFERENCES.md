@@ -639,12 +639,24 @@ departs:
   names hundreds of accounts, and a pull slower than the partition changes
   them does not converge (#4411).
 - **A retaken chain keeps the element-index entries of what it held** (the
-  #4327 shape; #4444). **The backfill past the match does too:**
-  `pull.Backfill` replaces the elements and mark states below the mark but
-  writes an `ElementIndex` only where none is held, so a hash the node held
-  at another position keeps its old index and a hash the chain no longer
-  holds keeps one; a later `AddEntry(unique)` of it is skipped and a proof of
-  it points at the wrong index (#4438 re-review F-8(a); #4444).
+  #4327 shape; #4444). The backfill past the match does too: `pull.Backfill`
+  replaces the elements and mark states below the mark but writes an
+  `ElementIndex` only where none is held, so a hash the node held at another
+  position keeps its old index and a hash the chain no longer holds keeps
+  one (#4438 re-review F-8(a); #4444). Since #4327 `AddEntry(unique)` no
+  longer trusts such an index: it skips only when the element at the indexed
+  position is the hash, and appends otherwise. The stale entries are still
+  trusted by `IndexOf`, `HeightOf`, receipts, `provingAnchorIndex` and proofs,
+  which point at the wrong index (#4444). A `ModeStateOnly` head restore
+  leaves the node's wrong elements below the last mark in place, so there the
+  element confirms the stale index and the append is still skipped (#4444).
+- **The v1 snapshot restore indexed mark-point hashes one mark set high**
+  (#4321). `RestoreElementIndexFromMarkPoints` (`snapshot.Restore`, used by
+  `tools/cmd/genesis`, `tools/cmd/snapshot fix` and the factom merge tool)
+  wrote `Count+i` for hashes at `Count-markFreq+i`. Fixed with #4327, because
+  the value check in `AddEntry(unique)` would otherwise have appended a held
+  hash on a database so restored; databases already restored keep the high
+  indexes until restored again.
 - **Streamed pages are on disk before the chain is held to its head**
   ([#4446](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4446)).
   A whole-chain pull and a backfill write each page as it arrives and check
@@ -1701,7 +1713,8 @@ so the anchor root and BPT chains write blind, and a transaction's second
 append to the same chain is settled from its own chain-update record (E9).
 The remaining read is an in-window miss for a new hash, a guard against a
 repeat across transactions that no path is known to produce; it goes when
-the e2e duplicate assertion has run clean long enough to say so. The
+the e2e duplicate assertion has run clean long enough to say so. A hit is
+refuted by the element it names (#4327; database.md, "Chains are logs"). The
 `Element` and `States` writes read nothing since D7. The element index names
 the last-written occurrence live as it does after a restore, so the former D9
 is closed.
