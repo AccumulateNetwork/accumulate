@@ -2595,3 +2595,19 @@ Directory's at the time it executed the anchor. The Directory's own last
 complete block is not said: its anchor ledger counts the BVNs' anchors, so
 the read is installed on BVNs only. N is read again at each repeat of the halt
 line (every 10 s, bounded at 5 s).
+
+### The simulator's certificate mode is not DAG-BFT ordering (#4142)
+
+The spec (consensus.md, "The acceptance gate") has a simulator mode that
+executes blocks through `ProduceBlock`. The code (`CertificateConsensus`)
+builds the certificate from the lockstep hub's block, so the order of the
+envelopes is the hub's, not a DAG's, and the certificates carry no parents; the
+round is the block index. Under the mode, as on a DAG-BFT node: an envelope the
+executor refuses, or that does not unmarshal, is logged and dropped, not an
+error that stops the run; the system ledger records the round; an empty block
+announces `DidCommitBlock` and reports its real hash. `ProduceBlock` returns
+neither per-message statuses nor validator updates, so the nodes compare no
+statuses, a block that changes the validator set is not followed by the
+simulator's nodes, and a recorder is given no block (recordings made under the
+mode are incomplete). Not built: the real DAG per partition inside the
+simulator; the package-shaped criteria of #4142 part (a).
