@@ -2001,3 +2001,18 @@ round (Restart; #4530), so the rounds it must collect are the frontier's last
 few and those thirty-four. The pending buffer's size is not the
 question ("240 is nothing, it is just we don't need even that"); it stays as
 is.
+
+### The acceptance gate: the simulator executes through ProduceBlock
+
+A test must be able to run a scenario against the executor as DAG-BFT hands it
+blocks, not as the lockstep simulator does (#4142). The simulator therefore has
+a mode, `simulator.CertificateConsensus`, in which each block's envelopes
+become the batches of a certificate, one batch per envelope in the block's
+order, and `ExecutorBridge.ProduceBlock` executes them on every node of a
+partition, in place of the per-envelope `Process` loop. The lockstep hub still
+orders the blocks and compares the nodes' hashes; it does not run the DAG.
+`ProduceBlock` commits the block, so the node's commit step only announces it
+(`DidCommitBlock`, with the major block the bridge reports). A test chooses the
+mode with the option, or runs unchanged under it when
+`ACCUMULATE_SIM_CERTIFICATES` is set. The healing tests of `test/e2e` run under
+it.
