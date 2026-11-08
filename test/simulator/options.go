@@ -22,10 +22,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
@@ -35,7 +35,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/simplenet"
 )
 
 type Option interface {
@@ -208,25 +208,9 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) Option {
 }
 
 // NewSimpleNetwork creates a basic network with the given name, number of BVNs,
-// and number of nodes per BVN.
+// and number of nodes per BVN. See [simplenet.New].
 func NewSimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkInit {
-	net := new(accumulated.NetworkInit)
-	net.Id = name
-	for i := 0; i < bvnCount; i++ {
-		bvnInit := new(accumulated.BvnInit)
-		bvnInit.Id = fmt.Sprintf("BVN%d", i)
-		for j := 0; j < nodeCount; j++ {
-			bvnInit.Nodes = append(bvnInit.Nodes, &accumulated.NodeInit{
-				DnnType:    config.Validator,
-				BvnnType:   config.Validator,
-				PrivValKey: testing.GenerateKey(name, bvnInit.Id, j, "val"),
-				DnNodeKey:  testing.GenerateKey(name, bvnInit.Id, j, "dn"),
-				BvnNodeKey: testing.GenerateKey(name, bvnInit.Id, j, "bvn"),
-			})
-		}
-		net.Bvns = append(net.Bvns, bvnInit)
-	}
-	return net
+	return simplenet.New(name, bvnCount, nodeCount)
 }
 
 func LocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePort uint64) Option {
@@ -485,6 +469,26 @@ func (g genesis) apply(opts *simFactory) error {
 func InitialAcmeSupply(v *big.Int) Option {
 	return optionFunc(func(f *simFactory) error {
 		f.initialSupply = v
+		return nil
+	})
+}
+
+// CertificateObserver is told of every block a node hands to the executor
+// through ExecutorBridge.ProduceBlock under CertificateConsensus: the
+// partition and node, and the params the bridge was given, whose batches
+// are the block's certificate payload.
+type CertificateObserver = func(partition string, node int, params adapter.BlockParams)
+
+// CertificateConsensus executes every block the way a DAG-BFT node does
+// (#4142, part b): the block's envelopes become the batches of a
+// certificate, and adapter.ExecutorBridge.ProduceBlock hands them to the
+// executor, in place of the per-envelope Process loop of the lockstep
+// default. The lockstep hub still orders and agrees the blocks. observe, if
+// not nil, sees each block's params.
+func CertificateConsensus(observe CertificateObserver) Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.certificates = true
+		opts.observeCertificate = observe
 		return nil
 	})
 }

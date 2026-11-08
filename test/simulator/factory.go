@@ -34,6 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -51,6 +52,8 @@ type simFactory struct {
 
 	dropDispatchedMessages      bool
 	skipProposalCheck           bool
+	certificates                bool // execute blocks through ExecutorBridge.ProduceBlock (#4142)
+	observeCertificate          CertificateObserver
 	ignoreDeliverResults        bool
 	ignoreCommitResults         bool
 	deterministic               bool
@@ -785,7 +788,30 @@ func (f *nodeFactory) makeCoreApp() *consensus.Node {
 	})
 
 	// Create the consensus node
+	if f.certificates {
+		return f.makeConsensusNode(f.newBridgeApp(app.(*consensus.ExecutorApp), exec))
+	}
 	return f.makeConsensusNode(app)
+}
+
+// newBridgeApp has the node execute through the bridge DAG-BFT uses, over the
+// same executor and event bus, in place of the lockstep Process loop.
+func (node *nodeFactory) newBridgeApp(inner *consensus.ExecutorApp, exec execute.Executor) consensus.App {
+	bridge, err := adapter.NewExecutorBridge(adapter.ExecutorBridgeConfig{
+		Executor:    exec,
+		PartitionID: node.networkFactory.id,
+		EventBus:    node.getEventBus(),
+	})
+	if err != nil {
+		panic(fmt.Errorf("make executor bridge: %w", err))
+	}
+	app := &consensus.BridgeApp{ExecutorApp: inner, Bridge: bridge}
+	if observe := node.observeCertificate; observe != nil {
+		part, id := node.networkFactory.id, node.id
+		app.Observe = func(p adapter.BlockParams) { observe(part, id, p) }
+	}
+	node.join.produce = app.Produce
+	return app
 }
 
 func (node *nodeFactory) makeConsensusNode(app consensus.App) *consensus.Node {
