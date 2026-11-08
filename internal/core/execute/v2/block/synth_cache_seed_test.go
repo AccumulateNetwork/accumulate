@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/block"
@@ -265,7 +266,7 @@ func TestTheSeedReadsOnlyWhatAJoinTook(t *testing.T) {
 	// the three accounts by the least window a join takes -- each chain's
 	// last mark set.
 	node := database.New(stores["BVN0"], nil)
-	src := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: node, Partition: "BVN0"})}
+	src := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: node, Partition: "BVN0"})}
 	db := database.OpenInMemory(nil)
 	bvn := PartitionUrl("BVN0")
 	batch := db.Begin(true)

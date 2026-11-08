@@ -26,6 +26,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/tracker"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/lastcomplete"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	bpt "gitlab.com/accumulatenetwork/accumulate/pkg/types/record"
@@ -99,6 +100,9 @@ type PulledState struct {
 	authority *anchorsrc.Authority
 
 	machine *nodestate.Machine
+
+	// lastComplete is StateOptions.LastComplete.
+	lastComplete func(ctx context.Context) lastcomplete.Answer
 
 	// backfillWhen is StateOptions.BackfillWhen; nil means the partition's
 	// own state is the only gate.
@@ -364,6 +368,12 @@ type StateOptions struct {
 	// state pull reads, through the same per-peer gate (#4550: 850 chain
 	// queries a minute, three times the BVN pull's validator time).
 	BackfillWhen func() bool
+
+	// LastComplete, when set, says the partition's last complete block (the
+	// newest the Directory holds with the threshold's signatures). The line a
+	// node says when it has no block of its own to resume from names it, so
+	// the operator sees what state a joiner would need (#4512).
+	LastComplete func(ctx context.Context) lastcomplete.Answer
 }
 
 // DefaultAnchorWait is how long a complete pull holds for its block's signed
@@ -395,6 +405,7 @@ func NewState(opts StateOptions) (*PulledState, error) {
 		sources:      opts.Sources,
 		machine:      machine,
 		backfillWhen: opts.BackfillWhen,
+		lastComplete: opts.LastComplete,
 		torn:         opts.Torn,
 		tracker:      track,
 		log:          log.With("module", "join"),
@@ -1850,6 +1861,26 @@ func (s *PulledState) sourcesFor(ctx context.Context, u *url.URL) ([]pull.Source
 	return srcs, partition, nil
 }
 
+// lastCompleteFields is the log fields that name the partition's last
+// complete block, or say it is unknown and why (#4512). The Directory is read
+// with a bound: this runs in the join's check, once a minute at most.
+func (s *PulledState) lastCompleteFields() []any {
+	if s.lastComplete == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	a := s.lastComplete(ctx)
+	if !a.Known {
+		return []any{"lastCompleteBlock", "unknown", "lastCompleteWhy", a.Why}
+	}
+	kv := []any{"lastCompleteBlock", a.Block, "lastCompleteRoot", fmt.Sprintf("%x", a.Root), "stateAsOfIt", a.State.String()}
+	if a.StateErr != "" {
+		kv = append(kv, "stateAsOfItWhy", a.StateErr)
+	}
+	return kv
+}
+
 // Resumable implements [State]: the block this node executed itself, when it
 // may execute from there with nothing matched — the partition restarted as a
 // whole (executor spec, "Sync", "A partition that restarts as a whole";
@@ -1886,12 +1917,18 @@ func (s *PulledState) Resumable() (uint64, bool) {
 		// 20261002T145702Z, 17:18Z: "no consensus checkpoint matched block
 		// 1", every round; #4508).
 		s.sayMu.Lock()
-		if now := s.clock(); now.Sub(s.noOwnSaid) >= stallSayEvery {
+		now := s.clock()
+		say := now.Sub(s.noOwnSaid) >= stallSayEvery
+		if say {
 			s.noOwnSaid = now
-			s.log.Info("Fewer of this partition's validators serve than sign an anchor, and this node has no block of its own to resume from: no state can be proven to it; collecting",
-				"partition", s.partition, "block", s.executed)
 		}
 		s.sayMu.Unlock()
+		if say {
+			// Read after the lock is released: the Directory read is bounded
+			// by seconds and the lock is shared with the pull's own lines.
+			s.log.Info("Fewer of this partition's validators serve than sign an anchor, and this node has no block of its own to resume from: no state can be proven to it; collecting",
+				append([]any{"partition", s.partition, "block", s.executed}, s.lastCompleteFields()...)...)
+		}
 		return 0, false
 	}
 	if s.peersHighest > s.executed+ResumeSlack {

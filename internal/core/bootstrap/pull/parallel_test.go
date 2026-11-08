@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -139,7 +140,7 @@ func TestASignatureChainsWindowLeavesItsMessagesToTheBackfill(t *testing.T) {
 	// its start, which the entry record carries. Window zero: the mark set
 	// holding the last entry, as the ledgers are taken; the pool's window is
 	// only wider.
-	peer := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: "Directory"})}
+	peer := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: "Directory"})}
 	require.NoError(t, Account(context.Background(), peer, nil, u, Options{Mode: ModeWindow, Window: 0, Store: dst, Partition: protocol.DnUrl()}))
 
 	r := dst.Begin(false)
@@ -250,7 +251,7 @@ func TestTheSpineAccountsChainsSpreadAcrossThePeersToo(t *testing.T) {
 	}
 	// The account's state as a peer serves it; the join takes the chains to
 	// its heads (TakeChainsAt), then keeps the state, heads included.
-	q := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: "Directory"})}
+	q := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: "Directory"})}
 	rec, err := q.QueryAccountStates(context.Background(), protocol.DnUrl(), &api.AccountStatesQuery{Accounts: []*url.URL{u}})
 	require.NoError(t, err)
 	require.Len(t, rec.States, 1)

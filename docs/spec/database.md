@@ -189,6 +189,11 @@ a restore alike, and no reader relies on which occurrence it names: a receipt,
 a query by hash, a proof check and the proven set each need *an* index of the
 hash, and any serves. Writing the index is therefore a write, not a read
 followed by a write.
+A hit on that index is a claim the element refutes: a chain asked for unique
+skips an entry only when the index names a position below the head whose
+element is the hash, and appends it (moving the index) when that element is
+another hash or the position is at or past the head; an element the store
+cannot read at that position is an error, not an answer.
 Repeats do occur, by construction, and are appended: a root chain receives
 equal anchors from equal chains (genesis, one transaction creating several
 accounts); a signature chain records one cause per signer and every signature

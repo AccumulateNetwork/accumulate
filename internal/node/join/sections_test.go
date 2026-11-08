@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -127,7 +128,7 @@ func consistentForger(t *testing.T, alice *url.URL) named {
 	putLedger(t, liar, here, 10)
 	putTokens(t, liar, alice, 1000)
 	putTokens(t, liar, protocol.AccountUrl("bob", "tokens"), 6)
-	return named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: liar, Partition: "BVN0"})}, name: "consistent forger"}
+	return named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: liar, Partition: "BVN0"})}, name: "consistent forger"}
 }
 
 // TestAForgedSectionIsRefused — #4485, executor spec, "Sync", §3a: once the
@@ -140,7 +141,7 @@ func consistentForger(t *testing.T, alice *url.URL) named {
 // block is held, and nothing of what they served is written.
 func TestAForgedSectionIsRefused(t *testing.T) {
 	peer, node, alice := sectionNotLoaded(t)
-	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}, name: "honest"}
+	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peer, Partition: "BVN0"})}, name: "honest"}
 	pageForger := forgedPage{Source: honest.Source, name: "forged page"}
 	stateForger := forgedState{Source: honest.Source, name: "forged state"}
 	liar := consistentForger(t, alice)
@@ -191,7 +192,7 @@ func TestAForgedSectionIsRefused(t *testing.T) {
 // with it, not kept for ever.
 func TestABlockDiscardedAfterALoadLeavesNothingPending(t *testing.T) {
 	peer, node, alice := sectionNotLoaded(t)
-	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}, name: "honest"}
+	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peer, Partition: "BVN0"})}, name: "honest"}
 	x := gateOver(t, node, honest)
 
 	b := node.BeginExecuting()
@@ -213,7 +214,7 @@ func TestABlockDiscardedAfterALoadLeavesNothingPending(t *testing.T) {
 // held and begun again.
 func TestALoadOfASectionCommittedSinceTheBatchBeganIsNotTakenAsLoaded(t *testing.T) {
 	peer, node, alice := sectionNotLoaded(t)
-	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})}, name: "honest"}
+	honest := named{Source: api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peer, Partition: "BVN0"})}, name: "honest"}
 	x := gateOver(t, node, honest)
 	s := database.SectionOfAccount(alice)
 

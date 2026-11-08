@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -85,7 +86,7 @@ func ledgerWithOneVote(t *testing.T) (src *database.Database, root [32]byte, blo
 // releases the vote at the anchor its peers release it at.
 func TestTheEventsBlockListsAreDerivedNotTaken(t *testing.T) {
 	src, _, _, part, sysLedger, _, partitionID := ledgerWithOneVote(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: partitionID})}
 	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 	ctx := context.Background()
 
@@ -144,7 +145,7 @@ func TestStaleMinorVotesAreCleared(t *testing.T) {
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())
 
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: partitionID})}
 	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 
 	dst := newObservedDB(t)
@@ -182,7 +183,7 @@ func TestStaleMinorVotesAreCleared(t *testing.T) {
 // set is written with each entry once, and a block served twice is one block.
 func TestServedEventsAreWrittenOnce(t *testing.T) {
 	src, _, _, part, sysLedger, _, partitionID := ledgerWithOneVote(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: partitionID})}
 	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 	ctx := context.Background()
 
@@ -240,7 +241,7 @@ func TestServedEventsAreWrittenOnce(t *testing.T) {
 		require.NoError(t, idx.AddEntry(data, false))
 		require.NoError(t, b.UpdateBPT())
 		require.NoError(t, b.Commit())
-		honest2 := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src2, Partition: partitionID})}
+		honest2 := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src2, Partition: partitionID})}
 		opts2 := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 		liar := rewriteEvents{Source: honest2, fn: func(ev *api.LedgerEvents) {
 			for _, p := range ev.MajorPending {

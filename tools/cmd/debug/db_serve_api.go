@@ -23,6 +23,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	v2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
@@ -114,6 +115,7 @@ func serveApiFromDatabases(cmd *cobra.Command, args []string) {
 		}
 
 		Q.parts[part.ID] = api.NewQuerier(api.QuerierParams{
+			NodeState: nodestate.Always{}, // executed or archived database, not a joining node
 			Logger:    logger,
 			Database:  db,
 			Partition: part.ID,

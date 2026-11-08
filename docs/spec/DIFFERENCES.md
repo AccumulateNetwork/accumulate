@@ -639,12 +639,24 @@ departs:
   names hundreds of accounts, and a pull slower than the partition changes
   them does not converge (#4411).
 - **A retaken chain keeps the element-index entries of what it held** (the
-  #4327 shape; #4444). **The backfill past the match does too:**
-  `pull.Backfill` replaces the elements and mark states below the mark but
-  writes an `ElementIndex` only where none is held, so a hash the node held
-  at another position keeps its old index and a hash the chain no longer
-  holds keeps one; a later `AddEntry(unique)` of it is skipped and a proof of
-  it points at the wrong index (#4438 re-review F-8(a); #4444).
+  #4327 shape; #4444). The backfill past the match does too: `pull.Backfill`
+  replaces the elements and mark states below the mark but writes an
+  `ElementIndex` only where none is held, so a hash the node held at another
+  position keeps its old index and a hash the chain no longer holds keeps
+  one (#4438 re-review F-8(a); #4444). Since #4327 `AddEntry(unique)` no
+  longer trusts such an index: it skips only when the element at the indexed
+  position is the hash, and appends otherwise. The stale entries are still
+  trusted by `IndexOf`, `HeightOf`, receipts, `provingAnchorIndex` and proofs,
+  which point at the wrong index (#4444). A `ModeStateOnly` head restore
+  leaves the node's wrong elements below the last mark in place, so there the
+  element confirms the stale index and the append is still skipped (#4444).
+- **The v1 snapshot restore indexed mark-point hashes one mark set high**
+  (#4321). `RestoreElementIndexFromMarkPoints` (`snapshot.Restore`, used by
+  `tools/cmd/genesis`, `tools/cmd/snapshot fix` and the factom merge tool)
+  wrote `Count+i` for hashes at `Count-markFreq+i`. Fixed with #4327, because
+  the value check in `AddEntry(unique)` would otherwise have appended a held
+  hash on a database so restored; databases already restored keep the high
+  indexes until restored again.
 - **Streamed pages are on disk before the chain is held to its head**
   ([#4446](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4446)).
   A whole-chain pull and a backfill write each page as it arrives and check
@@ -1701,7 +1713,8 @@ so the anchor root and BPT chains write blind, and a transaction's second
 append to the same chain is settled from its own chain-update record (E9).
 The remaining read is an in-window miss for a new hash, a guard against a
 repeat across transactions that no path is known to produce; it goes when
-the e2e duplicate assertion has run clean long enough to say so. The
+the e2e duplicate assertion has run clean long enough to say so. A hit is
+refuted by the element it names (#4327; database.md, "Chains are logs"). The
 `Element` and `States` writes read nothing since D7. The element index names
 the last-written occurrence live as it does after a restore, so the former D9
 is closed.
@@ -1983,15 +1996,127 @@ So a peer outside the committee can still:
   (header with its signature, vote signatures, signers; the state hash
   aside) and costs it a lookup and a marshal; a copy of a header or vote
   costs it a signature check, and is recognised as a copy only by the
-  handlers.
+  handlers. This stays: the origin gate does not cover authored messages
+  (a gate that silenced a validator under an unrecorded peer ID would stall
+  the chain that has to repair it), and a copy costs one signature check.
 
-**What must be decided** is whether the consensus topics are limited to
-committee peers and, if they are, how the router learns which peers those
-are: a validator's p2p identity bound to its validator key (a signed record,
-or the relay challenge run at connection), and what non-members — followers
-and joining nodes, which take certificates and batches from these topics —
-receive instead. #4587 (committee members are not guaranteed to be connected
-to one another) is the same decision seen from the other side.
+**Decided** (network.md, "A validator's network identity"; consensus.md,
+"Which peers may send them"; #4596 part 2, with #4587): each validator's
+libp2p peer ID is recorded in its `ValidatorInfo` of `dn.acme/network`,
+attested by the validator key and by the node key over a tagged, sequenced
+struct, written by the same operator-authorized `WriteData` that changes the
+definition today, and required of every active validator from the first
+executor version activated after v2-kourou on this line. The admitted peers
+of a partition are the peer IDs of every committee in its schedule (the one
+before, the one now, the one scheduled by #4593's activation round), so a
+change is never a cut. The origin gate (`msg.GetFrom()`) applies to batches
+and certificate-sync responses only, which have no author; headers, votes
+and certificates admit on their author checks. An unadmitted origin is
+ignored (`ValidationIgnore`), not rejected. The gate is dormant until the
+activating version is active and every member of every scheduled committee
+has a verified peer. Committee members keep a protected connection to every
+other admitted peer, which with flood publishing is what makes a restarted
+member's minute outside the meshes cost nothing. Followers keep taking
+certificates and batches from the same topics; they cannot originate batches
+or responses.
+
+**What remains** until it is built. **The build is blocked on the version
+decision:** it needs the first executor version activated after v2-kourou on
+this line, whose name and number the owner decides (#4139, !1199 reconcile
+the numbering; !1277 wrote v2-canaveral for the same thing in its C25/C26
+questions, and the tree already has an entry of that name). No version is
+chosen here, and no code is written for the gate until it is.
+
+- `protocol/general.yml`: `ValidatorPeer` (`ID`, `NodePublicKey`, `Sequence`,
+  `Signature`, `NodeSignature`) on `ValidatorInfo`, regenerating `protocol/types_gen.go`;
+  the attestation (a length-prefixed struct, two tags) made and verified in
+  one place; `UpdateValidatorKey`'s callers re-attesting.
+- `ParseNetwork` (`pkg/types/network/globals.go`, called from
+  `internal/core/execute/v2/block/network_accounts.go:123`, in the staged
+  branch; the `ParseNetworkLegacy` branch and v1 stay as they are), behind
+  the version above, refusing: an entry whose
+  attestation or node signature does not verify; two entries naming one
+  peer; an active entry without one; a `NodePublicKey` that does not derive
+  `ID`. The active globals' version decides, the pending definition is what
+  is parsed. `ParseNetwork` does **not** check the tombstone.
+- The tombstone (network.md, "The sequence, and the tombstone"): a record per
+  peer ID in executor state, the highest `Sequence` ever accepted, kept across
+  `RemoveValidator` and `UpdateValidatorKey`; checked in the executor's write
+  path (`network_accounts.go`, beside the `ParseNetwork` call), only for an
+  entry that differs from the active one, which must exceed it; an unchanged
+  entry is accepted. There is no validator-wide "`Sequence` rises on a peer
+  change" rule: the count is per peer ID.
+- The spine verifier (`internal/spine/spine.go:254`) calls `ParseNetwork` too
+  and has no executor version in hand; it is given one, or the two diverge.
+  It skips the tombstone check (it has no executor state), and an agreement
+  test runs the same sequence of definition writes through the executor and
+  the spine verifier and requires the same verdict from both on everything
+  `ParseNetwork` decides.
+- An executor version to gate on: see above. v2-kourou is active on Kermit,
+  so it cannot be the gate, and the `VNext` placeholder is not for use.
+  `protocol/enums.yml` already carries v2-canaveral ("activates the DAG-BFT
+  consensus rules", the first after v2-kourou) and #4593's text gates its
+  ledger fields on it; whether the peer record and the origin gate are gated
+  on that same version, or on a later one, is the owner's decision, so this
+  entry says only "the first executor version activated after v2-kourou on
+  this line".
+- Genesis (`BuildGenesisDocs`, which holds every node's keys) and the
+  simulator's network writing every validator bound, **and seeding the
+  tombstone for every peer ID they bind** (the same record a block would
+  write), so a genesis-bound validator cannot be removed and re-added with its
+  genesis attestation; and the activating version's block seeding it from the
+  active definition for every bound peer ID that has none (network.md, "The
+  sequence, and the tombstone"), tested on a network bound before activation;
+  `init network` and
+  `netsim` checked to produce definitions the executor accepts. Binding an
+  existing network (Kermit, a converted mainnet) before activation, by the
+  operators' write (network.md, "Binding an existing network"), with a test
+  that a definition without peers does not stall a node that runs the gate.
+- The node computing its attestation at start, serving it in
+  `ConsensusStatus.PeerAttestation`, and `accumulated` printing it for the
+  operator who writes the definition.
+- `types.ValidatorInfo.PeerID`, carried through `adapter.ValidatorInfo`,
+  the executor bridge and `onValidatorSetChange`; the admitted set derived
+  from #4593's committee schedule (`types.CommitteeSchedule`) and held by
+  the gossip layer, for followers too.
+- The gossip layer: the origin check first in the batch validator, and
+  first after the type byte is read in the certificate-sync validator (one
+  topic and one validator for requests and responses): a request (`0x01`)
+  passes and a response (`0x02`) is gated on `msg.GetFrom()`, returning `ValidationIgnore` with
+  its own `outcome`, and passing everything while the gate is dormant; the
+  connection keeper (dial via peerstore then DHT, `Protect`, backoff,
+  `Unprotect` on leaving the set; #4587). A per-origin limit on
+  certificate-sync requests, or the answers moved to a stream to the
+  requester. A follower's `CertSyncer` no longer answering.
+- Tests: a peer outside the committee publishes a batch and a sync
+  response and neither is delivered or relayed (the #4601 review
+  patch's `TestDefect_StrangerHeaderRelayedToValidators`, not committed, must
+  keep failing); a header, vote
+  and certificate from a committee author under an unrecorded peer ID are
+  still delivered (the lost `p2p.key` of one validator and of f+1); a
+  definition with a bad, duplicate or missing attestation, or a node
+  signature by another key, is refused, and accepted below the activating
+  version; a validator removed and re-added with its old attestation, a
+  genesis-bound or pre-activation-bound one included, is refused, and accepted with a higher `Sequence`; a definition write that
+  leaves every entry unchanged is accepted (the tombstone is checked only for
+  entries that differ); a gated node still answers a certificate-sync request
+  from an origin that is not admitted; the executor/spine agreement test; a binary from before the activation
+  round-trips an entry carrying `Peer`; a definition without peers does not stall a
+  gated node; a follower two committee changes behind catches up; in the
+  simulator a member restarted under the same peer ID receives every batch
+  of the minute after, which is #4587's measurement.
+- Alternatives considered and rejected (decisions recorded in
+  [design-questions.md](design-questions.md)): matching an entry to its predecessor by validator key
+  (misses a removed-then-re-added validator, which has no predecessor, and a
+  rotated key, which has a new hash); recovering the node key from the peer
+  ID, which restricts the node key to types whose ID carries the key inline
+  (ed25519, secp256k1) and excludes ECDSA and RSA; two certificate-sync
+  topics, one for requests and one for responses, so each has its own
+  validator (more topics and a wire change for what one byte read does).
+- Follow-ups, not this entry: retiring the relay challenge once every
+  candidate is a recorded peer; the vote limiter keyed on the author
+  (#4162 item 18); the unused `acc/%s/dispatch` and `acc/%s/anchors`
+  topics in `pkg/consensus/dispatcher`, which register no validator.
 
 ### H0. The healing pair does not rotate on a partition whose blocks are empty
 
@@ -2193,52 +2318,6 @@ and the HEAL path has none, which is the actual hole.
 path, and assembly at the destination. Build it when a run shows a proof-length
 rejection, which names the real trigger rather than a supposed one.
 
-### C18. Voters lock per header digest, in memory
-
-*[#4590](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4590); fixed by !1271*
-
-consensus.md, "The vote rule": a validator votes for at most one header per
-(author, round), appends (author, round) → digest to the `voted` file
-before the vote is signed, reads it back on every start, and refuses a
-second digest for the pair. The code records the
-headers it voted for by digest alone (`primary/vote_handler.go:361-377`,
-`:471-476`) and only in memory (`primary.go:351`): two headers from one
-author for one round, differing only in timestamp, both get the same honest
-validators' votes and both reach a quorum, and a restarted validator holds
-no record at all. Each node then keeps whichever certificate reached it
-first and refuses the other as equivocation for good ("DAG insertion"), so
-nodes holding different versions cannot insert each other's later
-certificates. With n = 4, no round r+1 header reaches three votes once the
-author stops. Review tests `TestDefect_HonestVotersCertifyTwoHeadersForOneAuthorRound`
-and `TestIntended_EquivocatingAuthorGetsTwoVotes` (#4601) show it.
-
-### C19. Parents are checked for presence, not for round, distinctness or stake quorum
-
-*[#4591](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4591); #4162 item 17; fixed by !1272*
-
-consensus.md, "Header validity", "Certificate validity" and "DAG
-insertion": a header's strong parents are distinct certificates of round
-r−1 whose authors' stake is a quorum of that round's committee, weak links
-are allowed and not counted, and the voter, the insert and the builder
-apply the rule through one check, `DAG.CheckParents`; `Certificate.Verify`
-refuses only a parentless or duplicate-parent header. The code:
-
-- a voter checks only that each named parent is in its DAG
-  (`primary/vote_handler.go:391-409`), so a header with no parents passes;
-- `Certificate.Verify` checks no parent (`types/certificate.go:147-230`);
-- `DAG.Insert` skips the parent check when the list is empty
-  (`dag/dag.go:154`, `len(cert.Parents()) > 0`);
-- the builder's minimum is a count, `QuorumCount` (7 of 12), not stake
-  (`primary/header_builder.go:158-164`; `types/committee.go:207-216`), and
-  with the validity threshold (5 of 12) the two sum to n, so they do not
-  guarantee an intersection; a round set by `Restore`, `RestoreAuthored` or
-  `Rejoin` skips the stake check the round advance makes.
-
-A leader certificate with no path to an earlier committed leader breaks the
-linked-leader walk: two nodes that receive the same certificates in a
-different order commit different leader sequences
-(`TestDefect_ZeroParentLeaderSplitsCommitSequence`, #4601).
-
 ### C21. A lost insertion trigger leaves a committable leader to a later leader's walk
 
 *[#4162](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4162) items 1 and 6*
@@ -2261,37 +2340,6 @@ threshold, `L` is committed only when a later leader's linked walk reaches
 it, one or more leader rounds later. Safety is unaffected, since the walk
 is the same on every node; the latency of that leader's group is what
 differs.
-
-### C22. Review fixes in merge requests not yet merged at 7d9458e10
-
-Each line is the code at `7d9458e10` against the rule the spec states, and
-the merge request that brings the code into line. **Remove a line when its
-merge request is merged**; remove the entry when the list is empty.
-
-- **#4592** (!1258): the last authored header is read back only when a
-  checkpoint is resumed, so a start that resumes none (no checkpoint for
-  the executor's last block, or a store at genesis) signs a second header
-  for a round it already signed ("Persistence and restart").
-- **#4596** (!1266): the router relays a consensus message before any
-  handler checks its author; the check is in the handlers only ("Who may
-  send consensus messages"). What the merge request leaves open, which
-  peers a validator exchanges the topics with, is #4596 part 2 (!1266
-  records it; !1269 decides it).
-- **#4597** (!1257): a node that has seen any response to a sync request
-  answers it no more, so one forged response silences every honest answer
-  ("Certificate catch-up"); the rule is that a response suppresses only
-  the certificates it delivered that checked, unless it completes the
-  request (every certificate checks, nothing missing), in which case it
-  suppresses the request; junk suppresses nothing and a partial answer
-  leaves the rest to the peers.
-- **#4598** (!1264): the active store's eviction does not protect a batch a
-  certified, uncommitted header names, so batches from any peer can evict
-  a voter's copy of what its vote attested (invariant 3); the rule is that
-  such a batch is not evicted, and batches no header names evict only each
-  other.
-- **#4599** (!1256): `UnmarshalBatch` allocates from a count field before
-  checking it against the bytes that remain ("Decoding is bounded by the
-  message").
 
 ### C23. A leader's timestamp moves block time forward without bound
 
@@ -2367,6 +2415,17 @@ nothing more and the node needs a join. The stop is logged once and
 join: the node keeps voting and authoring while it orders nothing, until an
 operator restarts it into one. A node more than `DAGGCDepth` behind the
 frontier is in the same position today ("Retention").
+
+### C28. A block produced more than `DAGGCDepth` rounds behind ordering takes no checkpoint
+
+*[#4624](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4624)*
+
+consensus.md, "Restart": handed groups are dropped once their leader is more
+than `DAGGCDepth` below the last commit, so `CheckpointAt` returns nil for a
+leader below them and the service writes no checkpoint for that block. The
+checkpoint files then match no executor block, and a restart finds none and
+starts at round zero (E11). The tail of such a checkpoint could not be
+written either (#4625).
 
 ## Durability: the seal is still on the block path; the committed log is not on disk
 
@@ -2543,3 +2602,36 @@ take its state and route requests to it. The code (#4447/#4466) lets each node
 resume from its own block when fewer peers serve than the signing threshold,
 so nodes can resume at different blocks, and a peer that times out counts as
 not serving. Not built.
+
+### A halted partition states N but cannot revive from it (#4512)
+
+The spec (executor.md, "A partition that loses a quorum of its validators'
+states", Paul 2026-10-03) revives a partition from its last complete block N,
+with the committee for the next block formed from N's state. The code (!1283)
+computes and states N from the Directory's delivered number, and says whether
+state as of N is at hand, retained or not obtainable. It does not roll a
+survivor back to N or redo the blocks after it (#4627), form the committee
+from N's state or have the Directory re-evaluate held anchors (#4628), copy
+state by hand (R4-C, #4629), retain BPT history by default (#4630), or let a
+joiner verify N itself: N is the Directory node's word, not a quorum the
+asker checks (#4631). The network version used for the threshold is the
+Directory's at the time it executed the anchor. The Directory's own last
+complete block is not said: its anchor ledger counts the BVNs' anchors, so
+the read is installed on BVNs only. N is read again at each repeat of the halt
+line (every 10 s, bounded at 5 s).
+
+### The simulator's certificate mode is not DAG-BFT ordering (#4142)
+
+The spec (consensus.md, "The acceptance gate") has a simulator mode that
+executes blocks through `ProduceBlock`. The code (`CertificateConsensus`)
+builds the certificate from the lockstep hub's block, so the order of the
+envelopes is the hub's, not a DAG's, and the certificates carry no parents; the
+round is the block index. Under the mode, as on a DAG-BFT node: an envelope the
+executor refuses, or that does not unmarshal, is logged and dropped, not an
+error that stops the run; the system ledger records the round; an empty block
+announces `DidCommitBlock` and reports its real hash. `ProduceBlock` returns
+neither per-message statuses nor validator updates, so the nodes compare no
+statuses, a block that changes the validator set is not followed by the
+simulator's nodes, and a recorder is given no block (recordings made under the
+mode are incomplete). Not built: the real DAG per partition inside the
+simulator; the package-shaped criteria of #4142 part (a).

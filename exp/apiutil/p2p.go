@@ -54,9 +54,23 @@ func InitRouter(opts RouterOptions) (routing.Router, error) {
 		Events: opts.Events,
 		Logger: logger,
 	})
-	go initRouter(opts)
+	startInitRouter(opts)
 
 	return router, nil
+}
+
+// startInitRouter fetches the routing table in the background. It is a
+// variable so that a test can observe whether InitRouter starts the fetch.
+var startInitRouter = func(opts RouterOptions) { go initRouter(opts) }
+
+// publishInitFailure reports that the routing table could not be fetched. The
+// empty GlobalValues is the failure signal, not a silent success: the router
+// refuses a table with no routing, marks itself not ready and Ready() yields
+// false, which makes cmd/accumulated/run/router.go stop the instance and
+// tools/cmd/debug/heal_common.go exit. The router's error is discarded because
+// the caller learns of the failure through Ready().
+func publishInitFailure(opts RouterOptions) {
+	_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
 }
 
 func initRouter(opts RouterOptions) {
@@ -77,14 +91,14 @@ func initRouter(opts RouterOptions) {
 		svcAddr, err := dirNetSvc.MultiaddrFor(opts.Network)
 		if err != nil {
 			slog.ErrorContext(opts.Context, "Failed to initialize router (1)", "error", err)
-			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
+			publishInitFailure(opts)
 			return
 		}
 
 		err = opts.Node.WaitForService(opts.Context, svcAddr)
 		if err != nil {
 			slog.ErrorContext(opts.Context, "Failed to initialize router (2)", "error", err)
-			_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
+			publishInitFailure(opts)
 			return
 		}
 
@@ -126,7 +140,7 @@ func initRouter(opts RouterOptions) {
 	ns, err := client.NetworkStatus(opts.Context, api.NetworkStatusOptions{})
 	if err != nil {
 		slog.ErrorContext(opts.Context, "Failed to initialize router (3)", "error", err)
-		_ = opts.Events.Publish(events.WillChangeGlobals{New: &network.GlobalValues{}})
+		publishInitFailure(opts)
 		return
 	}
 

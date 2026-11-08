@@ -216,6 +216,17 @@ them or intervene. Work, in order:
    failing the lockstep, and `RestoreNode` brings back a stopped node with
    its store and keys. Not yet on Docker.
 
+4. **Built (!1283): the last complete block N.** A halted partition states N
+   (the newest block whose anchor the Directory holds with the threshold's
+   signatures, read from the Directory's delivered number), the root the
+   anchor carries, how far the node is past it and whether state as of N can
+   be obtained, in the halt message, the no-state-to-prove line and a gauge.
+   Remaining, each its own issue naming #4512: rollback to N and redo (#4627),
+   committee from N's state and Directory re-evaluation, R4-B (#4628), R4-C
+   state copy, still listed above and not dropped (#4629), BPT history
+   retention (#4630, owner's decision), quorum-bound proof of N (#4631).
+   #4512 stays open as the umbrella until a partition actually revives.
+
 ### R5 — a whole restart resumes from the highest signed, validated state (#4501)
 
 Spec: executor.md, decided 2026-10-02. Each node states its highest validated

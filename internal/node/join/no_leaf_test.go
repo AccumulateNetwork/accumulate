@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -60,7 +61,7 @@ func TestFetch_DropsANameNoPeerHoldsALeafFor(t *testing.T) {
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())
 
-	peer := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: db, Partition: partitionID})}
+	peer := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: db, Partition: partitionID})}
 
 	t.Run("every source answers NotFound", func(t *testing.T) {
 		s := quietState(t, here, &fixedSources{partition: here, srcs: []pull.Source{peer, peer}})
