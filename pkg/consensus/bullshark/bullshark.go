@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -296,6 +297,7 @@ func (b *Bullshark) SetLastCommitRound(round types.Round) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.lastCommitRound = round
+	metrics.LastCommitRound.WithLabelValues(b.partition).Set(float64(round))
 }
 
 // UpdateCommittee schedules a committee from its ActivationRound. A round

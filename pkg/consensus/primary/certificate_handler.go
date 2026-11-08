@@ -364,6 +364,7 @@ func (p *Primary) tryAdvanceRound() {
 
 		oldRound := p.currentRound
 		p.currentRound++
+		metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(p.currentRound))
 		if !p.lastRoundAdvance.IsZero() {
 			metrics.RoundDurationSeconds.Observe(now.Sub(p.lastRoundAdvance).Seconds())
 		}
@@ -430,6 +431,7 @@ func (p *Primary) AdvanceRound() {
 	oldRound := p.currentRound
 	p.currentRound++
 	newRound := p.currentRound
+	metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(newRound))
 	p.roundMu.Unlock()
 
 	slog.Info("Forcibly advanced to new round",
@@ -443,6 +445,7 @@ func (p *Primary) AdvanceRound() {
 func (p *Primary) SetRound(round types.Round) {
 	p.roundMu.Lock()
 	p.currentRound = round
+	metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(round))
 	p.roundMu.Unlock()
 }
 
@@ -454,6 +457,7 @@ func (p *Primary) SetRound(round types.Round) {
 func (p *Primary) SetRoundAndSeed(round types.Round) {
 	p.roundMu.Lock()
 	p.currentRound = round
+	metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(round))
 	p.seed, p.seeded = round, true
 	p.roundMu.Unlock()
 }
