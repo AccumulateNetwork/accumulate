@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- A secp256k1 private key whose top byte is zero exports at 32 bytes and, in
+  the short form already stored, signs (!1237)
+  - From v1.4.5 (commit 28f87d9a1, which replaced go-ethereum's `FromECDSA`)
+    until this fix, `FromECDSA` exported `D.Bytes()`, which drops leading zero
+    bytes. About one key in 256 was therefore exported as 31 bytes, and the
+    strict import `SignETH` and `SignEip712TypedData` use refused it with
+    `invalid length, need 256 bits`. Such a key derived the right address and
+    signed BTC and BTC-legacy signatures, but could not sign ETH or typed-data
+    signatures.
+  - `FromECDSA` now pads to the curve's size, so a new key is always 32 bytes.
+  - A key exported by v1.4.5 up to this fix may be stored as 31 bytes. `SignETH`
+    and `SignEip712TypedData` now left-pad a key shorter than 32 bytes before
+    the strict check, so a stored short key signs without being rewritten. A
+    key longer than 32 bytes is still refused. Any wallet that stores keys
+    exported through this package is outside this repository; whether its
+    stored keys include the short form depends on which release it was built
+    against.
+  - Client side only: no executor version change, no encoding change.
+
 ## 1.4.6.7
 
 The release Kermit runs. A devnet can now turn on the BPT history retention

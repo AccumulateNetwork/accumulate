@@ -611,3 +611,63 @@ func TestSignETH_KeyWithLeadingZeroByte(t *testing.T) {
 	require.NoError(t, SignETH(sig, altcrypto.FromECDSA(privKey), nil, hash[:]))
 	require.True(t, VerifyUserSignature(sig, SignableHash(hash)))
 }
+
+// shortStoredSecp256k1Key is a secp256k1 key whose top byte is zero, in the 31-byte form that
+// FromECDSA exported from v1.4.5 until it was fixed. A wallet that stored such a key still holds
+// 31 bytes, so the signing functions must accept it.
+func shortStoredSecp256k1Key(t *testing.T) (*ecdsa.PrivateKey, []byte) {
+	t.Helper()
+	d := make([]byte, 32)
+	for i := 1; i < 32; i++ {
+		d[i] = byte(i)
+	}
+	privKey, err := altcrypto.ToECDSA(d)
+	require.NoError(t, err)
+	short := privKey.D.Bytes()
+	require.Len(t, short, 31, "precondition: the key's top byte is zero")
+	return privKey, short
+}
+
+// A key stored in the 31-byte form signs through SignETH, with the same public key as the padded
+// form. Before the fix SignETH returned "invalid length, need 256 bits" for it.
+func TestSignETH_ShortStoredKey(t *testing.T) {
+	privKey, short := shortStoredSecp256k1Key(t)
+
+	hash := sha256.Sum256([]byte("short stored key"))
+	sig := new(ETHSignature)
+	sig.PublicKey = altcrypto.FromECDSAPub(&privKey.PublicKey)
+	require.NoError(t, SignETH(sig, short, nil, hash[:]))
+	require.Equal(t, altcrypto.FromECDSAPub(&privKey.PublicKey), sig.PublicKey, "the short form must give the same public key")
+	require.True(t, VerifyUserSignature(sig, SignableHash(hash)))
+
+	// Longer than the curve's size is still refused
+	require.Error(t, SignETH(new(ETHSignature), append([]byte{0}, altcrypto.FromECDSA(privKey)...), nil, hash[:]))
+}
+
+// A key stored in the 31-byte form signs through SignEip712TypedData and the signature verifies.
+// Before the fix it returned "invalid length, need 256 bits".
+func TestSignEip712TypedData_ShortStoredKey(t *testing.T) {
+	privKey, short := shortStoredSecp256k1Key(t)
+
+	txn, err := build.Transaction().
+		For("adi.acme", "tokens").
+		SendTokens(100, AcmePrecisionPower).To("other.acme", "tokens").
+		Done()
+	require.NoError(t, err)
+
+	sig := &TypedDataSignature{
+		ChainID:       protocol.EthChainID("MainNet"),
+		PublicKey:     altcrypto.FromECDSAPub(&privKey.PublicKey),
+		Signer:        url.MustParse("acc://adi.acme/book/1"),
+		SignerVersion: 1,
+		Timestamp:     1720564975623,
+		Vote:          VoteTypeAccept,
+	}
+	txn.Header.Initiator = [32]byte(sig.Metadata().Hash())
+
+	require.NoError(t, SignEip712TypedData(sig, short, nil, txn))
+	require.True(t, sig.Verify(nil, txn))
+
+	// Longer than the curve's size is still refused
+	require.Error(t, SignEip712TypedData(sig, append([]byte{0}, altcrypto.FromECDSA(privKey)...), nil, txn))
+}

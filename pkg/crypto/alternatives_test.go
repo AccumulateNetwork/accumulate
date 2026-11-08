@@ -256,3 +256,64 @@ func TestFromECDSA_FullWidthKeyUnchanged(t *testing.T) {
 		t.Fatalf("a full-width key exported differently: %x vs %x", got, priv.D.Bytes())
 	}
 }
+
+// A key stored in the short form - D.Bytes() of a key whose top byte is zero, as FromECDSA exported
+// it from v1.4.5 until it was fixed - imports through ToECDSAPadded as the same scalar. A full-width
+// key is untouched, and a key longer than the curve's size is still refused.
+func TestToECDSAPadded(t *testing.T) {
+	priv := keyWithLeadingZeroByte(t)
+
+	t.Run("31 bytes", func(t *testing.T) {
+		short := priv.D.Bytes()
+		if len(short) != 31 {
+			t.Fatalf("precondition: want 31 bytes, got %d", len(short))
+		}
+		if _, err := ToECDSA(short); err == nil {
+			t.Fatal("precondition: the strict ToECDSA must refuse the short form")
+		}
+		back, err := ToECDSAPadded(short)
+		if err != nil {
+			t.Fatalf("the short form does not import: %v", err)
+		}
+		if back.D.Cmp(priv.D) != 0 {
+			t.Fatal("padding changed the key")
+		}
+		if back.PublicKey.X.Cmp(priv.PublicKey.X) != 0 || back.PublicKey.Y.Cmp(priv.PublicKey.Y) != 0 {
+			t.Fatal("padding changed the public key")
+		}
+	})
+
+	t.Run("1 byte", func(t *testing.T) {
+		back, err := ToECDSAPadded([]byte{7})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if back.D.Int64() != 7 {
+			t.Fatalf("want D=7, got %v", back.D)
+		}
+	})
+
+	t.Run("32 bytes", func(t *testing.T) {
+		full := FromECDSA(priv)
+		back, err := ToECDSAPadded(full)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if back.D.Cmp(priv.D) != 0 {
+			t.Fatal("a full-width key imported differently")
+		}
+	})
+
+	t.Run("33 bytes", func(t *testing.T) {
+		long := append([]byte{0}, FromECDSA(priv)...)
+		if _, err := ToECDSAPadded(long); err == nil {
+			t.Fatal("a 33-byte key must be refused")
+		}
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		if _, err := ToECDSAPadded(nil); err == nil {
+			t.Fatal("an empty key must be refused")
+		}
+	})
+}

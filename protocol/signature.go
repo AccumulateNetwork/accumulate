@@ -696,7 +696,8 @@ func SignEthAsDer(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err
  */
 
 func SignETH(sig *ETHSignature, privateKey, sigMdHash, txnHash []byte) (err error) {
-	priv, err := altcrypto.ToECDSA(privateKey)
+	// Padded: a key exported by v1.4.5 up to the FromECDSA fix may be 31 bytes. See ToECDSAPadded.
+	priv, err := altcrypto.ToECDSAPadded(privateKey)
 	if err != nil {
 		return err
 	}
@@ -1213,7 +1214,8 @@ func SignEip712TypedData(sig *TypedDataSignature, privateKey []byte, outer Signa
 		return err
 	}
 
-	priv, err := altcrypto.ToECDSA(privateKey)
+	// Padded: a key exported by v1.4.5 up to the FromECDSA fix may be 31 bytes. See ToECDSAPadded.
+	priv, err := altcrypto.ToECDSAPadded(privateKey)
 	if err != nil {
 		return err
 	}

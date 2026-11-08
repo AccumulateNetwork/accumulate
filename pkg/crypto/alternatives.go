@@ -56,6 +56,29 @@ func ToECDSAUnsafe(d []byte) *ecdsa.PrivateKey {
 	return priv
 }
 
+// ToECDSAPadded is ToECDSA for a secp256k1 private key that may have been stored at less than
+// the curve's size. From v1.4.5 until FromECDSA was fixed, it exported priv.D.Bytes(), which
+// drops leading zero bytes, so about one key in 256 was stored as 31 bytes. Such a key is still
+// on disk and in backups, and derives the right address, but the strict ToECDSA refuses it.
+//
+// A big-endian scalar is unchanged by leading zero bytes, so a key of 1 to 31 bytes is
+// left-padded to 32 and then checked exactly as ToECDSA checks any key: a key longer than the
+// curve's size, an empty key, a zero key and a key >= N are still refused.
+//
+// The signing functions call this rather than normalizing in address.FromPrivateKeyBytes,
+// because a stored key reaches them by paths that never pass through that function: a
+// client/signing.PrivateKey is raw bytes, and an ETH key's String() is bare hex, which
+// address.Parse returns as an Unknown. Padding at the point of use covers every path.
+func ToECDSAPadded(d []byte) (*ecdsa.PrivateKey, error) {
+	size := (S256().Params().BitSize + 7) / 8
+	if len(d) > 0 && len(d) < size {
+		padded := make([]byte, size)
+		copy(padded[size-len(d):], d)
+		d = padded
+	}
+	return ToECDSA(d)
+}
+
 // toECDSA creates a private key with the given D value. The strict parameter
 // controls whether the key's length should be enforced.
 func toECDSA(d []byte, strict bool) (*ecdsa.PrivateKey, error) {
