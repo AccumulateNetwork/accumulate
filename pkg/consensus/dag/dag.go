@@ -96,12 +96,22 @@ type DAG struct {
 	// were never committed here (#4239): the executor halted and the network
 	// went on. A node that needed them is stranded, not lagging.
 	uncommittedDropped types.Round
+	// partition labels the DAG's size metrics: a process runs the Directory
+	// and a BVN, each with its own DAG (SetPartition).
+	partition string
 	// equivocations counts conflicting certificates refused (Equivocations).
 	equivocations atomic.Uint64
 	// parentQuorum reports whether authors carry a stake quorum of round's
 	// committee (SetParentQuorum). Nil counts any one parent of the round
 	// before as enough.
 	parentQuorum func(round types.Round, authors []ed25519.PublicKey) bool
+}
+
+// SetPartition names the partition the DAG's metrics are labelled with.
+func (d *DAG) SetPartition(partition string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.partition = partition
 }
 
 // NewDAG creates a new DAG with the specified garbage collection depth.
@@ -345,8 +355,16 @@ func (d *DAG) insertLocked(cert *types.Certificate, checkParents bool) (bool, er
 			d.collectLocked(round - d.gcDepth)
 		}
 	}
+	d.noteSizeLocked()
 
 	return true, nil
+}
+
+// noteSizeLocked publishes the DAG's size: the rounds and the certificates
+// it holds.
+func (d *DAG) noteSizeLocked() {
+	metrics.DAGRounds.WithLabelValues(d.partition).Set(float64(len(d.rounds)))
+	metrics.DAGCertificates.WithLabelValues(d.partition).Set(float64(len(d.digestIndex)))
 }
 
 // CollectedBelow is the round below which every round has been collected;
@@ -435,6 +453,7 @@ func (d *DAG) insertGenesisLocked(cert *types.Certificate) error {
 
 	// Add to digest index
 	d.digestIndex[cert.Digest()] = cert
+	d.noteSizeLocked()
 
 	return nil
 }
@@ -585,6 +604,7 @@ func (d *DAG) collectLocked(cutoff types.Round) {
 		delete(d.certifiedByRound, round)
 	}
 	d.gcCutoff = cutoff
+	d.noteSizeLocked()
 	metrics.DAGGCRoundsRemovedTotal.Add(float64(removed))
 	if uncommitted > 0 {
 		if d.uncommittedDropped == 0 {

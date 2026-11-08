@@ -20,68 +20,68 @@ const (
 // Consensus metrics
 var (
 	// CurrentRound is the current consensus round.
-	CurrentRound = promauto.NewGauge(prometheus.GaugeOpts{
+	CurrentRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "current_round",
 		Help:      "Current consensus round",
-	})
+	}, []string{"partition"})
 
 	// LastCommitRound is the last committed leader round.
-	LastCommitRound = promauto.NewGauge(prometheus.GaugeOpts{
+	LastCommitRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "last_commit_round",
 		Help:      "Last committed leader round",
-	})
+	}, []string{"partition"})
 
 	// CertificatesCreatedTotal is the total number of certificates created.
-	CertificatesCreatedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	CertificatesCreatedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "certificates_created_total",
 		Help:      "Total number of certificates created",
-	})
+	}, []string{"partition"})
 
 	// CertificatesCommittedTotal is the total number of certificates committed.
-	CertificatesCommittedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	CertificatesCommittedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "certificates_committed_total",
 		Help:      "Total number of certificates committed",
-	})
+	}, []string{"partition"})
 
 	// LeaderCommitsTotal is the number of leader commits.
-	LeaderCommitsTotal = promauto.NewCounter(prometheus.CounterOpts{
+	LeaderCommitsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "leader_commits_total",
 		Help:      "Total number of leader commits",
-	})
+	}, []string{"partition"})
 
 	// HeadersCreatedTotal is the total number of headers created.
-	HeadersCreatedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	HeadersCreatedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "headers_created_total",
 		Help:      "Total number of headers created",
-	})
+	}, []string{"partition"})
 
 	// VotesReceivedTotal is the total number of votes received.
-	VotesReceivedTotal = promauto.NewCounter(prometheus.CounterOpts{
+	VotesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "votes_received_total",
 		Help:      "Total number of votes received",
-	})
+	}, []string{"partition"})
 
 	// VotesSentTotal is the total number of votes sent.
-	VotesSentTotal = promauto.NewCounter(prometheus.CounterOpts{
+	VotesSentTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "votes_sent_total",
 		Help:      "Total number of votes sent",
-	})
+	}, []string{"partition"})
 )
 
 // Worker metrics
@@ -130,20 +130,20 @@ var (
 // DAG metrics
 var (
 	// DAGRounds is the number of rounds in the DAG.
-	DAGRounds = promauto.NewGauge(prometheus.GaugeOpts{
+	DAGRounds = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "dag_rounds",
 		Help:      "Number of rounds in the DAG",
-	})
+	}, []string{"partition"})
 
 	// DAGCertificates is the total number of certificates in the DAG.
-	DAGCertificates = promauto.NewGauge(prometheus.GaugeOpts{
+	DAGCertificates = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "dag_certificates",
 		Help:      "Total number of certificates in the DAG",
-	})
+	}, []string{"partition"})
 
 	// DAGGCRoundsRemovedTotal is the total rounds removed by garbage collection.
 	DAGGCRoundsRemovedTotal = promauto.NewCounter(prometheus.CounterOpts{
@@ -202,13 +202,15 @@ var (
 		Help:      "Total gossip messages received",
 	}, []string{"message_type"})
 
-	// PeersConnected is the current connected peer count.
-	PeersConnected = promauto.NewGauge(prometheus.GaugeOpts{
+	// PeersConnected is the number of peers subscribed to the consensus
+	// certificates topic, which differs from the host's peer count when
+	// subscriptions are not propagating (#4054).
+	PeersConnected = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "peers_connected",
-		Help:      "Current number of connected peers",
-	})
+		Help:      "Peers subscribed to the consensus certificates topic",
+	}, []string{"partition"})
 )
 
 // Timing metrics (histograms)
@@ -363,199 +365,6 @@ var (
 		Help:      "Current number of banned peers",
 	})
 )
-
-// Metrics provides an interface to update DAG-BFT metrics.
-type Metrics struct {
-	enabled bool
-}
-
-// NewMetrics creates a new Metrics instance.
-// If enabled is false, all metric operations are no-ops.
-func NewMetrics(enabled bool) *Metrics {
-	return &Metrics{enabled: enabled}
-}
-
-// SetCurrentRound sets the current consensus round.
-func (m *Metrics) SetCurrentRound(round uint64) {
-	if m.enabled {
-		CurrentRound.Set(float64(round))
-	}
-}
-
-// SetLastCommitRound sets the last committed leader round.
-func (m *Metrics) SetLastCommitRound(round uint64) {
-	if m.enabled {
-		LastCommitRound.Set(float64(round))
-	}
-}
-
-// IncCertificatesCreated increments the certificates created counter.
-func (m *Metrics) IncCertificatesCreated() {
-	if m.enabled {
-		CertificatesCreatedTotal.Inc()
-	}
-}
-
-// IncCertificatesCommitted increments the certificates committed counter.
-func (m *Metrics) IncCertificatesCommitted() {
-	if m.enabled {
-		CertificatesCommittedTotal.Inc()
-	}
-}
-
-// IncLeaderCommits increments the leader commits counter.
-func (m *Metrics) IncLeaderCommits() {
-	if m.enabled {
-		LeaderCommitsTotal.Inc()
-	}
-}
-
-// IncHeadersCreated increments the headers created counter.
-func (m *Metrics) IncHeadersCreated() {
-	if m.enabled {
-		HeadersCreatedTotal.Inc()
-	}
-}
-
-// IncVotesReceived increments the votes received counter.
-func (m *Metrics) IncVotesReceived() {
-	if m.enabled {
-		VotesReceivedTotal.Inc()
-	}
-}
-
-// IncVotesSent increments the votes sent counter.
-func (m *Metrics) IncVotesSent() {
-	if m.enabled {
-		VotesSentTotal.Inc()
-	}
-}
-
-// IncWorkerBatchesCreated increments the worker batches created counter.
-func (m *Metrics) IncWorkerBatchesCreated(workerID string) {
-	if m.enabled {
-		WorkerBatchesCreatedTotal.WithLabelValues(workerID).Inc()
-	}
-}
-
-// IncWorkerTransactionsProcessed increments the worker transactions processed counter.
-func (m *Metrics) IncWorkerTransactionsProcessed(workerID string, count uint64) {
-	if m.enabled {
-		WorkerTransactionsProcessedTotal.WithLabelValues(workerID).Add(float64(count))
-	}
-}
-
-// IncWorkerTransactionsReceived increments the worker transactions received counter.
-func (m *Metrics) IncWorkerTransactionsReceived(workerID string) {
-	if m.enabled {
-		WorkerTransactionsReceivedTotal.WithLabelValues(workerID).Inc()
-	}
-}
-
-// SetWorkerPendingTransactions sets the worker pending transactions gauge.
-func (m *Metrics) SetWorkerPendingTransactions(workerID string, count int) {
-	if m.enabled {
-		WorkerPendingTransactions.WithLabelValues(workerID).Set(float64(count))
-	}
-}
-
-// SetWorkerStoredBatches sets the worker stored batches gauge.
-func (m *Metrics) SetWorkerStoredBatches(workerID string, count int) {
-	if m.enabled {
-		WorkerStoredBatches.WithLabelValues(workerID).Set(float64(count))
-	}
-}
-
-// SetDAGRounds sets the DAG rounds gauge.
-func (m *Metrics) SetDAGRounds(rounds int) {
-	if m.enabled {
-		DAGRounds.Set(float64(rounds))
-	}
-}
-
-// SetDAGCertificates sets the DAG certificates gauge.
-func (m *Metrics) SetDAGCertificates(count int) {
-	if m.enabled {
-		DAGCertificates.Set(float64(count))
-	}
-}
-
-// IncDAGGCRoundsRemoved increments the DAG GC rounds removed counter.
-func (m *Metrics) IncDAGGCRoundsRemoved(count int) {
-	if m.enabled {
-		DAGGCRoundsRemovedTotal.Add(float64(count))
-	}
-}
-
-// IncGossipMessagesSent increments the gossip messages sent counter.
-func (m *Metrics) IncGossipMessagesSent(messageType string) {
-	if m.enabled {
-		GossipMessagesSentTotal.WithLabelValues(messageType).Inc()
-	}
-}
-
-// IncGossipMessagesReceived increments the gossip messages received counter.
-func (m *Metrics) IncGossipMessagesReceived(messageType string) {
-	if m.enabled {
-		GossipMessagesReceivedTotal.WithLabelValues(messageType).Inc()
-	}
-}
-
-// SetPeersConnected sets the connected peers gauge.
-func (m *Metrics) SetPeersConnected(count int) {
-	if m.enabled {
-		PeersConnected.Set(float64(count))
-	}
-}
-
-// ObserveRoundDuration observes a round duration.
-func (m *Metrics) ObserveRoundDuration(seconds float64) {
-	if m.enabled {
-		RoundDurationSeconds.Observe(seconds)
-	}
-}
-
-// ObserveCertificateCreation observes certificate creation time.
-func (m *Metrics) ObserveCertificateCreation(seconds float64) {
-	if m.enabled {
-		CertificateCreationSeconds.Observe(seconds)
-	}
-}
-
-// ObserveBlockProduction observes one block's production time for a partition.
-func (m *Metrics) ObserveBlockProduction(partition string, seconds float64) {
-	if m.enabled {
-		BlockProductionSeconds.WithLabelValues(partition).Observe(seconds)
-	}
-}
-
-// ObserveTransactionLatency observes transaction latency.
-func (m *Metrics) ObserveTransactionLatency(seconds float64) {
-	if m.enabled {
-		TransactionLatencySeconds.Observe(seconds)
-	}
-}
-
-// IncVotesRateLimited increments the votes rate limited counter.
-func (m *Metrics) IncVotesRateLimited() {
-	if m.enabled {
-		VotesRateLimitedTotal.Inc()
-	}
-}
-
-// IncPeersBanned increments the peers banned counter.
-func (m *Metrics) IncPeersBanned() {
-	if m.enabled {
-		PeersBannedTotal.Inc()
-	}
-}
-
-// SetPeersBannedCurrent sets the current banned peers gauge.
-func (m *Metrics) SetPeersBannedCurrent(count int) {
-	if m.enabled {
-		PeersBannedCurrent.Set(float64(count))
-	}
-}
 
 // Batch lifecycle and delivery metrics.
 //

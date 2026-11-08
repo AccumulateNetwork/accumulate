@@ -245,6 +245,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 
 	// Create DAG
 	d := dag.NewDAG(config.DAGGCDepth)
+	d.SetPartition(config.Partition)
 
 	// Create gossip layer (may be nil for testing)
 	var g *gossip.GossipLayer
