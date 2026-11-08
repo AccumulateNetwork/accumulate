@@ -178,12 +178,54 @@ func TestHistoricalBody_ReceiptWithoutBodyServesNoBody(t *testing.T) {
 	})
 }
 
-// A retained body is served only if its retained bytes are exactly the encoding
-// the BPT hashed. The decoder accepts an overlong varint the encoder never
-// writes: bytes carrying one decode to an account whose encoding still hashes
-// to the receipt's start, so the hash check alone passes them, yet they are not
-// what was retained from the BPT and the node cannot vouch for them.
-func TestHistoricalBody_BytesThatDoNotRoundTripAreNotServed(t *testing.T) {
+// The body served is the retained bytes decoded and encoded again, and it is
+// used only if that encoding hashes to where the receipt starts. So the form the
+// retained bytes took does not matter: the decoder accepts an overlong varint
+// the encoder never writes, and bytes carrying one still decode to the account
+// the BPT hashed. The body IS served, its encoding is the canonical one, and it
+// hashes to Receipt.Start - by the hash, not by storage.
+func TestHistoricalBody_OverlongRetainedBytesServeTheHashedBody(t *testing.T) {
+	sim, lite := changingLite(t, 10_000, 6)
+
+	var block uint64
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		blocks, err := batch.Account(lite).RetainedStateReceiptBlocks().Get()
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(blocks), 2)
+		block = blocks[len(blocks)-2] // changed since, so the current body cannot stand in
+	})
+
+	var retained []byte
+	Update(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		account := batch.Account(lite)
+		encoded, err := account.RetainedMainState(block).Get()
+		require.NoError(t, err)
+		retained = append([]byte(nil), encoded...)
+		// Field 1 is the account type: 0x01 then its value as a one-byte
+		// uvarint. Write the same value as an overlong two-byte uvarint.
+		require.Equal(t, byte(0x01), encoded[0])
+		require.Less(t, encoded[1], byte(0x80))
+		overlong := append([]byte{0x01, encoded[1] | 0x80, 0x00}, encoded[2:]...)
+		require.NotEqual(t, encoded, overlong)
+		require.NoError(t, account.RetainedMainState(block).Put(overlong))
+	})
+
+	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
+		proof, err := indexing.HistoricalAccountStateProof(bvn0, batch, batch.Account(lite), block)
+		require.NoError(t, err)
+		requireServesBody(t, proof)
+
+		served, err := proof.State.MarshalBinary()
+		require.NoError(t, err)
+		require.Equal(t, retained, served, "the served encoding is not the one the BPT hashed")
+	})
+}
+
+// Retained bytes that do not decode are a body the node cannot produce, and
+// nothing more: the entry hash and its path to the root are proven regardless,
+// and a hash the node can prove is never withheld. The answer is body-less, as
+// for any block whose body the node cannot produce - not an error.
+func TestHistoricalBody_UndecodableRetainedBytesServeNoBody(t *testing.T) {
 	sim, lite := changingLite(t, 10_000, 6)
 
 	var block uint64
@@ -195,27 +237,18 @@ func TestHistoricalBody_BytesThatDoNotRoundTripAreNotServed(t *testing.T) {
 	})
 
 	Update(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
-		account := batch.Account(lite)
-		encoded, err := account.RetainedMainState(block).Get()
-		require.NoError(t, err)
-		// Field 1 is the account type: 0x01 then its value as a one-byte
-		// uvarint. Write the same value as an overlong two-byte uvarint.
-		require.Equal(t, byte(0x01), encoded[0])
-		require.Less(t, encoded[1], byte(0x80))
-		overlong := append([]byte{0x01, encoded[1] | 0x80, 0x00}, encoded[2:]...)
-		decoded, err := UnmarshalAccount(overlong)
-		require.NoError(t, err, "precondition: the decoder accepts the overlong form")
-		reencoded, err := decoded.MarshalBinary()
-		require.NoError(t, err)
-		require.Equal(t, encoded, reencoded, "precondition: it decodes to the retained account")
-		require.NoError(t, account.RetainedMainState(block).Put(overlong))
+		// Field 1 with a type value no account has
+		bad := []byte{0x01, 0x7f}
+		_, err := UnmarshalAccount(bad)
+		require.Error(t, err, "precondition: the bytes do not decode")
+		require.NoError(t, batch.Account(lite).RetainedMainState(block).Put(bad))
 	})
 
 	View(t, sim.DatabaseFor(lite), func(batch *database.Batch) {
 		proof, err := indexing.HistoricalAccountStateProof(bvn0, batch, batch.Account(lite), block)
-		require.NoError(t, err)
+		require.NoError(t, err, "a body that does not decode is a capability limit, not a reason to deny the entry-rooted proof")
 		require.False(t, proof.StartsAtMainState)
-		require.Nil(t, proof.State, "served a body from retained bytes that are not the bytes the BPT hashed")
+		require.Nil(t, proof.State)
 		require.True(t, proof.Receipt.Validate(nil))
 	})
 }

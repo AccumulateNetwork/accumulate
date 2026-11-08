@@ -346,10 +346,13 @@ func (s *Querier) queryAccount(ctx context.Context, batch *database.Batch, recor
 	// would be answered with a current-state receipt - the behaviour AIP-58
 	// exists to stop.
 	//
-	// The historical answer refuses only when BPT history does not cover the
-	// block. Otherwise it always serves the account's entry and its path to
-	// the BPT root - a hash the node can prove is never withheld - with the
-	// account's main state as of the block when the node can produce it, and
+	// The historical answer refuses only as ResolveHistoricalAccountState
+	// documents: the account had no record at the height (NotFound), BPT
+	// history does not cover the block (IncompleteChain), the height is past
+	// the latest indexed block (NotReady), or it is zero (BadRequest).
+	// Otherwise it always serves the account's entry and its path to the BPT
+	// root - a hash the node can prove is never withheld - with the account's
+	// main state as of the block when the node can produce it, and
 	// Receipt.StartsAtMainState says which (historicalStateReceipt).
 	if wantReceipt.ForHeight != 0 {
 		err = s.historicalStateReceipt(batch, record, r, wantReceipt.ForHeight)

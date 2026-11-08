@@ -133,9 +133,10 @@ func (a *Account) retainStateReceipt(hasher hash.Hasher) error {
 	switch {
 	case err == nil:
 		// Kept as the marshalled form, which is exactly what the hasher
-		// hashed. It is decoded to be served and encoded again on the wire, so
-		// the read side (retainedStateAt) serves it only when that round trip
-		// reproduces these bytes, and startsAt checks the hash besides.
+		// hashed. The read side (retainedStateAt) decodes it, and the body is
+		// served only if its re-encoding hashes to where the receipt starts
+		// (startsAt): the encoding a caller receives is the hashed one by the
+		// hash itself, not by how it was stored.
 		encoded, err := state.MarshalBinary()
 		if err != nil {
 			return errors.UnknownError.WithFormat("marshal main state: %w", err)

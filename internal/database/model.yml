@@ -197,7 +197,7 @@
     # carries the CURRENT body beside a receipt for a past one, which does not
     # hash to that receipt's start, so the answer cannot be checked.
     - name: RetainedMainState
-      description: is the account's marshalled main state as of a retained block, exactly the bytes the BPT hashed; a historical answer serves it only if decoding and re-encoding reproduces those bytes
+      description: is the account's marshalled main state as of a retained block, the bytes the BPT hashed; a historical answer decodes it and serves the body only if its re-encoding hashes to where the receipt starts
       type: state
       parameters:
       - name: Block

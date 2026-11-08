@@ -225,7 +225,8 @@ func startsAt(r *merkle.Receipt, body protocol.Account) bool {
 
 // retainedStateAt returns the receipt from the account's main state hash to its
 // BPT entry as of the given block, and the main state that receipt starts at.
-// Either is nil when the node did not retain it.
+// Either is nil when the node did not retain it, and the state is nil when the
+// node cannot decode what it retained.
 //
 // Both are retained at the blocks where the account changed, so the one
 // covering a block is the newest retained at or before it - the same rule the
@@ -266,22 +267,23 @@ func retainedStateAt(account *database.Account, block uint64) (*merkle.Receipt, 
 	if len(encoded) == 0 {
 		return r, nil, nil
 	}
+
+	// The retained bytes are the encoding the BPT hashed, but they are not
+	// what is served: the body is decoded here and encoded again on the wire.
+	// The caller serves it only if that re-encoding hashes to where the
+	// receipt starts (startsAt), so the encoding a caller receives is the
+	// hashed one by the hash itself, whatever form the retained bytes took.
+	//
+	// Bytes that do not decode are a body this node cannot produce. That is a
+	// body-less answer, not a refusal: the entry hash and its path are proven
+	// regardless, and a hash the node can prove is never withheld. Under -tags
+	// debug it is loud instead, because in testing retained bytes that do not
+	// decode mean retention wrote the wrong thing.
 	body, err := protocol.UnmarshalAccount(encoded)
 	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("unmarshal retained main state: %w", err)
-	}
-
-	// The caller checks that the re-encoded body hashes to the receipt's start
-	// (startsAt), but not that the retained bytes are that encoding. The
-	// decoder accepts forms the encoder never writes (an overlong varint, for
-	// one), so retained bytes that are not the ones the BPT hashed could still
-	// decode to a body that passes. Retained bytes that do not survive the
-	// round trip exactly are not a body this node can vouch for.
-	reencoded, err := body.MarshalBinary()
-	if err != nil {
-		return nil, nil, errors.UnknownError.WithFormat("re-marshal retained main state: %w", err)
-	}
-	if !bytes.Equal(reencoded, encoded) {
+		if err := debugUndecodable(blocks[i-1], err); err != nil {
+			return nil, nil, err
+		}
 		return r, nil, nil
 	}
 	return r, body, nil

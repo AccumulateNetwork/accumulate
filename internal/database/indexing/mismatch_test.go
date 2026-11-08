@@ -33,3 +33,20 @@ func TestDebugMismatch(t *testing.T) {
 	}
 	require.NoError(t, err, "a production node degrades rather than failing")
 }
+
+// TestDebugUndecodable covers the build-tagged halves of debugUndecodable
+// directly, for the same reason as TestDebugMismatch: under -tags debug nothing
+// is retained, so the proof-level test cannot reach the loud path.
+func TestDebugUndecodable(t *testing.T) {
+	cause := errors.EncodingError.With("field Type: missing")
+
+	err := debugUndecodable(7, cause)
+	if debugBuild {
+		require.Error(t, err, "retained bytes that do not decode must be loud under -tags debug")
+		require.Equal(t, errors.InternalError, errors.Code(err))
+		require.Contains(t, err.Error(), "block 7")
+		require.Contains(t, err.Error(), "does not decode")
+		return
+	}
+	require.NoError(t, err, "a production node serves a body-less answer rather than failing")
+}

@@ -100,6 +100,33 @@ receipt from its main state to its BPT entry (146 bytes) and the marshalled main
 state itself — for a key page or token account, a few hundred bytes — for as
 long as the window covers that block.
 
+Measured on live networks (the encoded size of every account in the last 100
+state-changing blocks of each partition, and the partition's state-changing rate
+from its `root-index` chain, since retention writes only on those blocks):
+
+| Partition | State-changing blocks / yr | Accounts written / block | Retained / block\* | Per year |
+|---|---|---|---|---|
+| Kermit BVN1 | ~815,000 | 1.7 (+ ledger) | ~570 B | **~465 MB** |
+| Kermit Directory | ~727,000 | not sampled | ~430 B (est.†) | ~310 MB (est.†) |
+| MainNet Cyclops | ~38,000 | 1.5 (+ ledger) | ~560 B | **~21 MB** |
+| MainNet Directory | ~40,000 | 0.9 (+ ledger) | ~430 B | ~17 MB |
+
+\* including the partition ledger (73 B + 146 B), which changes on every
+state-changing block but carries no chain entry in the block listing, so it is
+added explicitly. Key-value overhead (~2 × 32-byte keys per write) is not
+included.
+
+† not sampled; MainNet Directory's per-block figure applied to Kermit's
+Directory rate.
+
+The ledger accounts dominate the count — the ledger is written every
+state-changing block and `anchors` in 61–87% of them — but they are small
+(60–160 B), so the whole addition is about half a kilobyte per state-changing
+block: 1–2% on top of BPT history itself (34–71 KB per state-changing block,
+above). BPT history is the cost to decide on; the body adds little to it.
+Kermit's numbers are inflated by billing-anchoring traffic, which was most of
+the sample.
+
 Retention writes only under new key shapes — `("BPT", "History", …)` and the
 account's `RetainedStateReceipt` and `RetainedMainState` records. Existing
 databases stay readable, no migration runs, and the BPT root is unchanged — so

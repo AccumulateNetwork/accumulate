@@ -17,3 +17,12 @@ func debugMismatch(anchor, start []byte) error {
 	return errors.InternalError.WithFormat(
 		"the retained state receipt reaches %x but the proof starts at %x", anchor, start)
 }
+
+// debugUndecodable fails loudly under -tags debug. Retained main state that
+// does not decode means retention wrote the wrong bytes, which is a defect
+// worth stopping a test for — even though a production node serves a body-less
+// answer instead.
+func debugUndecodable(block uint64, err error) error {
+	return errors.InternalError.WithFormat(
+		"the main state retained at block %d does not decode: %w", block, err)
+}

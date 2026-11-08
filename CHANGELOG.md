@@ -2,17 +2,19 @@
 
 ## Unreleased
 
-- A retained historical body is served only if it is byte for byte what the BPT hashed (AIP-58 follow-up to !1233)
-  - A served body already had to hash to where its receipt starts: the node
-    decodes the retained bytes, re-encodes them and checks that hash. What it
-    did not check is the retained bytes themselves. The decoder accepts forms
-    the encoder never writes (an overlong varint, for one), so stored bytes
-    that are not the ones the BPT hashed could still decode to an account
-    that passes. A node now serves the retained body only if re-encoding it
-    reproduces the retained bytes exactly; otherwise the answer carries no
-    account, as for any block whose body the node cannot produce.
+- A retained historical body that does not decode no longer fails the answer (AIP-58 follow-up to !1233)
+  - A node whose retained main state for a block did not decode returned an
+    error and no receipt, withholding the account's entry hash and its path to
+    the BPT root — which it could prove. It now serves that answer with **no
+    account**, as for any block whose body it cannot produce, and
+    `StartsAtMainState` is false. Under `-tags debug` it fails loudly instead.
+  - The body served is the retained bytes decoded and encoded again, and it is
+    served only if that re-encoding hashes to where the receipt starts, so the
+    encoding a caller receives is the hashed one by the hash itself. The
+    comments now say so.
   - Measured on live networks, retention costs about half a kilobyte per
-    state-changing block - 1-2% on top of BPT history itself.
+    state-changing block - 1-2% on top of BPT history itself
+    (`docs/protocol/historical-account-state.md`).
 
 ## 1.4.6.7
 

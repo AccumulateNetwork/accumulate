@@ -13,3 +13,8 @@ package indexing
 // degrades to an entry-rooted proof, as it does whenever it cannot support a
 // main-state start.
 func debugMismatch(_, _ []byte) error { return nil }
+
+// debugUndecodable reports retained main state that does not decode. In a
+// production build this is not an error: the node serves the entry hash and
+// its path without a body, as it does whenever it cannot produce the body.
+func debugUndecodable(_ uint64, _ error) error { return nil }
