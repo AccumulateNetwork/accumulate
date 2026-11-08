@@ -1040,7 +1040,15 @@ func TestHTLC_ExpirationBoundsUseBlockTime(t *testing.T) {
 
 	// A lock that expires a day after the block time is long expired by the
 	// wall clock. The submission-time check, which uses the wall clock,
-	// rejects it; the simulator delivers it anyway, and execution accepts it.
+	// rejects it, and execution accepts it.
+	//
+	// This relies on a simulator quirk: the simulator delivers an envelope
+	// that fails Validate instead of dropping it, so the send still reaches
+	// Execute. On a real node CheckTx would keep it out of the block, which is
+	// the point of the submission-time check. What the test proves is about
+	// Execute: the verdict of a send that is in a block is a function of the
+	// block's time, not of the node's clock. If the simulator starts honouring
+	// Validate errors, build the block directly instead of submitting.
 	st := x.send(t, 1, x.blockTime(t).Add(24*time.Hour))
 	require.EqualError(t, st.AsError(), "hashlock expiration must be at least 10 minutes in the future")
 	x.sim.StepUntil(
