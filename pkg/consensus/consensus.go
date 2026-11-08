@@ -178,13 +178,14 @@ type Node struct {
 	protocols *gossip.ProtocolHandler
 
 	// Restart state (#4448); see restart.go.
-	dagStore *persist.DAGStore
-	orderMu  sync.Mutex    // held across ordering and recording what was handed over
-	handed   []handedGroup // groups handed to the executor not yet checkpointed
-	leadWake chan struct{} // closed when handed shrinks (awaitLead)
-	prevTail map[string]bool
-	restored []*types.Certificate // replayed through Bullshark at start
-	orphans  []*types.Certificate // dropped by Restore, taken in again at start
+	dagStore      *persist.DAGStore
+	orderMu       sync.Mutex    // held across ordering and recording what was handed over
+	handed        []handedGroup // groups handed to the executor not yet checkpointed
+	handedDropped types.Round   // newest leader dropped from handed past DAGGCDepth (#4624)
+	leadWake      chan struct{} // closed when handed shrinks (awaitLead)
+	prevTail      map[string]bool
+	restored      []*types.Certificate // replayed through Bullshark at start
+	orphans       []*types.Certificate // dropped by Restore, taken in again at start
 	// prevFloor is the tail floor of the last checkpoint saved: the vote
 	// records (#4590) are kept from there, as that checkpoint may be the one
 	// resumed. A checkpoint computed and not saved does not move it.

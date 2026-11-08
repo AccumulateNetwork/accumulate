@@ -435,3 +435,46 @@ func TestCheckpoint_NoStateDirKeepsFrontierPruning(t *testing.T) {
 	}
 	require.LessOrEqual(t, len(n.bullshark.GetCommitted()), (100+64+8)*4)
 }
+
+// A node that orders and never checkpoints also keeps the groups it handed
+// over bounded: none is held more than DAGGCDepth rounds below the last
+// commit (#4624).
+func TestHandedBoundedWithoutCheckpoint(t *testing.T) {
+	const depth = 100
+	r := newDedupRig(t)
+	n := r.nodeWithGCDepth(depth)
+	live := map[types.Round][]string{}
+	var prev []*types.Certificate
+	for round := types.Round(0); round <= 1000; round++ {
+		prev = r.layer(n, live, round, prev)
+	}
+	lc := n.bullshark.LastCommitRound()
+	require.Greater(t, lc, types.Round(900))
+	// One group per two rounds, plus slack.
+	require.LessOrEqual(t, len(n.handed), depth/2+4)
+	for _, g := range n.handed {
+		require.GreaterOrEqual(t, g.leader, lc-depth)
+	}
+}
+
+// A checkpoint for a block whose group was dropped from handed would count
+// the groups after it committed; there is none, rather than a wrong one
+// (#4624).
+func TestCheckpointAt_NoneBelowDroppedHanded(t *testing.T) {
+	const depth = 100
+	r := newDedupRig(t)
+	n := r.nodeWithGCDepth(depth)
+	live := map[types.Round][]string{}
+	var prev []*types.Certificate
+	for round := types.Round(0); round <= 400; round++ {
+		prev = r.layer(n, live, round, prev)
+	}
+	handed := len(n.handed)
+	cp, err := n.CheckpointAt(10)
+	require.Error(t, err)
+	require.Nil(t, cp)
+	require.Len(t, n.handed, handed)
+	require.NotNil(t, mustCheckpointAt(t, n, n.handedDropped))
+	require.NotNil(t, mustCheckpointAt(t, n, 0))
+	require.NotNil(t, mustCheckpointAt(t, n, n.bullshark.LastCommitRound()-10))
+}

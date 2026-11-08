@@ -34,7 +34,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/simulator"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/simplenet"
 	acctesting "gitlab.com/accumulatenetwork/accumulate/test/testing"
 )
 
@@ -110,7 +110,7 @@ type dnBridge struct {
 
 func newDnBridge(t *testing.T, bvns int, maxEnv int, liteKeys ...[]byte) *dnBridge {
 	t.Helper()
-	netInit := simulator.NewSimpleNetwork("RealBridge", bvns, 1)
+	netInit := simplenet.New("RealBridge", bvns, 1)
 	genesisTime := time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 	values := new(core.GlobalValues)
 	values.ExecutorVersion = protocol.ExecutorVersionLatest

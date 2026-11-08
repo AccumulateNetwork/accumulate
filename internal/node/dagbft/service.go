@@ -510,7 +510,7 @@ const (
 // fatal: the next block writes again. While the DAG no longer holds the tail
 // (the executor more than DAGGCDepth behind ordering) none is written, and a
 // restart finds no checkpoint matching the executor's last block and starts at
-// round zero (DIFFERENCES C28, E11); that is reported once per lag.
+// round zero (DIFFERENCES C28, C29, E11); that is reported once per lag.
 func (s *Service) saveCheckpoint(blockIndex uint64, leaderRound types.Round) {
 	if s.config.DataDir == "" {
 		return
