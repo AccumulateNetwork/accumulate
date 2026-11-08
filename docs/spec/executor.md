@@ -3204,6 +3204,36 @@ rejected (`ParseNetworkLegacy`). That path is kept unchanged for replaying
 history, in the v1 executor as well as in v2 before `V2Canaveral`: a node
 replaying it must end with the globals the network had.
 
+### Major blocks on a BVN
+
+The Directory opens major blocks; a BVN learns of each from a Directory
+anchor or a `MakeMajorBlock` message, and each such message reports one major
+block, its index and time, in its transaction state. A BVN that was down or
+stalled for more than a major block interval learns of several in one block.
+From v2-canaveral:
+
+- **The block's major block is the newest reported** (`BlockState.
+  MergeTransaction`): the highest index, with its time, whatever order the
+  messages' states merge in. Before v2-canaveral the last state merged set it.
+- **Every major block reported is recorded** on the anchor pool's major block
+  chain (step 11, `recordMajorBlock`), one entry per index, in increasing
+  order, each with its own time and this block's root index; an index at or
+  below the last entry the chain holds is not recorded. Before v2-canaveral
+  one entry was written, the block's major block, whatever the chain held.
+
+The Directory records the one major block it opened, as before; its indices
+increase by construction.
+
+A notice at or below the last recorded index does not execute from
+v2-canaveral, so the block's major block is always a new one: from
+v2-vandenberg a BVN learns of major blocks only from `MakeMajorBlock`
+messages (a Directory anchor's `MakeMajorBlock` field is read only before
+it), the Directory produces one per index, in increasing order, when it
+opens the major block (`block_end.go`), and they reach the BVN on the
+Directory's synthetic stream, which executes each number once and in order
+(a copy at or below `Delivered` is tossed). The check in `recordMajorBlock`
+is the second line.
+
 ### Anchor emission, and the heartbeat
 
 Step 5 above decides whether the block sends an anchor. It does, if any of:
