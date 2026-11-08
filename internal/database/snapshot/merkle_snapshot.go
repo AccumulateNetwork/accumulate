@@ -146,7 +146,7 @@ func (s *Chain) RestoreElementIndexFromMarkPoints(c *database.MerkleManager, sta
 		}
 
 		for i, h := range state.HashList {
-			err := c.ElementIndex(h).Put(uint64(state.Count) + uint64(i))
+			err := c.ElementIndex(h).Put(uint64(state.Count-c.MarkFreq()) + uint64(i))
 			if err != nil {
 				return errors.UnknownError.WithFormat("store element index: %w", err)
 			}

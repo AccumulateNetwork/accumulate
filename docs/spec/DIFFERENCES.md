@@ -639,12 +639,24 @@ departs:
   names hundreds of accounts, and a pull slower than the partition changes
   them does not converge (#4411).
 - **A retaken chain keeps the element-index entries of what it held** (the
-  #4327 shape; #4444). **The backfill past the match does too:**
-  `pull.Backfill` replaces the elements and mark states below the mark but
-  writes an `ElementIndex` only where none is held, so a hash the node held
-  at another position keeps its old index and a hash the chain no longer
-  holds keeps one; a later `AddEntry(unique)` of it is skipped and a proof of
-  it points at the wrong index (#4438 re-review F-8(a); #4444).
+  #4327 shape; #4444). The backfill past the match does too: `pull.Backfill`
+  replaces the elements and mark states below the mark but writes an
+  `ElementIndex` only where none is held, so a hash the node held at another
+  position keeps its old index and a hash the chain no longer holds keeps
+  one (#4438 re-review F-8(a); #4444). Since #4327 `AddEntry(unique)` no
+  longer trusts such an index: it skips only when the element at the indexed
+  position is the hash, and appends otherwise. The stale entries are still
+  trusted by `IndexOf`, `HeightOf`, receipts, `provingAnchorIndex` and proofs,
+  which point at the wrong index (#4444). A `ModeStateOnly` head restore
+  leaves the node's wrong elements below the last mark in place, so there the
+  element confirms the stale index and the append is still skipped (#4444).
+- **The v1 snapshot restore indexed mark-point hashes one mark set high**
+  (#4321). `RestoreElementIndexFromMarkPoints` (`snapshot.Restore`, used by
+  `tools/cmd/genesis`, `tools/cmd/snapshot fix` and the factom merge tool)
+  wrote `Count+i` for hashes at `Count-markFreq+i`. Fixed with #4327, because
+  the value check in `AddEntry(unique)` would otherwise have appended a held
+  hash on a database so restored; databases already restored keep the high
+  indexes until restored again.
 - **Streamed pages are on disk before the chain is held to its head**
   ([#4446](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4446)).
   A whole-chain pull and a backfill write each page as it arrives and check
@@ -1701,7 +1713,8 @@ so the anchor root and BPT chains write blind, and a transaction's second
 append to the same chain is settled from its own chain-update record (E9).
 The remaining read is an in-window miss for a new hash, a guard against a
 repeat across transactions that no path is known to produce; it goes when
-the e2e duplicate assertion has run clean long enough to say so. The
+the e2e duplicate assertion has run clean long enough to say so. A hit is
+refuted by the element it names (#4327; database.md, "Chains are logs"). The
 `Element` and `States` writes read nothing since D7. The element index names
 the last-written occurrence live as it does after a restore, so the former D9
 is closed.
@@ -2403,6 +2416,17 @@ join: the node keeps voting and authoring while it orders nothing, until an
 operator restarts it into one. A node more than `DAGGCDepth` behind the
 frontier is in the same position today ("Retention").
 
+### C28. A block produced more than `DAGGCDepth` rounds behind ordering takes no checkpoint
+
+*[#4624](https://gitlab.com/accumulatenetwork/accumulate/-/work_items/4624)*
+
+consensus.md, "Restart": handed groups are dropped once their leader is more
+than `DAGGCDepth` below the last commit, so `CheckpointAt` returns nil for a
+leader below them and the service writes no checkpoint for that block. The
+checkpoint files then match no executor block, and a restart finds none and
+starts at round zero (E11). The tail of such a checkpoint could not be
+written either (#4625).
+
 ## Durability: the seal is still on the block path; the committed log is not on disk
 
 The spec (database.md invariant 5, consensus.md "The committed log") makes the
@@ -2595,3 +2619,19 @@ Directory's at the time it executed the anchor. The Directory's own last
 complete block is not said: its anchor ledger counts the BVNs' anchors, so
 the read is installed on BVNs only. N is read again at each repeat of the halt
 line (every 10 s, bounded at 5 s).
+
+### The simulator's certificate mode is not DAG-BFT ordering (#4142)
+
+The spec (consensus.md, "The acceptance gate") has a simulator mode that
+executes blocks through `ProduceBlock`. The code (`CertificateConsensus`)
+builds the certificate from the lockstep hub's block, so the order of the
+envelopes is the hub's, not a DAG's, and the certificates carry no parents; the
+round is the block index. Under the mode, as on a DAG-BFT node: an envelope the
+executor refuses, or that does not unmarshal, is logged and dropped, not an
+error that stops the run; the system ledger records the round; an empty block
+announces `DidCommitBlock` and reports its real hash. `ProduceBlock` returns
+neither per-message statuses nor validator updates, so the nodes compare no
+statuses, a block that changes the validator set is not followed by the
+simulator's nodes, and a recorder is given no block (recordings made under the
+mode are incomplete). Not built: the real DAG per partition inside the
+simulator; the package-shaped criteria of #4142 part (a).
