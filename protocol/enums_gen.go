@@ -143,7 +143,7 @@ const ExecutorVersionV2Jiuquan ExecutorVersion = 8
 // ExecutorVersionV2Kourou enables collection proofs for cross-partition messaging.
 const ExecutorVersionV2Kourou ExecutorVersion = 9
 
-// ExecutorVersionV2Tanegashima enables the HTLC fixes (refund at expiration, reclaim, block-time expiration bounds).
+// ExecutorVersionV2Tanegashima enables the HTLC refund of an expired locked deposit.
 const ExecutorVersionV2Tanegashima ExecutorVersion = 10
 
 // ExecutorVersionVNext is a placeholder for testing. DO NOT USE.

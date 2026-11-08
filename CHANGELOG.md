@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- An expired HTLC lock is refunded to its sender (#4578, !1263)
+  - **New executor version `v2-tanegashima` (10)**, gating the refund. It is
+    defined and inert — activated on no network — so this release changes no
+    behaviour until a network activates it. Kermit runs `v2-kourou`.
+  - Before, the expiry event skipped every delivered deposit, so no lock was
+    ever refunded. Under `v2-tanegashima` a lock nobody releases is refunded
+    once its expiration has passed, once, and a release of a refunded lock is
+    refused, so release and refund cannot both pay out.
+  - The refund lands at the first major block after the expiration, so up to
+    one major block (about 12 hours) later. In that window the lock has
+    expired but is not yet refunded: the recipient can no longer release it
+    and the sender does not yet have the funds back. Neither party can move
+    them; the refund then lands.
+  - Locks whose expiry event fired before the activation are not refunded by
+    it; their single event has already run (#4613).
+
 ## 1.4.6.7
 
 The release Kermit runs. A devnet can now turn on the BPT history retention

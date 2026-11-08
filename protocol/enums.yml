@@ -38,7 +38,7 @@ ExecutorVersion:
   V2Tanegashima:
     value: 10
     label: v2-tanegashima
-    description: enables the HTLC fixes (refund at expiration, reclaim, block-time expiration bounds)
+    description: enables the HTLC refund of an expired locked deposit
 
   VNext:
     value: 11

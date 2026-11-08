@@ -677,9 +677,19 @@ type expiringLock struct {
 	preimage   []byte
 	expiration time.Time
 	lockedTxID *url.TxID
+	partition  string // the partition that holds the locked deposit
 }
 
 func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
+	t.Helper()
+	return newExpiringLockOn(t, version, 1)
+}
+
+// newExpiringLockOn makes the lock on a network with the given number of
+// BVNs. With more than one, Alice is on BVN0 and Bob - and so the locked
+// deposit and its expiry event - on BVN1, so the refund has to cross
+// partitions to reach her.
+func newExpiringLockOn(t *testing.T, version ExecutorVersion, bvns int) *expiringLock {
 	t.Helper()
 	x := new(expiringLock)
 	x.alice = url.MustParse("alice")
@@ -698,9 +708,16 @@ func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
 	// simulator's clock must start there.
 	now := time.Now()
 	x.sim = NewSim(t,
-		simulator.SimpleNetwork(t.Name(), 1, 1),
+		simulator.SimpleNetwork(t.Name(), bvns, 1),
 		simulator.GenesisWith(now, g),
 	)
+
+	x.partition = "BVN0"
+	if bvns > 1 {
+		x.sim.SetRoute(x.alice, "BVN0")
+		x.sim.SetRoute(x.bob, "BVN1")
+		x.partition = "BVN1"
+	}
 
 	MakeIdentity(t, x.sim.DatabaseFor(x.alice), x.alice, aliceKey[32:])
 	CreditCredits(t, x.sim.DatabaseFor(x.alice), x.alice.JoinPath("book", "1"), 1e9)
@@ -730,9 +747,11 @@ func newExpiringLock(t *testing.T, version ExecutorVersion) *expiringLock {
 	return x
 }
 
+// blockTime is the block time of the partition that holds the locked deposit,
+// the clock the expiry event and a release are measured against.
 func (x *expiringLock) blockTime(t *testing.T) time.Time {
 	t.Helper()
-	ledger := GetAccount[*SystemLedger](t, x.sim.DatabaseFor(x.alice), PartitionUrl("BVN0").JoinPath(Ledger))
+	ledger := GetAccount[*SystemLedger](t, x.sim.Database(x.partition), PartitionUrl(x.partition).JoinPath(Ledger))
 	return ledger.Timestamp
 }
 
@@ -778,9 +797,40 @@ func TestHTLC_ExpiredLock(t *testing.T) {
 	require.Equal(t, errors2.Expired, x.lockStatus())
 	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
 
+	// Bob can no longer release it. The release-side guard refuses a refunded
+	// deposit before the time check does, so the message tells them apart.
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Fails().WithMessage("locked deposit has been refunded"))
+	require.Equal(t, int64(0), x.balance(t, x.bob))
+	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
+}
+
+// TestHTLC_ExpiredLockCrossPartition verifies that the refund of an expired
+// lock reaches a sender on another partition: Alice is on BVN0, the locked
+// deposit and its expiry event on BVN1.
+func TestHTLC_ExpiredLockCrossPartition(t *testing.T) {
+	x := newExpiringLockOn(t, ExecutorVersionLatest, 2)
+	alicePart, err := x.sim.Router().RouteAccount(x.alice)
+	require.NoError(t, err)
+	bobPart, err := x.sim.Router().RouteAccount(x.bob)
+	require.NoError(t, err)
+	require.NotEqual(t, alicePart, bobPart, "the lock must cross partitions")
+
+	// Not refunded before the expiration
+	x.stepTo(t, x.expiration.Add(-30*time.Second))
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+
+	// After the expiration the deposit is marked refunded on BVN1 and the
+	// refund arrives on BVN0
+	x.stepTo(t, x.expiration.Add(2*time.Minute))
+	x.sim.StepUntil(True(func(*Harness) bool {
+		return x.lockStatus() == errors2.Expired && x.balance(t, x.alice) == 100*AcmePrecision
+	}))
+
 	// Bob can no longer release it
 	release := x.release(2)
-	x.sim.StepUntil(Txn(release).Fails())
+	x.sim.StepUntil(Txn(release).Fails().WithMessage("locked deposit has been refunded"))
 	require.Equal(t, int64(0), x.balance(t, x.bob))
 	require.Equal(t, int64(100*AcmePrecision), x.balance(t, x.alice))
 }
@@ -816,6 +866,28 @@ func TestHTLC_ExpiredLockBeforeTanegashima(t *testing.T) {
 	x.stepTo(t, x.expiration.Add(2*time.Minute))
 	x.sim.StepN(10)
 	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+
+	// A release after the expiration fails on time, as it always has; the
+	// deposit is still delivered, so the refund guard has nothing to say
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Fails().WithMessage("locked deposit has expired"))
+	require.Equal(t, errors2.Delivered, x.lockStatus())
+	require.Equal(t, int64(0), x.balance(t, x.bob))
+	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
+}
+
+// TestHTLC_ReleaseAfterEarlyExpiryEventBeforeTanegashima verifies that below
+// v2-tanegashima a release after the early expiry event still pays out: the
+// event changed nothing about a delivered deposit.
+func TestHTLC_ReleaseAfterEarlyExpiryEventBeforeTanegashima(t *testing.T) {
+	x := newExpiringLock(t, ExecutorVersionV2Kourou)
+
+	x.stepTo(t, x.blockTime(t).Add(3*time.Minute))
+	require.True(t, x.blockTime(t).Before(x.expiration))
+	release := x.release(2)
+	x.sim.StepUntil(Txn(release).Succeeds())
+	require.Equal(t, int64(10*AcmePrecision), x.balance(t, x.bob))
 	require.Equal(t, int64(90*AcmePrecision), x.balance(t, x.alice))
 }
 
@@ -1275,8 +1347,9 @@ func TestHTLC_CrossChainSwap_AliceRefundAfterExpiry(t *testing.T) {
 	// never reveals the secret (perhaps he lost interest or his ETH lock expired),
 	// Alice's ACME lock will eventually expire and she can reclaim her tokens.
 	//
-	// Note: The actual refund mechanism on Accumulate is not yet implemented
-	// (it would require a RefundLockedOperation or automatic expiration handling).
+	// On Accumulate the refund is automatic: the expiry event refunds a lock
+	// nobody released once its expiration has passed (#4578);
+	// TestHTLC_ExpiredLock and TestHTLC_ExpiredLockCrossPartition drive it.
 	// This test verifies the protocol flow on the Ethereum side.
 
 	// Setup mock Ethereum HTLC
