@@ -91,6 +91,14 @@ func (x UserSignature) check(batch *database.Batch, ctx *userSigContext) error {
 		return errors.BadRequest.WithFormat("invalid user signature: expected delegated or key, got %v", ctx.signature.Type())
 	}
 
+	// From v2-canaveral the signer and its delegators are named canonically
+	// (executor spec, "Account URLs")
+	if ctx.GetActiveGlobals().ExecutorVersion.V2CanaveralEnabled() {
+		if err := protocol.CheckAccountUrls(sig); err != nil {
+			return errors.UnknownError.Wrap(err)
+		}
+	}
+
 	// Unwrap delegated signatures
 	err := x.unwrapDelegated(ctx)
 	if err != nil {

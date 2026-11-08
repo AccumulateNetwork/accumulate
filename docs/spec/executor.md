@@ -3463,6 +3463,25 @@ So a user signature is not special: it is an ordinary message carrying a
 signature, and the second dispatch exists only because the signature's type
 decides how it is verified.
 
+### Account URLs
+
+An account's identity is its URL's host and path (`url.AccountID`): the
+database key, and the routing number, are computed from those alone, case
+folded. User info, a port, a query and a fragment are not part of it, so a
+URL carrying any of them names the same account as the URL without them,
+while `url.Equal` and `url.Compare`, which compare the whole URL, call the
+two different. From v2-canaveral a URL that names an account carries none of
+the four (`protocol.CheckAccountUrls`):
+
+- a **user transaction** is refused, `BadRequest`, if any URL in its header
+  or its body has one (`TransactionMessage.check`);
+- a **user signature** is refused the same way if its signer, or any
+  delegator, has one (`UserSignature.check`).
+
+Transaction IDs (`url.TxID`) are not account URLs and are not checked.
+Synthetic and system transactions are produced from what was checked and are
+not checked again. Before v2-canaveral nothing is refused for these parts.
+
 ### Anchor signatures are not that path
 
 A block anchor is a **message** executor, `BlockAnchor` in `messageExecutors`,
