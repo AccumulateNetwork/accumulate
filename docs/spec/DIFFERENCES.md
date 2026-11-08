@@ -2439,7 +2439,10 @@ instance during catch-up, and every checkpoint is skipped until it is back
 within it. The previous checkpoint is not resumed: when none matches the
 executor's last block the service starts at round zero (E11). The checkpoint
 taken before this change was not correct either: its dedup set was clamped at
-`DAGGCDepth` below the last commit and its tail collected.
+`DAGGCDepth` below the last commit and its tail collected, and a node restored
+from it took in nothing. Ordering is not held to keep the tail in reach: the
+DAG collects on the gossip path as the frontier advances, whatever ordering
+does, so a hold would stop this node's commits without keeping anything.
 
 ## Durability: the seal is still on the block path; the committed log is not on disk
 

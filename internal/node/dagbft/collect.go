@@ -846,9 +846,6 @@ func (s *Service) collectGroup(certs []*types.Certificate, batches []*types.Batc
 	defer s.mu.Unlock()
 	s.buffer = append(s.buffer, g)
 	s.bufferBytes += g.bytes()
-	// A joining node takes no checkpoint for what it buffers: consensus must
-	// not wait for one (#4625).
-	s.node.Handled(g.Round())
 	s.logger.Debug("Buffered a committed group while joining",
 		"partition", s.config.Partition.ID,
 		"round", leader.Header.Round,

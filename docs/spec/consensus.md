@@ -1698,26 +1698,28 @@ directory records no handed groups, so it
 reports no floor and prunes at the frontier. The checkpoint copies only the
 window it keeps, from 2 × `RescueWindow` below its leader.
 
-**Ordering waits for the executor before the DAG forgets the tail** (#4625).
-The DAG collects every round more than `DAGGCDepth` behind the frontier, and
-the checkpoint for a group needs the DAG from its tail floor (the leader
-round less `RescueWindow` + `WeakLinkWindow`) up. So a node with a state
-directory orders no further while the frontier is more than
-`DAGGCDepth` − 2 × `RescueWindow` rounds (1,936 by default; 16 at the minimum
-depth) past the leader of the oldest group handed to the executor and not
-yet produced (`Node.maxLead`, `Node.awaitLead`); the checkpoint that takes
-that group off the list lets ordering go on. This changes when groups are
-handed over, never which: the commit buffer's capacity no longer bounds the
-lag, as the lead stops far short of filling it. A joining node, which takes no checkpoint
-for the groups it buffers or for the handoff's, lists them off instead
-(`Node.Handled`) and does not wait; a halted node waits. And `CheckpointAt` fails,
-changing nothing, when the DAG has already collected rounds from the tail
-floor up — a checkpoint without its tail restores a node that orders
-differently — so none is written without one. While the executor is that far behind
-(the commit buffer holds 5,000 groups, about 10,000 rounds, and `DAGGCDepth`
-is 2,000, so catch-up can be), every checkpoint is skipped, and a restart does
-not resume from the previous one: with none matching the executor's last
-block it starts at round zero (DIFFERENCES, E11, C28, C29).
+**A checkpoint is taken only with its tail** (#4625). The DAG collects
+every round more than `DAGGCDepth` behind the frontier as certificates
+arrive, on the gossip path, whatever ordering and the executor do ("DAG
+retention", #4239), and the checkpoint for a group needs the DAG from its
+tail floor (the leader round less `RescueWindow` + `WeakLinkWindow`) up. So
+while the frontier is more than `DAGGCDepth` − `RescueWindow` −
+`WeakLinkWindow` rounds (1,960 by default) past the leader of the block being
+produced, `CheckpointAt` fails, changing nothing, and the service writes
+none. A checkpoint written without its tail restored a node that could take
+in nothing: every certificate of the tail it had was an orphan, every live
+certificate lacked a parent, and it ordered nothing more
+(`TestCheckpointAt_TruncatedTailRestoresNothing`). Ordering does not wait for
+the executor to keep the tail in reach: insertion would not wait with it,
+the frontier and the collection floor would move on as before, and a hold
+on ordering would never lift once the tail was gone
+(`TestCheckpointAt_StalledExecutorRecovers`). While the executor is that far
+behind (the commit buffer holds 5,000 groups, about 10,000 rounds, so
+catch-up can be), every checkpoint is skipped, and a restart does not resume
+from the previous one: with none matching the executor's last block it
+starts at round zero (DIFFERENCES E11, C28, C29). The groups handed over are
+bounded meanwhile by the drop at `DAGGCDepth` (#4624), which also refuses a
+checkpoint below the dropped groups.
 
 **A restart reloads the DAG it stopped with** (#4448). The DAG lives in
 memory, and a header needs a quorum of the previous round's certificates as

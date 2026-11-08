@@ -182,7 +182,6 @@ type Node struct {
 	orderMu       sync.Mutex    // held across ordering and recording what was handed over
 	handed        []handedGroup // groups handed to the executor not yet checkpointed
 	handedDropped types.Round   // newest leader dropped from handed past DAGGCDepth (#4624)
-	leadWake      chan struct{} // closed when handed shrinks (awaitLead)
 	prevTail      map[string]bool
 	restored      []*types.Certificate // replayed through Bullshark at start
 	orphans       []*types.Certificate // dropped by Restore, taken in again at start
@@ -318,7 +317,6 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		bullshark:   bs,
 		committed:   make(chan []*types.Certificate, config.CommitBufferSize),
 		limitRaised: make(chan struct{}, 1),
-		leadWake:    make(chan struct{}),
 	}
 	p.SetCommittees(n.committees)
 	bs.SetCommittees(n.committees)
