@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/dgraph-io/badger"
-
 	"gitlab.com/accumulatenetwork/accumulate/internal/api/routing"
 	coredb "gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/indexing"

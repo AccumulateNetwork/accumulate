@@ -35,9 +35,9 @@ var (
 func TestPolicy(t *testing.T) {
 	p := PolicyFor("Cyclops")
 	cases := []struct {
-		name        string
-		key         *record.Key
-		fall, keep  bool
+		name       string
+		key        *record.Key
+		fall, keep bool
 	}{
 		{"the BPT", record.NewKey("BPT", "Root"), false, false},
 		{"own ledger root chain", record.NewKey("Account", ledger, "RootChain", "Element", uint64(1)), false, false},
