@@ -268,8 +268,10 @@ type simNode struct {
 	consumeDone  chan struct{}
 	stoppedEquiv uint64 // equivocations counted by DAGs of stopped nodes
 
-	maxBlockTxs atomic.Uint64 // the most transactions one executed block carried
-	maxLag      atomic.Int64  // the deepest execution lag observed after a block
+	maxBlockTxs   atomic.Uint64 // the most transactions one executed block carried
+	maxBlockBytes atomic.Uint64 // the most batch bytes one executed block carried
+	maxBatchBytes atomic.Uint64 // the largest single batch executed
+	maxLag        atomic.Int64  // the deepest execution lag observed after a block
 }
 
 // maxHeight is the highest height any node of the partition has executed.
@@ -347,6 +349,16 @@ type Result struct {
 	// (consensus spec, invariant 9).
 	MaxBlockTxs map[string]uint64
 	MaxLag      map[string]int
+
+	// MaxBlockBytes is, per partition, the most batch bytes (the sum of
+	// transaction lengths, types.Batch.Size) one executed block carried, and
+	// MaxBatchBytes the largest single batch executed. The header byte cap
+	// bounds a block in bytes, not transactions: a batch is sealed at
+	// BatchSize but is not capped there (worker.createBatch takes everything
+	// pending), and the first batch of a header is admitted whatever its
+	// size (#4373).
+	MaxBlockBytes map[string]uint64
+	MaxBatchBytes map[string]uint64
 
 	// ResumeGap is, per restarted partition, the longest it went without an
 	// executed block in the 30 s after its nodes returned. A partition is
@@ -569,9 +581,22 @@ func (s *Sim) consume(ctx context.Context, sn *simNode) {
 				}
 				executedAny = true
 				executed = append(executed, cert.Digest().String())
-				n := 0
+				n, nb := 0, 0
 				for _, b := range batches {
 					n += len(b.Transactions)
+					nb += b.Size()
+					for {
+						cur := sn.maxBatchBytes.Load()
+						if uint64(b.Size()) <= cur || sn.maxBatchBytes.CompareAndSwap(cur, uint64(b.Size())) {
+							break
+						}
+					}
+				}
+				for {
+					cur := sn.maxBlockBytes.Load()
+					if uint64(nb) <= cur || sn.maxBlockBytes.CompareAndSwap(cur, uint64(nb)) {
+						break
+					}
 				}
 				sn.txs.Add(uint64(n))
 				blockTxs += n
@@ -1039,7 +1064,7 @@ func (s *Sim) diagnose(logf func(string, ...any), prev map[*simNode]snapshot, mo
 func (s *Sim) finish(start time.Time, ok bool, reason string) *Result {
 	r := &Result{Ok: ok, Reason: reason, Heights: map[string]uint64{}, Elapsed: time.Since(start),
 		Submitted: s.submitted.Load(), Refused: s.refused.Load(),
-		MaxBlockTxs: map[string]uint64{}, MaxLag: map[string]int{}, ResumeGap: s.resumeGap}
+		MaxBlockTxs: map[string]uint64{}, MaxBlockBytes: map[string]uint64{}, MaxBatchBytes: map[string]uint64{}, MaxLag: map[string]int{}, ResumeGap: s.resumeGap}
 	for _, part := range s.parts {
 		for _, sn := range s.byPart[part] {
 			if h := sn.height.Load(); h > r.Heights[part] {
@@ -1047,6 +1072,12 @@ func (s *Sim) finish(start time.Time, ok bool, reason string) *Result {
 			}
 			if m := sn.maxBlockTxs.Load(); m > r.MaxBlockTxs[part] {
 				r.MaxBlockTxs[part] = m
+			}
+			if m := sn.maxBlockBytes.Load(); m > r.MaxBlockBytes[part] {
+				r.MaxBlockBytes[part] = m
+			}
+			if m := sn.maxBatchBytes.Load(); m > r.MaxBatchBytes[part] {
+				r.MaxBatchBytes[part] = m
 			}
 			if l := int(sn.maxLag.Load()); l > r.MaxLag[part] {
 				r.MaxLag[part] = l

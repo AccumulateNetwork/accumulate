@@ -63,6 +63,31 @@ func overloaded(t *testing.T, maxHeaderBytes int, seconds time.Duration) *Result
 	return r
 }
 
+// requireBlockWithinHeaderBytes asserts a block is bounded by validators x
+// rounds x MaxHeaderBytes, in bytes. It is not a transaction count: BatchSize
+// is the trigger that seals a batch, not a cap (worker.createBatch takes
+// everything pending, so a batch under load holds more than BatchSize
+// transactions), and the header budget always admits the first batch it meets
+// however large (ConsumeAvailableBatchesWithin). So a header carries at most
+// MaxHeaderBytes plus one batch's overshoot, and a block at most that for
+// each of validators x two rounds of headers. A bound of 4*2*50+50
+// transactions assumed fixed-size batches and failed at 457 on a correct
+// build (#4373). What this guards is a block exceeding what the byte cap
+// admits; that the cap itself is enforced is pinned deterministically by
+// primary TestCreateHeader_MetersTheBacklog and _BudgetIsPerBlock, because
+// since #4517 this load builds no backlog for an uncapped header to dump
+// (uncapped and capped runs both peak near 285 transactions, all in one batch).
+func requireBlockWithinHeaderBytes(t *testing.T, r *Result, part string, validators, maxHeaderBytes int) {
+	t.Helper()
+	const roundsPerBlock = 2
+	bound := uint64(validators * roundsPerBlock * (maxHeaderBytes + int(r.MaxBatchBytes[part])))
+	t.Logf("%s: block %d bytes (%d txs), largest batch %d bytes, bound %d bytes",
+		part, r.MaxBlockBytes[part], r.MaxBlockTxs[part], r.MaxBatchBytes[part], bound)
+	require.Greater(t, r.MaxBlockBytes[part], uint64(0), "blocks were executed")
+	require.LessOrEqual(t, r.MaxBlockBytes[part], bound,
+		"a block is bounded by validators x rounds x (MaxHeaderBytes + one batch)")
+}
+
 func TestOverload_BacklogComesBackAHeaderAtATime(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the consensus stack twice for ~25s each")
@@ -89,8 +114,7 @@ func TestOverload_BacklogComesBackAHeaderAtATime(t *testing.T) {
 	// itself stays high in both runs -- the partition is offered more than it
 	// can execute for the whole run, and only the user half can be refused --
 	// so the block size, which is the block's execution time, is the measure.
-	require.LessOrEqual(t, capped.MaxBlockTxs["BVN1"], uint64(4*2*50+50),
-		"with the cap a block is bounded by validators x MaxHeaderBytes")
+	requireBlockWithinHeaderBytes(t, capped, "BVN1", 4, 2*oneBatch+oneBatch/2)
 	// System traffic is proposed while execution lags (consensus spec;
 	// #4517), so nothing piles up in the store during a refusal window, and
 	// even without the cap there is no backlog to come back in one block.
@@ -174,6 +198,6 @@ func TestOverload_CappedHeadersKeepThePartitionMoving(t *testing.T) {
 	oneBatch := types.NewBatch(txs).Size()
 	r, err := asymmetricOverload(t, 2*oneBatch+oneBatch/2)
 	require.NoError(t, err, "with the cap no partition is declared stalled")
-	require.LessOrEqual(t, r.MaxBlockTxs["BVN2"], uint64(4*2*50+50), "a block is bounded by validators x MaxHeaderBytes")
+	requireBlockWithinHeaderBytes(t, r, "BVN2", 4, 2*oneBatch+oneBatch/2)
 	require.Greater(t, r.Heights["BVN2"], uint64(200), "and BVN2 keeps producing blocks under the same load")
 }
