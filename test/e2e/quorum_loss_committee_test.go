@@ -84,7 +84,7 @@ func TestAPartitionThatLostAQuorumHaltsAndResumesWhenItsValidatorsReturn(t *test
 		bvn0.RestoreNode(i)
 		back = append(back, restartTarget{"BVN0", bvn0, i})
 	}
-	joinRestarted(t, sim, back, 60*time.Second)
+	joinRestarted(t, sim, back, 60*time.Second, nil)
 
 	// BVN0 resumes, and what it sends is delivered.
 	st := send()
