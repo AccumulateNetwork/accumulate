@@ -386,7 +386,7 @@ func convertNodeKey(inst *Instance) (*tmp2p.NodeKey, error) {
 		if key != nil {
 			switch k := key.(type) {
 			case *RawPrivateKey:
-				inst.logger.Info("P2P key is RawPrivateKey", "address", k.Address)
+				inst.logger.Info("P2P key is RawPrivateKey") // Never log k.Address: it is the private key (#4494)
 			case *CometNodeKeyFile:
 				inst.logger.Info("P2P key is CometNodeKeyFile", "path", k.Path)
 			case *TransientPrivateKey:
