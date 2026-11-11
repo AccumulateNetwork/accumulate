@@ -263,7 +263,8 @@ func (UpdateKeyPage) executeOperation(page *protocol.KeyPage, book *protocol.Key
 		return nil
 
 	case *protocol.UpdateKeyOperation:
-		return updateKey(page, book, &op.OldEntry, &op.NewEntry, false)
+		// UpdateKeyPage changes the page's version, so the entry may move
+		return updateKey(page, book, &op.OldEntry, &op.NewEntry, false, false)
 
 	case *protocol.SetThresholdKeyPageOperation:
 		return page.SetThreshold(op.Threshold)

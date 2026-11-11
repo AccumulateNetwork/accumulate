@@ -57,15 +57,19 @@ func (ms *KeyPage) SetThreshold(m uint64) error {
 	return nil
 }
 
-// EntryByKeyHash finds the entry with a matching key hash.
+// EntryByKeyHash finds the first entry with a matching key hash.
+//
+// The entries are not necessarily sorted: UpdateKey replaces an entry's key
+// hash where the entry stands, so that a signature recorded against the
+// entry's index still belongs to that entry. On a sorted page the first match
+// is the entry a binary search finds.
 func (p *KeyPage) EntryByKeyHash(keyHash []byte) (int, KeyEntry, bool) {
-	i, found := sortutil.Search(p.Keys, func(ks *KeySpec) int {
-		return bytes.Compare(ks.PublicKeyHash, keyHash)
-	})
-	if !found {
-		return -1, nil, false
+	for i, ks := range p.Keys {
+		if bytes.Equal(ks.PublicKeyHash, keyHash) {
+			return i, ks, true
+		}
 	}
-	return i, p.Keys[i], true
+	return -1, nil, false
 }
 
 // AddKeySpec adds a key spec to the page.

@@ -214,7 +214,8 @@ func (UpdateKey) Execute(st *StateManager, tx *Delivery) (protocol.TransactionRe
 		return nil, errors.InternalError.WithFormat("initiator %v is neither the principal nor a delegate", initiator)
 	}
 
-	err = updateKey(page, book, oldEntry, &protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true)
+	inPlace := st.Globals.ExecutorVersion >= updateKeyInPlaceVersion
+	err = updateKey(page, book, oldEntry, &protocol.KeySpecParams{KeyHash: body.NewKeyHash}, true, inPlace)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +238,26 @@ func requireKeyHash(h []byte) error {
 	return nil
 }
 
-func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams, preserveDelegate bool) error {
+// updateKeyInPlaceVersion is the executor version from which UpdateKey replaces
+// an entry's key where the entry stands instead of moving it to where its new
+// key hash sorts.
+//
+// UpdateKey does not change the page's version, and a signature on a pending
+// transaction is recorded in the active signature set against the index of
+// its key's entry; signatures at the same page version are assumed to index
+// the same entries. Moving the entry breaks that: the holder's next signature,
+// with the new key, fills a second slot, and another holder's signature can
+// land in the slot the holder already filled. Kept in place, the holder's
+// entry, and every other entry, keeps its index for as long as the page keeps
+// its version. UpdateKeyPage changes the version, so it may still reorder.
+//
+// The page is no longer sorted by key hash once an entry is replaced in place;
+// KeyPage.EntryByKeyHash scans the entries for that reason.
+const updateKeyInPlaceVersion = protocol.ExecutorVersionV2Tanegashima
+
+// updateKey replaces the old entry with the new one. If inPlace is set, the
+// entry keeps its index; otherwise it is moved to where it sorts.
+func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protocol.KeySpecParams, preserveDelegate, inPlace bool) error {
 	if new.Delegate != nil {
 		if err := verifyIsNotPage(&book.AccountAuth, new.Delegate); err != nil {
 			return errors.UnknownError.WithFormat("invalid delegate %v: %w", new.Delegate, err)
@@ -261,6 +281,10 @@ func updateKey(page *protocol.KeyPage, book *protocol.KeyBook, old, new *protoco
 
 	if new.Delegate != nil || !preserveDelegate {
 		entry.Delegate = new.Delegate
+	}
+
+	if inPlace {
+		return nil
 	}
 
 	// Relocate the entry
