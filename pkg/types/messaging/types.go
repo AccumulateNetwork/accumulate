@@ -272,15 +272,16 @@ func (m *BadSyntheticMessage) Hash() [32]byte {
 	}
 	h.AddHash2(msgHash)
 
-	// A message without a proof, a receipt or a 32-byte anchor is refused,
-	// but it is still named, and naming it must not panic (#4572). Its anchor
-	// is hashed as bytes, which a well-formed message's never is, so it cannot
-	// take a well-formed message's name.
+	// A message without a proof, a receipt or an anchor of at least 32 bytes
+	// is refused, but it is still named, and naming it must not panic
+	// (#4572). Its anchor is hashed as bytes, which a well-formed message's
+	// never is, so it cannot take a well-formed message's name. An anchor of
+	// 32 bytes or more is hashed by its first 32, as it always was.
 	var anchor []byte
 	if m.Proof != nil && m.Proof.Receipt != nil {
 		anchor = m.Proof.Receipt.Anchor
 	}
-	if len(anchor) == 32 {
+	if len(anchor) >= 32 {
 		h.AddHash((*[32]byte)(anchor))
 	} else {
 		h.AddBytes(anchor)

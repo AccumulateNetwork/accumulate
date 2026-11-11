@@ -2798,8 +2798,13 @@ produces and causes nothing; a `BadSyntheticMessage` without a 32-byte proof
 anchor hashes the anchor as bytes, which no well-formed one does. A
 well-formed message's ID and hash are unchanged. `Envelope.Normalize` refuses
 a transaction or signature entry with nothing in it, as it already refused a
-transaction with no body, and an anchor body without a source is refused by
-its transaction executor. A message of every type with every field left out
+transaction with no body, and refuses a message, at any depth of wrapping,
+that is missing its inner message, transaction, transaction body, signature
+or anchored message (`messaging.wellFormed`). An anchor body without a source
+is refused by its transaction executor. A deprecated synthetic message whose
+proof anchor is 32 bytes or longer hashes it by its first 32 bytes, as it
+always did. Every message these rules refuse, or name differently, used to
+panic the node, so none of them is gated on an executor version. A message of every type with every field left out
 is refused, not fatal, through validation and through a block
 (`TestMalformedMessagesAreRefused`).
 

@@ -58,6 +58,10 @@ func signedAnchor(t *testing.T, sim *Sim, source string, dest *url.URL, body Tra
 	return &messaging.BlockAnchor{Anchor: seq, Signature: sig.(KeySignature)}
 }
 
+func wrapSeq(msg messaging.Message) *messaging.SequencedMessage {
+	return &messaging.SequencedMessage{Message: msg, Source: PartitionUrl("BVN0"), Destination: DnUrl(), Number: 1}
+}
+
 func noPanic(t *testing.T, what string, fn func()) {
 	t.Helper()
 	var r any
@@ -114,6 +118,62 @@ func TestMalformedMessagesAreRefused(t *testing.T) {
 		}},
 		{"synthetic message without a message", Directory, func(*Sim) messaging.Message {
 			return &messaging.SyntheticMessage{}
+		}},
+		{"deprecated synthetic message with a receipt list and no receipt", Directory, func(*Sim) messaging.Message {
+			return &messaging.BadSyntheticMessage{Message: inner(), Proof: &AnnotatedReceipt{
+				ReceiptList: &merkle.ReceiptList{},
+			}}
+		}},
+		{"anchor of a transaction without a body", "BVN0", func(sim *Sim) messaging.Message {
+			return signedAnchor(t, sim, Directory, PartitionUrl("BVN0"), nil)
+		}},
+		{"anchor of an empty sequence", "BVN0", func(*Sim) messaging.Message {
+			return &messaging.BlockAnchor{Anchor: &messaging.SequencedMessage{}}
+		}},
+		{"sequenced message without a message", Directory, func(*Sim) messaging.Message {
+			return &messaging.SequencedMessage{Source: PartitionUrl("BVN0"), Destination: DnUrl(), Number: 1}
+		}},
+		{"sequenced message without a destination", Directory, func(*Sim) messaging.Message {
+			seq := inner()
+			seq.Destination = nil
+			return seq
+		}},
+		{"synthetic message of a sequence without a destination", Directory, func(*Sim) messaging.Message {
+			seq := inner()
+			seq.Destination = nil
+			return &messaging.SyntheticMessage{Message: seq}
+		}},
+		{"sequenced signature request without an authority", Directory, func(*Sim) messaging.Message {
+			txid := AcmeUrl().WithTxID([32]byte{1})
+			return wrapSeq(&messaging.SignatureRequest{TxID: txid, Cause: txid})
+		}},
+		{"sequenced signature request without a cause", Directory, func(*Sim) messaging.Message {
+			txid := AcmeUrl().WithTxID([32]byte{1})
+			return wrapSeq(&messaging.SignatureRequest{Authority: AcmeUrl(), TxID: txid})
+		}},
+		{"sequenced transaction message without a transaction", Directory, func(*Sim) messaging.Message {
+			return wrapSeq(&messaging.TransactionMessage{})
+		}},
+		{"sequenced transaction without a body", Directory, func(*Sim) messaging.Message {
+			return wrapSeq(&messaging.TransactionMessage{Transaction: &Transaction{Header: TransactionHeader{Principal: AcmeUrl()}}})
+		}},
+		{"sequenced signature message without a signature", Directory, func(*Sim) messaging.Message {
+			return wrapSeq(&messaging.SignatureMessage{})
+		}},
+		{"sequenced credit payment without a transaction ID", Directory, func(*Sim) messaging.Message {
+			return wrapSeq(&messaging.CreditPayment{})
+		}},
+		{"synthetic message of an empty sequence", Directory, func(*Sim) messaging.Message {
+			return &messaging.SyntheticMessage{Message: &messaging.SequencedMessage{}}
+		}},
+		{"synthetic message of an empty synthetic message", Directory, func(*Sim) messaging.Message {
+			return &messaging.SyntheticMessage{Message: &messaging.SyntheticMessage{}}
+		}},
+		{"synthetic message of a transaction without a body", Directory, func(*Sim) messaging.Message {
+			return &messaging.SyntheticMessage{Message: wrapSeq(&messaging.TransactionMessage{Transaction: &Transaction{Header: TransactionHeader{Principal: AcmeUrl()}}})}
+		}},
+		{"deprecated synthetic message of a transaction without a body", Directory, func(*Sim) messaging.Message {
+			return &messaging.BadSyntheticMessage{Message: wrapSeq(&messaging.TransactionMessage{Transaction: &Transaction{Header: TransactionHeader{Principal: AcmeUrl()}}})}
 		}},
 	}
 

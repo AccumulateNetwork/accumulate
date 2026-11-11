@@ -22,7 +22,13 @@ var (
 )
 
 func reqHeld(n uint64, collected bool) *execute.Held {
-	seq := &messaging.SequencedMessage{Number: n, Source: reqSource, Destination: protocol.PartitionUrl("BVN0")}
+	// The sequenced message carries a transaction: one without a message is
+	// refused by normalization before it is dispatched (#4572).
+	seq := &messaging.SequencedMessage{Number: n, Source: reqSource, Destination: protocol.PartitionUrl("BVN0"),
+		Message: &messaging.TransactionMessage{Transaction: &protocol.Transaction{
+			Header: protocol.TransactionHeader{Principal: protocol.PartitionUrl("BVN0").JoinPath(protocol.Ledger)},
+			Body:   &protocol.SyntheticDepositTokens{},
+		}}}
 	return &execute.Held{ID: seq.ID(), Message: seq, Hash: seq.Hash(), Collected: collected}
 }
 

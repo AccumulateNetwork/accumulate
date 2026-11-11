@@ -46,6 +46,11 @@ func (e *Envelope) Normalize() ([]Message, error) {
 	for _, sig := range e.Signatures {
 		messages = append(messages, &SignatureMessage{Signature: sig})
 	}
+	for i, msg := range messages {
+		if err := wellFormed(msg); err != nil {
+			return nil, errors.BadRequest.WithFormat("message %d: %w", i, err)
+		}
+	}
 
 	// Collect a set of all transaction hashes
 	unsigned := map[[32]byte]struct{}{}
@@ -145,6 +150,45 @@ func (e *Envelope) Normalize() ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+// wellFormed refuses a message missing a field that naming, routing or
+// executing it reads (#4572), before anything reads it: Normalize, validation
+// filling a refused message's status with its ID, and block execution all
+// name a message. A field whose absence is refused further on is left to that
+// refusal, so no message that was refused or executed before changes its
+// outcome.
+//
+// The transaction a signature, credit payment or signature request names is
+// left to its executor: Normalize skips a message that names none.
+func wellFormed(msg Message) error {
+	switch m := msg.(type) {
+	case nil:
+		return errors.BadRequest.With("missing message")
+	case *TransactionMessage:
+		if m.Transaction == nil {
+			return errors.BadRequest.With("missing transaction")
+		}
+		if m.Transaction.Body == nil {
+			return errors.BadRequest.With("missing transaction body")
+		}
+	case *SignatureMessage:
+		if m.Signature == nil {
+			return errors.BadRequest.With("missing signature")
+		}
+	case *BlockAnchor:
+		if m.Anchor == nil {
+			return errors.BadRequest.With("missing anchor")
+		}
+		return wellFormed(m.Anchor)
+	case interface{ Unwrap() Message }:
+		// Sequenced, synthetic and bad synthetic messages
+		if m.Unwrap() == nil {
+			return errors.BadRequest.With("missing message")
+		}
+		return wellFormed(m.Unwrap())
+	}
+	return nil
 }
 
 func getTxnHash(txn *protocol.Transaction, defaultTxID *url.TxID) ([]byte, error) {
