@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -67,10 +68,10 @@ func TestAQuerierIsAdmittedByItsOwnGate(t *testing.T) {
 	}()
 
 	u := protocol.AccountUrl("nobody")
-	_, err := NewQuerier(QuerierParams{Database: db, Partition: "BVN0", QueryGate: full}).Query(ctx, u, nil)
+	_, err := NewQuerier(QuerierParams{NodeState: nodestate.Always{}, Database: db, Partition: "BVN0", QueryGate: full}).Query(ctx, u, nil)
 	require.ErrorContains(t, err, "query capacity exhausted", "the querier whose gate is full must refuse")
-	_, err = NewQuerier(QuerierParams{Database: db, Partition: "BVN0", QueryGate: free}).Query(ctx, u, nil)
+	_, err = NewQuerier(QuerierParams{NodeState: nodestate.Always{}, Database: db, Partition: "BVN0", QueryGate: free}).Query(ctx, u, nil)
 	require.False(t, errors.Is(err, errors.NotReady), "the querier with a free gate must not refuse: %v", err)
 
-	require.Same(t, queryGate, NewQuerier(QuerierParams{Database: db, Partition: "BVN0"}).gate)
+	require.Same(t, queryGate, NewQuerier(QuerierParams{NodeState: nodestate.Always{}, Database: db, Partition: "BVN0"}).gate)
 }
