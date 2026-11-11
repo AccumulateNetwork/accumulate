@@ -378,6 +378,9 @@ var ErrStalled = errors.New("partition stalled")
 // a consensus fault.
 var ErrMeshIncomplete = errors.New("gossip mesh incomplete")
 
+// beforeGossipSub lets a test delay the creation of validator i's GossipSub.
+var beforeGossipSub = func(i int) {}
+
 // New builds the network: one libp2p host per validator, a Directory node on
 // every host, and a BVN node on each host for its validator's BVN — the
 // soak's dual topology, where all partitions share each validator's host,
@@ -437,6 +440,7 @@ func New(cfg Config) (*Sim, error) {
 			return nil, fmt.Errorf("host %d: %w", i, err)
 		}
 		s.hosts[i] = h
+		beforeGossipSub(i)
 		ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithPeerExchange(true), pubsub.WithFloodPublish(true))
 		if err != nil {
 			s.Close()
