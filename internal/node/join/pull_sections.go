@@ -155,7 +155,11 @@ type spanLoad struct {
 // that page covered -- a span is a page of the tree as it is, 256 leaves,
 // whether a section holds one leaf or forty -- the spans fetched at once,
 // statesInFlight against each peer, and each span's answers kept on the
-// round's goroutine as they arrive. One page at a time used 1.4 of the 16
+// round's goroutine as they arrive. Each peer has statesInFlight workers that
+// start their spans with it, and statesInFlight slots every page and states
+// query of the load to it holds: a span picked by its index, and its stale
+// leaves asked across the peers at once, had sixteen in flight to the slower
+// of two peers (#4604). One page at a time used 1.4 of the 16
 // queries four validators admit, 2.6 s and ~100 accounts a page, so a BVN
 // of 96k leaves was 40 minutes of pulling against a 30-minute deadline
 // (#4549, run 20261007T141334Z). A span no peer serves leaves its sections
@@ -175,6 +179,7 @@ func (s *PulledState) loadOpened(ctx context.Context, p *syncing) {
 	if len(srcs) == 0 {
 		return
 	}
+	srcs = holdSlots(srcs)
 	started := s.clock()
 	probe := new(spanLoad)
 	covered, ok := s.fetchPage(ctx, p, srcs, s.pageTurn, todo, probe)
@@ -191,21 +196,20 @@ func (s *PulledState) loadOpened(ctx context.Context, p *syncing) {
 		spans = append(spans, todo[:n])
 		todo = todo[n:]
 	}
-	turn := s.pageTurn
-	s.pageTurn += len(spans)
 
 	next := make(chan int)
 	out := make(chan *spanLoad)
-	workers := min(statesInFlight*len(srcs), len(spans))
 	var wg sync.WaitGroup
-	for w := 0; w < workers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range next {
-				out <- s.fetchSpan(ctx, p, srcs, turn+i, spans[i])
-			}
-		}()
+	for turn := range srcs {
+		for w := 0; w < min(statesInFlight, len(spans)); w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := range next {
+					out <- s.fetchSpan(ctx, p, srcs, turn, spans[i])
+				}
+			}()
+		}
 	}
 	go func() {
 		for i := range spans {
@@ -262,6 +266,11 @@ func (s *PulledState) fetchSpan(ctx context.Context, p *syncing, srcs []pull.Sou
 // keepSpan writes what a span's fetch brought, on the round's goroutine, and
 // marks its sections loaded. It returns how many accounts were kept.
 func (s *PulledState) keepSpan(ctx context.Context, p *syncing, ld *spanLoad) int {
+	for i, a := range ld.answers {
+		if h, ok := a.src.(*slotted); ok {
+			ld.answers[i].src = h.Source
+		}
+	}
 	p.highest = max(p.highest, ld.highest)
 	p.sectionPages += ld.pages
 	kept := s.keepStates(ctx, p, ld.answers)
@@ -274,6 +283,49 @@ func (s *PulledState) keepSpan(ctx context.Context, p *syncing, ld *spanLoad) in
 	}
 	return kept
 }
+
+// slotted is a peer whose page and states queries each hold one of its
+// slots, waiting for one: the opened-section load's queries to the peer.
+type slotted struct {
+	pull.Source
+	slots chan struct{}
+}
+
+// holdSlots gives each source statesInFlight slots.
+func holdSlots(srcs []pull.Source) []pull.Source {
+	held := make([]pull.Source, len(srcs))
+	for i, src := range srcs {
+		held[i] = &slotted{src, make(chan struct{}, statesInFlight)}
+	}
+	return held
+}
+
+func (h *slotted) hold(ctx context.Context) error {
+	select {
+	case h.slots <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return errors.UnknownError.Wrap(ctx.Err())
+	}
+}
+
+func (h *slotted) QueryBptPage(ctx context.Context, scope *url.URL, query *api.BptPageQuery) (*api.BptPageRecord, error) {
+	if err := h.hold(ctx); err != nil {
+		return nil, err
+	}
+	defer func() { <-h.slots }()
+	return h.Source.QueryBptPage(ctx, scope, query)
+}
+
+func (h *slotted) QueryAccountStates(ctx context.Context, scope *url.URL, query *api.AccountStatesQuery) (*api.AccountStatesRecord, error) {
+	if err := h.hold(ctx); err != nil {
+		return nil, err
+	}
+	defer func() { <-h.slots }()
+	return h.Source.QueryAccountStates(ctx, scope, query)
+}
+
+func (h *slotted) String() string { return sourceKey(h.Source) }
 
 // fetchPage fetches the page from the highest of todo, asking the peers in
 // turn until one answers at or after the pull's start, and adds what it

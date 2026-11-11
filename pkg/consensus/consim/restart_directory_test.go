@@ -37,9 +37,17 @@ func TestRestartOneDirectoryValidatorOfTwelve(t *testing.T) {
 		BatchSize:        20,
 		TargetHeight:     target,
 		TargetEveryNode:  true,
-		Duration:         4 * time.Minute,
-		StallAfter:       30 * time.Second,
-		StateDir:         t.TempDir(),
+		// From the CPU it needs, not from a 24-core box (#4610): the run
+		// costs about 829 CPU-seconds. On 2 dedicated cores the Directory
+		// made 1.4 blocks a second; on the GitLab runner's 2 vCPUs (go test
+		// consim, pipeline 2972987247) it made 0.59, before the restart and
+		// after it alike, and reached 356 of 400 in ten minutes: the run
+		// needs about 680 s there. Twenty minutes is 1.8 times that, and
+		// fits the package's -timeout 45m beside the rest of consim (1376 s
+		// on that runner).
+		Duration:   20 * time.Minute,
+		StallAfter: 30 * time.Second,
+		StateDir:   t.TempDir(),
 		Restarts: []Restart{{
 			Part: "Directory", Vals: []int{restarted}, AtHeight: 40,
 			StopFirst: []int{restarted}, StopFirstFor: 2 * time.Second,

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -80,7 +81,7 @@ func entriesOf(t *testing.T, q *Querier, u *url.URL, opts *api.RangeOptions) (in
 // bytes, always holding at least one.
 func TestAChainEntryRangeIsAtMost200EntriesAnd50000Bytes(t *testing.T) {
 	db := database.OpenInMemory(nil)
-	q := NewQuerier(QuerierParams{Database: db, Partition: "Test"})
+	q := NewQuerier(QuerierParams{NodeState: nodestate.Always{}, Database: db, Partition: "Test"})
 
 	small := protocol.DnUrl().JoinPath("small")
 	chainOf(t, db, small, 300, 8)

@@ -9,14 +9,14 @@ package block
 import (
 	"bytes"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"sort"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/synthcache"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )

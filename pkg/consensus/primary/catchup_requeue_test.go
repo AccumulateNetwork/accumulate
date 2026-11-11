@@ -170,9 +170,9 @@ func TestCreateHeader_DedupsPayloadDigests(t *testing.T) {
 	w.RequeueBatches([]types.BatchDigest{batch.Digest()})
 	w.RequeueBatches([]types.BatchDigest{batch.Digest()})
 
-	// Round 1 with an empty round 0 is allowed to have no parents, which
-	// keeps this test focused on the payload.
-	header, err := p.createHeaderLockedWithRound(1, 1)
+	// Round 0 needs no parents, which keeps this test focused on the
+	// payload.
+	header, err := p.createHeaderLockedWithRound(0, 1)
 	require.NoError(t, err)
 	require.Len(t, header.Payload, 1, "duplicate queue entries must collapse to one payload entry")
 	require.Equal(t, batch.Digest(), header.Payload[0].Digest)

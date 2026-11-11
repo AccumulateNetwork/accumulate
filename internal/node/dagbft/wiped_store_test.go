@@ -47,7 +47,9 @@ func TestRestart_AWipedStoreDoesNotResumeFromItsCheckpoint(t *testing.T) {
 	restarted.config.DataDir = dir
 	ca.last = protocol.GenesisBlock
 	require.NoError(t, restarted.initializeGenesis())
-	require.False(t, restarted.seedFromCheckpoint(),
+	seeded, err := restarted.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.False(t, seeded,
 		"a store at genesis resumed from a checkpoint 107047 blocks above it, as if they were empty")
 	require.Equal(t, uint64(protocol.GenesisBlock), restarted.lastBlockIndex, "the next block is numbered from the checkpoint, not the store")
 	require.Equal(t, types.Round(0), restarted.node.LastCommitRound())
@@ -61,7 +63,7 @@ func TestRestart_AWipedStoreDoesNotResumeFromItsCheckpoint(t *testing.T) {
 	go restarted.blockProductionLoop()
 	defer func() { cancel(); restarted.wg.Wait() }()
 
-	_, err := restarted.processCommittedGroup(group(commitCert(author, 214126, time.Unix(200, 0), nil)))
+	_, err = restarted.processCommittedGroup(group(commitCert(author, 214126, time.Unix(200, 0), nil)))
 	require.NoError(t, err)
 
 	// The whole-restart exit (#4447) resumes a node from its own block when

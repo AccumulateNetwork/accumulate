@@ -15,7 +15,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -23,6 +22,7 @@ import (
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/dag"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
@@ -169,18 +169,30 @@ type Primary struct {
 	lagging atomic.Bool
 	config  Config
 	gossip  *gossip.GossipLayer
-	dag     *dag.DAG
-	workers []*worker.Worker
+	// broadcastHeader sends a header this primary authored to the network:
+	// gossip's BroadcastHeader, or a test's. Nil without gossip.
+	broadcastHeader func(context.Context, *types.Header) error
+	dag             *dag.DAG
+	workers         []*worker.Worker
 
-	// Committee (protected by committeeMu - read-heavy, writes rare during epoch transitions)
-	committeeMu sync.RWMutex
-	committee   *types.Committee
+	// committees is the committee of each round: a header, vote or
+	// certificate is checked against the committee of its own round, and a
+	// round's quorum is counted in it (#4593).
+	committees *types.CommitteeSchedule
+
+	// roundLimit, when set and reporting true, is the highest round this
+	// primary may advance to, author or vote at: the rounds whose committee
+	// it is sure of (Node.ReportExecuted).
+	roundLimit func() (types.Round, bool)
 
 	// Current round state (protected by roundMu)
 	roundMu          sync.Mutex
 	currentRound     types.Round
-	currentEpoch     uint64
 	lastRoundAdvance time.Time
+	// seed is the round Node.Rejoin seeded this node at, if seeded: its
+	// DAG holds nothing below it (catchUpRequests).
+	seed   types.Round
+	seeded bool
 
 	// Vote collection and certificate tracking (protected by pendingMu)
 	pendingMu sync.Mutex
@@ -203,6 +215,24 @@ type Primary struct {
 	votedHeaders map[types.HeaderDigest]types.Round
 	sentVotes    map[types.HeaderDigest]*types.Vote
 
+	// votedRounds is, per author and round, the header this primary voted
+	// for (#4590). A validator signs one header per author and round, the
+	// first it votes for (Narwhal 4.1): two headers from one author for one
+	// round otherwise both reached a quorum of honest votes, and the
+	// partition split on which certificate was real. The record is made
+	// before the vote is signed and persisted through onVoted; a restarted
+	// primary gets it back through RestoreVoted. Nil onVoted persists
+	// nothing.
+	votedRounds map[authorRound]types.HeaderDigest
+	onVoted     func(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) error
+	// votedFloor is the round below which votedRounds has been pruned, in
+	// memory here or on disk by the checkpoints before a restart
+	// (RestoreVotedFloor): no header below it is voted, as the record of
+	// what was voted there is gone. A rejoin that lowers the round
+	// (Node.Rejoin) otherwise reopened pruned rounds with no record. It
+	// only rises.
+	votedFloor types.Round
+
 	// deferredPins records, per header whose vote is deferred, the batches
 	// pinned in the workers on its behalf, and the round it was for so the
 	// same round-based cleanup that drops votedHeaders releases these.
@@ -211,6 +241,12 @@ type Primary struct {
 	// that can never be evicted -- the memory bound failing open.
 	deferredPins   map[types.HeaderDigest][]types.BatchDigest
 	deferredRounds map[types.HeaderDigest]types.Round
+
+	// deferred records what each deferred vote lacks, and retests carries
+	// the headers whose last missing piece has landed back to the loop, so
+	// the vote goes out then and not on the next rebroadcast (#4611).
+	deferred *deferredVotes
+	retests  chan *types.Header
 
 	// Round-sync pacing (#4057)
 	roundSyncMu       sync.Mutex
@@ -289,6 +325,25 @@ type Primary struct {
 	votesSent           atomic.Uint64
 }
 
+// parentQuorum reports whether authors carry a stake quorum of the committee
+// of round (#4591): the rule a header's parents of the round before must
+// meet, for the headers this primary votes for, the certificates its DAG
+// takes in and the headers it builds. round is the parents' round.
+func (p *Primary) parentQuorum(round types.Round, authors []ed25519.PublicKey) bool {
+	committee := p.committeeAt(round)
+	var stake uint64
+	for _, a := range authors {
+		stake += committee.StakeOf(a)
+	}
+	return committee.HasQuorum(stake)
+}
+
+// authorRound keys votedRounds.
+type authorRound struct {
+	author string
+	round  types.Round
+}
+
 // DefaultPendingCertsGCDepth is the gc_depth for sizing the pending certificates buffer.
 const DefaultPendingCertsGCDepth = 10
 
@@ -339,12 +394,11 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 
 	p := &Primary{
 		config:         config,
-		committee:      committee,
+		committees:     types.NewCommitteeSchedule(committee),
 		gossip:         g,
 		dag:            d,
 		workers:        workers,
 		currentRound:   0,
-		currentEpoch:   committee.Epoch,
 		pendingVotes:   make(map[types.HeaderDigest][]*types.Vote),
 		ourHeaders:     make(map[types.HeaderDigest]*types.Header),
 		ourCerts:       make(map[types.Round]*types.Certificate),
@@ -352,19 +406,29 @@ func New(config Config, committee *types.Committee, g *gossip.GossipLayer, d *da
 		deferredPins:   make(map[types.HeaderDigest][]types.BatchDigest),
 		deferredRounds: make(map[types.HeaderDigest]types.Round),
 		sentVotes:      make(map[types.HeaderDigest]*types.Vote),
+		votedRounds:    make(map[authorRound]types.HeaderDigest),
 		pendingCerts:   pendingCerts,
 		newCerts:       make(chan *types.Certificate, config.NewCertsChannelSize),
+		deferred:       newDeferredVotes(),
+		retests:        make(chan *types.Header, 256),
 	}
+	for _, w := range workers {
+		w.SetOnStored(p.BatchStored)
+	}
+	d.SetParentQuorum(p.parentQuorum)
 
 	// Initialize CertSyncer if gossip is available
 	if g != nil {
+		p.broadcastHeader = g.BroadcastHeader
 		syncerConfig := CertSyncerConfig{
 			PublicKey: config.KeyPair.Public().(ed25519.PublicKey),
 			Partition: config.Partition,
 		}
 		p.certSyncer = NewCertSyncer(syncerConfig, d, g, pendingCerts)
 		// Set callback to process received certificates
-		p.certSyncer.SetCertReceivedCallback(p.receiveCertificate)
+		p.certSyncer.SetCertReceivedCallback(func(cert *types.Certificate) CertOutcome {
+			return p.receiveCertificate(cert, false)
+		})
 		p.requestParents = p.certSyncer.RequestMissing
 	}
 
@@ -410,8 +474,8 @@ func (p *Primary) Start(ctx context.Context) error {
 	// Get current round/epoch for logging (thread-safe)
 	p.roundMu.Lock()
 	startRound := p.currentRound
-	startEpoch := p.currentEpoch
 	p.roundMu.Unlock()
+	startEpoch := p.committeeAt(startRound).Epoch
 
 	slog.Info("Primary started",
 		"partition", p.config.Partition,
@@ -426,20 +490,26 @@ func (p *Primary) Start(ctx context.Context) error {
 		case <-p.ctx.Done():
 			return p.ctx.Err()
 
+		// The gossip channels carry what the topic validators accepted:
+		// authored and signed by a member of the committee of its epoch
+		// (#4596). The handlers do not verify those signatures again.
 		case header := <-headers:
 			if header != nil {
-				p.OnHeaderReceived(header)
+				p.handleHeader(header, true)
 			}
 
 		case vote := <-votes:
 			if vote != nil {
-				p.OnVoteReceived(vote)
+				p.handleVote(vote, true)
 			}
 
 		case cert := <-certs:
 			if cert != nil {
-				p.OnCertificateReceived(cert)
+				p.receiveCertificate(cert, true)
 			}
+
+		case header := <-p.retests:
+			p.handleHeader(header, true)
 
 		case <-ticker.C:
 			p.tryAdvanceRound()
@@ -454,6 +524,7 @@ func (p *Primary) Start(ctx context.Context) error {
 			if time.Since(lastRebroadcast) >= time.Second {
 				lastRebroadcast = time.Now()
 				p.rebroadcastPendingHeaders()
+				p.pruneDeferredVotes()
 			}
 			// Recover from a silent stall (#4057): after an outage all
 			// validators can end up with their OWN header certified but
@@ -506,11 +577,29 @@ func (p *Primary) CurrentRound() types.Round {
 	return p.currentRound
 }
 
-// CurrentEpoch returns the current consensus epoch.
+// CurrentEpoch returns the epoch of the committee of the current round.
 func (p *Primary) CurrentEpoch() uint64 {
-	p.roundMu.Lock()
-	defer p.roundMu.Unlock()
-	return p.currentEpoch
+	return p.committeeAt(p.CurrentRound()).Epoch
+}
+
+// committeeAt is the committee of a round.
+func (p *Primary) committeeAt(round types.Round) *types.Committee {
+	return p.committees.At(round)
+}
+
+// SetRoundLimit wires the highest round this primary may advance to, author
+// or vote at; limit reports false while there is none.
+func (p *Primary) SetRoundLimit(limit func() (types.Round, bool)) {
+	p.roundLimit = limit
+}
+
+// beyondLimit is whether round is above the round limit.
+func (p *Primary) beyondLimit(round types.Round) bool {
+	if p.roundLimit == nil {
+		return false
+	}
+	limit, ok := p.roundLimit()
+	return ok && round > limit
 }
 
 // NewCertificates returns a channel that receives new certificates.
@@ -542,8 +631,13 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	// Get current round (needs roundMu)
 	p.roundMu.Lock()
 	currentRound := p.currentRound
-	currentEpoch := p.currentEpoch
 	p.roundMu.Unlock()
+	// A round above the limit may belong to a committee this node has not
+	// executed the change to yet; its header would carry the wrong epoch.
+	if p.beyondLimit(currentRound) {
+		return
+	}
+	currentEpoch := p.committeeAt(currentRound).Epoch
 
 	// Check pending state and create header (needs pendingMu)
 	p.pendingMu.Lock()
@@ -581,10 +675,26 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 		return
 	}
 
+	// The round is claimed here, before the header is persisted: the
+	// watermark is what a second attempt at the round sees while the
+	// persist runs below with no lock held. It stays claimed if the persist
+	// fails — the round is burnt, never authored again.
+	p.hasAuthored = true
+	p.lastAuthoredRound = currentRound
+	p.headersCreated.Add(1)
+	metrics.HeadersCreatedTotal.WithLabelValues(p.config.Partition).Inc()
+	p.pendingMu.Unlock()
+
 	// Durable before anyone can see it: a crash after the broadcast must
-	// not let the restarted node author this round again (#4448).
+	// not let the restarted node author this round again (#4448), so the
+	// header is persisted and synced before it is broadcast (#4592). No
+	// primary lock is held meanwhile — the sync is two device flushes, and
+	// votes, certificates and the round go on — and the header is not yet
+	// in ourHeaders, so the rebroadcast path cannot send it before it is
+	// durable.
 	if p.onAuthored != nil {
 		if err := p.onAuthored(header); err != nil {
+			p.pendingMu.Lock()
 			p.requeueHeaderBatches(header)
 			p.pendingMu.Unlock()
 			slog.Error("Cannot persist authored header; not broadcasting it",
@@ -595,12 +705,9 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 
 	// Store for vote collection
 	digest := header.Digest()
+	p.pendingMu.Lock()
 	p.ourHeaders[digest] = header
 	p.pendingVotes[digest] = nil
-	p.hasAuthored = true
-	p.lastAuthoredRound = currentRound
-
-	p.headersCreated.Add(1)
 
 	if debugEnabled() {
 		slog.Debug("Created header",
@@ -618,6 +725,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	} else {
 		p.pendingVotes[digest] = append(p.pendingVotes[digest], selfVote)
 		p.votesSent.Add(1)
+		metrics.VotesSentTotal.WithLabelValues(p.config.Partition).Inc()
 
 		// Check if we already have quorum (possible in single-node case)
 		p.tryCreateCertificateLocked(digest)
@@ -638,10 +746,10 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 			default:
 			}
 		}
-		if p.gossip == nil {
+		if p.broadcastHeader == nil {
 			return
 		}
-		if err := p.gossip.BroadcastHeader(p.ctx, header); err != nil {
+		if err := p.broadcastHeader(p.ctx, header); err != nil {
 			slog.Warn("Failed to broadcast header",
 				"error", err,
 				"digest", digest.String())
@@ -719,6 +827,14 @@ func (p *Primary) cleanupOldHeadersLocked() (expired []types.HeaderDigest) {
 			delete(p.sentVotes, digest)
 		}
 	}
+	for key := range p.votedRounds {
+		if key.round < certCutoff {
+			delete(p.votedRounds, key)
+		}
+	}
+	if certCutoff > p.votedFloor {
+		p.votedFloor = certCutoff
+	}
 
 	// A header old enough to be dropped is never going to be voted on, so
 	// release whatever it was holding.  This is the path that bounds the pin
@@ -778,6 +894,36 @@ func (p *Primary) pinHeaderBatches(headerDigest types.HeaderDigest, header *type
 	}
 }
 
+// nameHeaderBatches marks the batches a header names on every worker, so
+// eviction takes batches no header names first, and returns the batches no
+// worker holds, in the header's order. A gossiped batch is routed to one
+// local worker by digest, not by the worker id the payload entry carries, so
+// a batch is missing only if every worker says so (#4159).
+func (p *Primary) nameHeaderBatches(header *types.Header) (missing []types.BatchDigest) {
+	digests := make([]types.BatchDigest, 0, len(header.Payload))
+	for _, entry := range header.Payload {
+		digests = append(digests, entry.Digest)
+	}
+	held := make(map[types.BatchDigest]bool, len(digests))
+	for _, w := range p.workers {
+		notHere := make(map[types.BatchDigest]bool, len(digests))
+		for _, d := range w.NameBatches(digests) {
+			notHere[d] = true
+		}
+		for _, d := range digests {
+			if !notHere[d] {
+				held[d] = true
+			}
+		}
+	}
+	for _, d := range digests {
+		if !held[d] {
+			missing = append(missing, d)
+		}
+	}
+	return missing
+}
+
 // releasePins drops the pins a header took: it was voted on, or it aged out.
 func (p *Primary) releasePins(headerDigest types.HeaderDigest) {
 	p.pendingMu.Lock()
@@ -808,6 +954,9 @@ func (p *Primary) requeueHeaderBatches(header *types.Header) {
 
 // signalNewCertificate sends a certificate to the newCerts channel (non-blocking).
 func (p *Primary) signalNewCertificate(cert *types.Certificate) {
+	// A vote deferred for this certificate as a parent can go out now (#4611).
+	p.retest(p.deferred.parentArrived(cert.Digest()))
+
 	p.newCertsMu.Lock()
 	defer p.newCertsMu.Unlock()
 
@@ -826,7 +975,7 @@ func (p *Primary) signalNewCertificate(cert *types.Certificate) {
 // rebroadcastPendingHeaders re-broadcasts headers that haven't achieved quorum.
 // This helps with mesh formation issues where initial broadcasts may be lost.
 func (p *Primary) rebroadcastPendingHeaders() {
-	if p.gossip == nil {
+	if p.broadcastHeader == nil {
 		return
 	}
 
@@ -873,7 +1022,7 @@ func (p *Primary) rebroadcastPendingHeaders() {
 				default:
 				}
 			}
-			if err := p.gossip.BroadcastHeader(p.ctx, h); err != nil {
+			if err := p.broadcastHeader(p.ctx, h); err != nil {
 				slog.Debug("Failed to rebroadcast header",
 					"error", err,
 					"digest", h.Digest().String())

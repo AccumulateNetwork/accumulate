@@ -9,16 +9,47 @@ package block
 import (
 	"strings"
 
+	"gitlab.com/accumulatenetwork/accumulate/internal/core"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/execute/v2/chain"
+	dagtypes "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
-// processNetworkAccountUpdates processes updates to network data accounts,
-// updating the in-memory globals variable and pushing updates when necessary.
-func (x *Executor) processNetworkAccountUpdates(st *chain.StateManager, delivery *chain.Delivery, principal protocol.Account) error {
+// processNetworkAccountUpdates validates updates to network data accounts,
+// parses the globals they change, and pushes updates when necessary.
+//
+// From V2Canaveral it changes nothing in memory: it returns the pending
+// globals the transaction makes, or nil if it makes no change, and the caller
+// makes them the executor's pending globals once the transaction has
+// succeeded. Before, it wrote the pending globals as it parsed, so a
+// transaction rejected after the parse, or whose commit failed, still changed
+// them (#4615).
+func (x *Executor) processNetworkAccountUpdates(st *chain.StateManager, delivery *chain.Delivery, principal protocol.Account) (*core.GlobalValues, error) {
 	r := x.BlockTimers.Start(BlockTimerTypeNetworkAccountUpdates)
 	defer x.BlockTimers.Stop(r)
+
+	var next *core.GlobalValues
+	staged := x.globals().Active.ExecutorVersion.V2CanaveralEnabled()
+	pending := func() *core.GlobalValues {
+		switch {
+		case !staged:
+			return &x.globals().Pending
+		case next == nil:
+			next = x.globals().Pending.Copy()
+		}
+		return next
+	}
+	err := x.updateNetworkAccount(st, delivery, principal, pending, staged)
+	if err != nil {
+		return nil, err
+	}
+	return next, nil
+}
+
+// updateNetworkAccount does the work of processNetworkAccountUpdates, parsing
+// changes into the globals pending returns.
+func (x *Executor) updateNetworkAccount(st *chain.StateManager, delivery *chain.Delivery, principal protocol.Account, pending func() *core.GlobalValues, staged bool) error {
 
 	// Only process updates to network accounts. To prevent potential issues
 	// replaying history, this condition must reject everything that was
@@ -49,7 +80,7 @@ func (x *Executor) processNetworkAccountUpdates(st *chain.StateManager, delivery
 	switch body := delivery.Transaction.Body.(type) {
 	case *protocol.ActivateProtocolVersion:
 		// Add the version change to the pending globals
-		x.globals().Pending.ExecutorVersion = body.Version
+		pending().ExecutorVersion = body.Version
 
 	case *protocol.UpdateKeyPage:
 		switch targetName {
@@ -80,19 +111,26 @@ func (x *Executor) processNetworkAccountUpdates(st *chain.StateManager, delivery
 		switch targetName {
 		case protocol.Oracle:
 			// Validate entry and update variable
-			err = x.globals().Pending.ParseOracle(body.Entry)
+			err = pending().ParseOracle(body.Entry)
 
 		case protocol.Globals:
 			// Validate entry and update variable
-			err = x.globals().Pending.ParseGlobals(body.Entry)
+			err = pending().ParseGlobals(body.Entry)
 
 		case protocol.Network:
 			// Validate entry and update variable
-			err = x.globals().Pending.ParseNetwork(body.Entry)
+			if staged {
+				err = pending().ParseNetwork(body.Entry)
+				if err == nil {
+					err = x.recordCommitteeActivation(st)
+				}
+			} else {
+				err = pending().ParseNetworkLegacy(body.Entry)
+			}
 
 		case protocol.Routing:
 			// Validate entry and update variable
-			err = x.globals().Pending.ParseRouting(body.Entry)
+			err = pending().ParseRouting(body.Entry)
 
 		case protocol.Votes,
 			protocol.Evidence:
@@ -145,5 +183,52 @@ func (x *Executor) processNetworkAccountUpdates(st *chain.StateManager, delivery
 		}
 	}
 
+	return nil
+}
+
+// recordCommitteeActivation records in the system ledger the DAG round from
+// which the network definition this block activates orders and verifies the
+// partition's rounds: the block's leader round plus the activation margin,
+// fixed by the committed sequence rather than by when a node executes the
+// block (consensus spec, "Committee changes"; #4593). A restarted or joining
+// node reads it back from its state. From v2-canaveral, the version that
+// activates the DAG-BFT rules; before it the ledger encodes as it did.
+func (x *Executor) recordCommitteeActivation(st *chain.StateManager) error {
+	if x.isGenesis || !x.globals().Active.ExecutorVersion.V2CanaveralEnabled() {
+		return nil
+	}
+	record := st.GetBatch().Account(x.Describe.Ledger())
+	var ledger *protocol.SystemLedger
+	err := record.Main().GetAs(&ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("load ledger: %w", err)
+	}
+	// The committee before this one, so a node joining between the two
+	// knows the committee of the rounds below the new one's (#4593). Every
+	// write in a block sees the same active definition, so only the block's
+	// first write shifts the round: a second would record the round the
+	// first just set. A second write finds the ledger as the first left it;
+	// the version alone does not say so, as the genesis definition's is
+	// zero, like a ledger's that recorded none.
+	active := x.globals().Active.Network
+	round := ledger.LeaderRound + uint64(dagtypes.CommitteeActivationMargin)
+	if active == nil || ledger.PreviousNetworkVersion != active.Version || ledger.CommitteeActivationRound != round {
+		ledger.PreviousCommitteeActivationRound = ledger.CommitteeActivationRound
+	}
+	ledger.CommitteeActivationRound = round
+	ledger.PreviousNetworkVersion = 0
+	ledger.PreviousValidators = nil
+	if active != nil {
+		ledger.PreviousNetworkVersion = active.Version
+		for _, v := range active.Validators {
+			if v.IsActiveOn(x.Describe.PartitionId) {
+				ledger.PreviousValidators = append(ledger.PreviousValidators, v.PublicKey)
+			}
+		}
+	}
+	err = record.Main().Put(ledger)
+	if err != nil {
+		return errors.UnknownError.WithFormat("store ledger: %w", err)
+	}
 	return nil
 }

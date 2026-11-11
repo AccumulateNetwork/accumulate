@@ -45,7 +45,85 @@ go test 1/2:
   # integration packages (cmd/consensus-testnet) hold many individually
   # bounded multi-node tests whose sum exceeds it — the package failed on
   # every pipeline while each test inside it was fine.
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet ./...
+  #
+  # The job itself has the project's 1h budget (build_timeout 3600s), and
+  # ./... on this 2-vCPU runner did not fit it (#4610): six jobs from
+  # 2026-10-15 to 2026-10-19 ended job_execution_timeout at 59m35s, with
+  # consim's tests summing ~1750s and test/e2e's ~1440-1580s when killed. The
+  # kill lands on whichever test is running and gotestsum reports it as
+  # FAIL (-1.00s) after "signal: terminated" -- that test did not fail.
+  # consim therefore runs in its own job (go test consim), and test/e2e in
+  # four (go test e2e).
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet $(go list -tags testnet ./... | grep -v -e /pkg/consensus/consim -e '/test/e2e$')
+
+go test consim:
+  # The in-process consensus simulator, on a runner of its own (#4610).
+  # Beside the rest of ./... on the 2-vCPU runner it shared its cores with
+  # another package, and its sims, timed in seconds, stalled for want of
+  # CPU. The package takes 1670 s on 2 dedicated cores (2026-10-21, every
+  # test passing; TestRestartOneDirectoryValidatorOfTwelve 416 s of it).
+  # On this runner it took 1979 s (pipeline 2972987247), with
+  # TestRestartOneDirectoryValidatorOfTwelve cut off at 603 s of the
+  # ~680 s it needs there: ~2050 s, so -timeout 45m is 1.3 times that. The
+  # job adds 15 minutes to fetch modules and build.
+  extends: .go test
+  timeout: 1h
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
+    ACC_ASSERT_IDENTITY_BOUNDARY: '1'
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 45m -tags testnet ./pkg/consensus/consim/...
+
+.go test e2e:
+  # test/e2e, on runners of its own, in four parts by top-level test name
+  # (#4610). Part k runs the tests that match its pattern and none before it,
+  # so every test is in exactly one part, whatever its name.
+  #
+  # In go test 1/2 the package overran -timeout 30m on all eight pipelines
+  # from 2026-10-15 to 2026-10-21 (pipeline 2972987247: killed at 1800 s, 110
+  # of its 347 tests run). Those 110 take 365 s on 2 dedicated cores and took
+  # 1649 s there, 4.5 times as long. The whole package takes 987 s on 2
+  # dedicated cores with RECORD_FAILURE set (2026-10-22): ~4400 s at that
+  # rate, which no single job holds. The parts take 258, 270, 210 and 249 s
+  # on 2 cores; at 4.5 times, the largest is 1215 s, and -timeout 30m is 1.5
+  # times that.
+  extends: .go test
+  timeout: 1h
+  variables:
+    GOMODCACHE: ''
+    GOLANGCI_LINT_CACHE: ''
+    ACC_ASSERT_IDENTITY_BOUNDARY: '1'
+  artifacts:
+    paths:
+      - failures/*
+  script:
+  - export RECORD_FAILURE="${PWD}/failures"
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -timeout 30m -tags testnet ${E2E_TESTS} ./test/e2e
+
+go test e2e 1/4:
+  extends: .go test e2e
+  variables:
+    E2E_TESTS: -run Restart
+
+go test e2e 2/4:
+  extends: .go test e2e
+  variables:
+    E2E_TESTS: -run Join -skip Restart
+
+go test e2e 3/4:
+  extends: .go test e2e
+  variables:
+    E2E_TESTS: -run Heal|Anchor -skip Restart|Join
+
+go test e2e 4/4:
+  extends: .go test e2e
+  variables:
+    E2E_TESTS: -skip Restart|Join|Heal|Anchor
 
 go test 2/2:
   # No-mmap indexer test

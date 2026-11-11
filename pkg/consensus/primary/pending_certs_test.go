@@ -447,63 +447,58 @@ func TestIntegrationChainedPendingCertificates(t *testing.T) {
 		genesisDigests[i] = c.Digest()
 	}
 
-	// Create round 1 certificate
-	header1 := types.NewHeader(validators[0].pub, 1, 1, nil, genesisDigests)
-	require.NoError(t, header1.Sign(validators[0].priv))
-
-	sigs1 := make([][]byte, len(validators))
-	authors1 := make([]uint16, len(validators))
-	for i, v := range validators {
-		vote := types.NewVote(header1.Digest(), 1, 1, v.pub)
-		require.NoError(t, vote.Sign(v.priv))
-		sigs1[i] = vote.Signature
-		authors1[i] = uint16(i)
+	// Rounds 1 to 3, three certificates each (a quorum of parents for the
+	// next round, #4591), every one naming all of the round before.
+	certify := func(i int, round types.Round, parents []types.CertificateDigest) *types.Certificate {
+		h := types.NewHeader(validators[i].pub, round, 1, nil, parents)
+		require.NoError(t, h.Sign(validators[i].priv))
+		sigs := make([][]byte, len(validators))
+		authors := make([]uint16, len(validators))
+		for j, v := range validators {
+			vote := types.NewVote(h.Digest(), round, 1, v.pub)
+			require.NoError(t, vote.Sign(v.priv))
+			sigs[j] = vote.Signature
+			authors[j] = uint16(j)
+		}
+		return types.NewCertificate(h, sigs, authors)
 	}
-	round1Cert := types.NewCertificate(header1, sigs1, authors1)
-
-	// Create round 2 certificate referencing round 1
-	header2 := types.NewHeader(validators[0].pub, 2, 1, nil, []types.CertificateDigest{round1Cert.Digest()})
-	require.NoError(t, header2.Sign(validators[0].priv))
-
-	sigs2 := make([][]byte, len(validators))
-	authors2 := make([]uint16, len(validators))
-	for i, v := range validators {
-		vote := types.NewVote(header2.Digest(), 2, 1, v.pub)
-		require.NoError(t, vote.Sign(v.priv))
-		sigs2[i] = vote.Signature
-		authors2[i] = uint16(i)
+	parents := genesisDigests
+	var rounds [][]*types.Certificate
+	for round := types.Round(1); round <= 3; round++ {
+		var certs []*types.Certificate
+		var digests []types.CertificateDigest
+		for i := 0; i < 3; i++ {
+			c := certify(i, round, parents)
+			certs = append(certs, c)
+			digests = append(digests, c.Digest())
+		}
+		rounds = append(rounds, certs)
+		parents = digests
 	}
-	round2Cert := types.NewCertificate(header2, sigs2, authors2)
-
-	// Create round 3 certificate referencing round 2
-	header3 := types.NewHeader(validators[0].pub, 3, 1, nil, []types.CertificateDigest{round2Cert.Digest()})
-	require.NoError(t, header3.Sign(validators[0].priv))
-
-	sigs3 := make([][]byte, len(validators))
-	authors3 := make([]uint16, len(validators))
-	for i, v := range validators {
-		vote := types.NewVote(header3.Digest(), 3, 1, v.pub)
-		require.NoError(t, vote.Sign(v.priv))
-		sigs3[i] = vote.Signature
-		authors3[i] = uint16(i)
-	}
-	round3Cert := types.NewCertificate(header3, sigs3, authors3)
 
 	// Receive certificates in reverse order: Round 3, then Round 2, then Round 1
-	p.OnCertificateReceived(round3Cert)
-	require.Nil(t, d.GetByDigest(round3Cert.Digest()))
-	require.Equal(t, 1, p.PendingCertsCount())
+	for _, c := range rounds[2] {
+		p.OnCertificateReceived(c)
+		require.Nil(t, d.GetByDigest(c.Digest()))
+	}
+	require.Equal(t, 3, p.PendingCertsCount())
 
-	p.OnCertificateReceived(round2Cert)
-	require.Nil(t, d.GetByDigest(round2Cert.Digest()))
-	require.Equal(t, 2, p.PendingCertsCount())
+	for _, c := range rounds[1] {
+		p.OnCertificateReceived(c)
+		require.Nil(t, d.GetByDigest(c.Digest()))
+	}
+	require.Equal(t, 6, p.PendingCertsCount())
 
 	// Receive round 1 - this should trigger a chain: insert round1 -> insert round2 -> insert round3
-	p.OnCertificateReceived(round1Cert)
+	for _, c := range rounds[0] {
+		p.OnCertificateReceived(c)
+	}
 
 	// All certificates should now be in the DAG
-	require.NotNil(t, d.GetByDigest(round1Cert.Digest()))
-	require.NotNil(t, d.GetByDigest(round2Cert.Digest()))
-	require.NotNil(t, d.GetByDigest(round3Cert.Digest()))
+	for _, certs := range rounds {
+		for _, c := range certs {
+			require.NotNil(t, d.GetByDigest(c.Digest()))
+		}
+	}
 	require.Equal(t, 0, p.PendingCertsCount())
 }

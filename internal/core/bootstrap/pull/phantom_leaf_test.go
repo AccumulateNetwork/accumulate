@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
@@ -141,7 +142,7 @@ func TestTheWritesThatMadeEmptyLeavesMakeNone(t *testing.T) {
 // kept, never a reason to drop the name — and the next source is asked.
 func TestAPeerServingALeafWithNoBodyIsRefused(t *testing.T) {
 	src, _, _, part, _, void, bodied, partitionID := mainlessFixture(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: partitionID})}
 	liar := bodyless{Source: honest, receiptOf: bodied}
 	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 
@@ -200,7 +201,7 @@ func TestAPeerServingALeafWithNoBodyIsRefused(t *testing.T) {
 // refused at the pull, and the next source is asked.
 func TestABodyServedUnderAnotherNameIsRefused(t *testing.T) {
 	src, _, _, part, _, _, bodied, partitionID := mainlessFixture(t)
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: partitionID})}
 	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 	phantom := url.MustParse("nobody/tokens")
 	liar := swapAll{Source: honest, for_: phantom, other: bodied}

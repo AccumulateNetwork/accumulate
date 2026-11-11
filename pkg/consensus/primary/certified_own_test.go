@@ -43,7 +43,7 @@ func ourCertificate(t *testing.T, p *Primary, validators []*testValidator, commi
 	v := validators[0]
 
 	header := types.NewHeader(v.pub, round, committee.Epoch,
-		[]types.PayloadEntry{{Digest: digest, Worker: 0}}, nil)
+		[]types.PayloadEntry{{Digest: digest, Worker: 0}}, parentsOf(p, round))
 	require.NoError(t, header.Sign(v.priv))
 
 	vote := types.NewVote(header.Digest(), round, committee.Epoch, v.pub)
@@ -52,6 +52,16 @@ func ourCertificate(t *testing.T, p *Primary, validators []*testValidator, commi
 	cert := types.NewCertificate(header, [][]byte{vote.Signature}, []uint16{0})
 	require.NoError(t, p.dag.Insert(cert))
 	return cert
+}
+
+// parentsOf names every certificate of the round before as a header's
+// parents.
+func parentsOf(p *Primary, round types.Round) []types.CertificateDigest {
+	var parents []types.CertificateDigest
+	for _, c := range p.dag.GetRound(round - 1) {
+		parents = append(parents, c.Digest())
+	}
+	return parents
 }
 
 // TestCertifiedOwn_ARequeuedBatchIsCountedOnce — the dedup window
@@ -100,7 +110,7 @@ func TestCertifiedOwn_ACertificateNotInTheDagCountsNothing(t *testing.T) {
 	// Built exactly as the counted one is, and never inserted.
 	v := vals[0]
 	header := types.NewHeader(v.pub, 1, committee.Epoch,
-		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, nil)
+		[]types.PayloadEntry{{Digest: batch.Digest(), Worker: 0}}, parentsOf(p, 1))
 	require.NoError(t, header.Sign(v.priv))
 	vote := types.NewVote(header.Digest(), 1, committee.Epoch, v.pub)
 	require.NoError(t, vote.Sign(v.priv))

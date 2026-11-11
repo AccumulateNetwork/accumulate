@@ -197,17 +197,43 @@ func (g *GlobalValues) FormatGlobals() protocol.DataEntry {
 	return g.formatEntry(g.Globals)
 }
 
+// ParseNetwork replaces the network definition with the one in the entry. It
+// leaves the receiver unchanged when it returns an error: a definition whose
+// version does not increase is rejected, not stored (#4615).
 func (g *GlobalValues) ParseNetwork(entry protocol.DataEntry) error {
-	version := g.Network.Version
-	err := parseEntryAs(labelNetwork, entry, new(protocol.NetworkDefinition), &g.Network)
+	def, err := unmarshalNetwork(entry)
 	if err != nil {
 		return err
 	}
 
-	if g.Network.Version <= version {
-		return errors.BadRequest.WithFormat("version must increase: %d <= %d", g.Network.Version, version)
+	if def.Version <= g.Network.Version {
+		return errors.BadRequest.WithFormat("version must increase: %d <= %d", def.Version, g.Network.Version)
+	}
+	g.Network = def
+	return nil
+}
+
+// ParseNetworkLegacy is ParseNetwork as it was before V2Canaveral: a
+// definition whose version does not increase is stored and then rejected. It is
+// kept for replaying history, on the v1 executor and on v2 before V2Canaveral.
+func (g *GlobalValues) ParseNetworkLegacy(entry protocol.DataEntry) error {
+	version := g.Network.Version
+	def, err := unmarshalNetwork(entry)
+	if err != nil {
+		return err
+	}
+
+	g.Network = def
+	if def.Version <= version {
+		return errors.BadRequest.WithFormat("version must increase: %d <= %d", def.Version, version)
 	}
 	return nil
+}
+
+func unmarshalNetwork(entry protocol.DataEntry) (*protocol.NetworkDefinition, error) {
+	var def *protocol.NetworkDefinition
+	err := parseEntryAs(labelNetwork, entry, new(protocol.NetworkDefinition), &def)
+	return def, err
 }
 
 func (g *GlobalValues) FormatNetwork() protocol.DataEntry {

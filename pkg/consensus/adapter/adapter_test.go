@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // mockBlockProducer implements BlockProducer for testing.
@@ -63,14 +64,14 @@ func (m *mockStateProvider) StateHash() [32]byte {
 // mockValidatorSetProvider implements ValidatorSetProvider for testing.
 type mockValidatorSetProvider struct {
 	validators []adapter.ValidatorInfo
-	callback   func([]adapter.ValidatorInfo, uint64)
+	callback   func([]adapter.ValidatorInfo, uint64, protocol.ExecutorVersion)
 }
 
 func (m *mockValidatorSetProvider) Validators() []adapter.ValidatorInfo {
 	return m.validators
 }
 
-func (m *mockValidatorSetProvider) OnValidatorSetChange(callback func([]adapter.ValidatorInfo, uint64)) {
+func (m *mockValidatorSetProvider) OnValidatorSetChange(callback func([]adapter.ValidatorInfo, uint64, protocol.ExecutorVersion)) {
 	m.callback = callback
 }
 
@@ -162,7 +163,7 @@ func TestMockValidatorSetProvider(t *testing.T) {
 
 	assert.Equal(t, validators, mock.Validators())
 
-	mock.OnValidatorSetChange(func(v []adapter.ValidatorInfo, version uint64) {
+	mock.OnValidatorSetChange(func(v []adapter.ValidatorInfo, version uint64, _ protocol.ExecutorVersion) {
 		// Callback registered
 	})
 	assert.NotNil(t, mock.callback)

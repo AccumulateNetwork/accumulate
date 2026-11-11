@@ -24,10 +24,9 @@ const DefaultParentWaitTimeout = 80 * time.Millisecond
 // createHeaderLocked creates a header for the current round.
 // Must be called with p.roundMu held.
 func (p *Primary) createHeaderLocked() (*types.Header, error) {
-	// p.roundMu must be held by caller (ensures thread-safe access to currentRound/currentEpoch)
+	// p.roundMu must be held by caller (ensures thread-safe access to currentRound)
 	round := p.currentRound
-	epoch := p.currentEpoch
-	return p.createHeaderLockedWithRound(round, epoch)
+	return p.createHeaderLockedWithRound(round, p.committeeAt(round).Epoch)
 }
 
 // createHeaderLockedWithRound creates a header for the specified round.
@@ -61,7 +60,7 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	// time, not as one block (consensus spec, invariant 9). The budget is
 	// this header's share of the block, so the block is bounded whatever the
 	// number of validators (#4230).
-	budget := p.headerBudget()
+	budget := p.headerBudget(round)
 	for _, w := range p.workers {
 		if budget <= 0 {
 			break
@@ -102,14 +101,11 @@ func (p *Primary) createHeaderLockedWithRound(round types.Round, epoch uint64) (
 	return header, nil
 }
 
-// headerBudget is the bytes of batches this header may carry: its share of
-// MaxBlockBytes among the committee's headers in one block, capped by
+// headerBudget is the bytes of batches a header of the round may carry: its
+// share of MaxBlockBytes among the committee's headers in one block, capped by
 // MaxHeaderBytes.
-func (p *Primary) headerBudget() int {
-	p.committeeMu.RLock()
-	validators := p.committee.Len()
-	p.committeeMu.RUnlock()
-	return headerBudget(p.config.MaxHeaderBytes, p.config.MaxBlockBytes, validators)
+func (p *Primary) headerBudget(round types.Round) int {
+	return headerBudget(p.config.MaxHeaderBytes, p.config.MaxBlockBytes, p.committeeAt(round).Len())
 }
 
 // headerBudget divides maxBlock among the validators' headers of one block
@@ -137,30 +133,22 @@ func (p *Primary) getParentCertsLocked() ([]types.CertificateDigest, error) {
 	return p.getParentCertsForRound(round)
 }
 
-// getParentCertsForRound retrieves 2f+1 parent certificates from round-1.
-// Does not require any lock to be held (uses committeeMu internally for committee access).
+// getParentCertsForRound retrieves the parent certificates from round-1,
+// which must carry a stake quorum: the rule a voter applies to the header
+// (#4591), of the committee of round-1. Does not require any lock to be held.
 func (p *Primary) getParentCertsForRound(round types.Round) ([]types.CertificateDigest, error) {
 	if round == 0 {
 		return nil, nil // genesis round has no parents
 	}
 
 	certs := p.dag.GetRound(round - 1)
-
-	// Special case for round 1 in multi-validator mode:
-	// If round 0 has no certificates (no genesis), allow round 1 to proceed with empty parents.
-	// This enables multi-validator networks to bootstrap without pre-computed genesis certificates.
-	if round == 1 && len(certs) == 0 {
-		return nil, nil // round 1 can start with empty parents in multi-validator mode
+	authors := make([]ed25519.PublicKey, len(certs))
+	for i, cert := range certs {
+		authors[i] = cert.Author()
 	}
-
-	// Get quorum count (needs committeeMu for reading committee)
-	p.committeeMu.RLock()
-	quorumCount := p.committee.QuorumCount()
-	p.committeeMu.RUnlock()
-
-	if len(certs) < quorumCount {
-		return nil, fmt.Errorf("%w: have %d, need %d",
-			ErrNotEnoughParents, len(certs), quorumCount)
+	if !p.parentQuorum(round-1, authors) {
+		return nil, fmt.Errorf("%w: %d certificates at round %d carry no quorum",
+			ErrNotEnoughParents, len(certs), round-1)
 	}
 
 	// Collect digests from ALL available certificates
@@ -181,9 +169,8 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 	// straggler a later ride into the committed DAG; duplicates across
 	// headers are harmless (ancestry walks and the commit path dedup by
 	// digest).
-	const weakLinkWindow = 8
 	if round >= 3 {
-		for r := round - 2; r >= 1 && r+weakLinkWindow >= round; r-- {
+		for r := round - 2; r >= 1 && r+types.WeakLinkWindow >= round; r-- {
 			for _, cert := range p.dag.GetRound(r) {
 				d := cert.Digest()
 				if !seen[d] {
@@ -197,6 +184,10 @@ func (p *Primary) getParentCertsForRound(round types.Round) ([]types.Certificate
 	return digests, nil
 }
 
+// weakLinkWindow is how far below its round a header reaches for weak links:
+// every certificate of the rounds from two below it to weakLinkWindow below.
+const weakLinkWindow = 8
+
 // waitForAllParents waits until all validators' certificates from the previous round
 // are available, or until a timeout expires. This should be called BEFORE taking
 // the lock to avoid blocking other operations.
@@ -205,13 +196,10 @@ func (p *Primary) waitForAllParents() {
 	round := p.currentRound
 	p.roundMu.Unlock()
 
-	p.committeeMu.RLock()
-	validatorCount := p.committee.Len()
-	p.committeeMu.RUnlock()
-
 	if round == 0 {
 		return // genesis round has no parents
 	}
+	validatorCount := p.committeeAt(round - 1).Len()
 
 	prevRound := round - 1
 	deadline := time.Now().Add(DefaultParentWaitTimeout)

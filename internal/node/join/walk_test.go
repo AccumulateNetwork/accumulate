@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -65,7 +66,7 @@ type scriptedPeer struct {
 }
 
 func (p *scriptedPeer) For(context.Context, *url.URL) ([]pull.Source, *url.URL, error) {
-	src := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: p.state, Partition: "BVN0"})}
+	src := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: p.state, Partition: "BVN0"})}
 	return []pull.Source{scriptedSource{Source: servedAt{Source: src, db: p.state}, peer: p}}, p.partition, nil
 }
 
@@ -154,7 +155,7 @@ func (s scriptedSource) QueryAccountStates(ctx context.Context, scope *url.URL, 
 
 // served is the production querier over the peer's store as it is now.
 func (p *scriptedPeer) served() api.Querier2 {
-	return api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: p.state, Partition: "BVN0"})}
+	return api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: p.state, Partition: "BVN0"})}
 }
 
 func (p *scriptedPeer) Querier(*url.URL) api.Querier { return p }

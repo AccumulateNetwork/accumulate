@@ -45,11 +45,15 @@ func runRestartOf(t *testing.T, r Restart, tweak func(*Config)) {
 		BatchTimeout:     10 * time.Millisecond,
 		BatchSize:        20,
 		TargetHeight:     160,
-		Duration:         3 * time.Minute,
-		StallAfter:       20 * time.Second,
-		StateDir:         t.TempDir(),
-		Restarts:         []Restart{r},
-		Out:              os.Stdout,
+		// Every node, not the furthest: the assertion below is per
+		// restarted node, and a run that stopped when one node reached
+		// 160 failed its peer at 159, executing, on a loaded box (#4610).
+		TargetEveryNode: true,
+		Duration:        3 * time.Minute,
+		StallAfter:      20 * time.Second,
+		StateDir:        t.TempDir(),
+		Restarts:        []Restart{r},
+		Out:             os.Stdout,
 	}
 	if tweak != nil {
 		tweak(&cfg)
@@ -64,6 +68,15 @@ func runRestartOf(t *testing.T, r Restart, tweak func(*Config)) {
 	if err != nil || !res.Ok {
 		t.Fatalf("consensus did not resume after the restart: %v (reason %q, heights %v)", err, res.Reason, res.Heights)
 	}
+	// Consensus resumes in seconds, not at gossip's heartbeat pace: a
+	// simulator whose pubsub lacked the node's flood publish crawled 7-20 s
+	// after every restart, within a slow runner's reach of the 20 s stall
+	// (#4610).
+	for part, gap := range res.ResumeGap {
+		if gap > 5*time.Second {
+			t.Fatalf("%s went %s without a block in the 30 s after its nodes returned: consensus crawled after the restart", part, gap.Truncate(time.Millisecond))
+		}
+	}
 	for _, part := range []string{"Directory", "BVN1"} {
 		if err := sim.CheckSequences(part); err != nil {
 			t.Fatalf("ordering differs across the restart: %v", err)
@@ -77,7 +90,7 @@ func runRestartOf(t *testing.T, r Restart, tweak func(*Config)) {
 			t.Fatalf("restarted BVN1 node %d reached only height %d", v, h)
 		}
 	}
-	t.Logf("reached heights %v in %s", res.Heights, res.Elapsed.Truncate(time.Second))
+	t.Logf("reached heights %v in %s, longest resume gap %v", res.Heights, res.Elapsed.Truncate(time.Second), res.ResumeGap)
 }
 
 // TestRestartWholePartition stops every validator of BVN1 mid-run and
@@ -176,6 +189,15 @@ func runNetworkRestart(t *testing.T, loadUntil map[string]uint64) {
 	if err != nil || !res.Ok {
 		t.Fatalf("the network did not resume after the restart: %v (reason %q, heights %v)", err, res.Reason, res.Heights)
 	}
+	// Consensus resumes in seconds, not at gossip's heartbeat pace: a
+	// simulator whose pubsub lacked the node's flood publish crawled 7-20 s
+	// after every restart, within a slow runner's reach of the 20 s stall
+	// (#4610).
+	for part, gap := range res.ResumeGap {
+		if gap > 5*time.Second {
+			t.Fatalf("%s went %s without a block in the 30 s after its nodes returned: consensus crawled after the restart", part, gap.Truncate(time.Millisecond))
+		}
+	}
 	for _, part := range []string{"Directory", "BVN1"} {
 		if err := sim.CheckSequences(part); err != nil {
 			t.Fatalf("ordering differs across the restart: %v", err)
@@ -195,7 +217,7 @@ func runNetworkRestart(t *testing.T, loadUntil map[string]uint64) {
 			}
 		}
 	}
-	t.Logf("reached heights %v in %s", res.Heights, res.Elapsed.Truncate(time.Second))
+	t.Logf("reached heights %v in %s, longest resume gap %v", res.Heights, res.Elapsed.Truncate(time.Second), res.ResumeGap)
 }
 
 // TestRestartNetworkAfterEmptyBlocks is the Docker shape: the Directory busy

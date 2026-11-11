@@ -20,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/bpt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
@@ -127,7 +128,7 @@ func TestANodeWhoseOwnBlockFailsItsCheckTakesItsSectionsAgain(t *testing.T) {
 	requireTorn(t, node, prefix)
 
 	log := filepath.Join(t.TempDir(), "repairs.jsonl")
-	peer := apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	peer := apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})
 	s, err := NewState(StateOptions{Partition: here, Database: node, Sources: &onePeer{partition: here, querier: peer, block: 10}, ExecutedBlock: 1, RepairLog: log})
 	require.NoError(t, err)
 	require.NoError(t, s.Pull(context.Background()))
@@ -207,7 +208,7 @@ func TestATornBlockThePeerHoldsNothingUnderIsForgotten(t *testing.T) {
 	tornBlock(t, node, other, prefix)
 	requireTorn(t, node, prefix)
 
-	peer := apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	peer := apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})
 	s, err := NewState(StateOptions{Partition: here, Database: node, Sources: &onePeer{partition: here, querier: peer, block: 10}, ExecutedBlock: 1})
 	require.NoError(t, err)
 	require.NoError(t, s.Pull(context.Background()))
@@ -368,7 +369,7 @@ func TestAnOfflineRepairTakesAgainWhatTheRepairLogRecords(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, open, 1, "precondition: the failure is recorded and open")
 
-	peer := apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	peer := apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})
 	res, err := RepairOffline(context.Background(), node, here, peer, logPath, nil)
 	require.NoError(t, err)
 	require.Equal(t, &OfflineRepair{Open: 1, Repaired: 1}, res)

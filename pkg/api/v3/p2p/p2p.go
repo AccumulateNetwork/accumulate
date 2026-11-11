@@ -40,6 +40,7 @@ type Node struct {
 	cancel   context.CancelFunc
 	peermgr  *peerManager
 	host     host.Host
+	memory   *serviceMemory
 	tracker  dial.Tracker
 	services []*serviceHandler
 }
@@ -164,6 +165,14 @@ func New(opts Options) (_ *Node, err error) {
 		options = append(options, libp2p.Identity(key))
 	}
 
+	// The peerstore keeps a peer's services as the peer announced them,
+	// whatever order identify's messages are consumed in (#4610).
+	n.memory, err = newServiceMemory()
+	if err != nil {
+		return nil, err
+	}
+	options = append(options, libp2p.Peerstore(n.memory))
+
 	// Create the libp2p host
 	n.host, err = libp2p.New(options...)
 	if err != nil {
@@ -174,6 +183,9 @@ func New(opts Options) (_ *Node, err error) {
 			n.host.Close()
 		}
 	}()
+
+	// Keep what identify says of a peer's services from regressing (#4610).
+	n.memory.forgetOnDisconnect(n.host)
 
 	// Create a peer manager
 	n.peermgr, err = newPeerManager(n.context, n.host, func() []*serviceHandler { return n.services }, opts)

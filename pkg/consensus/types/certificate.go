@@ -7,11 +7,32 @@
 package types
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
 	"errors"
+	"reflect"
 	"sort"
 )
+
+// WeakLinkWindow is how many rounds below its own a header names as weak
+// links (primary.buildHeader): every certificate of the rounds from two to
+// WeakLinkWindow below. The DAG waives the parent check only for
+// certificates that far above its collection floor, because a weak link they
+// name may have been collected (#4595).
+const WeakLinkWindow = 8
+
+// RescueWindow is how many rounds below the last commit an ordering walk can
+// still reach (bullshark.orderDag): a certificate older than that can never
+// enter a committed leader's history.
+const RescueWindow = 32
+
+// MinDAGGCDepth is the shallowest DAG a node runs with (#4595): Bullshark
+// stops ordering once the collection floor is within RescueWindow plus
+// WeakLinkWindow of its last commit, and a DAG of twice the rescue window
+// leaves the frontier 24 rounds to run ahead of the commit before that
+// happens, which a healthy node never needs.
+const MinDAGGCDepth = 2 * RescueWindow
 
 // CertificateDigest is a 32-byte hash uniquely identifying a certificate.
 // It is the same as the header digest since certificates are uniquely
@@ -138,6 +159,48 @@ func (c *Certificate) Parents() []CertificateDigest {
 	return c.Header.Parents
 }
 
+// SameWire reports whether o is c as encoded on the wire: a copy of the whole
+// certificate with only the state hash zeroed is compared, so every field but
+// the state hash counts, the header with its signature, the vote signatures
+// and the signers among them. The digest covers only the header, and not its
+// signature, so this is what makes a copy of a held certificate a duplicate
+// (#4597): comparing the encoding rather than fields means no field added
+// later reopens it. The state hash is left out because a node sets it on the
+// certificate it holds after executing it, and it is no part of what the
+// signers signed: a fresh copy of an executed certificate lacks it and is
+// the same certificate. It costs a marshal of each.
+func (c *Certificate) SameWire(o *Certificate) bool {
+	if c == nil || o == nil {
+		return false
+	}
+	a, err := c.wireWithoutStateHash()
+	if err != nil {
+		return false
+	}
+	b, err := o.wireWithoutStateHash()
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(a, b)
+}
+
+// wireWithoutStateHash is the encoding of a copy of the whole certificate
+// with the state hash zero: every field but the state hash is copied, and none
+// is named, so a field added later is not left out. The state hash is never
+// read, not even by a struct copy, because execution sets it on another
+// goroutine (#4445).
+func (c *Certificate) wireWithoutStateHash() ([]byte, error) {
+	var bare Certificate
+	src := reflect.ValueOf(c).Elem()
+	dst := reflect.ValueOf(&bare).Elem()
+	for i := 0; i < src.NumField(); i++ {
+		if src.Type().Field(i).Name != "StateHash" {
+			dst.Field(i).Set(src.Field(i))
+		}
+	}
+	return bare.Marshal()
+}
+
 // Verify verifies the certificate against the given committee.
 // It checks that:
 //  1. The header signature is valid
@@ -168,6 +231,20 @@ func (c *Certificate) Verify(committee *Committee) error {
 	// Check author is in committee
 	if !committee.ContainsValidator(c.Header.Author) {
 		return errors.New("header author is not in committee")
+	}
+
+	// A header above round 0 names parents, none twice (#4591). Whether
+	// they are the round before's and carry a quorum is checked against
+	// the DAG when the certificate is inserted.
+	if c.Header.Round > 0 && len(c.Header.Parents) == 0 {
+		return errors.New("certificate above round 0 names no parents")
+	}
+	parents := make(map[CertificateDigest]bool, len(c.Header.Parents))
+	for _, p := range c.Header.Parents {
+		if parents[p] {
+			return errors.New("certificate names a parent twice")
+		}
+		parents[p] = true
 	}
 
 	// Check we have matching signatures and authorities
@@ -331,6 +408,12 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 		return nil, errors.New("too many signatures")
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// a signature costs at least its 4-byte length.
+	if int(numSigs)*4 > len(data)-offset {
+		return nil, errors.New("certificate data truncated: fewer bytes than signatures")
+	}
+
 	signatures := make([][]byte, numSigs)
 	for i := uint32(0); i < numSigs; i++ {
 		if offset+4 > len(data) {
@@ -363,6 +446,11 @@ func UnmarshalCertificate(data []byte) (*Certificate, error) {
 
 	if numAuth > 10_000 {
 		return nil, errors.New("too many authorities")
+	}
+
+	// As for the signatures: 2 bytes per authority index must remain.
+	if int(numAuth)*2 > len(data)-offset {
+		return nil, errors.New("certificate data truncated: fewer bytes than authorities")
 	}
 
 	if int(numAuth) != len(signatures) {
