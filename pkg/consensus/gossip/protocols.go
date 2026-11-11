@@ -209,10 +209,7 @@ func (p *ProtocolHandler) FetchBatch(ctx context.Context, peerID peer.ID, digest
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 
-	// Close write side to signal we're done sending
-	if err := stream.CloseWrite(); err != nil {
-		return nil, fmt.Errorf("close write: %w", err)
-	}
+	closeRequest(stream)
 
 	// Read response
 	data, err := readMessage(stream, MaxBatchSize, DefaultReadTimeout)
@@ -247,10 +244,7 @@ func (p *ProtocolHandler) FetchCertificate(ctx context.Context, peerID peer.ID, 
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 
-	// Close write side
-	if err := stream.CloseWrite(); err != nil {
-		return nil, fmt.Errorf("close write: %w", err)
-	}
+	closeRequest(stream)
 
 	// Read response
 	data, err := readMessage(stream, MaxCertificateSize, DefaultReadTimeout)
@@ -285,10 +279,7 @@ func (p *ProtocolHandler) SyncDAG(ctx context.Context, peerID peer.ID, fromRound
 		return nil, fmt.Errorf("send request: %w", err)
 	}
 
-	// Close write side
-	if err := stream.CloseWrite(); err != nil {
-		return nil, fmt.Errorf("close write: %w", err)
-	}
+	closeRequest(stream)
 
 	// Read response (format: count + serialized certs)
 	data, err := readMessage(stream, MaxSyncResponseSize, DefaultReadTimeout)
@@ -303,6 +294,20 @@ func (p *ProtocolHandler) SyncDAG(ctx context.Context, peerID peer.ID, fromRound
 
 	return unmarshalCertificateList(data)
 }
+
+// closeRequest half-closes a fetch stream once its request is written. A
+// failure is not the fetch's: the server reads one request, answers and closes
+// the stream, and on QUIC its close stops our sending, so a client slower than
+// the server cannot half-close although the answer is on its way. The read
+// that follows reports the answer, or why there is none (#4588).
+func closeRequest(s network.Stream) {
+	beforeCloseRequest()
+	_ = s.CloseWrite()
+}
+
+// beforeCloseRequest lets a test hold a client between writing its request
+// and half-closing the stream.
+var beforeCloseRequest = func() {}
 
 // handleBatchFetch handles incoming batch fetch requests.
 func (p *ProtocolHandler) handleBatchFetch(stream network.Stream) {
