@@ -9,11 +9,11 @@ package block
 import (
 	"context"
 	"crypto/ed25519"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"

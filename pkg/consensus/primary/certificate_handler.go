@@ -17,14 +17,29 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
-// OnCertificateReceived handles an incoming certificate from another validator.
+// OnCertificateReceived handles an incoming certificate from another
+// validator, verifying it here.
 func (p *Primary) OnCertificateReceived(cert *types.Certificate) {
-	p.receiveCertificate(cert)
+	p.receiveCertificate(cert, false)
+}
+
+// OnRestoredCertificate takes in a certificate a restart dropped from the
+// restored tail for a missing parent (#4595): held, and its parents asked
+// for, as a late certificate is. It was verified when this node first took
+// it in, so it is not verified again; its epoch still has to be this
+// primary's.
+func (p *Primary) OnRestoredCertificate(cert *types.Certificate) CertOutcome {
+	return p.receiveCertificate(cert, true)
 }
 
 // receiveCertificate is OnCertificateReceived reporting what inserting the
-// certificate did, which the catch-up path counts (#4469).
-func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
+// certificate did, which the catch-up path counts (#4469). routerVerified
+// says the certificate came through the certs topic, whose validator
+// verified it against the committee of its epoch before delivering it
+// (#4596, gossip/topic-validators.go): it is not verified again. What
+// arrives by any other path, a sync response's certificates among them, is
+// verified here.
+func (p *Primary) receiveCertificate(cert *types.Certificate, routerVerified bool) CertOutcome {
 	if cert == nil {
 		return CertFailed
 	}
@@ -34,11 +49,22 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 	// costs a map lookup while Verify costs an ed25519 check per signature.
 	// Observed without this: 281k duplicate verifications in 3 minutes of
 	// catch-up (#4057).
-	if p.dag.Contains(cert.Digest()) {
+	if held := p.dag.GetByDigest(cert.Digest()); held != nil {
 		// Release anything still held waiting for it (#4515): a certificate
 		// that reached the DAG by a path that released nothing is released
 		// by its next copy.
 		p.processPendingForParent(cert.Digest())
+		// The digest covers only the header, not even its signature, so a
+		// copy is a duplicate only if it is the held certificate as encoded
+		// on the wire; a genuine header with other signatures is not
+		// verified and does not pass as the certificate it names (#4597).
+		if !held.SameWire(cert) {
+			slog.Debug("A copy of a held certificate with other signatures",
+				"round", cert.Round(),
+				"author", hexEncode(cert.Author()),
+				"digest", cert.Digest().String())
+			return CertInvalid
+		}
 		return CertDuplicate
 	}
 
@@ -65,13 +91,30 @@ func (p *Primary) receiveCertificate(cert *types.Certificate) CertOutcome {
 		}
 	}
 
-	// Verify certificate
+	// Verify the certificate, unless the router did. Its epoch is still
+	// this primary's to judge: the router verifies a certificate against the
+	// committee of the epoch it names, which need not be the committee of
+	// the certificate's round, and Verify's first check refuses any epoch
+	// but the committee's.
+	if routerVerified {
+		if cert.Header.Epoch != p.committeeAt(cert.Round()).Epoch {
+			slog.Info("Invalid certificate",
+				"error", "certificate epoch does not match committee epoch",
+				"round", cert.Round(),
+				"author", hexEncode(cert.Author()),
+				"digest", cert.Digest().String())
+			return CertInvalid
+		}
+		return p.insertCertificateAndProcessPending(cert)
+	}
 	p.verifications.Add(1)
 	metrics.CertVerificationsTotal.WithLabelValues(p.config.Partition).Inc()
 	if p.certSyncer != nil {
 		p.certSyncer.window.verification()
 	}
-	if err := cert.Verify(p.committee); err != nil {
+	// The committee of the certificate's round: one of an earlier epoch
+	// still verifies below the round its successor took over at (#4593).
+	if err := cert.Verify(p.committeeAt(cert.Round())); err != nil {
 		// Info, not Debug: silently dropping peers' certificates stalls
 		// round advancement with no externally visible cause (#4054).
 		slog.Info("Invalid certificate",
@@ -132,11 +175,12 @@ func (p *Primary) insertCertificateAndProcessPending(cert *types.Certificate) Ce
 				// anyway: re-delivery (round catch-up, stall recovery) brings
 				// the certificate back, and without the parents it is refused
 				// again every time. After a Rejoin at P the certificates at
-				// P+2 name, as weak links, those of P-6..P-1, which no round
-				// request asks for, while gossip fills the buffer with
-				// frontier certificates it never prunes -- a follower's
-				// Directory sat at P+2 for four minutes (#4469). Certificates
-				// further ahead are left to round catch-up.
+				// P+2 name, as weak links, those of P-6..P-1, which round
+				// requests asked for only from #4610 (catchUpRequests), while
+				// gossip fills the buffer with frontier certificates it never
+				// prunes -- a follower's Directory sat at P+2 for four minutes
+				// (#4469). Certificates further ahead are left to round
+				// catch-up.
 				p.roundMu.Lock()
 				needed := cert.Round() <= p.currentRound+1
 				p.roundMu.Unlock()
@@ -278,12 +322,13 @@ func (p *Primary) tryAdvanceRound() {
 		currentRound := p.currentRound
 		p.roundMu.Unlock()
 
-		p.committeeMu.RLock()
-		committee := p.committee
-		p.committeeMu.RUnlock()
-
 		// Can advance when we have 2f+1 certificates in current round
-		if !p.dag.HasQuorum(currentRound, committee) {
+		if !p.dag.HasQuorum(currentRound, p.committeeAt(currentRound)) {
+			break
+		}
+		// Nor past the round limit: the next round may belong to a
+		// committee change this node has not executed yet.
+		if p.beyondLimit(currentRound + 1) {
 			break
 		}
 
@@ -319,6 +364,7 @@ func (p *Primary) tryAdvanceRound() {
 
 		oldRound := p.currentRound
 		p.currentRound++
+		metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(p.currentRound))
 		if !p.lastRoundAdvance.IsZero() {
 			metrics.RoundDurationSeconds.Observe(now.Sub(p.lastRoundAdvance).Seconds())
 		}
@@ -385,6 +431,7 @@ func (p *Primary) AdvanceRound() {
 	oldRound := p.currentRound
 	p.currentRound++
 	newRound := p.currentRound
+	metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(newRound))
 	p.roundMu.Unlock()
 
 	slog.Info("Forcibly advanced to new round",
@@ -398,134 +445,43 @@ func (p *Primary) AdvanceRound() {
 func (p *Primary) SetRound(round types.Round) {
 	p.roundMu.Lock()
 	p.currentRound = round
+	metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(round))
 	p.roundMu.Unlock()
 }
 
-// SetEpoch sets the current epoch (useful for committee changes).
-func (p *Primary) SetEpoch(epoch uint64) {
+// SetRoundAndSeed sets the current round to the round Node.Rejoin seeded
+// this node at, and records it as the seed. The DAG holds nothing below it,
+// and the certificates just above it name rounds below it as weak links, so
+// round catch-up asks for those too (catchUpRequests, #4610). One lock, so
+// no catch-up sees the new round without the seed.
+func (p *Primary) SetRoundAndSeed(round types.Round) {
 	p.roundMu.Lock()
-	p.currentEpoch = epoch
+	p.currentRound = round
+	metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(round))
+	p.seed, p.seeded = round, true
 	p.roundMu.Unlock()
 }
 
-// UpdateCommittee updates the committee (for epoch transitions).
-// This method handles epoch transitions by updating the committee and epoch,
-// recalculating dependent values, and ensuring certificate validity across epochs.
-func (p *Primary) UpdateCommittee(committee *types.Committee) {
-	// Lock both committee and round mutexes (always in same order to avoid deadlock)
-	p.committeeMu.Lock()
-	p.roundMu.Lock()
-
-	oldEpoch := p.currentEpoch
-	oldCommittee := p.committee
-
-	// Update committee and epoch
-	p.committee = committee
-	p.currentEpoch = committee.Epoch
-
-	p.roundMu.Unlock()
-	p.committeeMu.Unlock()
-
-	// Log the transition
-	slog.Info("Updated committee",
-		"oldEpoch", oldEpoch,
-		"newEpoch", committee.Epoch,
-		"validators", len(committee.Validators))
-
-	// If this is an epoch transition, perform additional cleanup
-	if committee.Epoch > oldEpoch {
-		// Compute and log validator changes
-		if oldCommittee != nil {
-			diff := oldCommittee.DiffWith(committee)
-			for _, update := range diff {
-				switch update.Type {
-				case types.ValidatorUpdateAdd:
-					slog.Info("Validator added",
-						"pubkey", hexEncode(update.PublicKey),
-						"stake", update.NewStake)
-				case types.ValidatorUpdateRemove:
-					slog.Info("Validator removed",
-						"pubkey", hexEncode(update.PublicKey))
-				case types.ValidatorUpdateStake:
-					slog.Info("Validator stake changed",
-						"pubkey", hexEncode(update.PublicKey),
-						"newStake", update.NewStake)
-				}
-			}
-		}
-	}
+// UpdateCommittee schedules a committee from its ActivationRound
+// (types.CommitteeSchedule): the rounds below it keep the committee they had.
+func (p *Primary) UpdateCommittee(committee *types.Committee) error {
+	return p.committees.Schedule(committee)
 }
 
-// TransitionEpoch performs a complete epoch transition with the given validator updates.
-// This creates a new committee by applying the updates and sets it as the current committee.
-// The round is optionally reset based on the resetRound parameter.
-func (p *Primary) TransitionEpoch(updates []types.ValidatorUpdate, resetRound bool) {
-	// Lock both committee and round mutexes (always in same order to avoid deadlock)
-	p.committeeMu.Lock()
-	p.roundMu.Lock()
-
-	oldEpoch := p.currentEpoch
-	oldRound := p.currentRound
-
-	// Create new committee by applying updates
-	newCommittee := p.committee.UpdateValidators(updates)
-
-	// Validate the new committee
-	if err := newCommittee.Validate(); err != nil {
-		p.roundMu.Unlock()
-		p.committeeMu.Unlock()
-		slog.Error("Invalid committee after epoch transition",
-			"error", err,
-			"epoch", newCommittee.Epoch)
-		return
-	}
-
-	// Update committee and epoch
-	p.committee = newCommittee
-	p.currentEpoch = newCommittee.Epoch
-
-	// Optionally reset round for new epoch
-	if resetRound {
-		p.currentRound = 0
-		p.lastRoundAdvance = time.Time{}
-	}
-
-	currentRound := p.currentRound
-	p.roundMu.Unlock()
-	p.committeeMu.Unlock()
-
-	slog.Info("Completed epoch transition",
-		"oldEpoch", oldEpoch,
-		"newEpoch", newCommittee.Epoch,
-		"oldRound", oldRound,
-		"currentRound", currentRound,
-		"validators", len(newCommittee.Validators),
-		"totalStake", newCommittee.TotalStake(),
-		"quorumThreshold", newCommittee.QuorumThreshold())
-
-	// Log individual updates
-	for _, update := range updates {
-		switch update.Type {
-		case types.ValidatorUpdateAdd:
-			slog.Info("Validator added",
-				"pubkey", hexEncode(update.PublicKey),
-				"stake", update.NewStake)
-		case types.ValidatorUpdateRemove:
-			slog.Info("Validator removed",
-				"pubkey", hexEncode(update.PublicKey))
-		case types.ValidatorUpdateStake:
-			slog.Info("Validator stake changed",
-				"pubkey", hexEncode(update.PublicKey),
-				"newStake", update.NewStake)
-		}
-	}
+// SetCommittees makes s the schedule this primary verifies and authors by,
+// so a node's primary and Bullshark share one.
+func (p *Primary) SetCommittees(s *types.CommitteeSchedule) {
+	p.committees = s
 }
 
-// Committee returns the current committee (thread-safe).
+// Committees is the schedule this primary verifies and authors by.
+func (p *Primary) Committees() *types.CommitteeSchedule {
+	return p.committees
+}
+
+// Committee returns the committee of the current round.
 func (p *Primary) Committee() *types.Committee {
-	p.committeeMu.RLock()
-	defer p.committeeMu.RUnlock()
-	return p.committee
+	return p.committeeAt(p.CurrentRound())
 }
 
 // GetOurCertificate returns our certificate for the given round, if any.
@@ -583,8 +539,12 @@ func (p *Primary) prunePendingCerts() {
 
 // ForgetHeld drops every certificate held for want of a parent, and reports
 // how many: what a node seeded by Node.Rejoin held before the seed
-// (PendingCertificates.Forget).
+// (PendingCertificates.Forget). The requests in flight go with them
+// (CertSyncer.ForgetInFlight), so that each is asked for again at once.
 func (p *Primary) ForgetHeld() int {
+	if p.certSyncer != nil {
+		p.certSyncer.ForgetInFlight()
+	}
 	return p.pendingCerts.Forget()
 }
 

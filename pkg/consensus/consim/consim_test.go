@@ -11,6 +11,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestSoakTopologyLiveness runs the full consensus stack in the soak's dual
@@ -185,4 +187,40 @@ func TestFullBatchStoreMustNotRefuseWork(t *testing.T) {
 	if err != nil {
 		t.Errorf("network did not progress with a full batch store: %v (%s)", err, res.Reason)
 	}
+}
+
+// Every host's pubsub reaches every other host however slowly the setup runs.
+// A pubsub opens its stream to each connected peer when it starts and drops a
+// peer with no pubsub yet for good, so with the hosts connected before their
+// pubsubs existed, a pause in the setup cut the hosts set up before it off
+// from those after. CI pipeline 2952104919 lost two of BVN1's four validators
+// that way and never committed a block (#4610).
+func TestSlowSetupStillConnectsEveryPubsub(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the consensus stack for a few seconds")
+	}
+	sim, err := New(Config{
+		BVNs:             1,
+		ValidatorsPerBVN: 4,
+		TPS:              20,
+		MinRoundInterval: 20 * time.Millisecond,
+		BatchTimeout:     10 * time.Millisecond,
+		BatchSize:        20,
+		TargetHeight:     20,
+		TargetEveryNode:  true,
+		Duration:         time.Minute,
+		StallAfter:       15 * time.Second,
+		Out:              os.Stdout,
+		pubsubStagger:    20 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	defer sim.Close()
+
+	res, err := sim.Run(context.Background())
+	for i, sn := range sim.byPart["Directory"] {
+		require.Len(t, sn.ps.ListPeers(""), len(sim.hosts)-1,
+			"host %d's pubsub has a stream to every other host", i)
+	}
+	require.NoError(t, err)
+	require.True(t, res.Ok, "every node reaches the target: reason %q, heights %v", res.Reason, res.Heights)
 }

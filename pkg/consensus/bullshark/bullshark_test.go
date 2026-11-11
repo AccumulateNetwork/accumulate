@@ -335,18 +335,3 @@ func TestMarkCommitted_NilCertificate(t *testing.T) {
 	bs.MarkCommitted(nil)
 	require.Empty(t, bs.GetLastCommitted())
 }
-
-func TestUpdateCommittee(t *testing.T) {
-	h := newTestHelper(t, 4)
-	bs := New(h.committee, h.dag)
-
-	// Create a new committee.
-	newCommittee := types.NewCommittee([]types.ValidatorInfo{
-		{PublicKey: h.keys[0].Public().(ed25519.PublicKey), Stake: 200},
-	}, 2)
-
-	bs.UpdateCommittee(newCommittee)
-
-	// The committee should be updated (we can't easily verify this without
-	// exposing internals, but the function should not panic).
-}

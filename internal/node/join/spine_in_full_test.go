@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -56,7 +57,7 @@ func TestFetch_ASpineAccountIsTakenWholeWheneverItIsNamed(t *testing.T) {
 	writeAccount(t, peer, other, 3)
 
 	rec := &expandRecording{
-		Source:   api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peer, Partition: "BVN0"})},
+		Source:   api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peer, Partition: "BVN0"})},
 		expanded: map[string]bool{},
 		asked:    map[string]bool{},
 	}

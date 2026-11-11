@@ -428,6 +428,10 @@ func sourceName(s pull.Source) string {
 // and the watch names carol, and nothing else.
 func TestAnExecutedBlockThatMissesNamesTheAccountItDiffersIn(t *testing.T) {
 	f := newProvenFixture(t, simulator.BPTHistoryDepth(4096))
+	// The root watch is what is tested. The overlap (#4495) settles each block
+	// after the handoff against its record and would catch carol first, by
+	// its record, without the watch locating anything.
+	f.p.NodeJoinState(provenJoiner).SetOverlapBlocks(0)
 	_, err := f.join(t, 150, nil)
 	require.NoError(t, err)
 	state := f.p.NodeJoinState(provenJoiner)

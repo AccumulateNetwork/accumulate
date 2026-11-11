@@ -8,8 +8,10 @@ package bullshark
 
 import (
 	"bytes"
+	"log/slog"
 	"sort"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -17,6 +19,31 @@ import (
 // It returns an ordered list of certificates to commit, with the oldest first.
 func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutput {
 	b.mu.Lock()
+
+	// A walk over a collected round orders a group the peers did not
+	// (#4595): a node whose commits trail the frontier by more than the DAG
+	// depth has lost rounds the walk from its last commit still reaches
+	// (consensus.md, "DAG retention"). The weak-link window above the
+	// collection floor counts as lost too, since the DAG takes certificates
+	// there without their parents. Such a node is stranded — the batches
+	// those rounds name are outside every peer's retention — and orders
+	// nothing more, rather than something different, until a join seeds it
+	// above the gap.
+	if cutoff := b.dag.CollectedBelow(); cutoff > 0 && cutoff+types.WeakLinkWindow+rescueWindow > b.lastCommitRound {
+		if !b.stranded {
+			b.stranded = true
+			metrics.OrderingStranded.Set(1)
+			slog.Error("Ordering stopped: the DAG has collected rounds the next ordering walk reaches; this node needs to rejoin",
+				"partition", b.partition, "lastCommit", b.lastCommitRound, "collectedBelow", cutoff)
+		}
+		b.mu.Unlock()
+		return nil
+	}
+	if b.stranded {
+		b.stranded = false
+		metrics.OrderingStranded.Set(0)
+		slog.Info("Ordering resumed", "partition", b.partition, "lastCommit", b.lastCommitRound)
+	}
 
 	// Find all uncommitted leaders linked to this one.
 	leaders := b.orderLeaders(leader)
@@ -62,13 +89,28 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 
 		// Update last commit round after processing each leader.
 		b.lastCommitRound = l.Round()
+		metrics.LeaderCommitsTotal.WithLabelValues(b.partition).Inc()
+		metrics.LastCommitRound.WithLabelValues(b.partition).Set(float64(b.lastCommitRound))
 	}
+
+	metrics.CertificatesCommittedTotal.WithLabelValues(b.partition).Add(float64(len(committedCerts)))
 
 	// Prune the digest dedup as the frontier advances. Anything older than
 	// the rescue window can never appear in another ancestor walk, so its
-	// entry is dead weight.
+	// entry is dead weight — to ordering. The checkpoint of the block being
+	// produced still needs the window below ITS leader, which trails the
+	// frontier by the executor's lag, so the floor is the oldest unproduced
+	// leader when that is lower (#4594). The node never reports a floor
+	// more than DAGGCDepth below the frontier — its checkpoint cannot write
+	// the tail past that — so the set is bounded on a node that never
+	// checkpoints. A node that reports none prunes at the frontier, as
+	// before.
+	floor := b.lastCommitRound
+	if b.dedupFloor != 0 && b.dedupFloor < floor {
+		floor = b.dedupFloor
+	}
 	for d, r := range b.committed {
-		if r+rescueWindow+32 < b.lastCommitRound {
+		if r+rescueWindow+32 < floor {
 			delete(b.committed, d)
 		}
 	}
@@ -128,7 +170,7 @@ func (b *Bullshark) orderLeaders(leader *types.Certificate) []*types.Certificate
 // reachable; the old lastCommitRound+1 floor excluded exactly the
 // certificates the weak links exist to save. The committed-digest set keeps
 // the wider walk from re-emitting anything.
-const rescueWindow = 32
+const rescueWindow = types.RescueWindow
 
 // RescueWindow is rescueWindow for a node seeding its position: the first
 // leaders it commits after a seed walk this far below it, and certificates

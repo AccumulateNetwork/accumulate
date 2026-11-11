@@ -162,10 +162,12 @@ func (c *NodeConfig) applyDefaults() {
 // Node represents a complete consensus node with all components.
 // It orchestrates workers, primary, and Bullshark for DAG-based consensus.
 type Node struct {
-	config    NodeConfig
-	committee *types.Committee
-	host      host.Host
-	pubsub    *pubsub.PubSub
+	config NodeConfig
+	// committees is the committee of each round, shared by the primary and
+	// Bullshark (#4593; committee-change.go).
+	committees *types.CommitteeSchedule
+	host       host.Host
+	pubsub     *pubsub.PubSub
 
 	// Components
 	dag       *dag.DAG
@@ -176,11 +178,18 @@ type Node struct {
 	protocols *gossip.ProtocolHandler
 
 	// Restart state (#4448); see restart.go.
-	dagStore *persist.DAGStore
-	orderMu  sync.Mutex    // held across ordering and recording what was handed over
-	handed   []handedGroup // groups handed to the executor not yet checkpointed
-	prevTail map[string]bool
-	restored []*types.Certificate // replayed through Bullshark at start
+	dagStore      *persist.DAGStore
+	orderMu       sync.Mutex    // held across ordering and recording what was handed over
+	handed        []handedGroup // groups handed to the executor not yet checkpointed
+	handedDropped types.Round   // newest leader dropped from handed past DAGGCDepth (#4624)
+	lagWarned     bool          // the missing checkpoint of this lag was logged (#4624)
+	prevTail      map[string]bool
+	restored      []*types.Certificate // replayed through Bullshark at start
+	orphans       []*types.Certificate // dropped by Restore, taken in again at start
+	// prevFloor is the tail floor of the last checkpoint saved: the vote
+	// records (#4590) are kept from there, as that checkpoint may be the one
+	// resumed. A checkpoint computed and not saved does not move it.
+	prevFloor types.Round
 
 	// Committed certificates channel
 	committed chan []*types.Certificate
@@ -195,6 +204,16 @@ type Node struct {
 	// holdOrdering: the node takes certificates into its DAG and orders none
 	// of them, until Rejoin names the round to order from (#4405).
 	holdOrdering atomic.Bool
+
+	// stateRound is the leader round of the newest committed state this
+	// node holds, once stateKnown: the node orders, authors and votes up to
+	// CommitteeActivationMargin rounds above it, and deferred records that
+	// ordering stopped there. limitRaised wakes the ordering loop when the
+	// limit rises (committee-change.go).
+	stateRound  atomic.Uint64
+	stateKnown  atomic.Bool
+	deferred    atomic.Bool
+	limitRaised chan struct{}
 
 	// Metrics
 	transactionsSubmitted atomic.Uint64
@@ -220,9 +239,13 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 	}
 
 	config.applyDefaults()
+	if config.DAGGCDepth < types.MinDAGGCDepth {
+		return nil, fmt.Errorf("DAG GC depth %d is below the minimum of %d", config.DAGGCDepth, types.MinDAGGCDepth)
+	}
 
 	// Create DAG
 	d := dag.NewDAG(config.DAGGCDepth)
+	d.SetPartition(config.Partition)
 
 	// Create gossip layer (may be nil for testing)
 	var g *gossip.GossipLayer
@@ -232,6 +255,7 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 		if err != nil {
 			return nil, fmt.Errorf("create gossip layer: %w", err)
 		}
+		g.SetHeldCertificate(d.GetByDigest)
 	}
 
 	// Create workers.
@@ -284,17 +308,24 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 	// in "Missing batch for certificate" errors.
 
 	n := &Node{
-		config:    config,
-		committee: committee,
-		host:      h,
-		pubsub:    ps,
-		dag:       d,
-		gossip:    g,
-		workers:   workers,
-		primary:   p,
-		bullshark: bs,
-		committed: make(chan []*types.Certificate, config.CommitBufferSize),
+		config:      config,
+		committees:  types.NewCommitteeSchedule(committee),
+		host:        h,
+		pubsub:      ps,
+		dag:         d,
+		gossip:      g,
+		workers:     workers,
+		primary:     p,
+		bullshark:   bs,
+		committed:   make(chan []*types.Certificate, config.CommitBufferSize),
+		limitRaised: make(chan struct{}, 1),
 	}
+	p.SetCommittees(n.committees)
+	bs.SetCommittees(n.committees)
+	if g != nil {
+		g.SetCommittees(n.committees)
+	}
+	p.SetRoundLimit(n.RoundLimit)
 	p.SetExecutionLagSource(n.ExecutionLag, config.MaxExecutionLag)
 	if config.StateDir != "" {
 		n.dagStore, err = persist.OpenDAGStore(config.StateDir)
@@ -302,6 +333,35 @@ func NewNode(config NodeConfig, committee *types.Committee, h host.Host, ps *pub
 			return nil, err
 		}
 		p.SetOnAuthored(n.persistAuthored)
+		// The round of the header this node last authored is read back as
+		// soon as the node exists, checkpoint or not (#4592): a start that
+		// resumes no checkpoint — none for the executor's last block, or a
+		// store at genesis — otherwise knew nothing of that round and signed
+		// a second header for it. Only the round: the DAG is empty here, so
+		// whether the header certified cannot be told, and a header put back
+		// into vote collection now stays there after Restore finds its
+		// certificate in the tail, to be rebroadcast and its batches
+		// proposed again. Restore rejoins vote collection once the DAG is
+		// back (restoreTail); a start without a checkpoint deliberately does
+		// not: the round is burnt, not resumed.
+		authored, err := n.dagStore.Authored()
+		if err != nil {
+			return nil, fmt.Errorf("reading the last authored header: %w", err)
+		}
+		p.RestoreAuthoredRound(authored)
+		// The headers this node voted for come back on every start,
+		// checkpoint or not (#4590): the record otherwise started empty,
+		// and a restarted validator could sign a second header from an
+		// author for a round it had already voted in. With them the floor
+		// the checkpoints dropped the records to: a start that rejoins
+		// below it otherwise reopened rounds it had voted in with no
+		// record left of what it voted.
+		for _, v := range n.dagStore.Voted() {
+			p.RestoreVoted(v.Author, v.Round, v.Header)
+		}
+		p.RestoreVotedFloor(n.dagStore.VotedFloor())
+		p.SetOnVoted(n.dagStore.PutVoted)
+		n.dag.SetOnInsert(n.persistInserted)
 	}
 
 	// The batch-fetch protocol backs CollectBatches and the vote gate's
@@ -668,6 +728,8 @@ func (n *Node) Start(ctx context.Context) error {
 	n.wg.Add(1)
 	go n.processBullshark()
 
+	n.takeInOrphans()
+
 	// Serve batch fetches: CollectBatches on other nodes depends on peers
 	// answering, and a certificate is only as good as the availability of
 	// its batches.
@@ -828,10 +890,15 @@ func (n *Node) Committed() <-chan []*types.Certificate {
 	return n.committed
 }
 
-// ReportExecuted records that the executor produced a block from one
-// committed group. The primary reads the lag between commits and executions
-// from this (consensus spec, invariant 9).
-func (n *Node) ReportExecuted() { n.executedGroups.Add(1) }
+// ReportExecuted records that the executor produced the block of the group
+// committed at leader round leader, or holds it in a pulled state. The
+// primary reads the lag between commits and executions from this
+// (consensus spec, invariant 9), and the round is the newest state this node
+// holds (StateAt).
+func (n *Node) ReportExecuted(leader types.Round) {
+	n.executedGroups.Add(1)
+	n.StateAt(leader)
+}
 
 // ExecutedGroups is how many committed groups the executor has reported
 // executed, or held already in a pulled state.
@@ -858,9 +925,9 @@ func (n *Node) MaxExecutionLag() int {
 	return primary.DefaultMaxExecutionLag
 }
 
-// Committee returns the current committee.
+// Committee returns the committee scheduled last.
 func (n *Node) Committee() *types.Committee {
-	return n.committee
+	return n.committees.Latest()
 }
 
 // DAG returns the certificate DAG.
@@ -933,8 +1000,12 @@ func (n *Node) CurrentRound() types.Round {
 // its state, on a join that took seconds, held exactly the rounds it was
 // seeded at and ordered nothing (the libp2p join test, three runs of four,
 // #4530).
+//
+// The primary is told the seed, so that round catch-up asks for the rounds
+// below it that the certificates above it name as weak links (#4610).
 func (n *Node) Rejoin(round types.Round) {
-	n.primary.SetRound(round)
+	n.StateAt(round)
+	n.primary.SetRoundAndSeed(round)
 	n.bullshark.SetLastCommitRound(round)
 	n.dag.SetLastCommitRound(round)
 	forgot := n.primary.ForgetHeld()
@@ -970,26 +1041,55 @@ func (n *Node) Checkpoint() *persist.Checkpoint {
 // Restore seeds the consensus position from a checkpoint, before Start: the
 // primary participates from the checkpoint's round, Bullshark orders nothing
 // at or below its last commit and knows what each author had committed, and
-// the DAG accepts certificates at the commit floor without their pruned
-// parents. The checkpoint's tail, if it has one, goes back into the DAG and
+// the DAG accepts certificates up to the round after it without their
+// parents until a tail is restored. The checkpoint's tail, if it has one,
+// goes back into the DAG, less what lacks a parent (#4595), and
 // the batch store, and the header this node last authored back into vote
 // collection (#4448): a partition restarted as a whole has its parents in
 // memory again and continues from the round it stopped at. Certificate
 // catch-up covers the rounds between the checkpoint and the live frontier,
-// up to DAGGCDepth.
-func (n *Node) Restore(cp *persist.Checkpoint) {
+// up to DAGGCDepth. It fails, and the node must not start, if the header
+// this node last authored is there but cannot be read (#4592). It does not
+// hold the checkpoint's state: the caller calls StateAt once it has
+// scheduled the committee that state names (#4593).
+func (n *Node) Restore(cp *persist.Checkpoint) error {
+	n.restoreCommittees(cp)
 	n.primary.SetRound(cp.CurrentRound)
-	n.primary.SetEpoch(cp.CurrentEpoch)
 	n.bullshark.SetLastCommitRound(cp.LastCommitRound)
 	for author, round := range cp.LastCommitted {
 		n.bullshark.SetLastCommittedForAuthor(author, round)
 	}
 	n.bullshark.SetCommitted(cp.Committed)
+	if n.dagStore != nil { // see CheckpointAt
+		n.bullshark.SetDedupFloor(cp.LastCommitRound)
+	}
 	n.dag.SetLastCommitRound(cp.LastCommitRound)
-	certs, batches := n.restoreTail(cp)
+	certs, batches, err := n.restoreTail(cp)
+	if err != nil {
+		return err
+	}
 	slog.Info("Restored consensus position", "partition", n.config.Partition,
 		"round", n.primary.CurrentRound(), "lastCommit", cp.LastCommitRound, "block", cp.BlockIndex,
 		"certificates", certs, "batches", batches)
+	return nil
+}
+
+// PruneCommitted retires the batches a certificate names once this node has
+// executed them: they leave every worker's active store for retention, and
+// the DAG stops protecting them (invariant 3). Both, in that order, so a copy
+// arriving later is cache and not stored as certified again (#4598).
+func (n *Node) PruneCommitted(cert *types.Certificate, info worker.CommitInfo) {
+	if cert == nil || cert.Header == nil {
+		return
+	}
+	n.dag.MarkExecuted(cert)
+	digests := make([]types.BatchDigest, 0, len(cert.Header.Payload))
+	for _, e := range cert.Header.Payload {
+		digests = append(digests, e.Digest)
+	}
+	for _, w := range n.workers {
+		w.PruneCommitted(digests, info)
+	}
 }
 
 // Metrics returns node metrics.
@@ -1034,9 +1134,20 @@ func (n *Node) processBullshark() {
 				return
 			}
 
-			// Garbage collect old rounds
-			if lastCommit := n.bullshark.LastCommitRound(); lastCommit > n.config.DAGGCDepth {
-				n.dag.GarbageCollect(lastCommit)
+			// Tell the DAG the commit round — it bounds collection on round
+			// advance (#4595) — and collect once the depth is passed.
+			lastCommit := n.bullshark.LastCommitRound()
+			n.dag.GarbageCollect(lastCommit)
+			if lastCommit > n.config.DAGGCDepth {
+				n.committees.Prune(lastCommit - n.config.DAGGCDepth)
+			}
+
+		case <-n.limitRaised:
+			if n.holdOrdering.Load() {
+				continue
+			}
+			if !n.orderDeferred() {
+				return
 			}
 		}
 	}
@@ -1053,7 +1164,7 @@ func (n *Node) InsertGenesisForAll(keys []ed25519.PrivateKey) error {
 		pubKey := key.Public().(ed25519.PublicKey)
 
 		// Create genesis header
-		header := types.NewHeader(pubKey, 0, n.committee.Epoch, nil, nil)
+		header := types.NewHeader(pubKey, 0, n.committees.At(0).Epoch, nil, nil)
 		if err := header.Sign(key); err != nil {
 			return fmt.Errorf("sign genesis header for validator %d: %w", i, err)
 		}
@@ -1102,7 +1213,9 @@ func (n *Node) InitGenesis(validators []genesis.ValidatorInfo) error {
 	}
 
 	// Update committee to match genesis committee
-	n.committee = result.Committee
+	if err := n.committees.Replace([]*types.Committee{result.Committee}); err != nil {
+		return fmt.Errorf("genesis committee: %w", err)
+	}
 
 	// Set primary to round 1 since genesis is done
 	n.primary.SetRound(result.InitialRound)
@@ -1149,33 +1262,6 @@ func (n *Node) WaitForCommits(ctx context.Context, count uint64) error {
 			}
 		}
 	}
-}
-
-// UpdateCommittee updates the committee across all consensus components.
-// This is called when the validator set changes at a block boundary.
-// All nodes must call this at the same height to maintain consensus.
-func (n *Node) UpdateCommittee(committee *types.Committee) {
-	if committee == nil {
-		slog.Warn("UpdateCommittee called with nil committee")
-		return
-	}
-
-	n.mu.Lock()
-	oldCommittee := n.committee
-	n.committee = committee
-	n.mu.Unlock()
-
-	slog.Info("Updating committee",
-		"oldEpoch", oldCommittee.Epoch,
-		"newEpoch", committee.Epoch,
-		"oldValidators", oldCommittee.Len(),
-		"newValidators", committee.Len())
-
-	// Update Primary's committee
-	n.primary.UpdateCommittee(committee)
-
-	// Update Bullshark's committee
-	n.bullshark.UpdateCommittee(committee)
 }
 
 // perWorkerBytes splits a per-partition byte budget across workers.

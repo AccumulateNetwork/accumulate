@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // BlockProducer is called by the consensus layer when certificates are committed.
@@ -86,7 +87,10 @@ type ValidatorSetProvider interface {
 	// part of executed state, so every node — including one that replays or
 	// restores from a snapshot — derives the same epoch for the same
 	// committee, which a locally incremented counter cannot guarantee.
-	OnValidatorSetChange(callback func(validators []ValidatorInfo, version uint64))
+	// executor is the executor version active for the block that made the
+	// change: from v2-canaveral a change takes effect at a DAG round fixed
+	// by the committed sequence, before it at once (#4593).
+	OnValidatorSetChange(callback func(validators []ValidatorInfo, version uint64, executor protocol.ExecutorVersion))
 }
 
 // ValidatorInfo contains information about a validator.

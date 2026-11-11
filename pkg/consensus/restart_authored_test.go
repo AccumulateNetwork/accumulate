@@ -72,7 +72,9 @@ func TestCheckpointKeepsTheAuthoredHeadersBatches(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	n2.Restore(cp)
+	if err := n2.Restore(cp); err != nil {
+		t.Fatal(err)
+	}
 	if !n2.workers[0].CanServeBatch(b.Digest()) {
 		t.Fatal("the restarted node does not hold the batch its restored header names")
 	}

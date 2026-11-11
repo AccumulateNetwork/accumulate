@@ -7,6 +7,7 @@
 package merkle
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"strings"
@@ -352,6 +353,20 @@ func (m *Chain) ReplayBelow(st *State, hash []byte) error {
 	return nil
 }
 
+// holds reports whether the chain holds hash at position i below the head. An
+// element the store cannot read is an error, not an answer: what a node's
+// chain does must not depend on what its store still reads.
+func (m *Chain) holds(head *State, i uint64, hash []byte) (bool, error) {
+	if i >= uint64(head.Count) {
+		return false, nil
+	}
+	e, err := m.Entry(int64(i))
+	if err != nil {
+		return false, errors.UnknownError.WithFormat("%v: check element index %d: %w", m.key, i, err)
+	}
+	return bytes.Equal(e, hash), nil
+}
+
 // AddEntry adds a Hash to the Chain controlled by the ChainManager. If unique is
 // true, the hash will not be added if it is already in the chain.
 func (m *Chain) AddEntry(hash []byte, unique bool) error {
@@ -371,13 +386,23 @@ func (m *Chain) AddEntry(hash []byte, unique bool) error {
 	// duplicate branch there is the writer appending the same hash twice,
 	// which test builds record so the suites can assert which.
 	if unique {
-		_, err = m.ElementIndex(hash).Get()
+		i, err := m.ElementIndex(hash).Get()
 		switch {
 		case err == nil:
-			if OnDuplicate != nil {
-				OnDuplicate(m.key, unique)
+			// The index is a claim, and the element it names refutes it: a
+			// chain replaced whole leaves the index of a hash only the old
+			// chain held naming a position that now holds another entry, or
+			// none (#4327).
+			held, err := m.holds(head, i, hash)
+			if err != nil {
+				return err
 			}
-			return nil // Don't add duplicates
+			if held {
+				if OnDuplicate != nil {
+					OnDuplicate(m.key, unique)
+				}
+				return nil // Don't add duplicates
+			}
 		case !errors.Is(err, storage.ErrNotFound):
 			return err
 		}

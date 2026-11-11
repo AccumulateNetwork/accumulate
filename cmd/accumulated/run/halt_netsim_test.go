@@ -35,6 +35,21 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
+// startDelay is how long to wait before starting a DevNet so that its genesis
+// does not land in the last seconds before a minute boundary. Genesis records
+// its own time as the last major block's, and a block within a second of the
+// next scheduled time opens that major block, so a genesis there opens the
+// major block the test waits for (#4585). Starting early in the minute also
+// leaves room to request the halt before the boundary.
+func startDelay(now time.Time) time.Duration {
+	const margin = 10 * time.Second
+	into := now.Sub(now.Truncate(time.Minute))
+	if into < time.Minute-margin {
+		return 0
+	}
+	return time.Minute - into + time.Second
+}
+
 // TestHaltDevNetIntegration is a full end-to-end integration test that:
 // 1. Starts a DevNet with a fast major block schedule (every minute)
 // 2. Calls the /admin/halt API
@@ -55,6 +70,12 @@ func TestHaltDevNetIntegration(t *testing.T) {
 
 	// Create a temporary directory for the devnet
 	rootDir := t.TempDir()
+
+	// Do not let genesis land in the last seconds before a major block
+	if d := startDelay(time.Now()); d > 0 {
+		t.Logf("Waiting %s so that genesis is not at the minute boundary", d)
+		time.Sleep(d)
+	}
 
 	// Configure DevNet with a fast major block schedule (every minute)
 	globals := &network.GlobalValues{

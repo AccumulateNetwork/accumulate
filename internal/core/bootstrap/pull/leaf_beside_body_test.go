@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	apierrors "gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
@@ -75,7 +76,7 @@ func TestAQueuedDeliveryIsPulledWithItsOwnMessage(t *testing.T) {
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())
 
-	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{Database: src, Partition: partitionID})}
+	honest := api.Querier2{Querier: v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: src, Partition: partitionID})}
 	opts := Options{Mode: ModeStateOnly, WithReceipt: true, Partition: part}
 	ctx := context.Background()
 

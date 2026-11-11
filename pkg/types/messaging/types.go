@@ -64,11 +64,22 @@ func (m *SyntheticMessage) ID() *url.TxID {
 	return m.Message.ID().Account().WithTxID(m.Hash())
 }
 
+// ID is the signer's URL with the anchor's hash. An anchor without a
+// signature — refused by validation, but any peer can send one — is named
+// under acc://unknown rather than dereferenced (#4572): validation computes
+// the ID of a refused message for its status, and a nil signature there took
+// the node down.
 func (m *BlockAnchor) ID() *url.TxID {
+	if m.Signature == nil {
+		return protocol.UnknownUrl().WithTxID(m.Hash())
+	}
 	return m.Signature.GetSigner().WithTxID(m.Hash())
 }
 
 func (m *BlockAnchor) OldID() *url.TxID {
+	if m.Signature == nil {
+		return protocol.UnknownUrl().WithTxID(m.Hash())
+	}
 	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
 }
 

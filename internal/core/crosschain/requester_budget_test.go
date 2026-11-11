@@ -12,11 +12,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
+	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	dagconfig "gitlab.com/accumulatenetwork/accumulate/pkg/consensus/worker"
 )
 
 // Every envelope a healed anchor span is submitted in fits the destination's
