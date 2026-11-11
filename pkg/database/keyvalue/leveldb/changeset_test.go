@@ -9,10 +9,9 @@ package leveldb
 import (
 	"os"
 	"path/filepath"
-
-	"github.com/stretchr/testify/require"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/kvtest"
 )
