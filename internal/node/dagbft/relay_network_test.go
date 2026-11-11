@@ -404,7 +404,15 @@ func TestARelayCarriesWhatItCannotPropose(t *testing.T) {
 	}
 
 	a0, r0 := submissionCounts(part)
-	taken0 := testutil.ToFloat64(metrics.RelayedTotal.WithLabelValues(part, metrics.RelayTaken))
+	// The counter registry is process-global, so every counter compared below
+	// is a delta from this baseline (a later -count iteration starts with the
+	// earlier ones' totals).
+	relayOutcomes := []string{metrics.RelayTaken, metrics.RelayRefused, metrics.RelayNotReady, metrics.RelayUnreachable}
+	relay0 := map[string]float64{}
+	for _, o := range relayOutcomes {
+		relay0[o] = testutil.ToFloat64(metrics.RelayedTotal.WithLabelValues(part, o))
+	}
+	taken0 := relay0[metrics.RelayTaken]
 	certified0 := testutil.ToFloat64(metrics.CertifiedOwnTransactionsTotal.WithLabelValues(part))
 
 	var nHTTP, nPeer, nJoin, nVal int
@@ -506,8 +514,8 @@ loop:
 	taken := testutil.ToFloat64(metrics.RelayedTotal.WithLabelValues(part, metrics.RelayTaken)) - taken0
 	certified := testutil.ToFloat64(metrics.CertifiedOwnTransactionsTotal.WithLabelValues(part)) - certified0
 	relayedAll := float64(0)
-	for _, o := range []string{metrics.RelayTaken, metrics.RelayRefused, metrics.RelayNotReady, metrics.RelayUnreachable} {
-		relayedAll += testutil.ToFloat64(metrics.RelayedTotal.WithLabelValues(part, o))
+	for _, o := range relayOutcomes {
+		relayedAll += testutil.ToFloat64(metrics.RelayedTotal.WithLabelValues(part, o)) - relay0[o]
 	}
 	t.Logf("accepted=%.0f rejected=%.0f relayed-taken=%.0f relayed-all=%.0f certified_own=%.0f (sent http=%d peer=%d joining=%d validator=%d)",
 		a1-a0, r1-r0, taken, relayedAll, certified, nHTTP, nPeer, nJoin, nVal)
