@@ -9,6 +9,7 @@ package run
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -88,14 +89,26 @@ func (c *Config) describe() string {
 }
 
 func (k *RawPrivateKey) get(inst *Instance) (address.Address, error) {
-	inst.logger.Info("Loading RawPrivateKey", "address", k.Address)
+	// For a raw key, k.Address is the private key itself. Never log it (#4494).
 	addr, err := address.Parse(k.Address)
 	if err != nil {
-		inst.logger.Error("Failed to parse RawPrivateKey address", "address", k.Address, "error", err)
+		inst.logger.Error("Failed to parse RawPrivateKey", "error", err)
 		return nil, err
 	}
-	inst.logger.Info("RawPrivateKey loaded successfully", "address", k.Address)
+	inst.logger.Info("RawPrivateKey loaded", publicKeyLogAttrs(addr)...)
 	return addr, nil
+}
+
+// publicKeyLogAttrs returns log attributes that identify a key without
+// revealing it: its type and public key hash. It never includes the
+// private key or the address string (which, for a private key, encodes the
+// private key).
+func publicKeyLogAttrs(addr address.Address) []any {
+	attrs := []any{"key_type", addr.GetType().String()}
+	if hash, ok := addr.GetPublicKeyHash(); ok {
+		attrs = append(attrs, "public_key_hash", hex.EncodeToString(hash))
+	}
+	return attrs
 }
 
 func (k *TransientPrivateKey) get(inst *Instance) (address.Address, error) {
