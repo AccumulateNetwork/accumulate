@@ -73,8 +73,8 @@ func ExampleConfig() string {
 # Number of batch workers (default: 1)
 num_workers = 1
 
-# Rounds to keep in DAG before garbage collection (default: 50)
-dag_gc_depth = 50
+# Rounds to keep in DAG before garbage collection (default: 2000, minimum: 64)
+dag_gc_depth = 2000
 
 # Buffer size for committed certificates (default: 5000)
 commit_buffer_size = 5000

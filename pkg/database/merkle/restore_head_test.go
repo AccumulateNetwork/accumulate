@@ -43,8 +43,8 @@ func TestRestoreHeadIsAppendable(t *testing.T) {
 			require.Equal(t, head.Anchor(), got.Anchor())
 
 			next := rh.NextList()
-			require.NoError(t, src.AddEntry(next, false))
-			require.NoError(t, dst.AddEntry(next, false), "a restored chain could not be appended to")
+			require.NoError(t, src.AddEntry(next, true))
+			require.NoError(t, dst.AddEntry(next, true), "a restored chain could not be appended to")
 
 			sh, err := src.Head().Get()
 			require.NoError(t, err)

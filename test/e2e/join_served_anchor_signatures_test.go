@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/anchorsrc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/build"
@@ -71,7 +72,7 @@ func TestAJoinedNodeServesTheAnchorsItPulledWithTheirSignatures(t *testing.T) {
 		authority, err := anchorsrc.FromStore(sim.S.Partition("BVN0").NodeDatabase(0), bvn)
 		require.NoError(t, err)
 		pool := DnUrl().JoinPath(AnchorPool)
-		params := apiimpl.QuerierParams{Partition: Directory, Database: p.NodeDatabase(node)}
+		params := apiimpl.QuerierParams{NodeState: nodestate.Always{}, Partition: Directory, Database: p.NodeDatabase(node)}
 		if js := p.NodeJoinState(node); js != nil {
 			// The gate the daemon puts in front of the querier (#4368): a
 			// node that has not joined refuses; the joined node reads ACTIVE.

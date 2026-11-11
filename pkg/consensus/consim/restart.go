@@ -42,11 +42,15 @@ func (s *Sim) checkpoint(sn *simNode, node *consensus.Node, group []*types.Certi
 		sn.cpPrev.SetFilename(prevCheckpointFile)
 	}
 	cp := node.CheckpointAt(group[len(group)-1].Round())
+	if cp == nil {
+		return
+	}
 	cp.BlockIndex = sn.height.Load() + 1
 	if sn.lastSaved != nil {
 		_ = sn.cpPrev.Save(sn.lastSaved)
 	}
 	if err := sn.cpCur.Save(cp); err == nil {
+		node.CheckpointSaved(cp)
 		sn.lastSaved = cp
 	}
 }
@@ -57,12 +61,14 @@ func (s *Sim) checkpointNow(sn *simNode) {
 	if s.cfg.StateDir == "" || sn.cpCur == nil {
 		return
 	}
-	cp := sn.n().CheckpointAt(0)
+	node := sn.n()
+	cp := node.CheckpointAt(0)
 	cp.BlockIndex = sn.height.Load()
 	if sn.lastSaved != nil {
 		_ = sn.cpPrev.Save(sn.lastSaved)
 	}
 	if err := sn.cpCur.Save(cp); err == nil {
+		node.CheckpointSaved(cp)
 		sn.lastSaved = cp
 	}
 }
@@ -177,7 +183,10 @@ func (s *Sim) restartStaggered(nodes, first []*simNode, gap, executorFirst time.
 		if cp == nil {
 			return fmt.Errorf("restart %s/%d: no checkpoint to resume executor block %d from", sn.part, sn.val, last)
 		}
-		node.Restore(cp)
+		if err := node.Restore(cp); err != nil {
+			return fmt.Errorf("restart %s/%d: %w", sn.part, sn.val, err)
+		}
+		node.StateAt(cp.LastCommitRound)
 		sn.lastSaved = cp
 		sn.height.Store(cp.BlockIndex)
 		sn.resumedAt, sn.keptAtRestart = cp.BlockIndex, sn.kept.Load()
@@ -268,8 +277,17 @@ func (s *Sim) Sequences(part string) [][]string {
 }
 
 // CheckSequences reports the first block at which two nodes of a partition
-// executed different things.
+// executed different things, or at which a restored node produced a block
+// again differently.
 func (s *Sim) CheckSequences(part string) error {
+	for i, sn := range s.byPart[part] {
+		sn.seqMu.Lock()
+		reproduced := sn.reproduced
+		sn.seqMu.Unlock()
+		if len(reproduced) > 0 {
+			return fmt.Errorf("%s: node %d: %s", part, i, reproduced[0])
+		}
+	}
 	seqs := s.Sequences(part)
 	for i := 1; i < len(seqs); i++ {
 		n := min(len(seqs[0]), len(seqs[i]))

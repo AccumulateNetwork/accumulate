@@ -101,7 +101,7 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 	}
 
 	// Do extra processing for special network accounts
-	err = x.processNetworkAccountUpdates(st, delivery, principal)
+	pending, err := x.processNetworkAccountUpdates(st, delivery, principal)
 	if err != nil {
 		return t.recordFailedTransaction(batch, delivery, err)
 	}
@@ -113,7 +113,17 @@ func (t *TransactionContext) processTransaction(batch *database.Batch) (*protoco
 		return t.recordFailedTransaction(batch, delivery, err)
 	}
 
-	return t.recordSuccessfulTransaction(batch, state, delivery, result)
+	status, state, err = t.recordSuccessfulTransaction(batch, state, delivery, result)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// The network accounts the transaction wrote change the pending globals
+	// only now that it has succeeded (#4615)
+	if pending != nil {
+		x.globals().Pending = *pending
+	}
+	return status, state, nil
 }
 
 func (t *TransactionContext) transactionIsReady(batch *database.Batch, delivery *chain.Delivery, status *protocol.TransactionStatus, principal protocol.Account) (bool, error) {

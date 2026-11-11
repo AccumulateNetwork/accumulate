@@ -8,18 +8,18 @@ package adapter
 
 import (
 	"context"
-	"github.com/prometheus/client_golang/prometheus"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
-	"gitlab.com/accumulatenetwork/accumulate/protocol"
 	"log/slog"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // capture collects log records so a test can assert on what an operator sees.

@@ -8,8 +8,6 @@ package run
 
 import (
 	"context"
-	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -20,6 +18,8 @@ import (
 	"github.com/google/uuid"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"gitlab.com/accumulatenetwork/accumulate/exp/ioc"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node/dagbft"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/p2p"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"go.opentelemetry.io/otel"

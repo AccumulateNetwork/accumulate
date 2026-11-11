@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -112,7 +113,7 @@ func TestAPartitionLedgerWithScheduledEventsCanBePulled(t *testing.T) {
 			defer jb.Discard()
 			write(t, jb.Account(sysLedger).Events(), c.joiner)
 
-			src := api.Querier2{Querier: NewQuerier(QuerierParams{Database: peerDB, Partition: partitionID})}
+			src := api.Querier2{Querier: NewQuerier(QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: partitionID})}
 			p, err := pull.Fetch(ctx, src, jb, sysLedger, pull.Options{Mode: pull.ModeStateOnly, Partition: part}, true)
 			require.NoError(t, err)
 			require.Equal(t, peerRoot, p.Root(), "the receipt must end at the peer's root")

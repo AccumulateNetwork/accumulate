@@ -27,8 +27,9 @@ func (b *Bullshark) electLeader(round types.Round) *types.Certificate {
 	// This creates a pseudo-random seed based on the round number.
 	seed := sha256.Sum256(binary.BigEndian.AppendUint64(nil, uint64(round)))
 
-	// Select leader based on seed and stake.
-	leaderPubKey := selectByStake(b.committee, seed[:])
+	// Select leader based on seed and stake, among the committee of the
+	// round.
+	leaderPubKey := selectByStake(b.committees.At(round), seed[:])
 	if leaderPubKey == nil {
 		return nil
 	}
@@ -83,22 +84,25 @@ func selectByStake(committee *types.Committee, seed []byte) []byte {
 // hasSupport checks if the leader has f+1 (validity threshold) support
 // from certificates in the voting round.
 // Support means the certificate references the leader (directly or as an ancestor).
+// It is counted in the committee of the leader's round, which is also the
+// voting round's: activation rounds are even (CommitteeActivationMargin).
 func (b *Bullshark) hasSupport(leader *types.Certificate, votingRound types.Round) bool {
 	certs := b.dag.GetRound(votingRound)
 	if len(certs) == 0 {
 		return false
 	}
 
+	committee := b.committees.At(leader.Round())
 	var supportStake uint64
 	for _, cert := range certs {
 		// Check if cert references leader (directly or transitively).
 		if b.dag.IsAncestor(leader, cert) {
-			supportStake += b.committee.StakeOf(cert.Author())
+			supportStake += committee.StakeOf(cert.Author())
 		}
 	}
 
 	// Need f+1 (validity threshold) support.
-	return supportStake >= b.committee.ValidityThreshold()
+	return supportStake >= committee.ValidityThreshold()
 }
 
 // LeaderForRound returns the elected leader for a given round.

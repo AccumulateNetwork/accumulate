@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -21,13 +22,70 @@ func (p *Primary) SetOnAuthored(fn func(*types.Header) error) {
 	p.onAuthored = fn
 }
 
+// RestoreAuthoredRound tells a restarted primary the round of the last
+// header it authored before it stopped, and nothing else: it never authors
+// that round, or any below it, again (#4159 stall 3). A header by another
+// key is ignored. It is what a start that restores no checkpoint knows
+// (#4592): the DAG is empty, so whether the header certified cannot be
+// told, and the header deliberately does not rejoin vote collection — the
+// round is burnt, not resumed. Call before Start; RestoreAuthored, after the
+// DAG is restored, does the rest.
+func (p *Primary) RestoreAuthoredRound(h *types.Header) {
+	if h == nil || !h.Author.Equal(p.config.KeyPair.Public()) {
+		return
+	}
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	p.restoreAuthoredRoundLocked(h.Round)
+}
+
+// restoreAuthoredRoundLocked raises the authored watermark to round. The
+// caller holds pendingMu.
+func (p *Primary) restoreAuthoredRoundLocked(round types.Round) {
+	if !p.hasAuthored || round > p.lastAuthoredRound {
+		p.hasAuthored = true
+		p.lastAuthoredRound = round
+	}
+}
+
+// SetOnVoted installs the hook that persists, before a vote is signed, which
+// header this primary votes for at an author's round (#4590). The vote is
+// not signed if the hook fails. Call before Start.
+func (p *Primary) SetOnVoted(fn func(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) error) {
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	p.onVoted = fn
+}
+
+// RestoreVoted tells a restarted primary a header it voted for before it
+// stopped (#4590): it votes for no other header from that author for that
+// round. Call before Start.
+func (p *Primary) RestoreVoted(author ed25519.PublicKey, round types.Round, digest types.HeaderDigest) {
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	p.votedRounds[authorRound{string(author), round}] = digest
+}
+
+// RestoreVotedFloor tells a restarted primary the round below which its
+// vote records were dropped by the checkpoints before it stopped (#4590):
+// it votes for no header below it, as it cannot tell what it voted there.
+// A rejoin below the floor otherwise reopened those rounds. The floor only
+// rises. Call before Start.
+func (p *Primary) RestoreVotedFloor(floor types.Round) {
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	p.votedFloor = max(p.votedFloor, floor)
+}
+
 // RestoreAuthored tells a restarted primary the last header it authored
 // before it stopped (#4448). It never authors that round, or any below it,
 // again (#4159 stall 3). If that header's certificate is not in the DAG and
 // the round is still current, the header goes back into vote collection, so
 // the ordinary rebroadcast sends the same header again; the primary's round
 // is raised to it, since the node had reached it. Call before Start, after
-// the DAG has been restored.
+// the DAG has been restored: called before, it cannot see that the header
+// certified, puts it back into vote collection, and the certified header is
+// rebroadcast and its batches proposed again (!1258 review).
 func (p *Primary) RestoreAuthored(h *types.Header) {
 	if h == nil || !h.Author.Equal(p.config.KeyPair.Public()) {
 		return
@@ -35,16 +93,14 @@ func (p *Primary) RestoreAuthored(h *types.Header) {
 	p.roundMu.Lock()
 	if h.Round > p.currentRound {
 		p.currentRound = h.Round
+		metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(h.Round))
 	}
 	current := p.currentRound
 	p.roundMu.Unlock()
 
 	p.pendingMu.Lock()
 	defer p.pendingMu.Unlock()
-	if !p.hasAuthored || h.Round > p.lastAuthoredRound {
-		p.hasAuthored = true
-		p.lastAuthoredRound = h.Round
-	}
+	p.restoreAuthoredRoundLocked(h.Round)
 	digest := h.Digest()
 	if h.Round+1 < current || p.dag.Contains(types.CertificateDigest(digest)) {
 		return
@@ -115,9 +171,8 @@ func (p *Primary) RoundStatus() RoundStatus {
 	}
 	p.seenMu.Unlock()
 	st.Authors = len(authors)
-	p.committeeMu.RLock()
-	st.Committee, st.Quorum = p.committee.Len(), p.committee.QuorumCount()
-	p.committeeMu.RUnlock()
+	committee := p.committeeAt(st.Round)
+	st.Committee, st.Quorum = committee.Len(), committee.QuorumCount()
 	return st
 }
 
@@ -127,7 +182,12 @@ func (p *Primary) RoundStatus() RoundStatus {
 // header about once a second, or re-sends its vote on each rebroadcast it
 // sees. A stopped one's last header stays in the DAG and in memory, and
 // counting it made a partition that lost two of four report three producing.
-const HeardWithin = 10 * time.Second
+//
+// It is well inside the stall a node reports (10 s with no block): a member
+// that stopped after authoring the round the partition then stalls at was
+// heard after the last block, and at 10 s it was still counted when the stall
+// was reported, so the partition said 3 or 4 of 4 producing (#4610).
+const HeardWithin = 5 * time.Second
 
 type seenAt struct {
 	round types.Round

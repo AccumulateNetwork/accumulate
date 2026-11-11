@@ -88,11 +88,12 @@ func (a *executingAdapter) ValidateTransaction([]byte) error {
 	return nil
 }
 
-func (a *executingAdapter) LastBlock() (uint64, [32]byte, error)                       { return 0, [32]byte{}, nil }
-func (a *executingAdapter) LastMajorBlock() (uint64, time.Time, bool)                  { return 0, time.Time{}, false }
-func (a *executingAdapter) StateHash() [32]byte                                        { return [32]byte{} }
-func (a *executingAdapter) Validators() []adapter.ValidatorInfo                        { return nil }
-func (a *executingAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64)) {}
+func (a *executingAdapter) LastBlock() (uint64, [32]byte, error)      { return 0, [32]byte{}, nil }
+func (a *executingAdapter) LastMajorBlock() (uint64, time.Time, bool) { return 0, time.Time{}, false }
+func (a *executingAdapter) StateHash() [32]byte                       { return [32]byte{} }
+func (a *executingAdapter) Validators() []adapter.ValidatorInfo       { return nil }
+func (a *executingAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64, protocol.ExecutorVersion)) {
+}
 
 func (a *executingAdapter) count(prefix string) int {
 	a.mu.Lock()

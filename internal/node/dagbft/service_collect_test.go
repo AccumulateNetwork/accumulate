@@ -73,11 +73,15 @@ func newJoiningService(t *testing.T) (*Service, *collectingAdapter, ed25519.Publ
 
 // pullState puts in the service's database the system ledger a join's pull
 // leaves there: the block the pulled state is and the leader round that
-// committed it. The handoff reads both from it (#4362).
+// committed it. The handoff reads both from it (#4362). The state names the
+// committee the service has.
 func pullState(t *testing.T, svc *Service, index uint64, round types.Round) {
 	t.Helper()
 	u := protocol.PartitionUrl(svc.config.Partition.ID).JoinPath(protocol.Ledger)
 	require.NoError(t, svc.config.Database.Update(func(batch *database.Batch) error {
+		if err := putNetwork(batch, svc.config.Partition.ID, svc.Committee()); err != nil {
+			return err
+		}
 		return batch.Account(u).Main().Put(&protocol.SystemLedger{Url: u, Index: index, LeaderRound: uint64(round)})
 	}))
 }

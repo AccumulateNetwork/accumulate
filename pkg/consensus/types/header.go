@@ -339,6 +339,12 @@ func UnmarshalHeader(data []byte) (*Header, error) {
 		return nil, errors.New("header has too many payload entries")
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// an entry is 33 bytes on the wire.
+	if int(numPayload)*33 > len(data)-offset {
+		return nil, errors.New("header data truncated: fewer bytes than payload entries")
+	}
+
 	h.Payload = make([]PayloadEntry, numPayload)
 	for i := uint32(0); i < numPayload; i++ {
 		if offset+33 > len(data) {
@@ -366,6 +372,11 @@ func UnmarshalHeader(data []byte) (*Header, error) {
 
 	if numParents > 10_000 {
 		return nil, errors.New("header has too many parents")
+	}
+
+	// As for the payload: 32 bytes per parent must remain.
+	if int(numParents)*32 > len(data)-offset {
+		return nil, errors.New("header data truncated: fewer bytes than parents")
 	}
 
 	h.Parents = make([]CertificateDigest, numParents)

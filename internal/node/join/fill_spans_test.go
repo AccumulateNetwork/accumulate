@@ -15,6 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
@@ -42,7 +43,7 @@ func TestTheFillLoadsSectionsInSpans(t *testing.T) {
 		putTokens(t, peerDB, accounts[i], int64(i))
 	}
 	var pagesInFlight, pagesMost, statesInFlightN, statesMost atomic.Int64
-	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{Database: peerDB, Partition: "BVN0"})}
+	served := api.Querier2{Querier: apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})}
 	stA := &statesSource{Source: served, inflight: &statesInFlightN, most: &statesMost}
 	stB := &statesSource{Source: served, inflight: &statesInFlightN, most: &statesMost}
 	a := &pageSource{Source: stA, inflight: &pagesInFlight, most: &pagesMost}

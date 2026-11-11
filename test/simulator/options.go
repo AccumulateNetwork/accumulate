@@ -22,10 +22,10 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database/record"
 	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
-	"gitlab.com/accumulatenetwork/accumulate/internal/node/config"
 	accumulated "gitlab.com/accumulatenetwork/accumulate/internal/node/daemon"
 	ioutil2 "gitlab.com/accumulatenetwork/accumulate/internal/util/io"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3/message"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/adapter"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/badger"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/bcdb"
@@ -35,7 +35,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/network"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
-	"gitlab.com/accumulatenetwork/accumulate/test/testing"
+	"gitlab.com/accumulatenetwork/accumulate/test/simulator/simplenet"
 )
 
 type Option interface {
@@ -208,25 +208,9 @@ func SimpleNetwork(name string, bvnCount, nodeCount int) Option {
 }
 
 // NewSimpleNetwork creates a basic network with the given name, number of BVNs,
-// and number of nodes per BVN.
+// and number of nodes per BVN. See [simplenet.New].
 func NewSimpleNetwork(name string, bvnCount, nodeCount int) *accumulated.NetworkInit {
-	net := new(accumulated.NetworkInit)
-	net.Id = name
-	for i := 0; i < bvnCount; i++ {
-		bvnInit := new(accumulated.BvnInit)
-		bvnInit.Id = fmt.Sprintf("BVN%d", i)
-		for j := 0; j < nodeCount; j++ {
-			bvnInit.Nodes = append(bvnInit.Nodes, &accumulated.NodeInit{
-				DnnType:    config.Validator,
-				BvnnType:   config.Validator,
-				PrivValKey: testing.GenerateKey(name, bvnInit.Id, j, "val"),
-				DnNodeKey:  testing.GenerateKey(name, bvnInit.Id, j, "dn"),
-				BvnNodeKey: testing.GenerateKey(name, bvnInit.Id, j, "bvn"),
-			})
-		}
-		net.Bvns = append(net.Bvns, bvnInit)
-	}
-	return net
+	return simplenet.New(name, bvnCount, nodeCount)
 }
 
 func LocalNetwork(name string, bvnCount, nodeCount int, baseIP net.IP, basePort uint64) Option {
@@ -288,30 +272,61 @@ func BadgerDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
 // read from all of history and cannot show a record that the executor needs
 // and the window no longer holds (soak 20260905T032333Z: mark-point states
 // past the window, every Directory anchor rejected).
-func BcdbDbOpener(dir string, onErr func(error)) OpenDatabaseFunc {
-	dbs := map[string]keyvalue.Beginner{}
-	var mu sync.Mutex
-	return func(partition *protocol.PartitionInfo, node int, logger logging.Logger) keyvalue.Beginner {
-		mu.Lock()
-		defer mu.Unlock()
-		file := fmt.Sprintf("%s-%d", partition.ID, node)
-		if db, ok := dbs[file]; ok {
-			return db
-		}
-		err := os.MkdirAll(dir, 0700)
-		if err != nil {
-			onErr(err)
-			panic(err)
-		}
-		db, err := bcdb.Open(filepath.Join(dir, file))
-		if err != nil {
-			onErr(err)
-			panic(err)
-		}
-		db.StatsEvery = 0
-		dbs[file] = db
+func BcdbDbOpener(dir string, onErr func(error)) *BcdbStores {
+	return &BcdbStores{dir: dir, onErr: onErr, dbs: map[string]*bcdb.Database{}}
+}
+
+// BcdbStores is what BcdbDbOpener opens: one store per node, closed
+// together. A store runs its maintenance -- compress, merge, pack -- in a
+// goroutine of its own after a commit, and Close waits for the run in
+// flight; a test that leaves its stores open has that run writing segments
+// under its temporary directory while the directory is removed ("TempDir
+// RemoveAll cleanup: ... Shard0006/perm: directory not empty", go test e2e
+// 4/4 of !1274 at f79b1f645, #4610). The harness's BcdbDatabase closes them
+// before the directory goes.
+type BcdbStores struct {
+	dir   string
+	onErr func(error)
+	mu    sync.Mutex
+	dbs   map[string]*bcdb.Database
+}
+
+// Open is the OpenDatabaseFunc.
+func (s *BcdbStores) Open(partition *protocol.PartitionInfo, node int, logger logging.Logger) keyvalue.Beginner {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	file := fmt.Sprintf("%s-%d", partition.ID, node)
+	if db, ok := s.dbs[file]; ok {
 		return db
 	}
+	err := os.MkdirAll(s.dir, 0700)
+	if err != nil {
+		s.onErr(err)
+		panic(err)
+	}
+	db, err := bcdb.Open(filepath.Join(s.dir, file))
+	if err != nil {
+		s.onErr(err)
+		panic(err)
+	}
+	db.StatsEvery = 0
+	s.dbs[file] = db
+	return db
+}
+
+// Close closes every store, waiting for the maintenance each has in
+// flight, and returns the first error.
+func (s *BcdbStores) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var first error
+	for file, db := range s.dbs {
+		if err := db.Close(); err != nil && first == nil {
+			first = fmt.Errorf("close %s: %w", file, err)
+		}
+		delete(s.dbs, file)
+	}
+	return first
 }
 
 func OverlayDatabase(a, b OpenDatabaseFunc) Option {
@@ -454,6 +469,26 @@ func (g genesis) apply(opts *simFactory) error {
 func InitialAcmeSupply(v *big.Int) Option {
 	return optionFunc(func(f *simFactory) error {
 		f.initialSupply = v
+		return nil
+	})
+}
+
+// CertificateObserver is told of every block a node hands to the executor
+// through ExecutorBridge.ProduceBlock under CertificateConsensus: the
+// partition and node, and the params the bridge was given, whose batches
+// are the block's certificate payload.
+type CertificateObserver = func(partition string, node int, params adapter.BlockParams)
+
+// CertificateConsensus executes every block the way a DAG-BFT node does
+// (#4142, part b): the block's envelopes become the batches of a
+// certificate, and adapter.ExecutorBridge.ProduceBlock hands them to the
+// executor, in place of the per-envelope Process loop of the lockstep
+// default. The lockstep hub still orders and agrees the blocks. observe, if
+// not nil, sees each block's params.
+func CertificateConsensus(observe CertificateObserver) Option {
+	return optionFunc(func(opts *simFactory) error {
+		opts.certificates = true
+		opts.observeCertificate = observe
 		return nil
 	})
 }
