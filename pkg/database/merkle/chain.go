@@ -59,9 +59,13 @@ func (c *Chain) getMarkPoints() ([]chainStatesKey, error) {
 		return nil, errors.UnknownError.WithFormat("load head: %w", err)
 	}
 
+	// The mark point closing a set is stored at index n*markFreq-1 as soon as
+	// the chain reaches n*markFreq entries, so a chain whose count is itself
+	// a mark point holds one at Count-1, and that state is the only record
+	// of the entries of the set it closes. The bound is inclusive.
 	n := head.Count / c.markFreq
 	keys := make([]chainStatesKey, 0, n)
-	for i := c.markFreq; i < head.Count; i += c.markFreq {
+	for i := c.markFreq; i <= head.Count; i += c.markFreq {
 		keys = append(keys, chainStatesKey{Index: uint64(i - 1)})
 	}
 	return keys, nil
