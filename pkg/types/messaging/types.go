@@ -50,18 +50,41 @@ func UnwrapAs[T any](msg Message) (T, bool) {
 	}
 }
 
-func (m *TransactionMessage) ID() *url.TxID { return m.Transaction.ID() }
+// A message missing the field it is named by is refused, but validation and
+// execution still name it for its status. It is named under acc://unknown
+// rather than dereferenced (#4572); an ID with no account cannot be recorded
+// either. Nothing changes for a message that has the field.
+func named(u *url.URL, hash [32]byte) *url.TxID {
+	if u == nil {
+		u = protocol.UnknownUrl()
+	}
+	return u.WithTxID(hash)
+}
+
+func (m *TransactionMessage) ID() *url.TxID {
+	if m.Transaction == nil {
+		return named(nil, m.Hash())
+	}
+	return m.Transaction.ID()
+}
 
 func (m *SequencedMessage) ID() *url.TxID {
-	return m.Destination.WithTxID(m.Hash())
+	return named(m.Destination, m.Hash())
 }
 
 func (m *BadSyntheticMessage) ID() *url.TxID {
-	return m.Message.ID().Account().WithTxID(m.Hash())
+	return named(innerAccount(m.Message), m.Hash())
 }
 
 func (m *SyntheticMessage) ID() *url.TxID {
-	return m.Message.ID().Account().WithTxID(m.Hash())
+	return named(innerAccount(m.Message), m.Hash())
+}
+
+func innerAccount(msg Message) *url.URL {
+	if msg == nil {
+		return nil
+	}
+	return msg.ID().Account()
 }
 
 // ID is the signer's URL with the anchor's hash. An anchor without a
@@ -69,36 +92,41 @@ func (m *SyntheticMessage) ID() *url.TxID {
 // status; it is named under acc://unknown (#4572).
 func (m *BlockAnchor) ID() *url.TxID {
 	if m.Signature == nil {
-		return protocol.UnknownUrl().WithTxID(m.Hash())
+		return named(nil, m.Hash())
 	}
-	return m.Signature.GetSigner().WithTxID(m.Hash())
+	return named(m.Signature.GetSigner(), m.Hash())
 }
 
 func (m *BlockAnchor) OldID() *url.TxID {
 	if m.Signature == nil {
-		return protocol.UnknownUrl().WithTxID(m.Hash())
+		return named(nil, m.Hash())
 	}
-	return m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
+	return named(m.Signature.GetSigner(), *(*[32]byte)(m.Signature.Hash()))
 }
 
 func (m *SignatureMessage) ID() *url.TxID {
 	hash := m.Hash()
 	switch sig := m.Signature.(type) {
+	case nil:
+		return named(nil, hash)
 	case *protocol.ReceiptSignature:
-		return sig.SourceNetwork.WithTxID(hash)
+		return named(sig.SourceNetwork, hash)
 	case *protocol.InternalSignature:
 		return protocol.UnknownUrl().WithTxID(hash)
 	default:
-		return sig.RoutingLocation().WithTxID(hash)
+		return named(sig.RoutingLocation(), hash)
 	}
 }
 
 func (m *SignatureRequest) ID() *url.TxID {
-	return m.Authority.WithTxID(m.Hash())
+	return named(m.Authority, m.Hash())
 }
 
 func (m *CreditPayment) ID() *url.TxID {
-	return m.TxID.Account().WithTxID(m.Hash())
+	if m.TxID == nil {
+		return named(nil, m.Hash())
+	}
+	return named(m.TxID.Account(), m.Hash())
 }
 
 func (m *BlockSummary) ID() *url.TxID {
@@ -148,10 +176,16 @@ func (m *CreditPayment) GetTxID() *url.TxID    { return m.TxID }
 
 func (m *BlockAnchor) GetTxID() *url.TxID {
 	if seq, ok := m.Anchor.(*SequencedMessage); ok {
+		if seq.Message == nil {
+			return nil // Refused (#4572)
+		}
 		return seq.Message.ID()
 	}
 
 	// Should never happen
+	if m.Anchor == nil {
+		return nil // Refused (#4572)
+	}
 	return m.Anchor.ID()
 }
 
@@ -168,39 +202,73 @@ type MessageWithCauses interface {
 	GetCauses() []*url.TxID
 }
 
-func (m *SignatureRequest) GetCauses() []*url.TxID { return []*url.TxID{m.Cause} }
+func (m *SignatureRequest) GetCauses() []*url.TxID {
+	if m.Cause == nil {
+		return nil // Refused; recorded without a cause (#4572)
+	}
+	return []*url.TxID{m.Cause}
+}
 
 type MessageWithProduced interface {
 	Message
 	GetProduced() []*url.TxID
 }
 
-func (m *SequencedMessage) GetProduced() []*url.TxID    { return []*url.TxID{m.Message.ID()} }
-func (m *BadSyntheticMessage) GetProduced() []*url.TxID { return []*url.TxID{m.Message.ID()} }
-func (m *SyntheticMessage) GetProduced() []*url.TxID    { return []*url.TxID{m.Message.ID()} }
-func (m *SignatureRequest) GetProduced() []*url.TxID    { return []*url.TxID{m.TxID} }
+// A missing message produces nothing rather than being dereferenced (#4572).
+
+func (m *SequencedMessage) GetProduced() []*url.TxID    { return producedBy(m.Message) }
+func (m *BadSyntheticMessage) GetProduced() []*url.TxID { return producedBy(m.Message) }
+func (m *SyntheticMessage) GetProduced() []*url.TxID    { return producedBy(m.Message) }
+func (m *SignatureRequest) GetProduced() []*url.TxID {
+	if m.TxID == nil {
+		return nil
+	}
+	return []*url.TxID{m.TxID}
+}
 
 func (m *BlockAnchor) GetProduced() []*url.TxID {
-	id := m.Signature.GetSigner().WithTxID(*(*[32]byte)(m.Signature.Hash()))
-	return []*url.TxID{id, m.Anchor.ID()}
+	var ids []*url.TxID
+	if m.Signature != nil {
+		ids = append(ids, m.OldID())
+	}
+	return append(ids, producedBy(m.Anchor)...)
+}
+
+func producedBy(msg Message) []*url.TxID {
+	if msg == nil {
+		return nil
+	}
+	return []*url.TxID{msg.ID()}
 }
 
 func (m *TransactionMessage) Hash() [32]byte {
 	// A transaction message must contain nothing besides the transaction, so
-	// this is safe
+	// this is safe. One without a transaction is refused; it hashes as
+	// encoded rather than being dereferenced (#4572).
+	if m.Transaction == nil {
+		return encoding.Hash(m)
+	}
 	return *(*[32]byte)(m.Transaction.GetHash())
 }
 
 func (m *SignatureMessage) Hash() [32]byte {
 	// A signature message must contain nothing besides the signature and
-	// optionally a transaction hash, so this is safe
+	// optionally a transaction hash, so this is safe. One without a signature
+	// is refused; it hashes as encoded rather than being dereferenced (#4572).
+	if m.Signature == nil {
+		return encoding.Hash(m)
+	}
 	return *(*[32]byte)(m.Signature.Hash())
 }
 
 func (m *BadSyntheticMessage) Hash() [32]byte {
 	// This is unsafe and buggy, which is why this type is deprecated
 	var h hash.Hasher
-	h.AddHash2(m.Message.Hash())
+	var msgHash [32]byte
+	if m.Message != nil {
+		msgHash = m.Message.Hash()
+	}
+	h.AddHash2(msgHash)
 	h.AddHash2(m.proofAnchor())
 	return *(*[32]byte)(h.MerkleHash())
 }

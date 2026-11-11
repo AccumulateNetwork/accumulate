@@ -256,11 +256,13 @@ func (x *Executor) checkForUnsignedTransactions(messages []messaging.Message) er
 			}
 		}
 
-		if msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg); ok {
+		// A message that names no transaction, or a signature message with no
+		// signature, signs nothing; its own executor refuses it (#4572)
+		if msg, ok := messaging.UnwrapAs[messaging.MessageForTransaction](msg); ok && msg.GetTxID() != nil {
 			// User signatures can be sent without a transaction, but authority
 			// signatures and other message-for-transaction types cannot
 			sig, ok := msg.(*messaging.SignatureMessage)
-			isUser := ok && sig.Signature.Type() != protocol.SignatureTypeAuthority
+			isUser := ok && sig.Signature != nil && sig.Signature.Type() != protocol.SignatureTypeAuthority
 			haveSigFor[msg.GetTxID().Hash()] = isUser
 		}
 

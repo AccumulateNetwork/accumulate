@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/hash"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/merkle"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
@@ -123,4 +124,75 @@ func TestBadSyntheticMessage_HashWithoutProof(t *testing.T) {
 	h.AddHash2(msg.Message.Hash())
 	h.AddHash(&anchor)
 	require.Equal(t, *(*[32]byte)(h.MerkleHash()), msg.Hash())
+}
+
+// A message of every type with every field left out can still be named,
+// hashed and asked what it produced, caused and is for (#4572). Validation
+// and execution do all of that for a message they refuse.
+func TestMalformedMessage_NamingDoesNotPanic(t *testing.T) {
+	for typ := MessageType(1); typ < 256; typ++ {
+		msg, err := NewMessage(typ)
+		if err != nil {
+			continue
+		}
+		t.Run(typ.String(), func(t *testing.T) {
+			require.NotPanics(t, func() {
+				require.NotNil(t, msg.ID())
+				_ = msg.Hash()
+				if m, ok := msg.(MessageWithProduced); ok {
+					for _, id := range m.GetProduced() {
+						require.NotNil(t, id)
+					}
+				}
+				if m, ok := msg.(MessageWithCauses); ok {
+					for _, id := range m.GetCauses() {
+						require.NotNil(t, id)
+					}
+				}
+				if m, ok := msg.(MessageForTransaction); ok {
+					_ = m.GetTxID()
+				}
+			})
+		})
+	}
+}
+
+// A well-formed message is named as it always was: the nil checks change
+// nothing for a message that has its fields.
+func TestMalformedMessage_WellFormedIDsUnchanged(t *testing.T) {
+	txn := malformedTxn()
+	seq := malformedSeq(txn)
+	require.Equal(t, txn.Transaction.ID(), txn.ID())
+	require.Equal(t, *(*[32]byte)(txn.Transaction.GetHash()), txn.Hash())
+	syn := &SyntheticMessage{Message: seq}
+	require.Equal(t, seq.ID().Account().WithTxID(syn.Hash()), syn.ID())
+	require.Equal(t, []*url.TxID{seq.ID()}, syn.GetProduced())
+	cp := &CreditPayment{TxID: txn.ID()}
+	require.Equal(t, txn.ID().Account().WithTxID(cp.Hash()), cp.ID())
+	req := &SignatureRequest{Authority: protocol.AccountUrl("bar"), TxID: txn.ID(), Cause: txn.ID()}
+	require.Equal(t, []*url.TxID{txn.ID()}, req.GetCauses())
+	require.Equal(t, []*url.TxID{txn.ID()}, req.GetProduced())
+	require.Equal(t, req.Authority.WithTxID(req.Hash()), req.ID())
+	require.Equal(t, seq.Destination.WithTxID(seq.Hash()), seq.ID())
+	rs := &SignatureMessage{Signature: &protocol.ReceiptSignature{SourceNetwork: protocol.DnUrl()}}
+	require.Equal(t, protocol.DnUrl().WithTxID(rs.Hash()).String(), rs.ID().String())
+}
+
+// A message missing the account it is named by is named under acc://unknown,
+// not with an ID that has no account: such an ID cannot be recorded (#4572).
+func TestMalformedMessage_NamedWithoutAccount(t *testing.T) {
+	seq := malformedSeq(malformedTxn())
+	seq.Destination = nil
+	for name, msg := range map[string]Message{
+		"sequenced without destination":       seq,
+		"signature request without authority": &SignatureRequest{},
+		"receipt signature without source":    &SignatureMessage{Signature: &protocol.ReceiptSignature{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.NotPanics(t, func() {
+				require.True(t, protocol.UnknownUrl().Equal(msg.ID().Account()))
+				_ = msg.ID().String()
+			})
+		})
+	}
 }

@@ -130,6 +130,24 @@ func TestMalformedMessagesAreRefused(t *testing.T) {
 		{"sequenced message without a message", Directory, func(*Sim) messaging.Message {
 			return &messaging.SequencedMessage{Source: PartitionUrl("BVN0"), Destination: DnUrl(), Number: 1}
 		}},
+		{"sequenced message without a destination", Directory, func(*Sim) messaging.Message {
+			seq := inner()
+			seq.Destination = nil
+			return seq
+		}},
+		{"synthetic message of a sequence without a destination", Directory, func(*Sim) messaging.Message {
+			seq := inner()
+			seq.Destination = nil
+			return &messaging.SyntheticMessage{Message: seq}
+		}},
+		{"sequenced signature request without an authority", Directory, func(*Sim) messaging.Message {
+			txid := AcmeUrl().WithTxID([32]byte{1})
+			return wrapSeq(&messaging.SignatureRequest{TxID: txid, Cause: txid})
+		}},
+		{"sequenced signature request without a cause", Directory, func(*Sim) messaging.Message {
+			txid := AcmeUrl().WithTxID([32]byte{1})
+			return wrapSeq(&messaging.SignatureRequest{Authority: AcmeUrl(), TxID: txid})
+		}},
 		{"sequenced transaction message without a transaction", Directory, func(*Sim) messaging.Message {
 			return wrapSeq(&messaging.TransactionMessage{})
 		}},
