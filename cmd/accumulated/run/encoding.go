@@ -7,14 +7,20 @@
 package run
 
 import (
+	"unsafe"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/multiformats/go-multiaddr"
-	"gitlab.com/accumulatenetwork/core/schema/pkg/binary"
-	"gitlab.com/accumulatenetwork/core/schema/pkg/json"
 	"gitlab.com/accumulatenetwork/core/schema/pkg/widget"
 )
 
-func wMultiaddr() widget.Widget[*multiaddr.Multiaddr] { return multiaddrWidget{} }
+// wMultiaddr is the schema library's own value widget over [maddr], so this
+// package declares no MarshalJSON or UnmarshalJSON with the widget signature
+// (go vet's stdmethods check rejects that signature, and [widget.Widget] is
+// defined in another module so the methods cannot be renamed).
+func wMultiaddr() widget.Widget[*multiaddr.Multiaddr] {
+	return widget.ForValue(func(v *multiaddr.Multiaddr) *maddr { return (*maddr)(unsafe.Pointer(v)) })
+}
 
 // wPeerID is the schema library's own value widget over [peerID], so this
 // package declares no MarshalJSON or UnmarshalJSON with the widget
@@ -37,28 +43,27 @@ func (p *peerID) UnmarshalJSON(b []byte) error   { return (*peer.ID)(p).Unmarsha
 func (p peerID) MarshalBinary() ([]byte, error)  { return peer.ID(p).MarshalBinary() }
 func (p *peerID) UnmarshalBinary(b []byte) error { return (*peer.ID)(p).UnmarshalBinary(b) }
 
-// multiaddrWidget cannot be a [widget.Value]: multiaddr.Multiaddr is an
-// interface, so no defined type with a Copy method can alias the field. The
-// method names below are dictated by [widget.Widget]; go vet's stdmethods
-// check reports MarshalJSON and UnmarshalJSON for that reason.
-type multiaddrWidget struct{}
+// maddr is a struct holding a [multiaddr.Multiaddr], with the methods
+// [widget.Value] needs. It has the same memory layout as the interface it
+// wraps, which lets a *multiaddr.Multiaddr field be viewed as a *maddr. A nil
+// multiaddr is the zero value. Binary encoding is not supported.
+type maddr struct{ multiaddr.Multiaddr }
 
-func (multiaddrWidget) IsNil(v *multiaddr.Multiaddr) bool                         { return *v == nil }
-func (multiaddrWidget) Empty(v *multiaddr.Multiaddr) bool                         { return *v == nil }
-func (multiaddrWidget) CopyTo(dst, src *multiaddr.Multiaddr)                      { *dst = *src }
-func (multiaddrWidget) Equal(a, b *multiaddr.Multiaddr) bool                      { return (*a).Equal(*b) }
-func (multiaddrWidget) MarshalJSON(e *json.Encoder, v *multiaddr.Multiaddr) error { return e.Encode(v) }
+func (m maddr) Copy() maddr        { return m }
+func (m maddr) Equal(n maddr) bool { return m.Multiaddr.Equal(n.Multiaddr) }
+func (m maddr) IsNil() bool        { return m.Multiaddr == nil }
+func (m maddr) Empty() bool        { return m.Multiaddr == nil }
 
-func (multiaddrWidget) UnmarshalJSON(d *json.Decoder, v *multiaddr.Multiaddr) error {
-	m := multiaddr.StringCast("/tcp/0")
-	*v = m
-	return d.Decode(m)
+func (m maddr) MarshalJSON() ([]byte, error) { return m.Multiaddr.MarshalJSON() }
+
+func (m *maddr) UnmarshalJSON(b []byte) error {
+	a := multiaddr.StringCast("/tcp/0")
+	if err := a.UnmarshalJSON(b); err != nil {
+		return err
+	}
+	m.Multiaddr = a
+	return nil
 }
 
-func (multiaddrWidget) MarshalBinary(e *binary.Encoder, v *multiaddr.Multiaddr) error {
-	panic("not supported")
-}
-
-func (multiaddrWidget) UnmarshalBinary(d *binary.Decoder, v *multiaddr.Multiaddr) error {
-	panic("not supported")
-}
+func (m maddr) MarshalBinary() ([]byte, error) { panic("not supported") }
+func (m *maddr) UnmarshalBinary([]byte) error  { panic("not supported") }
