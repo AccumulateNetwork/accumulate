@@ -152,8 +152,30 @@ func (m *Chain) appendTail(index int64, hash []byte) error {
 // Tail records existed. Once per chain, on its first append after the
 // change; a chain that is never appended to again is read from its head as
 // before.
+//
+// At a mark point that code left the head carrying the whole set that had
+// just closed: it cleared the hash list on the next append, not when the set
+// closed. That set belongs to the mark point at Count-1, not to the open set,
+// which is empty. The head is the state that mark point holds, so a store
+// without it (one restored from a snapshot that did not collect it) is given
+// it from the head; then the next set starts empty.
 func (m *Chain) migrateTail(head *State) error {
 	lastMark := head.Count &^ m.markMask
+	if lastMark == head.Count && head.Count > 0 && int64(len(head.HashList)) == m.markFreq {
+		mark := m.States(uint64(head.Count) - 1)
+		_, err := mark.Get()
+		switch {
+		case err == nil:
+		case errors.Is(err, errors.NotFound):
+			if err := mark.Put(head.Copy()); err != nil {
+				return errors.UnknownError.WithFormat("head of %v: put mark point %d: %w", m.key, head.Count-1, err)
+			}
+		default:
+			return errors.UnknownError.WithFormat("head of %v: load mark point %d: %w", m.key, head.Count-1, err)
+		}
+		head.HashList = nil
+		return nil
+	}
 	if int64(len(head.HashList)) != head.Count-lastMark {
 		return errors.InvalidRecord.WithFormat("head of %v: expected %d hashes since the last mark point, got %d", m.key, head.Count-lastMark, len(head.HashList))
 	}
