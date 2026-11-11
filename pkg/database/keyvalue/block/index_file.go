@@ -51,10 +51,15 @@ func newIndexFile(name string, level int) (_ *indexFile, err error) {
 	return f, err
 }
 
-func openIndexFile(name string, level int) (_ *indexFile, err error) {
+func openIndexFile(name string, level int, readOnly bool) (_ *indexFile, err error) {
+	flags := os.O_RDWR
+	if readOnly {
+		flags = os.O_RDONLY
+	}
+
 	f := new(indexFile)
 	f.level = level
-	f.file, err = ioutil.OpenMappedFile(name, os.O_RDWR, 0600)
+	f.file, err = ioutil.OpenMappedFile(name, flags, 0600)
 	if err != nil {
 		return nil, err
 	}

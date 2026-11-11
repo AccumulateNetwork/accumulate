@@ -1204,6 +1204,8 @@ func (v *ServiceType) UnmarshalJSON(b []byte) error {
 type SidecarService struct {
 	// Path is the path to the sidecar database (issue 4273), which this node serves read-only to other nodes (issue 4561).
 	Path string
+	// StorageType is the backend of the sidecar database, LevelDB (the default) or ExpBlockDB. It is opened read-only.
+	StorageType *StorageType
 	// Listen are the addresses to serve it on.
 	Listen []Multiaddr
 }

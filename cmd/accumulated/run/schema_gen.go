@@ -1429,6 +1429,15 @@ func init() {
 				Type:        &schema.SimpleType{Type: schema.SimpleTypeString},
 			},
 			{
+				Name:        "StorageType",
+				Description: "is the backend of the sidecar database, LevelDB (the default) or ExpBlockDB. It is opened read-only",
+				Optional:    true,
+				Type: (&schema.PointerType{
+					TypeBase: schema.TypeBase{},
+				}).
+					ResolveElemTo(&deferredTypes, "StorageType"),
+			},
+			{
 				Name:        "Listen",
 				Description: "are the addresses to serve it on",
 				Type: (&schema.ArrayType{

@@ -49,7 +49,13 @@ func OpenMappedFile(name string, flags int, perm fs.FileMode) (_ *MappedFile, er
 		return f, nil
 	}
 
-	f.data, err = mmap.MapRegion(f.file, int(st.Size()), mmap.RDWR, 0, 0)
+	// A file opened without write access can only be mapped read-only
+	prot := mmap.RDWR
+	if flags&(os.O_WRONLY|os.O_RDWR) == 0 {
+		prot = mmap.RDONLY
+	}
+
+	f.data, err = mmap.MapRegion(f.file, int(st.Size()), prot, 0, 0)
 	if err != nil {
 		return nil, err
 	}

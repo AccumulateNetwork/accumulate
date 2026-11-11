@@ -53,7 +53,7 @@ func openRecordFileSet(cfg *config) (_ *recordFileSet, err error) {
 			continue
 		}
 
-		f, err := openRecordFile(filepath.Join(cfg.path, e.Name()))
+		f, err := openRecordFile(filepath.Join(cfg.path, e.Name()), cfg.readOnly)
 		if err != nil {
 			return nil, err
 		}

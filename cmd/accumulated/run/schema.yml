@@ -421,6 +421,10 @@ Service:
         - name: Path
           description: is the path to the sidecar database (issue 4273), which this node serves read-only to other nodes (issue 4561)
           type: string
+        - name: StorageType
+          description: is the backend of the sidecar database, LevelDB (the default) or ExpBlockDB. It is opened read-only
+          type: '*StorageType'
+          optional: true
         - name: Listen
           description: are the addresses to serve it on
           type: '[]Multiaddr'

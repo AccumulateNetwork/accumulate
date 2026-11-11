@@ -241,3 +241,64 @@ func doBatch(t testing.TB, db keyvalue.Beginner, prefix *record.Key, fn func(bat
 	fn(batch)
 	require.NoError(t, batch.Commit())
 }
+
+// TestReadOnly tests a backend's read-only open. openRW opens (creating if
+// necessary) the database read-write; openRO opens the same location
+// read-only, and must fail if it does not exist. missing opens read-only a
+// location that has never been created, and must fail without creating it.
+func TestReadOnly(t *testing.T, openRW, openRO Opener, missing func() error) {
+	// A database that does not exist cannot be opened read-only
+	require.Error(t, missing(), "read-only open of a missing database")
+
+	// Write some records, then close
+	const N = 50
+	db := openDb(t, openRW)
+	doBatch(t, db, nil, func(batch keyvalue.ChangeSet) {
+		for i := 0; i < N; i++ {
+			require.NoError(t, batch.Put(record.NewKey("ro", i), []byte(fmt.Sprint("value ", i))))
+		}
+	})
+	db.Close()
+
+	// Read them back
+	ro := openDb(t, openRO)
+	batch := ro.Begin(nil, false)
+	for i := 0; i < N; i++ {
+		v, err := batch.Get(record.NewKey("ro", i))
+		require.NoError(t, err)
+		require.Equal(t, fmt.Sprint("value ", i), string(v))
+	}
+	_, err := batch.Get(record.NewKey("ro", N))
+	require.ErrorIs(t, err, errors.NotFound)
+
+	// Iterate
+	var n int
+	require.NoError(t, batch.ForEach(func(*record.Key, []byte) error { n++; return nil }))
+	require.Equal(t, N, n)
+	batch.Discard()
+
+	// Writes do not succeed and do not change anything
+	w := ro.Begin(nil, true)
+	err = w.Put(record.NewKey("ro", "new"), []byte("x"))
+	if err == nil {
+		err = w.Commit()
+	}
+	require.Error(t, err, "write to a read-only database")
+	w.Discard()
+
+	batch = ro.Begin(nil, false)
+	_, err = batch.Get(record.NewKey("ro", "new"))
+	require.ErrorIs(t, err, errors.NotFound)
+	batch.Discard()
+	ro.Close()
+
+	// The data is unchanged on a read-write reopen
+	rw := openDb(t, openRW)
+	b2 := rw.Begin(nil, false)
+	defer b2.Discard()
+	_, err = b2.Get(record.NewKey("ro", "new"))
+	require.ErrorIs(t, err, errors.NotFound)
+	v, err := b2.Get(record.NewKey("ro", 7))
+	require.NoError(t, err)
+	require.Equal(t, "value 7", string(v))
+}

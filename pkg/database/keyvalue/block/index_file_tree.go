@@ -73,7 +73,7 @@ func openIndexFileTree(cfg *config) (_ *indexFileTree, err error) {
 		emap[s] = true
 	}
 
-	s.root, err = openIndexFileNode(cfg.path, 0, emap)
+	s.root, err = openIndexFileNode(cfg.path, 0, emap, cfg.readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func openIndexFileTree(cfg *config) (_ *indexFileTree, err error) {
 	return s, nil
 }
 
-func openIndexFileNode(dir string, level int, files map[string]bool) (indexFileNode, error) {
+func openIndexFileNode(dir string, level int, files map[string]bool, readOnly bool) (indexFileNode, error) {
 	if level == 0 && len(files) == 0 {
 		return emptyIndexFileTree(dir), nil
 	}
@@ -90,7 +90,7 @@ func openIndexFileNode(dir string, level int, files map[string]bool) (indexFileN
 		var name string
 		for name = range files {
 		}
-		return openIndexFile(filepath.Join(dir, indexFilePrefix+name), level)
+		return openIndexFile(filepath.Join(dir, indexFilePrefix+name), level, readOnly)
 	}
 
 	if len(files) < 16 {
@@ -119,7 +119,7 @@ func openIndexFileNode(dir string, level int, files map[string]bool) (indexFileN
 	s := &indexFileSet{level: level}
 	for i, files := range parts {
 		var err error
-		s.children[i], err = openIndexFileNode(dir, level+1, files)
+		s.children[i], err = openIndexFileNode(dir, level+1, files, readOnly)
 		if err != nil {
 			return nil, err
 		}

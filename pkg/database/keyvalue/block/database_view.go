@@ -57,6 +57,14 @@ func (db *Database) indexRecords() error {
 		return nil
 	}
 
+	// Indexing writes files
+	if db.readOnly {
+		if len(db.records.files) > 0 {
+			return ErrNotIndexed
+		}
+		return nil
+	}
+
 	records := db.recordLocation.View()
 	it := db.records.entries(nil)
 

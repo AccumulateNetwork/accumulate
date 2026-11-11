@@ -9,6 +9,8 @@ package block
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -40,6 +42,7 @@ type config struct {
 	fileLimit int64
 	nameFmt   NameFormat
 	filterFn  func(string) bool
+	readOnly  bool
 }
 
 type Option func(*Database)
@@ -62,6 +65,24 @@ func FilterFiles(fn func(string) bool) Option {
 	}
 }
 
+// ReadOnly opens the database for reading only. The directory must already
+// exist, no file is created or modified, and writable batches fail on commit.
+// A database that has records but no index cannot be opened read-only, because
+// building the index writes files; open it read-write once to index it. Only
+// records committed before Open are visible.
+func ReadOnly() Option {
+	return func(d *Database) {
+		d.readOnly = true
+	}
+}
+
+// ErrReadOnly is returned when a read-only database is asked to commit.
+var ErrReadOnly = errors.New("database is read-only")
+
+// ErrNotIndexed is returned when a database that is not indexed is opened
+// read-only.
+var ErrNotIndexed = errors.New("database is not indexed; open it read-write once to build the index")
+
 func Open(path string, options ...Option) (_ *Database, err error) {
 	db := new(Database)
 	defer func() {
@@ -76,6 +97,16 @@ func Open(path string, options ...Option) (_ *Database, err error) {
 
 	for _, o := range options {
 		o(db)
+	}
+
+	if db.readOnly {
+		st, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+		if !st.IsDir() {
+			return nil, fmt.Errorf("%q is not a directory", path)
+		}
 	}
 
 	// Load record files
@@ -150,7 +181,11 @@ func (d *Database) Begin(prefix *record.Key, writable bool) keyvalue.ChangeSet {
 	}
 
 	var commit memory.CommitFunc
-	if writable {
+	if writable && d.readOnly {
+		commit = func(map[[32]byte]memory.Entry) error {
+			return ErrReadOnly
+		}
+	} else if writable {
 		commit = func(entries map[[32]byte]memory.Entry) error {
 			return d.commit(view, entries)
 		}

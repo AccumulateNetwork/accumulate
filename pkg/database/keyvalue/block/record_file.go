@@ -44,9 +44,14 @@ func newRecordFile(name string) (_ *recordFile, err error) {
 	return f, (&recordFileWriter{&f.used, h}).Close()
 }
 
-func openRecordFile(name string) (_ *recordFile, err error) {
+func openRecordFile(name string, readOnly bool) (_ *recordFile, err error) {
+	flags := os.O_RDWR
+	if readOnly {
+		flags = os.O_RDONLY
+	}
+
 	f := new(recordFile)
-	f.file, err = ioutil.OpenMappedFile(name, os.O_RDWR, 0600)
+	f.file, err = ioutil.OpenMappedFile(name, flags, 0600)
 	if err != nil {
 		return nil, err
 	}

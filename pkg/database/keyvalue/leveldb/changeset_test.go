@@ -7,6 +7,10 @@
 package leveldb
 
 import (
+	"os"
+	"path/filepath"
+
+	"github.com/stretchr/testify/require"
 	"testing"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
@@ -50,4 +54,21 @@ func TestPrefix(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	kvtest.TestDelete(t, open(t))
+}
+
+func TestReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing")
+	kvtest.TestReadOnly(t,
+		func() (keyvalue.Beginner, error) { return Open(filepath.Join(dir, "db")) },
+		func() (keyvalue.Beginner, error) { return Open(filepath.Join(dir, "db"), ReadOnly()) },
+		func() error {
+			db, err := Open(missing, ReadOnly())
+			if err == nil {
+				_ = db.Close()
+			}
+			_, serr := os.Stat(missing)
+			require.True(t, os.IsNotExist(serr), "read-only open created the directory")
+			return err
+		})
 }

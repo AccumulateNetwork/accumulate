@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	goopt "github.com/syndtr/goleveldb/leveldb/opt"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/database/keyvalue/memory"
@@ -27,18 +28,36 @@ type Database struct {
 }
 
 type opts struct {
+	readOnly bool
 }
 
 type Option func(*opts)
 
+// ReadOnly opens the database for reading only. The database must already
+// exist, and writes fail.
+func ReadOnly() Option {
+	return func(o *opts) { o.readOnly = true }
+}
+
 func Open(filepath string, o ...Option) (*Database, error) {
-	// Make sure all directories exist
-	err := os.MkdirAll(filepath, 0700)
-	if err != nil {
-		return nil, errors.UnknownError.WithFormat("create %q: %w", filepath, err)
+	var opt opts
+	for _, o := range o {
+		o(&opt)
 	}
 
-	db, err := leveldb.OpenFile(filepath, nil)
+	var lo *goopt.Options
+	if opt.readOnly {
+		// Do not create anything
+		lo = &goopt.Options{ReadOnly: true, ErrorIfMissing: true}
+	} else {
+		// Make sure all directories exist
+		err := os.MkdirAll(filepath, 0700)
+		if err != nil {
+			return nil, errors.UnknownError.WithFormat("create %q: %w", filepath, err)
+		}
+	}
+
+	db, err := leveldb.OpenFile(filepath, lo)
 	if err != nil {
 		return nil, errors.UnknownError.WithFormat("open %q: %w", filepath, err)
 	}

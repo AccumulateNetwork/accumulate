@@ -147,3 +147,98 @@ func TestFileLimit(t *testing.T) {
 	}))
 	require.ElementsMatch(t, keys, keys2)
 }
+
+func TestReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing")
+	kvtest.TestReadOnly(t,
+		func() (keyvalue.Beginner, error) { return Open(filepath.Join(dir, "db")) },
+		func() (keyvalue.Beginner, error) { return Open(filepath.Join(dir, "db"), ReadOnly()) },
+		func() error {
+			db, err := Open(missing, ReadOnly())
+			if err == nil {
+				_ = db.Close()
+			}
+			_, serr := os.Stat(missing)
+			require.True(t, os.IsNotExist(serr), "read-only open created the directory")
+			return err
+		})
+}
+
+func commitOne(t *testing.T, dir string) {
+	db, err := Open(dir)
+	require.NoError(t, err)
+	batch := db.Begin(nil, true)
+	require.NoError(t, batch.Put(record.NewKey("a"), []byte("b")))
+	require.NoError(t, batch.Commit())
+	batch.Discard()
+	require.NoError(t, db.Close())
+}
+
+// A read-only open leaves every file as it was, and works on files that cannot
+// be written.
+func TestReadOnlyDoesNotWrite(t *testing.T) {
+	dir := t.TempDir()
+	commitOne(t, dir)
+
+	snapshot := func() map[string]string {
+		m := map[string]string{}
+		require.NoError(t, filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			b, err := os.ReadFile(p)
+			m[p] = string(b)
+			return err
+		}))
+		return m
+	}
+	before := snapshot()
+	require.NotEmpty(t, before)
+
+	// Make everything read-only on disk
+	require.NoError(t, filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			err = os.Chmod(p, 0400)
+		}
+		return err
+	}))
+
+	ro, err := Open(dir, ReadOnly())
+	require.NoError(t, err)
+	b := ro.Begin(nil, false)
+	v, err := b.Get(record.NewKey("a"))
+	require.NoError(t, err)
+	require.Equal(t, "b", string(v))
+	b.Discard()
+	w := ro.Begin(nil, true)
+	require.NoError(t, w.Put(record.NewKey("c"), []byte("d")))
+	require.ErrorIs(t, w.Commit(), ErrReadOnly)
+	w.Discard()
+	require.NoError(t, ro.Close())
+	require.Equal(t, before, snapshot())
+}
+
+// Indexing writes files, so an unindexed database is refused.
+func TestReadOnlyNotIndexed(t *testing.T) {
+	dir := t.TempDir()
+	commitOne(t, dir)
+
+	require.NoError(t, filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasPrefix(d.Name(), indexFilePrefix) {
+			err = os.Remove(p)
+		}
+		return err
+	}))
+
+	_, err := Open(dir, ReadOnly())
+	require.ErrorIs(t, err, ErrNotIndexed)
+
+	// Read-write rebuilds the index, after which read-only works
+	db, err := Open(dir)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	db, err = Open(dir, ReadOnly())
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+}
