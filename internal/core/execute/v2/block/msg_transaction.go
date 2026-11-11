@@ -123,6 +123,14 @@ func (x TransactionMessage) check(batch *database.Batch, ctx *MessageContext, re
 		}
 	}
 
+	// From v2-canaveral a user transaction names every account canonically
+	// (executor spec, "Account URLs")
+	if txn.Transaction.Body.Type().IsUser() && ctx.GetActiveGlobals().ExecutorVersion.V2CanaveralEnabled() {
+		if err := protocol.CheckAccountUrls(txn.Transaction); err != nil {
+			return nil, errors.UnknownError.Wrap(err)
+		}
+	}
+
 	// Make sure user transactions are signed. Synthetic messages and network
 	// update messages do not require signatures.
 	//

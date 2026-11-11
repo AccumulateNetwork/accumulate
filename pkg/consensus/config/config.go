@@ -10,6 +10,8 @@ package config
 import (
 	"fmt"
 	"time"
+
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
 // Default configuration values for DAG-BFT consensus.
@@ -250,8 +252,8 @@ func (c *Config) Validate() error {
 	if c.Consensus.NumWorkers < 1 {
 		return fmt.Errorf("num_workers must be at least 1")
 	}
-	if c.Consensus.DAGGCDepth < 10 {
-		return fmt.Errorf("dag_gc_depth must be at least 10")
+	if c.Consensus.DAGGCDepth < types.MinDAGGCDepth {
+		return fmt.Errorf("dag_gc_depth must be at least %d", types.MinDAGGCDepth)
 	}
 	if c.Consensus.CommitBufferSize < 100 {
 		return fmt.Errorf("commit_buffer_size must be at least 100")

@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	v3impl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/api/v3"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
@@ -36,7 +37,7 @@ func TestKeepStatesWritesAnAnswerInOneCommitAndNoneOfARefusedAccount(t *testing.
 	require.NoError(t, b.UpdateBPT())
 	require.NoError(t, b.Commit())
 
-	q := v3impl.NewQuerier(v3impl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	q := v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})
 	rec, err := api.Querier2{Querier: q}.QueryAccountStates(context.Background(), protocol.PartitionUrl("BVN0"), &api.AccountStatesQuery{Accounts: accounts})
 	require.NoError(t, err)
 	require.Len(t, rec.States, 3)
@@ -78,7 +79,7 @@ func TestKeepStatesWritesAnAnswerInOneCommitAndNoneOfARefusedAccount(t *testing.
 func TestAnOlderStateIsNotWrittenOverANewerOne(t *testing.T) {
 	peerDB := newObservedDB(t)
 	u := protocol.AccountUrl("stamped", "tokens")
-	q := v3impl.NewQuerier(v3impl.QuerierParams{Database: peerDB, Partition: "BVN0"})
+	q := v3impl.NewQuerier(v3impl.QuerierParams{NodeState: nodestate.Always{}, Database: peerDB, Partition: "BVN0"})
 	serve := func(balance int64) *api.AccountState {
 		b := peerDB.Begin(true)
 		require.NoError(t, b.Account(u).Main().Put(&protocol.TokenAccount{Url: u, TokenUrl: protocol.AcmeUrl(), Balance: *big.NewInt(balance)}))

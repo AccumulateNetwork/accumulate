@@ -13,23 +13,33 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
-// OnVoteReceived handles an incoming vote for our header.
+// OnVoteReceived handles an incoming vote for our header, verifying its
+// signature here.
 func (p *Primary) OnVoteReceived(vote *types.Vote) {
+	p.handleVote(vote, false)
+}
+
+// handleVote is OnVoteReceived for a vote the router may have verified:
+// one from the votes topic passed its validator, which checked the author's
+// membership and signature (#4596), and is not verified again.
+func (p *Primary) handleVote(vote *types.Vote, routerVerified bool) {
 	if vote == nil {
 		return
 	}
 
 	p.votesReceived.Add(1)
+	metrics.VotesReceivedTotal.WithLabelValues(p.config.Partition).Inc()
 
-	// CHEAP CHECK FIRST: Committee membership (~21ns)
+	// CHEAP CHECK FIRST: Committee membership (~21ns), in the committee of
+	// the vote's round.
 	// This prevents CPU exhaustion from non-validator vote spam
-	p.committeeMu.RLock()
-	inCommittee := p.committee.ContainsValidator(vote.Author)
-	quorumCount := p.committee.QuorumCount()
-	p.committeeMu.RUnlock()
+	committee := p.committeeAt(vote.Round)
+	inCommittee := committee.ContainsValidator(vote.Author)
+	quorumCount := committee.QuorumCount()
 
 	if !inCommittee {
 		slog.Debug("Vote from unknown validator",
@@ -38,12 +48,14 @@ func (p *Primary) OnVoteReceived(vote *types.Vote) {
 	}
 
 	// EXPENSIVE CHECK SECOND: Signature verification (~29µs)
-	// Only verify signatures from committee members
-	if err := vote.Verify(); err != nil {
-		slog.Debug("Invalid vote signature",
-			"error", err,
-			"author", hexEncode(vote.Author))
-		return
+	// Only verify signatures from committee members, and only once
+	if !routerVerified {
+		if err := vote.Verify(); err != nil {
+			slog.Debug("Invalid vote signature",
+				"error", err,
+				"author", hexEncode(vote.Author))
+			return
+		}
 	}
 	p.noteHeaderSeen(vote.Author, vote.Round)
 
@@ -128,15 +140,14 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 		return
 	}
 
-	// Calculate total stake from votes (needs committeeMu for reading stake)
-	p.committeeMu.RLock()
+	// Calculate total stake from votes, in the committee of the header's round
+	committee := p.committeeAt(header.Round)
 	var totalStake uint64
 	for _, v := range votes {
-		totalStake += p.committee.StakeOf(v.Author)
+		totalStake += committee.StakeOf(v.Author)
 	}
-	hasQuorum := p.committee.HasQuorum(totalStake)
-	quorumThreshold := p.committee.QuorumThreshold()
-	p.committeeMu.RUnlock()
+	hasQuorum := committee.HasQuorum(totalStake)
+	quorumThreshold := committee.QuorumThreshold()
 
 	// Need 2f+1 stake
 	if !hasQuorum {
@@ -147,7 +158,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 		return
 	}
 
-	// Create certificate (needs committeeMu for finding validators)
+	// Create certificate
 	cert := p.createCertificateFromVotes(header, votes)
 	if cert == nil {
 		return
@@ -156,6 +167,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	// Store in our certs
 	p.ourCerts[cert.Round()] = cert
 	p.certificatesCreated.Add(1)
+	metrics.CertificatesCreatedTotal.WithLabelValues(p.config.Partition).Inc()
 
 	if debugEnabled() {
 		slog.Debug("Created certificate",
@@ -233,8 +245,9 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	}()
 }
 
-// createCertificateFromVotes creates a certificate from the header and collected votes.
-// Uses committeeMu internally for finding validators.
+// createCertificateFromVotes creates a certificate from the header and
+// collected votes, indexing the signers in the committee of the header's
+// round.
 func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*types.Vote) *types.Certificate {
 	if len(votes) == 0 {
 		return nil
@@ -243,26 +256,32 @@ func (p *Primary) createCertificateFromVotes(header *types.Header, votes []*type
 	sigs := make([][]byte, len(votes))
 	authors := make([]uint16, len(votes))
 
-	p.committeeMu.RLock()
+	committee := p.committeeAt(header.Round)
 	for i, v := range votes {
 		sigs[i] = make([]byte, len(v.Signature))
 		copy(sigs[i], v.Signature)
 
-		idx, found := p.committee.FindValidator(v.Author)
+		idx, found := committee.FindValidator(v.Author)
 		if !found {
 			// This shouldn't happen as we check in OnVoteReceived
 			continue
 		}
 		authors[i] = idx
 	}
-	p.committeeMu.RUnlock()
 
 	return types.NewCertificate(header, sigs, authors)
 }
 
-// OnHeaderReceived handles an incoming header from another validator.
-// If valid, we vote on it.
+// OnHeaderReceived handles an incoming header from another validator,
+// verifying its signature here. If valid, we vote on it.
 func (p *Primary) OnHeaderReceived(header *types.Header) {
+	p.handleHeader(header, false)
+}
+
+// handleHeader is OnHeaderReceived for a header the router may have
+// verified: one from the headers topic passed its validator, which checked
+// the author's membership and signature (#4596), and is not verified again.
+func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 	if header == nil {
 		return
 	}
@@ -274,23 +293,23 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 			"round", header.Round)
 	}
 
-	// Verify header signature
-	if err := header.Verify(); err != nil {
-		slog.Debug("Invalid header signature",
-			"error", err,
+	// Check author is in the committee of the header's round: the lookup
+	// before the signature check, as for votes
+	committee := p.committeeAt(header.Round)
+	if !committee.ContainsValidator(header.Author) {
+		slog.Debug("Header from unknown validator",
 			"author", hexEncode(header.Author))
 		return
 	}
 
-	// Check author is in committee (uses committeeMu)
-	p.committeeMu.RLock()
-	inCommittee := p.committee.ContainsValidator(header.Author)
-	p.committeeMu.RUnlock()
-
-	if !inCommittee {
-		slog.Debug("Header from unknown validator",
-			"author", hexEncode(header.Author))
-		return
+	// Verify header signature, once
+	if !routerVerified {
+		if err := header.Verify(); err != nil {
+			slog.Debug("Invalid header signature",
+				"error", err,
+				"author", hexEncode(header.Author))
+			return
+		}
 	}
 	p.noteHeaderSeen(header.Author, header.Round)
 
@@ -300,17 +319,16 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
-	// Check epoch and round (uses roundMu)
 	p.roundMu.Lock()
-	currentEpoch := p.currentEpoch
 	currentRound := p.currentRound
 	p.roundMu.Unlock()
 
-	// Check epoch matches
-	if header.Epoch != currentEpoch {
+	// The epoch is the one of the header's round
+	if header.Epoch != committee.Epoch {
 		slog.Debug("Header epoch mismatch",
 			"headerEpoch", header.Epoch,
-			"currentEpoch", currentEpoch)
+			"roundEpoch", committee.Epoch,
+			"round", header.Round)
 		return
 	}
 
@@ -358,6 +376,13 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 
+	// No vote above the round limit: the round may belong to a committee
+	// change this node has not executed yet. The author rebroadcasts, and
+	// the vote goes out once the limit has passed the round.
+	if p.beyondLimit(header.Round) {
+		return
+	}
+
 	// Check if we already voted on this header (uses pendingMu)
 	headerDigest := header.Digest()
 	p.pendingMu.Lock()
@@ -375,6 +400,12 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		return
 	}
 	p.pendingMu.Unlock()
+
+	// One header per author and round (#4590): the first this validator
+	// voted for. Refused before anything is asked for on its behalf.
+	if p.votedOther(header, headerDigest) {
+		return
+	}
 
 	// Check we have all parent certificates. Deferring alone is not enough,
 	// for exactly the reason the batch gate below spells out: the author's
@@ -405,7 +436,21 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		if p.requestParents != nil {
 			p.requestParents(missingParents)
 		}
-		return // missing parents — asked for them; vote on a later rebroadcast
+		p.deferVote(header, missingParents, nil)
+		return // missing parents — asked for them; vote when they land (#4611)
+	}
+
+	// The parents are here. The distinct ones of the round before must
+	// carry a stake quorum (Narwhal 4.1, #4591); presence alone let a header
+	// with no parents through, and a certificate without a path to an
+	// earlier leader splits the commit sequence between nodes.
+	if err := p.dag.CheckParents(header.Round, header.Parents); err != nil {
+		slog.Info("Header's parents do not certify it; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"error", err)
+		return
 	}
 
 	// Data availability: only vote once we hold every batch this header names
@@ -420,12 +465,13 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	// batches arrive via gossip and the author rebroadcasts the header until
 	// it reaches quorum, so we vote on a later rebroadcast once we have them —
 	// the same defer-until-available shape as the missing-parent gate above.
-	var missingBatches []types.BatchDigest
-	for _, entry := range header.Payload {
-		if !p.haveBatch(entry.Digest) {
-			missingBatches = append(missingBatches, entry.Digest)
-		}
-	}
+	//
+	// One call checks and marks: the batches held are marked as named by a
+	// header this node votes on, so batches no header names are evicted
+	// before them until the certificate protects them (#4598). Checked first
+	// and marked after, eviction could take a batch between the two under a
+	// flood, and the vote went out for a batch this node no longer held.
+	missingBatches := p.nameHeaderBatches(header)
 	if len(missingBatches) > 0 {
 		// Pin every batch this header names -- including the ones we
 		// already hold. Those are the ones eviction takes while we wait
@@ -454,11 +500,21 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 		for _, d := range missingBatches {
 			p.requestMissingBatch(d)
 		}
-		return // missing batches — do not certify data we do not have
+		p.deferVote(header, nil, missingBatches)
+		return // missing batches — do not certify data we do not have; vote when they land (#4611)
 	}
 
 	// Every batch is here, so nothing is waiting on them any more.
 	p.releasePins(headerDigest)
+	p.deferred.drop(headerDigest)
+
+	// Record the header as this author's for the round, on disk before the
+	// vote exists: a restart must refuse any other header for the pair
+	// (#4590). The author rebroadcasts the header until it is certified, so
+	// a record that could not be written is tried again then.
+	if !p.recordVote(header, headerDigest) {
+		return
+	}
 
 	// Create and send vote
 	vote := types.NewVote(headerDigest, header.Round, header.Epoch, pubKey)
@@ -476,6 +532,7 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 	p.pendingMu.Unlock()
 
 	p.votesSent.Add(1)
+	metrics.VotesSentTotal.WithLabelValues(p.config.Partition).Inc()
 
 	if debugEnabled() {
 		slog.Debug("Voting on header",
@@ -487,6 +544,60 @@ func (p *Primary) OnHeaderReceived(header *types.Header) {
 
 	// Broadcast vote
 	p.broadcastVoteAsync(vote, headerDigest)
+}
+
+// votedOther reports whether this primary voted for a header other than
+// digest from the header's author for its round, or can no longer tell
+// because the round's records were pruned (#4590).
+func (p *Primary) votedOther(header *types.Header, digest types.HeaderDigest) bool {
+	p.pendingMu.Lock()
+	voted, ok := p.votedRounds[authorRound{string(header.Author), header.Round}]
+	floor := p.votedFloor
+	p.pendingMu.Unlock()
+	if header.Round < floor {
+		slog.Warn("Header for a round whose vote records were pruned; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"floor", floor,
+			"header", digest.String())
+		return true
+	}
+	if !ok || voted == digest {
+		return false
+	}
+	slog.Warn("Second header from an author for a round; not voting",
+		"partition", p.config.Partition,
+		"author", hexEncode(header.Author),
+		"round", header.Round,
+		"voted", voted.String(),
+		"refused", digest.String())
+	return true
+}
+
+// recordVote records digest as the header this primary votes for from the
+// header's author at its round, in memory and through the persistence hook,
+// and reports whether the vote may be signed (#4590).
+func (p *Primary) recordVote(header *types.Header, digest types.HeaderDigest) bool {
+	if p.votedOther(header, digest) {
+		return false
+	}
+	p.pendingMu.Lock()
+	p.votedRounds[authorRound{string(header.Author), header.Round}] = digest
+	onVoted := p.onVoted
+	p.pendingMu.Unlock()
+	if onVoted == nil {
+		return true
+	}
+	if err := onVoted(header.Author, header.Round, digest); err != nil {
+		slog.Error("Cannot persist the vote record; not voting",
+			"partition", p.config.Partition,
+			"author", hexEncode(header.Author),
+			"round", header.Round,
+			"error", err)
+		return false
+	}
+	return true
 }
 
 // haveBatch reports whether any of this node's workers holds the batch. A
@@ -618,18 +729,67 @@ func (p *Primary) requestRoundCatchUp(current, target types.Round) {
 	p.lastRoundPull = time.Now()
 	p.roundSyncMu.Unlock()
 
-	// Request at most MaxSyncRounds rounds, starting from where we are —
-	// certificates insert parent-first, so pulling the oldest gap first
-	// makes steady forward progress even across a large gap.
+	for _, rounds := range p.catchUpRequests(current, target) {
+		p.certSyncer.RequestRounds(rounds)
+	}
+}
+
+// catchUpRequests is what round catch-up asks for, one round request each.
+//
+// The first is at most MaxSyncRounds rounds, from one below the node's round
+// upward to target. Certificates insert parent-first, so pulling the oldest
+// gap first makes steady forward progress even across a large gap; the round
+// below is asked for again in case this node's copy of it is partial.
+//
+// A node seeded at S (SetRoundAndSeed) also asks, in a second request, for the rounds
+// below S that the certificates still to come name as weak links, from
+// S + 2 - weakLinkWindow, until its round passes S + weakLinkWindow. Its DAG
+// holds nothing below S, and the DAG takes S and S + 1 without parents but
+// not S + 2, so without them the node waits at S + 2. Asked for by digest
+// only, an answer lost was asked for again by the pending rescan fifteen
+// seconds after (#4610). They are a request of their own because an answer
+// carries at most MaxSyncCertificates, the rounds in the order asked: ahead
+// of the node's own rounds they filled the answer from 13 validators up, and
+// the node got none of the rounds it needed to advance. A round is asked for
+// until the DAG holds a certificate of every validator in it, not a quorum:
+// the weak links are to exactly the certificates a quorum can leave out.
+func (p *Primary) catchUpRequests(current, target types.Round) [][]types.Round {
 	first := current
 	if first > 0 {
-		first-- // Re-fetch the previous round in case our copy is partial
+		first--
 	}
 	var rounds []types.Round
 	for r := first; r <= target && len(rounds) < gossip.MaxSyncRounds; r++ {
 		rounds = append(rounds, r)
 	}
-	p.certSyncer.RequestRounds(rounds)
+	requests := [][]types.Round{rounds}
+	if below := p.seedRounds(current, first); len(below) > 0 {
+		requests = append(requests, below)
+	}
+	return requests
+}
+
+// seedRounds is the rounds below the seed, and below first, the start of the
+// node's own request, that a seeded node at current still lacks a
+// certificate of some validator in (catchUpRequests).
+func (p *Primary) seedRounds(current, first types.Round) []types.Round {
+	p.roundMu.Lock()
+	seed, seeded := p.seed, p.seeded
+	p.roundMu.Unlock()
+	if !seeded || current > seed+weakLinkWindow {
+		return nil
+	}
+	low := types.Round(0)
+	if seed+2 > weakLinkWindow {
+		low = seed + 2 - weakLinkWindow
+	}
+	var rounds []types.Round
+	for r := low; r < seed && r < first; r++ {
+		if len(p.dag.GetRound(r)) < p.committeeAt(r).Len() {
+			rounds = append(rounds, r)
+		}
+	}
+	return rounds
 }
 
 // pushCertsForStaleRound rebroadcasts the certificates of a stale round (and

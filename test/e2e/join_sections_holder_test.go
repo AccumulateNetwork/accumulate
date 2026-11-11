@@ -17,6 +17,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 	apiimpl "gitlab.com/accumulatenetwork/accumulate/internal/api/v3"
+	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/nodestate"
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/bootstrap/pull"
 	"gitlab.com/accumulatenetwork/accumulate/internal/database"
 	"gitlab.com/accumulatenetwork/accumulate/internal/node/join"
@@ -214,7 +215,7 @@ func TestAForgedRedirectTargetIsRefusedByTheHash(t *testing.T) {
 	j := prepareSectionsJoin(t)
 	s := j.quietSection()
 
-	honest := apiimpl.NewQuerier(apiimpl.QuerierParams{Database: j.part.NodeDatabase(0), Partition: "BVN0"})
+	honest := apiimpl.NewQuerier(apiimpl.QuerierParams{NodeState: nodestate.Always{}, Database: j.part.NodeDatabase(0), Partition: "BVN0"})
 	rec, err := honest.Query(context.Background(), PartitionUrl("BVN0"), &api.BptPageQuery{StartHash: s.ScanStart(), Count: 256})
 	require.NoError(t, err)
 	page, ok := rec.(*api.BptPageRecord)

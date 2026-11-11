@@ -40,7 +40,9 @@ func TestRestart_ResumesAtTheCheckpointedRound(t *testing.T) {
 	restarted.config.DataDir = dir
 	ca2.last = 2
 	require.NoError(t, restarted.initializeGenesis())
-	restarted.seedFromCheckpoint()
+	seeded, err := restarted.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.True(t, seeded, "precondition: the checkpoint for block 2 is restored")
 	require.Equal(t, types.Round(6), restarted.node.LastCommitRound(), "Bullshark resumes after the last committed leader")
 	require.Equal(t, types.Round(7), restarted.node.CurrentRound(), "the primary resumes at its round")
 	require.Equal(t, types.Round(6), restarted.node.DAG().LastCommitRound())
@@ -51,7 +53,9 @@ func TestRestart_ResumesAtTheCheckpointedRound(t *testing.T) {
 	crashed.config.DataDir = dir
 	ca3.last = 1
 	require.NoError(t, crashed.initializeGenesis())
-	crashed.seedFromCheckpoint()
+	seeded, err = crashed.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.True(t, seeded, "precondition: the checkpoint for block 1 is restored")
 	require.Equal(t, types.Round(4), crashed.node.LastCommitRound())
 	require.Equal(t, types.Round(5), crashed.node.CurrentRound())
 }
@@ -64,7 +68,9 @@ func TestRestart_NoMatchingCheckpointStartsAtZero(t *testing.T) {
 	svc.config.DataDir = dir
 	ca.last = 7
 	require.NoError(t, svc.initializeGenesis())
-	svc.seedFromCheckpoint()
+	seeded, err := svc.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.False(t, seeded, "no checkpoint matches block 7")
 	require.Equal(t, types.Round(0), svc.node.CurrentRound())
 	require.Equal(t, types.Round(0), svc.node.LastCommitRound())
 }
@@ -95,13 +101,15 @@ func TestRestart_ResumesPastEmptyBlocks(t *testing.T) {
 	restarted.config.DataDir = dir
 	ca2.last = 2
 	require.NoError(t, restarted.initializeGenesis())
-	require.True(t, restarted.seedFromCheckpoint(), "a checkpoint above the executor's last empty-tailed block is a position to resume")
+	seeded, err := restarted.seedFromCheckpoint()
+	require.NoError(t, err)
+	require.True(t, seeded, "a checkpoint above the executor's last empty-tailed block is a position to resume")
 	require.Equal(t, types.Round(8), restarted.node.LastCommitRound(), "resumes after block 3, the older checkpoint's")
 	require.Equal(t, types.Round(9), restarted.node.CurrentRound())
 
 	// The group of block 4 is ordered again, and is block 4 again.
 	restarted.node.Bullshark().SetLastCommitRound(10)
-	_, err := restarted.processCommittedGroup(group(commitCert(author2, 10, time.Unix(110, 0), nil)))
+	_, err = restarted.processCommittedGroup(group(commitCert(author2, 10, time.Unix(110, 0), nil)))
 	require.NoError(t, err)
 	require.Len(t, ca2.blocks, 1)
 	require.Equal(t, uint64(4), ca2.blocks[0].Index, "the next block is numbered after the checkpoint's, as the peers number it")

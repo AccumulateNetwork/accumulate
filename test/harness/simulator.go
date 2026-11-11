@@ -33,6 +33,11 @@ var GenesisTime = time.Date(2022, 7, 1, 0, 0, 0, 0, time.UTC)
 // NewSim creates a simulator with the given database, network initialization,
 // and snapshot function and calls NewSimWith.
 func NewSim(tb testing.TB, opts ...simulator.Option) *Sim {
+	// A test run under CertificateConsensusEnv executes its blocks through
+	// ExecutorBridge.ProduceBlock, with its body unchanged (#4142).
+	if os.Getenv(CertificateConsensusEnv) != "" {
+		opts = append(opts, simulator.CertificateConsensus(nil))
+	}
 	opts = append(opts,
 		simulator.WithRecordings(Recordings(tb)),
 		simulator.WithLogger(acctesting.NewTestLogger(tb)),
@@ -41,6 +46,9 @@ func NewSim(tb testing.TB, opts ...simulator.Option) *Sim {
 	require.NoError(tb, err)
 	return NewSimWith(tb, s)
 }
+
+// CertificateConsensusEnv, when set, has NewSim add simulator.CertificateConsensus.
+const CertificateConsensusEnv = "ACCUMULATE_SIM_CERTIFICATES"
 
 func Recordings(tb testing.TB) simulator.RecordingFunc {
 	onFail := os.Getenv("RECORD_FAILURE")
@@ -98,6 +106,16 @@ func Recordings(tb testing.TB) simulator.RecordingFunc {
 // a Sim.
 func NewSimWith(tb testing.TB, s *simulator.Simulator) *Sim {
 	return &Sim{*New(tb, s.HarnessServices(), s), s}
+}
+
+// BcdbDatabase runs the simulation on the BlockchainDB-backed store, in a
+// directory of the test's, and closes the stores before the directory is
+// removed: the close is registered after TempDir, so it runs first, and it
+// waits for the maintenance a store has in flight (#4610).
+func BcdbDatabase(tb testing.TB) simulator.Option {
+	stores := simulator.BcdbDbOpener(tb.TempDir(), func(err error) { require.NoError(tb, err) })
+	tb.Cleanup(func() { assert.NoError(tb, stores.Close()) })
+	return simulator.WithDatabase(stores.Open)
 }
 
 // Sim is a Harness with some extra simulator-specific features.

@@ -89,6 +89,18 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 		t.Cleanup(func() { _ = h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+
 	// Connect all hosts
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
@@ -99,13 +111,6 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 			err := hosts[i].Connect(ctx, pi)
 			require.NoError(t, err)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
 	}
 
 	// Create executors and nodes
@@ -187,7 +192,7 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 					}
 					// The executor reports each committed group back, or the execution-lag
 					// bound (consensus spec, invariant 9) empties every header after eight.
-					nodes[i].ReportExecuted()
+					nodes[i].ReportExecuted(group[len(group)-1].Round())
 				}
 			}
 		}()
@@ -346,6 +351,14 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 	newHost := bhost.NewBlankHost(newNetw)
 	t.Cleanup(func() { _ = newHost.Close() })
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	newPS, err := pubsub.NewGossipSub(ctx, newHost)
+	require.NoError(t, err)
+
 	// Connect to other nodes
 	for i := 0; i < numNodes; i++ {
 		if i != nodeToKill {
@@ -357,9 +370,6 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-
-	newPS, err := pubsub.NewGossipSub(ctx, newHost)
-	require.NoError(t, err)
 
 	// Create new node
 	newNodeCfg := consensus.NodeConfig{
@@ -411,7 +421,7 @@ func TestStress_MultiNodeNetworkUnderLoad(t *testing.T) {
 				}
 				// The executor reports each committed group back, or the execution-lag
 				// bound (consensus spec, invariant 9) empties every header after eight.
-				newNode.ReportExecuted()
+				newNode.ReportExecuted(group[len(group)-1].Round())
 			}
 		}
 	}()
@@ -652,6 +662,18 @@ func TestStress_MemoryStability(t *testing.T) {
 		t.Cleanup(func() { _ = h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+
 	// Connect all hosts
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
@@ -662,13 +684,6 @@ func TestStress_MemoryStability(t *testing.T) {
 			err := hosts[i].Connect(ctx, pi)
 			require.NoError(t, err)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
 	}
 
 	// Create executors and nodes
@@ -745,7 +760,7 @@ func TestStress_MemoryStability(t *testing.T) {
 					}
 					// The executor reports each committed group back, or the execution-lag
 					// bound (consensus spec, invariant 9) empties every header after eight.
-					nodes[i].ReportExecuted()
+					nodes[i].ReportExecuted(group[len(group)-1].Round())
 				}
 			}
 		}()
@@ -918,6 +933,18 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 		t.Cleanup(func() { _ = h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	// Create pubsub instances
+	for i := 0; i < numNodes; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
+		require.NoError(t, err)
+		pubsubs[i] = ps
+	}
+
 	// Connect all hosts
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
@@ -928,13 +955,6 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 			err := hosts[i].Connect(ctx, pi)
 			require.NoError(t, err)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < numNodes; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, hosts[i])
-		require.NoError(t, err)
-		pubsubs[i] = ps
 	}
 
 	// Create executors and nodes
@@ -1011,7 +1031,7 @@ func TestStress_ConsensusStallDetection(t *testing.T) {
 					}
 					// The executor reports each committed group back, or the execution-lag
 					// bound (consensus spec, invariant 9) empties every header after eight.
-					nodes[i].ReportExecuted()
+					nodes[i].ReportExecuted(group[len(group)-1].Round())
 				}
 			}
 		}()

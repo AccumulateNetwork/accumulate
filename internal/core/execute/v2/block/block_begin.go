@@ -9,7 +9,6 @@ package block
 import (
 	"context"
 	"fmt"
-	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"math/big"
 
 	"gitlab.com/accumulatenetwork/accumulate/internal/core/crosschain"
@@ -22,6 +21,7 @@ import (
 	"gitlab.com/accumulatenetwork/accumulate/pkg/errors"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/merkle"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/types/messaging"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/url"
 	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 

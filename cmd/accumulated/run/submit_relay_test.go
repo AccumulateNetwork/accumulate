@@ -36,12 +36,13 @@ type stubAdapter struct{}
 func (stubAdapter) ProduceBlock(context.Context, adapter.BlockParams) ([32]byte, error) {
 	return [32]byte{}, errors.NotAllowed.With("no executor")
 }
-func (stubAdapter) ValidateTransaction([]byte) error                           { return nil }
-func (stubAdapter) LastBlock() (uint64, [32]byte, error)                       { return 0, [32]byte{}, nil }
-func (stubAdapter) LastMajorBlock() (uint64, time.Time, bool)                  { return 0, time.Time{}, false }
-func (stubAdapter) StateHash() [32]byte                                        { return [32]byte{} }
-func (stubAdapter) Validators() []adapter.ValidatorInfo                        { return nil }
-func (stubAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64)) {}
+func (stubAdapter) ValidateTransaction([]byte) error          { return nil }
+func (stubAdapter) LastBlock() (uint64, [32]byte, error)      { return 0, [32]byte{}, nil }
+func (stubAdapter) LastMajorBlock() (uint64, time.Time, bool) { return 0, time.Time{}, false }
+func (stubAdapter) StateHash() [32]byte                       { return [32]byte{} }
+func (stubAdapter) Validators() []adapter.ValidatorInfo       { return nil }
+func (stubAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64, protocol.ExecutorVersion)) {
+}
 
 var _ adapter.ConsensusAdapter = stubAdapter{}
 

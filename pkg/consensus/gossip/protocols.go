@@ -528,8 +528,15 @@ func unmarshalCertificateList(data []byte) ([]*types.Certificate, error) {
 		return nil, errors.New("too many certificates in list")
 	}
 
-	certs := make([]*types.Certificate, 0, count)
 	offset := 4
+
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// a certificate costs at least its 4-byte length.
+	if int(count)*4 > len(data)-offset {
+		return nil, errors.New("certificate list truncated: fewer bytes than certificates")
+	}
+
+	certs := make([]*types.Certificate, 0, count)
 
 	for i := uint32(0); i < count; i++ {
 		if offset+4 > len(data) {

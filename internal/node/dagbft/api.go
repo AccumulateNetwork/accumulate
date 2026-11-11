@@ -288,6 +288,9 @@ func (s *SubmitterService) canPropose() bool {
 	if !s.membership.CanPropose() {
 		return false
 	}
+	// The sequencer, submitter and validator get a *nodestate.Machine wired
+	// directly in dagbft.go, where nil means never joined, deliberately
+	// (unlike the querier, #4335).
 	return s.nodeState == nil || s.nodeState.CanServeCurrent()
 }
 
@@ -599,6 +602,9 @@ func (s *ValidatorService) Type() api.ServiceType { return api.ServiceTypeValida
 // (executor.md, "Sync" step 6). So there is no committee gate here, and
 // nothing to relay: the answer needs no proposer.
 func (s *ValidatorService) Validate(ctx context.Context, envelope *messaging.Envelope, opts api.ValidateOptions) ([]*api.Submission, error) {
+	// The sequencer, submitter and validator get a *nodestate.Machine wired
+	// directly in dagbft.go, where nil means never joined, deliberately
+	// (unlike the querier, #4335).
 	if s.nodeState != nil && !s.nodeState.CanServeCurrent() {
 		mNotSubmitting.WithLabelValues(strings.ToLower(s.service.config.Partition.ID), "Validate").Inc()
 		return nil, errors.NotReady.WithFormat(

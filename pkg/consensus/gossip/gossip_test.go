@@ -8,8 +8,6 @@ package gossip_test
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	"testing"
 	"time"
 
@@ -51,18 +49,22 @@ func newTestNetwork(t *testing.T, ctx context.Context, n int) *testNetwork {
 		t.Cleanup(func() { h.Close() })
 	}
 
+	// The routers before any connection, as a node starts (#4054): a router
+	// attaches to every peer the host is connected to the moment it is
+	// made, and a peer whose router does not exist yet refuses its stream,
+	// which marks the peer dead for good -- nothing is published to it, and
+	// nothing retries.
+	for i := 0; i < n; i++ {
+		ps, err := pubsub.NewGossipSub(ctx, tn.hosts[i])
+		require.NoError(t, err)
+		tn.ps[i] = ps
+	}
+
 	// Connect all hosts to each other
 	for i := 0; i < n; i++ {
 		for j := i + 1; j < n; j++ {
 			tn.connect(i, j)
 		}
-	}
-
-	// Create pubsub instances
-	for i := 0; i < n; i++ {
-		ps, err := pubsub.NewGossipSub(ctx, tn.hosts[i])
-		require.NoError(t, err)
-		tn.ps[i] = ps
 	}
 
 	return tn
@@ -239,12 +241,15 @@ func TestGossipLayer_BroadcastAndReceiveHeader(t *testing.T) {
 	defer cancel()
 
 	tn := newTestNetwork(t, ctx, 2)
+	committee, keys := newCommittee(t, 1)
 
 	gl1, err := gossip.NewGossipLayer(tn.hosts[0], tn.ps[0], "test")
 	require.NoError(t, err)
 
 	gl2, err := gossip.NewGossipLayer(tn.hosts[1], tn.ps[1], "test")
 	require.NoError(t, err)
+	gl1.SetCommittee(committee)
+	gl2.SetCommittee(committee)
 
 	err = gl1.Start(ctx)
 	require.NoError(t, err)
@@ -257,12 +262,7 @@ func TestGossipLayer_BroadcastAndReceiveHeader(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Create a header
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-
-	header := types.NewHeader(pub, 1, 0, nil, nil)
-	err = header.Sign(priv)
-	require.NoError(t, err)
+	header := signedHeader(t, keys[0], 1, committee.Epoch)
 
 	err = gl1.BroadcastHeader(ctx, header)
 	require.NoError(t, err)
@@ -281,12 +281,15 @@ func TestGossipLayer_BroadcastAndReceiveVote(t *testing.T) {
 	defer cancel()
 
 	tn := newTestNetwork(t, ctx, 2)
+	committee, keys := newCommittee(t, 1)
 
 	gl1, err := gossip.NewGossipLayer(tn.hosts[0], tn.ps[0], "test")
 	require.NoError(t, err)
 
 	gl2, err := gossip.NewGossipLayer(tn.hosts[1], tn.ps[1], "test")
 	require.NoError(t, err)
+	gl1.SetCommittee(committee)
+	gl2.SetCommittee(committee)
 
 	err = gl1.Start(ctx)
 	require.NoError(t, err)
@@ -299,15 +302,7 @@ func TestGossipLayer_BroadcastAndReceiveVote(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Create a vote
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-
-	var headerDigest types.HeaderDigest
-	_, _ = rand.Read(headerDigest[:])
-
-	vote := types.NewVote(headerDigest, 5, 1, pub)
-	err = vote.Sign(priv)
-	require.NoError(t, err)
+	vote := signedVote(t, keys[0], signedHeader(t, keys[0], 5, committee.Epoch))
 
 	err = gl1.BroadcastVote(ctx, vote)
 	require.NoError(t, err)
@@ -326,12 +321,15 @@ func TestGossipLayer_BroadcastAndReceiveCertificate(t *testing.T) {
 	defer cancel()
 
 	tn := newTestNetwork(t, ctx, 2)
+	committee, keys := newCommittee(t, 1)
 
 	gl1, err := gossip.NewGossipLayer(tn.hosts[0], tn.ps[0], "test")
 	require.NoError(t, err)
 
 	gl2, err := gossip.NewGossipLayer(tn.hosts[1], tn.ps[1], "test")
 	require.NoError(t, err)
+	gl1.SetCommittee(committee)
+	gl2.SetCommittee(committee)
 
 	err = gl1.Start(ctx)
 	require.NoError(t, err)
@@ -344,14 +342,7 @@ func TestGossipLayer_BroadcastAndReceiveCertificate(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Create a certificate
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	require.NoError(t, err)
-
-	header := types.NewHeader(pub, 1, 0, nil, nil)
-	err = header.Sign(priv)
-	require.NoError(t, err)
-
-	cert := types.NewCertificate(header, [][]byte{header.Signature}, []uint16{0})
+	cert := quorumCert(t, committee, keys, signedHeader(t, keys[0], 1, committee.Epoch))
 
 	err = gl1.BroadcastCertificate(ctx, cert)
 	require.NoError(t, err)

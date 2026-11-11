@@ -38,7 +38,8 @@ func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Rou
 	// Pubsub before the connections, as a node's exists before its peers
 	// dial it: a peer whose pubsub dials a host with none yet takes it for a
 	// host that does not speak pubsub.
-	ps, err := pubsub.NewGossipSub(ctx, h)
+	// The node's pubsub options, as the validators' (New).
+	ps, err := pubsub.NewGossipSub(ctx, h, pubsub.WithPeerExchange(true), pubsub.WithFloodPublish(true))
 	if err != nil {
 		return nil, fmt.Errorf("follower pubsub: %w", err)
 	}
@@ -73,11 +74,11 @@ func (s *Sim) JoinFollower(ctx context.Context, seed func(part string) types.Rou
 				select {
 				case <-s.runCtx.Done():
 					return
-				case _, ok := <-n.Committed():
+				case group, ok := <-n.Committed():
 					if !ok {
 						return
 					}
-					n.ReportExecuted()
+					n.ReportExecuted(group[len(group)-1].Round())
 				}
 			}
 		}()

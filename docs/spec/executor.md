@@ -611,7 +611,16 @@ behind them (#4537): a node just started has its bootstrap peers connected
 within a second and its routing table warm only later, and two followers of run
 `20261006T031201Z` found no validator in the DHT for twenty seconds while
 connected to every one of them
-(`TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt`). **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
+(`TestFindService_FindsAConnectedServerBeforeTheDHTKnowsIt`). **What identify
+reported of a connected peer's services never regresses** (#4610): a node
+registers its services after it has connected, so its peers learn them from
+identify pushes, which carry no order and each replace the peer's whole
+protocol set; under load a stale one lands last and takes a service away
+(8 of 40 four-node meshes on two loaded cores, !1274). A node never withdraws
+a service while it runs, so a service a peer announced on a connection it
+still has: the node's peerstore writes it back into every later set of the
+peer's protocols, in the write itself, and forgets it when the peer's last
+connection closes (`serviceMemory`). **A section is loaded as of the node's block** (Paul, 2026-10-05, #4518;
 supersedes 2026-10-02, "no as-of-H load"). A block `h+1` that reads a section
 not loaded takes it as the peers held it at `h`, their BPT history serving the
 leaves (`BptPage.ForHeight`) and the accounts (`AccountStates.ForHeight`); the
@@ -1092,8 +1101,20 @@ Each round, in this order:
    at a time used 1.4 of the 16 queries four validators admit, 2.6 s and
    ~100 accounts a page, so a BVN of 96k leaves was 40 minutes of pulling
    against a 30-minute deadline (run 20261007T141334Z;
-   `TestTheSectionsARoundOpenedAreLoadedInParallel`). The round logs what it
-   loaded: sections, pages, accounts, and accounts per second.
+   `TestTheSectionsARoundOpenedAreLoadedInParallel`). **The bound holds
+   per peer** (#4604): each peer has `statesInFlight` workers that take the
+   next span and ask it of that peer first, and every page and
+   `AccountStates` call of the load to a peer, a span's stale leaves asked
+   of the other peers included, holds one of that peer's `statesInFlight`
+   slots, waiting for one. A span's peer picked by its index, and its stale
+   leaves asked across the peers at once, had sixteen in flight to the
+   slower of two peers
+   (`TestTheOpenedSectionsLoadHoldsStatesInFlightPerPeer`). Under it, the
+   node's gate to each peer (§3a, "A block's queries go first") holds this
+   load, as all the background, to `PeerInFlight`-1 (3) at the peer and
+   asks a busy peer again: what a peer sees of it is at most 3 at once. The
+   round logs what it loaded: sections, pages, accounts, and accounts per
+   second.
 
 **The state is complete** when the top is taken, every section opened is
 loaded, nothing is owed, and `L` is at or above the highest `B` any reply was
@@ -2038,6 +2059,39 @@ sealed" and "Syncing in a partition should not depend on any other partition
    says why; the partitions that receive from it bound what they hold for it
    (#4510); operators restore its validators (with their keys) or intervene.
 
+**The last complete block N (#4512, !1283).** The partition says where it
+stands when it halts. N is the newest block of the partition whose anchor the
+Directory holds with the threshold's signatures. It is read from the
+Directory, not from the partition: a BVN's own pool never holds its peers'
+signatures, so the survivors of a partition below its quorum cannot count a
+quorum on any anchor, old or new, and the Directory executes an anchor only
+with the threshold's signatures of the partition's set (or a collection proof
+under a directory root it holds). The node reads the Directory's anchor ledger
+for the number of the anchor it has delivered from the partition, finds that
+anchor in its own anchor-sequence chain, and states N (the anchor's block) and
+the root the anchor carries. It never derives N from its own unsigned state:
+if the Directory cannot be read, or has delivered none of the partition's
+anchors, or this node does not hold the anchor, the node says N is unknown
+and why. N is said in the halt message ("This partition has lost its quorum"),
+in the line a node with no block of its own to resume from says when no state
+can be proven to it, and on the gauge
+`accumulate_dagbft_partition_last_complete_block`. Beside N the node says how
+many blocks it has executed past it (the anchor of a block is made as the next
+begins, so one is usual; nothing after N has a quorum) and whether it can
+obtain the state as of N: **at hand** (its executed height is N), **in
+retained history** (N is within `RetainedBlockRange`; the root the node
+recorded for N is its own word and must be matched against the anchored root)
+or **not obtainable** (it executed past N and keeps no history that reaches it,
+which is every node with the default configuration); a failure reading the
+retained history is said as that failure, not as absent history. The gauges
+and the halt's N end when the partition produces a block again. Built: this, and its
+tests (`lastcomplete`; e2e `TestAPartitionThatLostItsQuorumStatesItsLastCompleteBlock`).
+Not built: rolling a survivor back to N and redoing the blocks after N (#4627),
+the committee for the block after N from N's state plus operator changes and
+the Directory re-evaluating what it holds (#4628), the operational state copy
+(#4629), retaining history across the rescue window (#4630, the owner's
+decision) and a quorum-bound proof of N a joiner can check itself (#4631).
+
 Before any of it, the partition must be seen for what it is: a torn store is
 detected at resume and not resumed onto (C13, #4507), and the Directory bounds
 what it holds for a partition below its quorum and names it degraded (#4510).
@@ -2362,7 +2416,14 @@ missing data: not the sequencer, not healing. **In this phase a syncing node
 refuses every read** and answers once it is fully synced (Paul, 2026-09-19):
 `BOOTING` refuses with `NotReady`, `ACTIVE` serves. "Every read" is the rule
 and, since #4368, what the code does: `servingFor` refuses every query while
-the node is `BOOTING`, counted per call. Tracking
+the node is `BOOTING`, counted per call. For the querier the gate fails
+closed (#4335): a querier given no node state refuses like a `BOOTING` one, and
+a node that never joined says so by being given `nodestate.Always`. This
+covers the querier only: the sequencer, submitter and validator
+get a `*nodestate.Machine` wired directly in `dagbft.go`, where nil means
+never joined, deliberately. A partition with a consensus service always has a
+node state, and a querier that finds none does not start; only a querier with
+no consensus service for its partition (a standalone one) is given `Always`, with a log line. Tracking
 which nodes are not synced, so a *reader* can be sent to one that can answer,
 is the next phase's work and nothing here anticipates it.
 
@@ -2611,7 +2672,11 @@ one thing a per-block record must never do. An empty block has no entry.
 
 Behaviour that changes what a block produces is gated on an `ExecutorVersion` so
 nodes at different versions do not disagree about the same block — `V2Baikonur`
-(6), `V2Jiuquan` (8), `V2Kourou` (10, collection proofs). A gate protects a
+(6), `V2Jiuquan` (8), `V2Kourou` (10, collection proofs), `V2Canaveral` (11,
+the DAG-BFT consensus rules: the first version after Kourou, which Kermit
+already runs, so what DAG-BFT changes in a block waits for its activation).
+`ExecutorVersionLatest`, the version tests and simulations run at, is
+`V2Canaveral`, one below the `VNext` placeholder (12). A gate protects a
 network that is running; it is not ceremony for code that has never been
 deployed.
 
@@ -2715,6 +2780,14 @@ so it is where "lost in consensus" and "lost in execution" separate.
 `exec_validate.go`, `Executor.Validate`: begins a read-only batch, normalizes
 the envelope, rejects unsigned transactions, and calls each message's validator
 through a bundle whose block is a shell. The batch is discarded unconditionally.
+A refused message still gets a status, and the status carries the message's
+ID, so **a message's ID must not depend on a field a peer can leave out**: a
+`BlockAnchor` without a signature is named under `acc://unknown`, where it
+used to be dereferenced and take the node down (#4572). Validation is reached
+from the worker and the API, with no recover between. The name is for the
+refusal only: an anchor without a signature is refused whatever its proof
+says (`BlockAnchor.check`, "Anchor signatures are not that path"), so nothing
+is ever executed or recorded under it.
 
 ### Execution
 
@@ -3104,7 +3177,62 @@ depends on the last:
     account at all.
 11. Update major index chains if this is a major block.
 12. Execute post-update actions.
-13. **Update the BPT**, and only then active globals.
+13. **Update the BPT**, and only then active globals. Only the network-account
+    writes of transactions that succeeded reach them ("Globals change only
+    with the transaction that writes them", below).
+
+### Globals change only with the transaction that writes them
+
+A transaction that writes a network data account (`network`, `globals`,
+`oracle`, `routing`) or activates a protocol version changes the executor's
+pending globals, which step 13 makes active and, where the validator sets
+differ, hands to consensus as validator updates. The pending globals are held
+in memory, not in the block's state, so they are not discarded with a failed
+transaction the way its writes are. From `V2Canaveral` the executor parses the
+new value into a copy and makes the copy its pending globals only once the
+transaction's commit and the record of its success have both succeeded. A
+transaction that fails for any reason after the parse — an update that does
+not write to state, a direct write to a BVN's account, a network definition
+whose version does not increase, a commit error — leaves the pending globals
+as they were, so the globals and the committed state of the network accounts
+change together or not at all. `ParseNetwork` rejects a definition whose
+version does not increase without storing it (#4615).
+
+Before `V2Canaveral` the executor parsed into the pending globals directly,
+before it rejected, and a definition with a stale version was stored and then
+rejected (`ParseNetworkLegacy`). That path is kept unchanged for replaying
+history, in the v1 executor as well as in v2 before `V2Canaveral`: a node
+replaying it must end with the globals the network had.
+
+### Major blocks on a BVN
+
+The Directory opens major blocks; a BVN learns of each from a Directory
+anchor or a `MakeMajorBlock` message, and each such message reports one major
+block, its index and time, in its transaction state. A BVN that was down or
+stalled for more than a major block interval learns of several in one block.
+From v2-canaveral:
+
+- **The block's major block is the newest reported** (`BlockState.
+  MergeTransaction`): the highest index, with its time, whatever order the
+  messages' states merge in. Before v2-canaveral the last state merged set it.
+- **Every major block reported is recorded** on the anchor pool's major block
+  chain (step 11, `recordMajorBlock`), one entry per index, in increasing
+  order, each with its own time and this block's root index; an index at or
+  below the last entry the chain holds is not recorded. Before v2-canaveral
+  one entry was written, the block's major block, whatever the chain held.
+
+The Directory records the one major block it opened, as before; its indices
+increase by construction.
+
+A notice at or below the last recorded index does not execute from
+v2-canaveral, so the block's major block is always a new one: from
+v2-vandenberg a BVN learns of major blocks only from `MakeMajorBlock`
+messages (a Directory anchor's `MakeMajorBlock` field is read only before
+it), the Directory produces one per index, in increasing order, when it
+opens the major block (`block_end.go`), and they reach the BVN on the
+Directory's synthetic stream, which executes each number once and in order
+(a copy at or below `Delivered` is tossed). The check in `recordMajorBlock`
+is the second line.
 
 ### Anchor emission, and the heartbeat
 
@@ -3365,6 +3493,25 @@ So a user signature is not special: it is an ordinary message carrying a
 signature, and the second dispatch exists only because the signature's type
 decides how it is verified.
 
+### Account URLs
+
+An account's identity is its URL's host and path (`url.AccountID`): the
+database key, and the routing number, are computed from those alone, case
+folded. User info, a port, a query and a fragment are not part of it, so a
+URL carrying any of them names the same account as the URL without them,
+while `url.Equal` and `url.Compare`, which compare the whole URL, call the
+two different. From v2-canaveral a URL that names an account carries none of
+the four (`protocol.CheckAccountUrls`):
+
+- a **user transaction** is refused, `BadRequest`, if any URL in its header
+  or its body has one (`TransactionMessage.check`);
+- a **user signature** is refused the same way if its signer, or any
+  delegator, has one (`UserSignature.check`).
+
+Transaction IDs (`url.TxID`) are not account URLs and are not checked.
+Synthetic and system transactions are produced from what was checked and are
+not checked again. Before v2-canaveral nothing is refused for these parts.
+
 ### Anchor signatures are not that path
 
 A block anchor is a **message** executor, `BlockAnchor` in `messageExecutors`,
@@ -3380,7 +3527,12 @@ and never reaches `signatureExecutors`. It is authorized in one of two ways:
 
 The proof is checked the same way a synthetic's is — receipt list only, never
 both forms, bounded by `MaxReceiptListElements`, and `Validate`d — and the same
-bound applies. An anchor with neither a signature nor a proof is `BadRequest`.
+bound applies. **The signature is required either way** and its signer must be
+an active validator of the source: it names the anchor (`BlockAnchor.ID`) and
+the anchor pool records the copy under its signer. Under a proof the signature
+is not verified — a rotated key or a historical quorum must not reject a
+proven anchor — but an anchor without one is `BadRequest`, whatever its proof,
+before the proof is looked at (#4572).
 
 The anchor itself must be a sequenced anchor transaction whose destination's
 root identity matches the transaction's principal, and a remote placeholder is

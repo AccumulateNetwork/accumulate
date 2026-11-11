@@ -45,7 +45,10 @@ func TestMetricsEndpoint(t *testing.T) {
 func TestMetricsEndpointContainsDagBftMetrics(t *testing.T) {
 	// Trigger metric registration by accessing a metric
 	// (metrics are auto-registered via promauto at package init time)
-	metrics.CurrentRound.Set(0)
+	// (the pipeline metrics are labelled by partition, so they appear once a
+	// series exists)
+	metrics.CurrentRound.WithLabelValues("test").Set(0)
+	metrics.CertificatesCreatedTotal.WithLabelValues("test").Add(0)
 
 	// Create a simple router with just the metrics endpoint
 	mux := httprouter.New()

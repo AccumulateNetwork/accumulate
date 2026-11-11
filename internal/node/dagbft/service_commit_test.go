@@ -44,12 +44,13 @@ func (a *commitAdapter) ProduceBlock(_ context.Context, params adapter.BlockPara
 	a.mu.Unlock()
 	return a.hash, nil
 }
-func (a *commitAdapter) ValidateTransaction([]byte) error                           { return nil }
-func (a *commitAdapter) LastBlock() (uint64, [32]byte, error)                       { return a.last, a.hash, nil }
-func (a *commitAdapter) LastMajorBlock() (uint64, time.Time, bool)                  { return 0, time.Time{}, false }
-func (a *commitAdapter) StateHash() [32]byte                                        { return a.hash }
-func (a *commitAdapter) Validators() []adapter.ValidatorInfo                        { return nil }
-func (a *commitAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64)) {}
+func (a *commitAdapter) ValidateTransaction([]byte) error          { return nil }
+func (a *commitAdapter) LastBlock() (uint64, [32]byte, error)      { return a.last, a.hash, nil }
+func (a *commitAdapter) LastMajorBlock() (uint64, time.Time, bool) { return 0, time.Time{}, false }
+func (a *commitAdapter) StateHash() [32]byte                       { return a.hash }
+func (a *commitAdapter) Validators() []adapter.ValidatorInfo       { return nil }
+func (a *commitAdapter) OnValidatorSetChange(func([]adapter.ValidatorInfo, uint64, protocol.ExecutorVersion)) {
+}
 
 // newCommitService builds an unstarted Service with a real (unstarted)
 // consensus node holding real workers, and a recording adapter.
@@ -144,10 +145,6 @@ func TestProcessCommittedCertificate_PrunesExactlyTheCommittedBatches(t *testing
 	require.True(t, w0.HasBatch(survivor.Digest()),
 		"a batch outside the certificate must NOT be retired — its transactions would be lost")
 	require.False(t, w0.HasRetained(survivor.Digest()))
-
-	// State hash was stamped onto the certificate for cross-node comparison.
-	// (The tracker records it; a diverging remote hash for the same round is
-	// what halts the node.)
 }
 
 // TestProcessCommittedCertificate_BlockTimeFromCertificate pins #4054's time

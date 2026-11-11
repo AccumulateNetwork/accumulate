@@ -137,6 +137,12 @@ func UnmarshalCertSyncRequest(data []byte) (*CertSyncRequest, error) {
 		return nil, fmt.Errorf("too many digests: %d > %d", numDigests, MaxSyncDigests)
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// a digest is 32 bytes on the wire.
+	if int(numDigests)*32 > len(data)-offset {
+		return nil, errors.New("cert sync request truncated: fewer bytes than digests")
+	}
+
 	r.Digests = make([]types.CertificateDigest, numDigests)
 	for i := uint32(0); i < numDigests; i++ {
 		if offset+32 > len(data) {
@@ -152,6 +158,10 @@ func UnmarshalCertSyncRequest(data []byte) (*CertSyncRequest, error) {
 		offset += 4
 		if numRounds > MaxSyncRounds {
 			return nil, fmt.Errorf("too many rounds: %d > %d", numRounds, MaxSyncRounds)
+		}
+		// As for the digests: 8 bytes per round must remain.
+		if int(numRounds)*8 > len(data)-offset {
+			return nil, errors.New("cert sync request truncated: fewer bytes than rounds")
 		}
 		r.Rounds = make([]types.Round, numRounds)
 		for i := uint32(0); i < numRounds; i++ {
@@ -269,6 +279,12 @@ func UnmarshalCertSyncResponse(data []byte) (*CertSyncResponse, error) {
 		return nil, fmt.Errorf("too many certificates: %d > %d", numCerts, MaxSyncCertificates)
 	}
 
+	// Checked against the remaining bytes before the slice exists (#4599):
+	// a certificate costs at least its 4-byte length.
+	if int(numCerts)*4 > len(data)-offset {
+		return nil, errors.New("cert sync response truncated: fewer bytes than certificates")
+	}
+
 	r.Certificates = make([]*types.Certificate, numCerts)
 	for i := uint32(0); i < numCerts; i++ {
 		if offset+4 > len(data) {
@@ -304,6 +320,11 @@ func UnmarshalCertSyncResponse(data []byte) (*CertSyncResponse, error) {
 
 	if numMissing > MaxSyncDigests {
 		return nil, fmt.Errorf("too many missing digests: %d > %d", numMissing, MaxSyncDigests)
+	}
+
+	// As for the certificates: 32 bytes per missing digest must remain.
+	if int(numMissing)*32 > len(data)-offset {
+		return nil, errors.New("cert sync response truncated: fewer bytes than missing digests")
 	}
 
 	r.Missing = make([]types.CertificateDigest, numMissing)

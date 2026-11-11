@@ -207,7 +207,10 @@ func (m *RecoveryManager) restoreState(checkpoint *persist.Checkpoint) error {
 		"round", checkpoint.CurrentRound,
 		"epoch", checkpoint.CurrentEpoch)
 
-	m.node.Restore(checkpoint)
+	if err := m.node.Restore(checkpoint); err != nil {
+		return err
+	}
+	m.node.StateAt(checkpoint.LastCommitRound)
 	return nil
 }
 
