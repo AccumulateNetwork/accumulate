@@ -390,9 +390,7 @@ func (p *Primary) tryAdvanceRound() {
 	}
 
 	// Clean up old headers
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.spawn(func() {
 
 		// Check if context is cancelled
 		if p.ctx != nil {
@@ -404,12 +402,10 @@ func (p *Primary) tryAdvanceRound() {
 		}
 
 		p.cleanupOldHeaders()
-	}()
+	})
 
 	// Create header for new round (outside lock to avoid deadlock)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.spawn(func() {
 
 		// Check if context is cancelled
 		if p.ctx != nil {
@@ -421,7 +417,7 @@ func (p *Primary) tryAdvanceRound() {
 		}
 
 		p.tryCreateAndBroadcastHeader()
-	}()
+	})
 }
 
 // AdvanceRound forcibly advances to the next round.

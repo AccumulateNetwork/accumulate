@@ -182,9 +182,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	delete(p.ourHeaders, headerDigest)
 
 	// Insert into DAG and broadcast (outside lock)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.spawn(func() {
 
 		// Check if context is cancelled
 		if p.ctx != nil {
@@ -242,7 +240,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 		// Release peers' certificates held waiting for this one: they
 		// arrive at the next round, often before it is inserted (#4515).
 		p.processPendingForParent(cert.Digest())
-	}()
+	})
 }
 
 // createCertificateFromVotes creates a certificate from the header and
@@ -658,9 +656,7 @@ func (p *Primary) requestMissingBatch(d types.BatchDigest) {
 
 // broadcastVoteAsync broadcasts a vote in the background.
 func (p *Primary) broadcastVoteAsync(vote *types.Vote, headerDigest types.HeaderDigest) {
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.spawn(func() {
 
 		// Check if context is cancelled
 		if p.ctx != nil {
@@ -678,7 +674,7 @@ func (p *Primary) broadcastVoteAsync(vote *types.Vote, headerDigest types.Header
 				"error", err,
 				"headerDigest", headerDigest.String())
 		}
-	}()
+	})
 }
 
 // hexEncode returns a short hex representation of a public key.
@@ -818,13 +814,11 @@ func (p *Primary) pushCertsForStaleRound(stale, current types.Round) {
 	for r := stale; r <= end; r++ {
 		for _, cert := range p.dag.GetRound(r) {
 			cert := cert
-			p.wg.Add(1)
-			go func() {
-				defer p.wg.Done()
+			p.spawn(func() {
 				if err := p.gossip.BroadcastCertificate(p.ctx, cert); err != nil {
 					slog.Debug("Failed to push certificate", "error", err)
 				}
-			}()
+			})
 			pushed++
 		}
 	}

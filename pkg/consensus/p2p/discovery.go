@@ -63,6 +63,7 @@ type Discovery struct {
 	mu          sync.RWMutex
 	rendezvous  map[string]context.CancelFunc
 	discovering map[string]context.CancelFunc
+	closed      bool // set under mu by Close; no wg.Add after it (#4640)
 
 	// Lifecycle
 	ctx    context.Context
@@ -165,6 +166,9 @@ func (d *Discovery) Bootstrap(ctx context.Context) error {
 func (d *Discovery) Advertise(rendezvous string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.closed {
+		return
+	}
 
 	// Already advertising
 	if _, ok := d.rendezvous[rendezvous]; ok {
@@ -224,6 +228,9 @@ func (d *Discovery) FindPeers(ctx context.Context, rendezvous string, limit int)
 func (d *Discovery) StartDiscovery(rendezvous string, handler func(peer.AddrInfo)) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.closed {
+		return
+	}
 
 	// Already discovering
 	if _, ok := d.discovering[rendezvous]; ok {
@@ -306,6 +313,7 @@ func (d *Discovery) RoutingDiscovery() *routing.RoutingDiscovery {
 // Close shuts down discovery.
 func (d *Discovery) Close() error {
 	d.mu.Lock()
+	d.closed = true
 	// Cancel all advertising
 	for _, cancel := range d.rendezvous {
 		cancel()

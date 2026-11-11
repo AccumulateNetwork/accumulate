@@ -316,7 +316,11 @@ type Primary struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	wg          sync.WaitGroup
-	closed      atomic.Bool
+	// wgMu orders every wg.Add against Stop closing admission. Stop sets closed
+	// under it before wg.Wait, and spawn checks closed under it before wg.Add,
+	// so no Add can race with, or follow, the Wait (#4640, #4616).
+	wgMu   sync.Mutex
+	closed atomic.Bool
 
 	// Metrics
 	headersCreated      atomic.Uint64
@@ -538,9 +542,34 @@ func (p *Primary) Start(ctx context.Context) error {
 	}
 }
 
+// spawn runs fn on a goroutine that Stop waits for. It starts nothing and
+// returns false once Stop has closed admission, so the Start loop (which is not
+// tracked by wg and can still run a handler after Stop cancels) can never call
+// wg.Add concurrently with, or after, Stop's wg.Wait.
+func (p *Primary) spawn(fn func()) bool {
+	p.wgMu.Lock()
+	if p.closed.Load() {
+		p.wgMu.Unlock()
+		return false
+	}
+	p.wg.Add(1)
+	p.wgMu.Unlock()
+	go func() {
+		defer p.wg.Done()
+		fn()
+	}()
+	return true
+}
+
 // Stop stops the primary gracefully.
 func (p *Primary) Stop() {
-	if p.closed.Swap(true) {
+	// Close admission under wgMu: any spawn that already did its wg.Add is
+	// ordered before this and is waited for below; any later spawn sees closed
+	// and starts nothing.
+	p.wgMu.Lock()
+	already := p.closed.Swap(true)
+	p.wgMu.Unlock()
+	if already {
 		return // Already closed
 	}
 
@@ -734,9 +763,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	p.pendingMu.Unlock()
 
 	// Broadcast header (outside lock)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.spawn(func() {
 
 		// Check if context is cancelled
 		if p.ctx != nil {
@@ -754,7 +781,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 				"error", err,
 				"digest", digest.String())
 		}
-	}()
+	})
 }
 
 // cleanupOldHeaders removes headers, votes, and certificates for old rounds.
@@ -1010,9 +1037,8 @@ func (p *Primary) rebroadcastPendingHeaders() {
 
 	// Rebroadcast outside the lock
 	for _, header := range toRebroadcast {
-		p.wg.Add(1)
-		go func(h *types.Header) {
-			defer p.wg.Done()
+		h := header
+		p.spawn(func() {
 
 			// Check if context is cancelled
 			if p.ctx != nil {
@@ -1027,7 +1053,7 @@ func (p *Primary) rebroadcastPendingHeaders() {
 					"error", err,
 					"digest", h.Digest().String())
 			}
-		}(header)
+		})
 	}
 }
 
@@ -1062,13 +1088,11 @@ func (p *Primary) recoverFromStall() {
 		for r := start; r <= current; r++ {
 			for _, cert := range p.dag.GetRound(r) {
 				cert := cert
-				p.wg.Add(1)
-				go func() {
-					defer p.wg.Done()
+				p.spawn(func() {
 					if err := p.gossip.BroadcastCertificate(p.ctx, cert); err != nil {
 						slog.Debug("Failed to re-share certificate", "error", err)
 					}
-				}()
+				})
 				shared++
 			}
 		}
