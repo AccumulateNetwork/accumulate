@@ -90,7 +90,13 @@ func TestAWholeNetworkRestartResumes(t *testing.T) {
 
 	runJoins := func(nodes []target) []bool {
 		t.Helper()
-		return restartAndJoin(t, sim, nodes)
+		// Every node but the one whose store says a pull started, or the one
+		// restarted alone, may take the exit.
+		resumers := len(nodes) - 1
+		if len(nodes) == 1 {
+			resumers = 0
+		}
+		return restartAndJoinTogether(t, sim, nodes, resumers)
 	}
 
 	active := func(n target) {
@@ -224,12 +230,61 @@ func restartAndJoin(t *testing.T, sim *Sim, nodes []restartTarget) []bool {
 		n.part.RestartNode(n.node)
 		require.True(t, n.part.Joining(n.node))
 	}
-	return joinRestarted(t, sim, nodes, 60*time.Second)
+	return joinRestarted(t, sim, nodes, 60*time.Second, nil)
+}
+
+// restartAndJoinTogether is restartAndJoin for a test that asserts every node
+// that can resume takes the whole-restart exit. The exit is the outcome of a
+// race the product allows: validators that resumed first serve again, and once
+// enough of them serve to sign an anchor, a straggler that has not yet taken
+// the exit joins from them instead (PulledState.Resumable; #4466). Which node
+// straggles is scheduling, and under load one did in 5 of 160 runs (#4459):
+// each time the straggler ended ACTIVE at its peers' block, and the test's
+// "did not resume" assertion failed. Here no node resumes until resumers of
+// them have each decided they may, so every node that can decides while all
+// its peers are still joining, as when every daemon starts at once.
+func restartAndJoinTogether(t *testing.T, sim *Sim, nodes []restartTarget, resumers int) []bool {
+	t.Helper()
+	for _, n := range nodes {
+		n.part.RestartNode(n.node)
+		require.True(t, n.part.Joining(n.node))
+	}
+	return joinRestarted(t, sim, nodes, 60*time.Second, newResumeGate(resumers))
+}
+
+// A resumeGate holds each node that may resume until want nodes may.
+type resumeGate struct {
+	mu   sync.Mutex
+	seen map[int]bool
+	want int
+	open chan struct{}
+}
+
+func newResumeGate(want int) *resumeGate {
+	return &resumeGate{seen: map[int]bool{}, want: want, open: make(chan struct{})}
+}
+
+// arrive says node i may resume and returns once want nodes have said so. A
+// gate never filled opens after a bound, and the test's assertions say why.
+func (g *resumeGate) arrive(i int) {
+	g.mu.Lock()
+	if !g.seen[i] {
+		g.seen[i] = true
+		if len(g.seen) == g.want {
+			close(g.open)
+		}
+	}
+	g.mu.Unlock()
+	select {
+	case <-g.open:
+	case <-time.After(30 * time.Second):
+	}
 }
 
 // joinRestarted runs the joins of nodes already restarted, together, while
-// the network steps, as restartAndJoin does, for at most timeout.
-func joinRestarted(t *testing.T, sim *Sim, nodes []restartTarget, timeout time.Duration) []bool {
+// the network steps, as restartAndJoin does, for at most timeout. A non-nil
+// gate holds every node that may resume until the gate's quota may.
+func joinRestarted(t *testing.T, sim *Sim, nodes []restartTarget, timeout time.Duration, gate *resumeGate) []bool {
 	t.Helper()
 	var mu sync.Mutex
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -245,7 +300,7 @@ func joinRestarted(t *testing.T, sim *Sim, nodes []restartTarget, timeout time.D
 			Buffer:    &lockedBuffer{Buffer: n.part.NodeJoin(n.node), mu: &mu},
 			Stage: &lockedStage{Stage: &join.ExecutorStage{Settler: settler,
 				Staging: n.part.NodeStaging(n.node), Database: n.part.NodeDatabase(n.node)}, mu: &mu},
-			State: &lockedState{State: n.part.NodeJoinState(n.node), mu: &mu, exited: &exited[i]},
+			State: &lockedState{State: n.part.NodeJoinState(n.node), mu: &mu, exited: &exited[i], gate: gate, index: i},
 			Peers: &join.APIPeers{Partition: n.name, Client: sim.S.Services(), Network: t.Name()},
 			Retry: time.Millisecond,
 		}
@@ -288,6 +343,8 @@ type lockedState struct {
 	join.State
 	mu     *sync.Mutex
 	exited *atomic.Bool
+	gate   *resumeGate
+	index  int
 }
 
 func (s *lockedState) Pull(ctx context.Context) error {
@@ -304,8 +361,12 @@ func (s *lockedState) Matched(ctx context.Context) (uint64, bool, error) {
 
 func (s *lockedState) Resumable() (uint64, bool) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.State.Resumable()
+	block, ok := s.State.Resumable()
+	s.mu.Unlock()
+	if ok && s.gate != nil {
+		s.gate.arrive(s.index)
+	}
+	return block, ok
 }
 
 func (s *lockedState) Executing(block uint64) error {
