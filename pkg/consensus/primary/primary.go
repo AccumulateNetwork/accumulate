@@ -695,6 +695,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	p.hasAuthored = true
 	p.lastAuthoredRound = currentRound
 	p.headersCreated.Add(1)
+	metrics.HeadersCreatedTotal.WithLabelValues(p.config.Partition).Inc()
 	p.pendingMu.Unlock()
 
 	// Durable before anyone can see it: a crash after the broadcast must
@@ -737,6 +738,7 @@ func (p *Primary) tryCreateAndBroadcastHeader() {
 	} else {
 		p.pendingVotes[digest] = append(p.pendingVotes[digest], selfVote)
 		p.votesSent.Add(1)
+		metrics.VotesSentTotal.WithLabelValues(p.config.Partition).Inc()
 
 		// Check if we already have quorum (possible in single-node case)
 		p.tryCreateCertificateLocked(digest)

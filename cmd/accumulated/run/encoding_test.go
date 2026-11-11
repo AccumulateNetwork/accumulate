@@ -12,6 +12,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,4 +43,27 @@ func TestPeerIDWidgetIsPeerIDsOwnEncoding(t *testing.T) {
 	require.True(t, cp.Equal(src))
 
 	require.False(t, new(HttpPeerMapEntry).Equal(src))
+}
+
+// TestMultiaddrWidgetRoundTrip pins the multiaddr widget's JSON to the
+// multiaddr's own string form, and checks copy and equality semantics.
+func TestMultiaddrWidgetRoundTrip(t *testing.T) {
+	a := multiaddr.StringCast("/ip4/1.2.3.4/tcp/8080/http")
+	src := &HttpListener{Listen: []multiaddr.Multiaddr{a}}
+
+	b, err := src.MarshalJSON()
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"/ip4/1.2.3.4/tcp/8080/http"`)
+
+	dst := new(HttpListener)
+	require.NoError(t, dst.UnmarshalJSON(b))
+	require.Len(t, dst.Listen, 1)
+	require.True(t, a.Equal(dst.Listen[0]))
+	require.True(t, src.Equal(dst))
+
+	cp := src.Copy()
+	require.True(t, cp.Equal(src))
+
+	other := &HttpListener{Listen: []multiaddr.Multiaddr{multiaddr.StringCast("/ip4/1.2.3.4/tcp/9")}}
+	require.False(t, other.Equal(src))
 }

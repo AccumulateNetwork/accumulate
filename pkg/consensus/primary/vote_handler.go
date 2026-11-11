@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/gossip"
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -31,6 +32,7 @@ func (p *Primary) handleVote(vote *types.Vote, routerVerified bool) {
 	}
 
 	p.votesReceived.Add(1)
+	metrics.VotesReceivedTotal.WithLabelValues(p.config.Partition).Inc()
 
 	// CHEAP CHECK FIRST: Committee membership (~21ns), in the committee of
 	// the vote's round.
@@ -165,6 +167,7 @@ func (p *Primary) tryCreateCertificateLocked(headerDigest types.HeaderDigest) {
 	// Store in our certs
 	p.ourCerts[cert.Round()] = cert
 	p.certificatesCreated.Add(1)
+	metrics.CertificatesCreatedTotal.WithLabelValues(p.config.Partition).Inc()
 
 	if debugEnabled() {
 		slog.Debug("Created certificate",
@@ -545,6 +548,7 @@ func (p *Primary) handleHeader(header *types.Header, routerVerified bool) {
 	p.pendingMu.Unlock()
 
 	p.votesSent.Add(1)
+	metrics.VotesSentTotal.WithLabelValues(p.config.Partition).Inc()
 
 	if debugEnabled() {
 		slog.Debug("Voting on header",

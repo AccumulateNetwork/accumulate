@@ -578,22 +578,37 @@ func (g *GossipLayer) handleVoteSubscription() {
 	}
 }
 
+// meshLogInterval is how many seconds pass between mesh status log lines.
+const meshLogInterval = 15
+
 // meshMonitor periodically logs gossip mesh health: how many peers the host
 // is connected to versus how many peers each consensus topic actually has.
 // The distinction diagnoses #4054-class failures — a topic with zero peers
 // while the host has connections means subscription announcements are not
 // propagating; zero host peers means the node is isolated at the libp2p level.
+// It also publishes the consensus topic's peer count as the peers_connected
+// gauge.
 func (g *GossipLayer) meshMonitor() {
 	defer g.wg.Done()
 
-	ticker := time.NewTicker(15 * time.Second)
+	// The peer gauge is sampled every second; the log line every
+	// meshLogInterval.
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
+	ticks := 0
 
 	for {
 		select {
 		case <-g.ctx.Done():
 			return
 		case <-ticker.C:
+			if t := g.topics.GetTopic(TopicCerts); t != nil {
+				metrics.PeersConnected.WithLabelValues(g.partition).Set(float64(len(t.ListPeers())))
+			}
+			if ticks++; ticks < meshLogInterval {
+				continue
+			}
+			ticks = 0
 			hostPeers := g.host.Network().Peers()
 
 			headerPeers := 0

@@ -31,7 +31,7 @@ import (
 // their circuit breakers.
 var (
 	// queryGate bounds concurrent Query executions.
-	queryGate = newGate(4, 50*time.Millisecond)
+	queryGate = NewQueryGate()
 
 	// sequenceGate bounds concurrent Sequence/SequenceRange executions.
 	// These build merkle proofs and range packages — the most expensive
@@ -41,20 +41,26 @@ var (
 	sequenceGate = newGate(2, 50*time.Millisecond)
 )
 
-// gate is a bounded-concurrency admission control with a short grace wait.
-type gate struct {
+// A Gate is a bounded-concurrency admission control with a short grace wait.
+type Gate struct {
 	slots chan struct{}
 	wait  time.Duration
 }
 
-func newGate(n int, wait time.Duration) *gate {
-	return &gate{slots: make(chan struct{}, n), wait: wait}
+func newGate(n int, wait time.Duration) *Gate {
+	return &Gate{slots: make(chan struct{}, n), wait: wait}
 }
+
+// NewQueryGate is a gate with a node's query capacity: four queries at once,
+// and a query that waits 50 ms for a slot refused. A node's queriers share
+// the process's (queryGate). Two peers served from one process, as in a
+// test, each need their own, as two nodes have (#4602).
+func NewQueryGate() *Gate { return newGate(4, 50*time.Millisecond) }
 
 // enter acquires a slot, waiting at most the grace period. Rejection is
 // CHEAP — that is the point: shedding a query costs a channel poll, serving
 // one costs database reads.
-func (g *gate) enter(ctx context.Context) error {
+func (g *Gate) enter(ctx context.Context) error {
 	select {
 	case g.slots <- struct{}{}:
 		return nil
@@ -72,4 +78,4 @@ func (g *gate) enter(ctx context.Context) error {
 	}
 }
 
-func (g *gate) exit() { <-g.slots }
+func (g *Gate) exit() { <-g.slots }

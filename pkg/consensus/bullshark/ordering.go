@@ -89,7 +89,11 @@ func (b *Bullshark) commitLeaderChain(leader *types.Certificate) []ConsensusOutp
 
 		// Update last commit round after processing each leader.
 		b.lastCommitRound = l.Round()
+		metrics.LeaderCommitsTotal.WithLabelValues(b.partition).Inc()
+		metrics.LastCommitRound.WithLabelValues(b.partition).Set(float64(b.lastCommitRound))
 	}
+
+	metrics.CertificatesCommittedTotal.WithLabelValues(b.partition).Add(float64(len(committedCerts)))
 
 	// Prune the digest dedup as the frontier advances. Anything older than
 	// the rescue window can never appear in another ancestor walk, so its

@@ -1098,6 +1098,46 @@ func TestOnHeaderReceived_MissingBatchTriggersFetch(t *testing.T) {
 	require.True(t, voted, "once the fetched batch is stored, the vote goes out")
 }
 
+// TestOnHeaderReceived_AsksForEveryMissingBatch pins #4503: a header that
+// names several batches the voter lacks has each of them asked for on its
+// first receipt. Asking for the first only, one per 1 s rebroadcast, made a
+// header re-proposing hundreds of batches take minutes to certify.
+func TestOnHeaderReceived_AsksForEveryMissingBatch(t *testing.T) {
+	validators := make([]*testValidator, 4)
+	for i := range validators {
+		validators[i] = newTestValidator(t)
+	}
+	committee := newTestCommittee(validators, 1)
+	d := newTestDAG()
+	genesisCerts := createGenesisCertificates(t, validators, committee, d)
+	parents := make([]types.CertificateDigest, len(genesisCerts))
+	for i, c := range genesisCerts {
+		parents[i] = c.Digest()
+	}
+
+	w := worker.New(worker.Config{ID: 0, Partition: "test"}, nil)
+	p := New(Config{Partition: "test", KeyPair: validators[0].priv}, committee, nil, d, []*worker.Worker{w})
+	p.SetRound(1)
+
+	var asked []types.BatchDigest
+	p.SetMissingBatchHandler(func(dg types.BatchDigest) { asked = append(asked, dg) })
+
+	first := types.NewBatch([][]byte{[]byte("first")})
+	held := types.NewBatch([][]byte{[]byte("held")})
+	last := types.NewBatch([][]byte{[]byte("last")})
+	require.NoError(t, w.StoreBatch(held))
+	header := types.NewHeader(validators[1].pub, 1, 1, []types.PayloadEntry{
+		{Digest: first.Digest(), Worker: 0},
+		{Digest: held.Digest(), Worker: 0},
+		{Digest: last.Digest(), Worker: 0},
+	}, parents)
+	require.NoError(t, header.Sign(validators[1].priv))
+
+	p.OnHeaderReceived(header)
+	require.ElementsMatch(t, []types.BatchDigest{first.Digest(), last.Digest()}, asked,
+		"every batch the header names and the voter lacks is asked for, and only those")
+}
+
 // TestOnHeaderReceived_VotesWhenBatchIsRetained pins the CanServeBatch fix:
 // a validator that already EXECUTED a batch (pruned to the retained store)
 // HAS it, and must vote for a header re-proposing that digest rather than

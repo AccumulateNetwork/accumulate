@@ -62,12 +62,12 @@ func TestAWholeRestartWhoseFirstResumersAreBelowTheThresholdResumesTheRest(t *te
 	}
 
 	// The first: every peer it asks is joining, so it resumes.
-	exits := joinRestarted(t, sim, all[:1], 60*time.Second)
+	exits := joinRestarted(t, sim, all[:1], 60*time.Second, nil)
 	require.True(t, exits[0], "the first Directory validator did not resume from its own block")
 
 	// The rest find one peer serving, and one signature is not four.
 	before := delivered()
-	exits = joinRestarted(t, sim, all[1:], 30*time.Second)
+	exits = joinRestarted(t, sim, all[1:], 30*time.Second, nil)
 	resumed := 1
 	for _, e := range exits {
 		if e {

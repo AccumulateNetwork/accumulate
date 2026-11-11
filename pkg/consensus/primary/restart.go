@@ -10,6 +10,7 @@ import (
 	"crypto/ed25519"
 	"time"
 
+	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/metrics"
 	"gitlab.com/accumulatenetwork/accumulate/pkg/consensus/types"
 )
 
@@ -92,6 +93,7 @@ func (p *Primary) RestoreAuthored(h *types.Header) {
 	p.roundMu.Lock()
 	if h.Round > p.currentRound {
 		p.currentRound = h.Round
+		metrics.CurrentRound.WithLabelValues(p.config.Partition).Set(float64(h.Round))
 	}
 	current := p.currentRound
 	p.roundMu.Unlock()

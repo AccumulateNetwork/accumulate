@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/gofrs/flock"
 )
 
 // Candidate blocks are probed on a stride wider than the span one devnet
@@ -22,7 +25,20 @@ const (
 	portSearchStride = 1000
 )
 
-// freeDevnetBase returns a base port whose entire devnet port block is free.
+// freeDevnetBase returns a base port whose entire devnet port block is free
+// and reserved for the lifetime of the test.
+//
+// Reserved means an advisory file lock, held until t.Cleanup, on a per-block
+// file in os.TempDir. The probe below cannot reserve anything: it closes its
+// sockets before the netsim binds, and the halt test sleeps up to ten seconds
+// (startDelay) in between. Two concurrent `go test` processes whose PIDs are
+// congruent modulo the number of blocks begin their search at the same block,
+// both probe it free, and the second to bind fails with "address already in
+// use" (#4383). With the lock, the second process fails to take the block's
+// lock and moves on to the next one. The lock is released by the kernel if the
+// process dies, so a crashed run cannot leak a block. The lock only excludes
+// other users of this helper; a foreign process that binds a port is still
+// caught by the probe, which runs after the lock is held.
 //
 // The halt tests used to hardcode 36656, 37656 and 38656, with a comment
 // hoping the numbers were unusual enough to avoid conflicts. They are not.
@@ -52,9 +68,16 @@ func freeDevnetBase(t *testing.T, bvns int) int {
 
 	for i := 0; i < n; i++ {
 		base := portSearchLo + ((first+i)%n)*portSearchStride
-		if devnetBlockFree(base, bvns) {
-			return base
+		lock := flock.New(filepath.Join(os.TempDir(), fmt.Sprintf("accumulate-devnet-ports-%d.lock", base)))
+		if ok, err := lock.TryLock(); err != nil || !ok {
+			continue
 		}
+		if !devnetBlockFree(base, bvns) {
+			_ = lock.Unlock()
+			continue
+		}
+		t.Cleanup(func() { _ = lock.Unlock() })
+		return base
 	}
 
 	t.Fatalf("no free devnet port block in [%d,%d)", portSearchLo, portSearchHi)
@@ -65,8 +88,9 @@ func freeDevnetBase(t *testing.T, bvns int) int {
 // is free — on TCP, and on UDP for the P2P port, which also serves QUIC.
 //
 // This is a probe, not a reservation: the ports are released before the
-// netsim claims them, so a determined race can still lose. That window is
-// microseconds, against the certainty of a fixed number colliding.
+// netsim claims them. freeDevnetBase closes that window against other users of
+// the helper by holding a per-block lock; it remains open only to an unrelated
+// process that binds one of these ports in the meantime.
 func devnetBlockFree(base, bvns int) bool {
 	// Probe every port from the base through the Accumulate API port, walked
 	// numerically: it is the range a node binds that matters, not the labels.
