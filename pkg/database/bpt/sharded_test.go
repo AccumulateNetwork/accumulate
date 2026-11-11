@@ -786,6 +786,10 @@ func TestShardDistribution(t *testing.T) {
 //
 // Validates: thread safety of GetRootHash, consistency of returned hashes,
 // no data races during concurrent operations.
+//
+// An empty tree's root is the zero hash (TestHashBranch: both branches empty
+// is empty), and the readers start with the writers, so a read is required to
+// be non-zero only when an insert had completed before it began (#4589).
 func TestConcurrentGetRootHash(t *testing.T) {
 	kvs := memory.New(nil).Begin(nil, true)
 	defer kvs.Discard()
@@ -806,6 +810,7 @@ func TestConcurrentGetRootHash(t *testing.T) {
 	}()
 
 	var wg sync.WaitGroup
+	var inserted atomic.Bool
 	var hashCountValue int
 	var hashCountMu sync.Mutex
 
@@ -825,6 +830,7 @@ func TestConcurrentGetRootHash(t *testing.T) {
 					v := sha256.Sum256([]byte(fmt.Sprintf("value%d", counter)))
 					err := s.Insert(k, v[:])
 					require.NoError(t, err)
+					inserted.Store(true)
 					counter++
 				}
 			}
@@ -845,9 +851,12 @@ func TestConcurrentGetRootHash(t *testing.T) {
 					hashCountMu.Unlock()
 					return
 				default:
+					after := inserted.Load()
 					root, err := s.GetRootHash()
 					require.NoError(t, err)
-					require.NotEqual(t, [32]byte{}, root)
+					if after {
+						require.NotEqual(t, [32]byte{}, root, "the root after an insert")
+					}
 					localCount++
 				}
 			}
