@@ -499,6 +499,11 @@ func (UserSignature) sendSignatureRequests(batch *database.Batch, ctx *userSigCo
 		authorities = append(authorities, ctx.transaction.Header.Authorities...)
 	}
 	for _, auth := range authorities {
+		// An authority with no URL names no one to ask; the transaction's
+		// executor refuses it (#4646)
+		if auth == nil {
+			continue
+		}
 		msg := new(messaging.SignatureRequest)
 		msg.Authority = auth
 		msg.Cause = ctx.message.ID()

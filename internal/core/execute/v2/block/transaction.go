@@ -160,6 +160,9 @@ func (t *TransactionContext) userTransactionIsReady(batch *database.Batch, deliv
 	notReady := map[[32]byte]bool{}
 	if t.GetActiveGlobals().ExecutorVersion.V2BaikonurEnabled() {
 		for _, auth := range delivery.Transaction.Header.Authorities {
+			if auth == nil {
+				continue // Names no one (#4646)
+			}
 			err = t.checkAuth(batch, delivery.Transaction, auth, notReady)
 			if err != nil {
 				return false, err

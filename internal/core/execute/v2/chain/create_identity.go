@@ -27,8 +27,9 @@ func (CreateIdentity) SignerCanSign(delegate AuthDelegate, batch *database.Batch
 		return false, errors.InternalError.WithFormat("invalid payload: want %T, got %T", new(protocol.CreateIdentity), transaction.Body)
 	}
 
-	// Creating a root ADI?
-	if !body.Url.IsRootIdentity() {
+	// Creating a root ADI? (A body with no URL falls back to the general
+	// rules, and check refuses it.)
+	if body.Url == nil || !body.Url.IsRootIdentity() {
 		return true, nil // Fallback
 	}
 
@@ -48,7 +49,7 @@ func (CreateIdentity) AuthorityIsAccepted(delegate AuthDelegate, batch *database
 	}
 
 	// Anyone is allowed to sign for a root identity
-	if body.Url.IsRootIdentity() {
+	if body.Url != nil && body.Url.IsRootIdentity() {
 		return false, nil
 	}
 
@@ -69,7 +70,7 @@ func (CreateIdentity) TransactionIsReady(delegate AuthDelegate, batch *database.
 	}
 
 	// Anyone is allowed to sign for a root identity
-	if body.Url.IsRootIdentity() {
+	if body.Url != nil && body.Url.IsRootIdentity() {
 		return true, false, nil
 	}
 
