@@ -38,6 +38,12 @@ func (a additionalAuthorities) TransactionIsReady(delegate AuthDelegate, batch *
 	// For each authority
 	notReady := map[[32]byte]struct{}{}
 	for _, authority := range a {
+		// An authority with no URL cannot vote. The executor's check
+		// refuses it when the transaction executes (#4646).
+		if authority == nil {
+			continue
+		}
+
 		// Check if any signer has reached its threshold
 		ok, vote, err := delegate.AuthorityDidVote(batch, transaction, authority)
 		if err != nil {
