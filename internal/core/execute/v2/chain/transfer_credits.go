@@ -28,7 +28,10 @@ func (TransferCredits) check(st *StateManager, tx *Delivery) (*protocol.Transfer
 		return nil, errors.InternalError.WithFormat("invalid payload: want %v, got %v", protocol.TransactionTypeTransferCredits, tx.Transaction.Body.Type())
 	}
 
-	for _, to := range body.To {
+	for i, to := range body.To {
+		if to == nil || to.Url == nil {
+			return nil, errors.BadRequest.WithFormat("recipient %d is missing a URL", i)
+		}
 		if to.Amount == 0 {
 			return nil, errors.BadRequest.WithFormat("transfer amount must be non-zero")
 		}

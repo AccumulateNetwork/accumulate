@@ -68,3 +68,35 @@ func TestTransferCredits_Bad(t *testing.T) {
 
 	require.EqualError(t, st.AsError(), "cannot transfer credits outside of acc://alice.acme")
 }
+
+// TestTransferCredits_MissingURL submits a transfer whose recipient has no
+// URL. That used to panic in CheckTx (to.Url.LocalTo on a nil URL), and the
+// node treats a panic there as fatal: Kermit crash-looped on one such
+// transaction from 2026-11-11. It must be refused as a bad request instead.
+func TestTransferCredits_MissingURL(t *testing.T) {
+	alice := AccountUrl("alice")
+	aliceKey := acctesting.GenerateKey(alice)
+
+	sim := NewSim(t,
+		simulator.SimpleNetwork(t.Name(), 3, 3),
+		simulator.Genesis(GenesisTime),
+	)
+
+	MakeIdentity(t, sim.DatabaseFor(alice), alice, aliceKey[32:])
+	CreditCredits(t, sim.DatabaseFor(alice), alice.JoinPath("book", "1"), 100*CreditPrecision)
+
+	body := &TransferCredits{To: []*CreditRecipient{{Amount: 100}}}
+	st := sim.BuildAndSubmitTxn(
+		build.Transaction().For(alice, "book", "1").Body(body).
+			SignWith(alice, "book", "1").Version(1).Timestamp(1).PrivateKey(aliceKey))
+
+	require.EqualError(t, st.AsError(), "recipient 0 is missing a URL")
+
+	// The network is still alive: a valid transaction still executes.
+	MakeKeyPage(t, sim.DatabaseFor(alice), alice.JoinPath("book"))
+	ok := sim.BuildAndSubmitTxnSuccessfully(
+		build.Transaction().For(alice, "book", "1").
+			TransferCredits(1).To(alice.JoinPath("book", "2")).
+			SignWith(alice, "book", "1").Version(1).Timestamp(2).PrivateKey(aliceKey))
+	sim.StepUntil(Txn(ok.TxID).Succeeds())
+}
