@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.6.9
+
+Three more missing-field panics of the kind that took Kermit down, found by
+sweeping every user transaction with each field cleared. No executor version
+change, no encoding change; 1.4.6.8 and this release interoperate.
+
+- Missing URLs in CreateIdentity and in additional authorities are refused (#4646)
+  - A CreateIdentity with no URL panicked while its signature was validated,
+    halting the node that received it.
+  - A create transaction listing an authority with no URL panicked while the
+    block executed, halting every validator on the same block.
+  - A transaction header naming an authority with no URL panicked while the
+    block executed.
+  - `TestNilRequiredFields` sends every user transaction with each field
+    cleared, and fails on any panic.
+
 ## 1.4.6.8
 
 A validation-hardening release. No executor version change, no encoding change;
