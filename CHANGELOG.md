@@ -5,6 +5,12 @@
 A validation-hardening release. No executor version change, no encoding change;
 1.4.6.7 and this release interoperate.
 
+- A TransferCredits recipient with no URL is refused (#4646)
+  - The check read the recipient's URL without testing for nil, so such a
+    transaction panicked in CheckTx and the node shut down. One resubmitted
+    transaction kept Kermit down from 2026-11-11. It is now refused as a bad
+    request, as SendTokens and IssueTokens already do.
+
 - Validation hardening (#4572)
   - Message validation refuses a message that lacks a field it is named,
     routed or executed by, instead of failing while reading it.
@@ -13,7 +19,7 @@ A validation-hardening release. No executor version change, no encoding change;
 
 ## 1.4.6.7
 
-The release Kermit runs. A devnet can now turn on the BPT history retention
+The release Kermit ran until 1.4.6.8. A devnet can now turn on the BPT history retention
 that AIP-58 historical answers need. No executor version change, no encoding
 change; 1.4.6.6 and this release interoperate.
 
