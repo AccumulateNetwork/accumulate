@@ -482,6 +482,13 @@ func (p *Primary) Start(ctx context.Context) error {
 		"epoch", startEpoch,
 		"round", startRound)
 
+	// A header restored with this primary's own vote (RestoreAuthored)
+	// waits for votes; where that vote alone is a quorum -- a committee of
+	// one -- no vote will ever come, so certify it now, as authoring does.
+	// The certificate is of the header and vote the node already signed;
+	// in a larger committee one vote is no quorum and nothing happens.
+	p.certifyRestoredHeaders()
+
 	// Try to create initial header if we can
 	p.tryCreateAndBroadcastHeader()
 

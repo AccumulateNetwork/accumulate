@@ -114,6 +114,20 @@ func (p *Primary) RestoreAuthored(h *types.Header) {
 	}
 }
 
+// certifyRestoredHeaders makes a certificate of each restored header whose
+// collected votes are already a quorum (Start).
+func (p *Primary) certifyRestoredHeaders() {
+	p.pendingMu.Lock()
+	defer p.pendingMu.Unlock()
+	digests := make([]types.HeaderDigest, 0, len(p.ourHeaders))
+	for d := range p.ourHeaders {
+		digests = append(digests, d)
+	}
+	for _, d := range digests {
+		p.tryCreateCertificateLocked(d)
+	}
+}
+
 // LastAuthoredRound is the highest round this primary has authored, and
 // whether it has authored any.
 func (p *Primary) LastAuthoredRound() (types.Round, bool) {
