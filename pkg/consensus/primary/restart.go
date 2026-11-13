@@ -115,17 +115,43 @@ func (p *Primary) RestoreAuthored(h *types.Header) {
 }
 
 // certifyRestoredHeaders makes a certificate of each restored header whose
-// collected votes are already a quorum (Start).
+// collected votes are already a quorum (Start). It is conservative: a header
+// not of the epoch of the committee held for its round, or naming a parent
+// the DAG does not hold, is left in vote collection as RestoreAuthored left
+// it. The first would count the own vote against a committee the header was
+// not made for; the second would drop the header and its votes before an
+// insert that must fail.
 func (p *Primary) certifyRestoredHeaders() {
 	p.pendingMu.Lock()
 	defer p.pendingMu.Unlock()
 	digests := make([]types.HeaderDigest, 0, len(p.ourHeaders))
-	for d := range p.ourHeaders {
-		digests = append(digests, d)
+	for d, h := range p.ourHeaders {
+		if p.restoredCertifiableLocked(h) {
+			digests = append(digests, d)
+		}
 	}
 	for _, d := range digests {
 		p.tryCreateCertificateLocked(d)
 	}
+}
+
+// restoredCertifiableLocked is whether a restored header may be certified at
+// start: its epoch is that of the committee held for its round, and every
+// parent it names is in the DAG. The caller holds pendingMu.
+func (p *Primary) restoredCertifiableLocked(h *types.Header) bool {
+	if h == nil {
+		return false
+	}
+	committee := p.committeeAt(h.Round)
+	if committee == nil || h.Epoch != committee.Epoch {
+		return false
+	}
+	for _, parent := range h.Parents {
+		if !p.dag.Contains(parent) {
+			return false
+		}
+	}
+	return true
 }
 
 // LastAuthoredRound is the highest round this primary has authored, and
