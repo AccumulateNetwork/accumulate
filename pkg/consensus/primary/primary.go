@@ -189,6 +189,15 @@ type Primary struct {
 	roundMu          sync.Mutex
 	currentRound     types.Round
 	lastRoundAdvance time.Time
+	// roundHeldSince is when this process began holding a round it has not
+	// advanced from (Start). recoverFromStall measures the stall from it
+	// while lastRoundAdvance is zero, so a round restored at a restart
+	// (SetRound, RestoreAuthored) is recovered too.
+	roundHeldSince time.Time
+	// stallLoggedAtStart is set once recoverFromStall has logged at Info
+	// while lastRoundAdvance was zero; later such lines go to Debug, once
+	// per process. Read and written under roundMu, like roundHeldSince.
+	stallLoggedAtStart bool
 	// seed is the round Node.Rejoin seeded this node at, if seeded: its
 	// DAG holds nothing below it (catchUpRequests).
 	seed   types.Round
@@ -474,6 +483,7 @@ func (p *Primary) Start(ctx context.Context) error {
 	// Get current round/epoch for logging (thread-safe)
 	p.roundMu.Lock()
 	startRound := p.currentRound
+	p.roundHeldSince = time.Now()
 	p.roundMu.Unlock()
 	startEpoch := p.committeeAt(startRound).Epoch
 
@@ -1044,7 +1054,22 @@ func (p *Primary) rebroadcastPendingHeaders() {
 func (p *Primary) recoverFromStall() {
 	p.roundMu.Lock()
 	current := p.currentRound
-	stalled := !p.lastRoundAdvance.IsZero() && time.Since(p.lastRoundAdvance) > 5*time.Second
+	// A round restored at a restart was never advanced in this process, so
+	// lastRoundAdvance is zero; measured from it alone, a whole restart that
+	// stopped with each validator holding only its own certificate of the
+	// round never recovered.
+	since := p.lastRoundAdvance
+	if since.IsZero() {
+		since = p.roundHeldSince
+	}
+	stalled := !since.IsZero() && time.Since(since) > 5*time.Second
+	// Before any round has advanced the stall is expected at launch and
+	// during a join: Info the first time, Debug after.
+	quiet := false
+	if stalled && p.lastRoundAdvance.IsZero() {
+		quiet = p.stallLoggedAtStart
+		p.stallLoggedAtStart = true
+	}
 	p.roundMu.Unlock()
 	if !stalled {
 		return
@@ -1090,7 +1115,11 @@ func (p *Primary) recoverFromStall() {
 		p.certSyncer.RequestRounds(rounds)
 	}
 
-	slog.Info("Consensus stalled - re-sharing certificates",
+	level := slog.LevelInfo
+	if quiet {
+		level = slog.LevelDebug
+	}
+	slog.Log(p.ctx, level, "Consensus stalled - re-sharing certificates",
 		"partition", p.config.Partition,
 		"round", current,
 		"shared", shared)
